@@ -8,8 +8,8 @@ import * as THREE from 'three';
  * - 対象は毛足の材質(色の絵と法線の絵と sheen を持つ物)。Blender で作った殻(alphaTest で抜く物)は隠す。
  * - 目・口・頬など、毛足でない部品の周りは毛を短くする。埋もれて顔が消えるのを防ぐ。
  *
- * character.json: "fur": { "layers": 12 }  省略できる値: length、tile、root、sheen、normal、flat、pile、cloud、gain、stray、strayReach、clear
- *   layers: 層の数。弱い GPU では減らす。length: 毛の長さ(既定はキャラの高さの 2%)。tile: 色の絵 1 枚あたりの毛の模様の繰り返し。
+ * character.json: "fur": { "layers": 12 }  省略できる値: length、hairWidth、tile、root、sheen、normal、flat、pile、cloud、gain、stray、strayReach、clear
+ *   layers: 層の数。弱い GPU では減らす。length: 毛の長さ(既定はキャラの高さの 2%)。hairWidth: 毛 1 本の太さ(キャラの高さに対する割合)。tile: UV の 1 あたりの毛の模様の繰り返し(書けば hairWidth より優先)。
  *   root: 根元の明るさ。normal: 毛足の法線の強さに掛ける値。flat: 色の絵の筋を消す割合(1 で一色)。pile: 毛 1 本ずつの明暗の強さ。cloud: ふわっとしたむらの強さ。gain: 毛の明るさに掛ける値。stray: 外へ飛び出す毛の層の数。strayReach: 飛び出す長さ(毛の長さの何倍か)。clear: 顔の部品から、毛を生やさない距離(毛の長さの何倍か)。
  */
 const FUR_TEXTURE_SIZE = 256;
@@ -17,6 +17,8 @@ const FUR_HAIR_COUNT = 26000;
 const CUT_INNER = 0.08;
 const CUT_OUTER = 0.8;
 const CUT_STRAY = 0.93;
+const HAIR_WIDTH_TEXELS = 3.4; // 毛の画像の中の毛 1 本の太さの目安(画素)
+const UV_JUMP = 0.25;
 const LENGTH_OF_HEIGHT = 0.02;
 const PATCH_KEEP_RADIUS = 0.3; // 当て布の絵の中心からの距離(絵の幅が 1)
 const CLEAR_FADE = 1.5; // 毛を生やさない範囲の外で、元の長さへ戻すまでの距離(毛の長さの何倍か)
@@ -90,6 +92,25 @@ function faceKeepPoints(mesh) {
     if (Math.hypot(uv.getX(i) - 0.5, uv.getY(i) - 0.5) < PATCH_KEEP_RADIUS) kept.push(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
   }
   return new Float32Array(kept);
+}
+
+/** UV の 1 が、モデルの長さでいくつに当たるか(三角形の辺の長さの比で測る)。作業役ごとに UV の繰り返しが違っても、毛の太さをそろえるため。 */
+function modelLengthPerUv(mesh) {
+  const pos = worldPositions(mesh);
+  const uv = mesh.geometry.attributes.uv;
+  const index = mesh.geometry.index;
+  if (!uv || !index) return 1;
+  let world = 0;
+  let flat = 0;
+  for (let i = 0; i + 2 < index.count; i += 3) {
+    const a = index.getX(i);
+    const b = index.getX(i + 1);
+    const dUv = Math.hypot(uv.getX(a) - uv.getX(b), uv.getY(a) - uv.getY(b));
+    if (dUv <= 0 || dUv > UV_JUMP) continue; // UV の継ぎ目をまたぐ辺は数えない
+    world += Math.hypot(pos[a * 3] - pos[b * 3], pos[a * 3 + 1] - pos[b * 3 + 1], pos[a * 3 + 2] - pos[b * 3 + 2]);
+    flat += dUv;
+  }
+  return flat > 0 ? world / flat : 1;
 }
 
 /** 毛の長さの倍率を頂点ごとに決める。顔の部品の近くは 0、離れると 1。 */
@@ -189,7 +210,8 @@ export function applyFur(scene, options = {}) {
   const cfg = {
     length: Math.max(size.y, 1e-3) * LENGTH_OF_HEIGHT,
     layers: 12,
-    tile: 14,
+    tile: null,
+    hairWidth: 0.004,
     root: 0.88,
     sheen: 0.35,
     normal: 0.15,
@@ -225,13 +247,16 @@ export function applyFur(scene, options = {}) {
   for (const mesh of targets) {
     if (layersOf.has(mesh.material)) continue;
     const base = mesh.material;
+    // 毛の太さを、キャラの高さに対する割合で決める(tile を直接書いたときは、そちらを使う)
+    const repeatLength = (size.y * cfg.hairWidth * FUR_TEXTURE_SIZE) / HAIR_WIDTH_TEXELS;
+    const layerCfg = { ...cfg, tile: cfg.tile ?? modelLengthPerUv(mesh) / repeatLength };
     base.sheen = cfg.sheen;
     base.sheenRoughness = Math.max(base.sheenRoughness, 0.8);
     base.normalScale.multiplyScalar(cfg.normal);
     const layers = [];
-    for (let k = 1; k <= cfg.layers; k += 1) layers.push(layerMaterial(base, hairs, k / cfg.layers, cfg));
+    for (let k = 1; k <= cfg.layers; k += 1) layers.push(layerMaterial(base, hairs, k / cfg.layers, layerCfg));
     // 外へ飛び出す毛: まばらな層を毛の長さの外まで足す。輪郭に細かいはみ出しが出る
-    for (let k = 1; k <= cfg.stray; k += 1) layers.push(layerMaterial(base, hairs, 1 + (k / cfg.stray) * cfg.strayReach, cfg));
+    for (let k = 1; k <= cfg.stray; k += 1) layers.push(layerMaterial(base, hairs, 1 + (k / cfg.stray) * cfg.strayReach, layerCfg));
     // 土台の面は根元の明るさにそろえる(毛の根元が見える所が、明るく浮かないように)
     base.color.multiplyScalar(cfg.root);
     base.emissiveIntensity *= cfg.root;
