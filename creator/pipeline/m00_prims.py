@@ -204,3 +204,76 @@ def outline(ob, thick, mat, name=None):
     sh.data.materials.clear()
     sh.data.materials.append(mat)
     return sh
+
+
+def loft(name, secs, mat=None, n=48, e=1.0, close=True):
+    """高さごとの断面(超楕円)をつないで、1 つの滑らかな形にする。元の絵の輪郭から読み取った「高さごとの幅」を、そのまま使える。
+
+    secs: [{z, cx, cy, rx, ry, e(省略可)}, …] を下から上へ。cx, cy は断面の中心(x, y)。rx, ry は半幅。
+    """
+    verts, faces = [], []
+    for s in secs:
+        ee = s.get("e", e)
+        for i in range(n):
+            th = 2 * math.pi * i / n
+            verts.append((s.get("cx", 0.0) + s["rx"] * _sgnpow(math.cos(th), ee), s.get("cy", 0.0) + s["ry"] * _sgnpow(math.sin(th), ee), s["z"]))
+    m = len(secs)
+    for j in range(m - 1):
+        for i in range(n):
+            a = j * n + i
+            b = j * n + (i + 1) % n
+            faces.append((a, b, b + n, a + n))
+    if close:
+        for j, z_end in ((0, 0), (m - 1, 1)):
+            c = len(verts)
+            s = secs[j]
+            verts.append((s.get("cx", 0.0), s.get("cy", 0.0), s["z"]))
+            for i in range(n):
+                a = j * n + i
+                b = j * n + (i + 1) % n
+                faces.append((c, b, a) if j == 0 else (c, a, b))
+    return _make(name, verts, faces, mat, (0, 0, 0), (0, 0, 0))
+
+
+def tube(name, pts, radii, mat=None, n=24, ry_scale=1.0):
+    """曲がった管(腕の袖など)。pts は中心線の点(x, y, z)、radii は各点の半径。両端は丸める。"""
+    verts, faces = [], []
+    P_ = [Vector(p) for p in pts]
+    for k, p in enumerate(P_):
+        d = (P_[min(k + 1, len(P_) - 1)] - P_[max(k - 1, 0)]).normalized()
+        ref = Vector((0, 1, 0)) if abs(d.y) < 0.9 else Vector((1, 0, 0))
+        u = d.cross(ref).normalized()
+        w = d.cross(u).normalized()
+        r = radii[k]
+        for i in range(n):
+            th = 2 * math.pi * i / n
+            verts.append(tuple(p + u * (r * math.cos(th)) + w * (r * ry_scale * math.sin(th))))
+    m = len(P_)
+    for j in range(m - 1):
+        for i in range(n):
+            a = j * n + i
+            b = j * n + (i + 1) % n
+            faces.append((a, b, b + n, a + n))
+    for j in (0, m - 1):
+        c = len(verts)
+        d = (P_[1] - P_[0]) if j == 0 else (P_[-1] - P_[-2])
+        verts.append(tuple(P_[j] + d.normalized() * (radii[j] * 0.6) * (-1 if j == 0 else 1)))
+        for i in range(n):
+            a = j * n + i
+            b = j * n + (i + 1) % n
+            faces.append((c, b, a) if j == 0 else (c, a, b))
+    return _make(name, verts, faces, mat, (0, 0, 0), (0, 0, 0))
+
+
+def gradient_axis(ob, p0, p1, c0, c1, ease=1.0):
+    """p0 から p1 への向きに沿って、c0 から c1 へ変わる頂点の色(羽の付け根のぼかしなど)。"""
+    me = ob.data
+    ca = me.color_attributes["Col"]
+    a, b = Vector(p0), Vector(p1)
+    ab = b - a
+    L2 = ab.dot(ab)
+    c0 = [_lin(c) for c in c0]
+    c1 = [_lin(c) for c in c1]
+    for i, v in enumerate(me.vertices):
+        t = max(0.0, min(1.0, (v.co - a).dot(ab) / L2)) ** ease
+        ca.data[i].color = (c0[0] + (c1[0] - c0[0]) * t, c0[1] + (c1[1] - c0[1]) * t, c0[2] + (c1[2] - c0[2]) * t, 1.0)
