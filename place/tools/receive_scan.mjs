@@ -50,6 +50,6 @@ if (!existsSync(join(scanDir, 'room_mesh.usdz'))) { console.error('撮影フォ�
 
 run(process.execPath, [join(here, 'ingest_roomscan.mjs'), scanDir, id, ...(nameArg ? [nameArg] : [])], '取りこみ');
 
-const ip = Object.values((await import('node:os')).networkInterfaces()).flat().find((n) => n?.family === 'IPv4' && /^192\.168\./.test(n.address))?.address ?? '192.168.x.x';
+const ip = Object.values((await import('node:os')).networkInterfaces()).flat().find((n) => n?.family === 'IPv4' && /^192\.168\./.test(n.address))?.address ?? '<PCのIP>';
 console.log(`\n撮影の原本: ${scanDir}`);
 console.log(`ARステージ / ブラウザで開く: https://${ip}:8443/place/web/demo.html?place=${id}`);
