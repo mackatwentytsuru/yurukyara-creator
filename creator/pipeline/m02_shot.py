@@ -4,7 +4,7 @@
         [--center x,z] [--scale 1.2] [--morph 名前=値,…] [--transparent]
 - 正射影。既定は、部品全体の外接箱に合わせる。--center と --scale(メートル)で、頭だけなどの範囲を指定できる。
 - 出力: <出力フォルダ>/shot_<向き>.png(白に近い背景)。向き: front(正面 -Y から)、right(キャラの右 -X から)、
-  back、left、q(右前 45°)。
+  back、left、q(右前 40°)、q55(55°。外の道具の 55° の確かめ)、q35(反対側の斜め 215°)、top(真上から)。
 """
 import math
 import os
@@ -13,7 +13,7 @@ import sys
 import bpy
 from mathutils import Vector
 
-VIEWS = {"front": 0.0, "q": 40.0, "right": 90.0, "back": 180.0, "left": 270.0}
+VIEWS = {"front": 0.0, "q": 40.0, "q55": 55.0, "q35": 215.0, "right": 90.0, "back": 180.0, "left": 270.0, "top": None}
 
 
 def main():
@@ -79,7 +79,14 @@ def main():
         pass
     sc.view_settings.view_transform = "Standard"
     for v in opt["--views"].split(","):
-        piv.rotation_euler[2] = math.radians(VIEWS[v])
+        if VIEWS[v] is None:      # 真上から(帽子・髪のてっぺん・羽根の広がりを見る)
+            piv.rotation_euler[2] = 0.0
+            co.location = (cx, 0.0, mx.z + 10)
+            co.rotation_euler = (0.0, 0.0, 0.0)
+        else:
+            co.location = (cx, -10, cz)
+            co.rotation_euler = (math.radians(90), 0, 0)
+            piv.rotation_euler[2] = math.radians(VIEWS[v])
         sc.render.filepath = os.path.join(out, f"shot_{v}.png")
         bpy.ops.render.render(write_still=True)
     print("SHOT done", opt["--views"])
