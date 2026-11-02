@@ -1,0 +1,151 @@
+"""段 6: 顔の絵の表(アトラス)を自分で描く。AI は使わない。
+
+使い方: python f01_face_atlas.py led <出力フォルダ>
+
+表の並び: 横 = 口の開き 4 段階(0 閉じる〜3 大きく開く)、縦 = 表情(neutral happy surprised sad think)と
+まばたき(blink = neutral の目を閉じた形)。1 マスの縦横比は 5:3。
+- led: 光る点(ドット)で顔を作る。点の格子は 40×24。光らない点もうっすら見える(画面らしさ)。
+出力: face_atlas.png と face_atlas.json(マスの並びと、表情ごとの行)
+"""
+import json
+import math
+import os
+import sys
+
+from PIL import Image, ImageDraw, ImageFilter
+
+COLS = 4
+ROWS = ["neutral", "happy", "surprised", "sad", "think", "blink"]
+GW, GH = 40, 24          # 点の格子
+CELL_W, CELL_H = 400, 240  # 1 マス(点の間隔 10 画素)
+SS = 3                    # 描くときの拡大(ぎざぎざ除け)
+
+
+def ring(cx, cy, r_out, r_in):
+    return {(x, y) for x in range(GW) for y in range(GH)
+            if r_in <= math.hypot(x - cx, (y - cy)) <= r_out}
+
+
+def disc(cx, cy, r):
+    return ring(cx, cy, r, 0)
+
+
+def arc_up(cx, cy, w, h, thick=1.0):
+    """上に凸の弧(はの目)。"""
+    pts = set()
+    for x in range(GW):
+        t = (x - cx) / (w / 2)
+        if abs(t) <= 1:
+            y = cy - h * (1 - t * t)
+            for yy in range(GH):
+                if abs(yy - (cy - h * (1 - t * t))) <= thick / 2 + 0.01:
+                    pts.add((x, yy))
+    return pts
+
+
+def smile(cx, cy, w, h, thick=1.0, frown=False):
+    """口の弧。h が大きいほど深い。frown は への字。"""
+    pts = set()
+    for x in range(GW):
+        t = (x - cx) / (w / 2)
+        if abs(t) <= 1:
+            y = cy + (-1 if frown else 1) * h * (1 - t * t)  # 中央が低い = 笑い口
+            for yy in range(GH):
+                if abs(yy - y) <= thick / 2 + 0.01:
+                    pts.add((x, yy))
+    return pts
+
+
+def hline(cx, cy, w):
+    return {(x, cy) for x in range(int(cx - w / 2), int(cx + w / 2) + 1) if 0 <= x < GW}
+
+
+def eyes(kind):
+    lx, rx, y = 11, 29, 8
+    if kind in ("neutral", "sad"):
+        out = ring(lx, y, 4.6, 3.0) | disc(lx, y, 1.2) | ring(rx, y, 4.6, 3.0) | disc(rx, y, 1.2)
+        if kind == "sad":
+            out = {(x, yy + 1) for x, yy in out}
+        return out
+    if kind == "happy":
+        return arc_up(lx, y + 1, 9, 3.2, 1.6) | arc_up(rx, y + 1, 9, 3.2, 1.6)
+    if kind == "surprised":
+        return (ring(lx, y, 5.6, 3.8) | disc(lx, y, 2.0) | ring(rx, y, 5.6, 3.8) | disc(rx, y, 2.0))
+    if kind == "think":
+        # 左の目は ふつう、右の目は小さく、上を見る
+        return ring(lx, y, 4.6, 3.0) | disc(lx + 1, y - 1, 1.4) | ring(rx, y - 1, 3.4, 1.8)
+    if kind == "blink":
+        return hline(lx, y, 9) | hline(rx, y, 9) | hline(lx, y + 1, 9) | hline(rx, y + 1, 9)
+    raise ValueError(kind)
+
+
+def mouth(kind, level):
+    cx, cy = 20, 18
+    if level == 0:
+        if kind == "happy":
+            return smile(cx, cy - 1, 16, 3.5, 1.4)
+        if kind == "sad":
+            return smile(cx, cy + 1, 10, 2.5, 1.2, frown=True)
+        if kind == "think":
+            return hline(cx + 3, cy, 8) | hline(cx - 2, cy + 1, 4)
+        if kind == "surprised":
+            return ring(cx, cy, 2.6, 1.4)
+        return smile(cx, cy - 1, 12, 2.6, 1.2)
+    # 開いた口: 楕円。段階で大きくなる
+    r = {1: (3.2, 1.6), 2: (4.8, 2.6), 3: (5.6, 3.6)}[level]
+    pts = {(x, y) for x in range(GW) for y in range(GH)
+           if ((x - cx) / r[0]) ** 2 + ((y - cy) / r[1]) ** 2 <= 1.0}
+    if kind == "happy":
+        pts = {(x, y) for (x, y) in pts if y >= cy - 1}   # 半月(上がまっすぐ)
+    return pts
+
+
+def draw_cell(on, w=CELL_W, h=CELL_H):
+    W, H = w * SS, h * SS
+    img = Image.new("RGB", (W, H), (6, 14, 40))
+    d = ImageDraw.Draw(img)
+    pitch = w / GW * SS
+    r_off, r_on = pitch * 0.26, pitch * 0.40
+    for x in range(GW):
+        for y in range(GH):
+            c = ((x + 0.5) * pitch, (y + 0.5) * (h * SS / GH))
+            if (x, y) in on:
+                continue
+            d.ellipse([c[0] - r_off, c[1] - r_off, c[0] + r_off, c[1] + r_off], fill=(14, 30, 70))
+    glow = Image.new("RGB", (W, H), (0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    for (x, y) in on:
+        c = ((x + 0.5) * pitch, (y + 0.5) * (h * SS / GH))
+        gd.ellipse([c[0] - r_on * 1.7, c[1] - r_on * 1.7, c[0] + r_on * 1.7, c[1] + r_on * 1.7], fill=(0, 70, 95))
+    glow = glow.filter(ImageFilter.GaussianBlur(pitch * 0.9))
+    from PIL import ImageChops
+    img = ImageChops.add(img, glow)
+    d = ImageDraw.Draw(img)
+    for (x, y) in on:
+        c = ((x + 0.5) * pitch, (y + 0.5) * (h * SS / GH))
+        d.ellipse([c[0] - r_on, c[1] - r_on, c[0] + r_on, c[1] + r_on], fill=(40, 225, 255))
+        d.ellipse([c[0] - r_on * 0.45, c[1] - r_on * 0.45, c[0] + r_on * 0.45, c[1] + r_on * 0.45], fill=(200, 250, 255))
+    return img.resize((w, h), Image.LANCZOS)
+
+
+def main():
+    style, out = sys.argv[1], sys.argv[2]
+    os.makedirs(out, exist_ok=True)
+    if style != "led":
+        raise SystemExit("今は led だけ")
+    atlas = Image.new("RGB", (COLS * CELL_W, len(ROWS) * CELL_H))
+    for r, kind in enumerate(ROWS):
+        for c in range(COLS):
+            base = "neutral" if kind == "blink" else kind
+            on = eyes(kind) | mouth(base, c)
+            atlas.paste(draw_cell(on), (c * CELL_W, r * CELL_H))
+    atlas.save(os.path.join(out, "face_atlas.png"))
+    spec = {"style": style, "cols": COLS, "rows": ROWS, "cell_aspect": CELL_W / CELL_H,
+            "mouth_levels": COLS, "blink_row": "blink"}
+    with open(os.path.join(out, "face_atlas.json"), "w", encoding="utf-8") as f:
+        json.dump(spec, f, ensure_ascii=False, indent=1)
+    print("atlas", atlas.size)
+
+
+if __name__ == "__main__":
+    main()
