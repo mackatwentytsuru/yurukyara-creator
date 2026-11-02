@@ -292,7 +292,7 @@ def camera(b, label, pos, target, focal):
 
 
 def place_character(b, meshes, face_material, report):
-    """胴と顔を同じ場所に置く。絵を動かさない今回は同じ位置のままでそろう。"""
+    """骨付きのメッシュを舞台に置く。"""
     if not meshes:
         raise RuntimeError("キャラの形が取り込めていない")
     scale = CHARACTER_HEIGHT_CM / CHARACTER_SOURCE_HEIGHT_CM
@@ -301,10 +301,12 @@ def place_character(b, meshes, face_material, report):
         actor = b.actors.spawn_actor_from_class(
             unreal.SkeletalMeshActor, vec(*CHARACTER_POS), unreal.Rotator(0, 0, CHARACTER_YAW))
         actor.skeletal_mesh_component.set_skinned_asset_and_update(mesh)
-        is_face = "Face" in mesh.get_name()
-        actor.set_actor_label("Character_" + ("Face" if is_face else "Body"))
-        if is_face:
-            actor.skeletal_mesh_component.set_material(0, face_material)
+        actor.set_actor_label("Character_" + mesh.get_name()[:12])
+        # 1 つのメッシュに合わせたので、顔の材質は名前で探した枠へ入れる
+        for index, slot in enumerate(mesh.get_editor_property("materials")):
+            if "face" in str(slot.get_editor_property("material_slot_name")).lower():
+                actor.skeletal_mesh_component.set_material(index, face_material)
+                report.append(f"face material slot {index}")
         actor.set_actor_scale3d(vec(scale, scale, scale))
         origin, extent = actor.get_actor_bounds(False)
         report.append(f"{mesh.get_name()} bounds origin {origin} extent {extent}")

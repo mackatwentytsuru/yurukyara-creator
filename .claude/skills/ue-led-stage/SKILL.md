@@ -39,6 +39,16 @@ description: Unreal Engine 5.8 で、複数の面の LED ウォールがある�
 - `AssetImportTask` で取り込むと、メッシュごとに別の骨付きメッシュと骨になる。胴と顔なら 2 アクタ置く。glTF の +Z(正面)は UE の +Y を向く。
 - 顔のアトラスは glTF の材質のままだと全部映る。1 コマだけ映す材質を書き、`Emissive = 色 × 明るさ × 透明度`。透明の抜き(Masked)は縁がギザギザになった。
 - **動きだけの glb(メッシュ無し)は Interchange が何も作らない**(スキンが使われていないと出る)。
+- **動かす手順**(骨が同じ動きの glb が別にあるとき):
+  1. Blender 背景モードで `scene.render.fps = 30` を**先に**入れる(初期の 24 のままだと、書き出しで動きが短くなる)。
+  2. 形の glb を読み、メッシュを `join` で 1 つに合わせる(材質は枠で残る)。UE は glb のメッシュごとに別の骨を作るので、合わせないと動きを 1 本で流せない。
+  3. 動きの glb を読み、骨の名前と初期の位置が同じかを確かめ、Action だけを取り、骨組みの NLA トラックに置く。
+  4. `export_animation_mode="NLA_TRACKS"` で 1 本の GLB に書き出す。UE では Skeletal Mesh 1 つ・Anim Sequence が動きの数だけできる(名前は `<glb名><動き名>`)。
+  5. シーケンスで `binding.add_track(unreal.MovieSceneSkeletalAnimationTrack)` → `add_section()` → `set_range`。`params` を `get_editor_property` で取り、`animation` を入れ、`set_editor_property("params", params)` で戻す。範囲が動きより長いと繰り返す。
+  6. 材質の枠は `mesh.get_editor_property("materials")` の `material_slot_name` で探し、`set_material(番号, 材質)`。
+- 測った値: Blender 2 秒、UE の取り込み 0.8 秒、撮影 1 コマ約 0.05 秒(骨 6 本・頂点 13,000 ほど)。
+- 確かめ方: 同じカットの 2 つのコマを並べて見る。部品ごとの剛体の骨なら、顔の面も体に付いて動く。
+- 顔のコマを途中で変えるのは未試験(`MovieSceneComponentMaterialTrack` はある)。
 
 ## 落とし穴
 
@@ -68,3 +78,11 @@ description: Unreal Engine 5.8 で、複数の面の LED ウォールがある�
 - カメラの式(焦点距離とセンサー幅)で面の範囲を計算し、面の中だけ平均と最大 255 の割合を測る。
 - 160 px ごとの線と面の境目の赤線のグリッドを流して撮り、赤線の位置を計算と比べる(今回の差は 0.5〜2.5 px)。
 - 同じカメラで、物があるカットと無いカットの差を取ると、物の範囲を測れる。LED の絵の中の物の縦横は、絵だけが違うカットとの差で測る(元の絵 0.922 に対して 0.921 だった)。
+
+## ブラウザ(three.js)のキャラを LED の動画にする(保険の案)
+- 実時間の画面録画ではなく、専用ページで `update(1/30)` を固定で進め、`canvas.toDataURL('image/png')` で透明 PNG を 1 コマずつ保存 → ffmpeg で背景に重ねる。1 コマ約 14 ms で、90 コマが数秒。
+- 中央の面の横 1.48 倍の伸ばしと中心の移動は、カメラの射影行列に直接入れる(`elements[0] *= 1.48`、`elements[8]`=横のずれ、`elements[9]`=縦のずれ。`updateProjectionMatrix` を空にして上書きを防ぐ)。
+- ヘッドレス Chrome は `--use-angle=d3d11 --ignore-gpu-blocklist`。`--use-angle=gl` だと WebGL のコンテキストが失われて全コマが透明になる。
+- 境目の確認は、静止ポーズでなく動き全体の外接矩形(全コマのアルファ)で測る。体が回る動きは静止より横に 10〜20% 広がる。
+- `web/` を書きかえずに読ませるには、小さな静的配信と import map(three・three/addons・@pixiv/three-vrm 系)で足りる。配る道を許可リストにして `.env` を除く。
+- 動きの glb をブラウザと別の道具(UE など)で見比べるときは、先に骨の回転をページで出して glb の値と突き合わせる。rig の視線処理(lookBone)は、動きの骨が一定値だと角度が積み上がるので、録画ページでは切る。

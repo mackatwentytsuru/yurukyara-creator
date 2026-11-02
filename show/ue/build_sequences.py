@@ -29,6 +29,8 @@ CUTS = [
     {"name": "Check_NoCharacter", "media": "a_title", "camera": "wide", "hide_character": True},
     # 動きの試し: 5 秒。扉が開き、カメラが少しずつ寄る
     {"name": "Move_DoorOpens", "media": "a_title", "camera": "wide", "frames": 150, "animate_doors": True},
+    # 骨の動きの試し: 3 秒。寄りのカメラ
+    {"name": "Move_Wave", "media": "a_title", "camera": "close", "frames": 90, "animation": "wave"},
 ]
 
 
@@ -116,7 +118,24 @@ def hide_actor(sequence, actor, frames):
     pin_transform(sequence, actor, (at.x, at.y, UNDER_FLOOR_Z), frames)
 
 
-def build_sequence(cut, level_actors, media_texture):
+def add_skeletal_animation(sequence, actor, animation, frames):
+    binding = sequence.add_possessable(actor)
+    track = binding.add_track(unreal.MovieSceneSkeletalAnimationTrack)
+    section = track.add_section()
+    section.set_range(0, frames)
+    params = section.get_editor_property("params")
+    params.set_editor_property("animation", animation)
+    section.set_editor_property("params", params)
+
+
+def find_animation(animations, wanted):
+    for name, animation in animations.items():
+        if wanted in name.lower():
+            return animation
+    raise RuntimeError(f"動きが無い: {wanted} / {list(animations)}")
+
+
+def build_sequence(cut, level_actors, media_texture, animations):
     sequence, _ = get_or_create(cut["name"], SEQUENCE_DIR, unreal.LevelSequence,
                                 unreal.LevelSequenceFactoryNew())
     reset_sequence(sequence)
@@ -129,6 +148,10 @@ def build_sequence(cut, level_actors, media_texture):
     add_media(sequence, source, media_texture, frames)
     camera_actor = level_actors["cameras"][cut["camera"]]
     camera_binding = add_camera_cut(sequence, camera_actor, frames)
+    if cut.get("animation"):
+        chosen = find_animation(animations, cut["animation"])
+        for actor in level_actors["characters"]:
+            add_skeletal_animation(sequence, actor, chosen, frames)
     if cut.get("hide_character"):
         for actor in level_actors["characters"]:
             hide_actor(sequence, actor, frames)
@@ -168,6 +191,6 @@ def build_render_config():
     return config
 
 
-def build_all(level_actors, media_texture):
+def build_all(level_actors, media_texture, animations):
     build_render_config()
-    return [build_sequence(cut, level_actors, media_texture) for cut in CUTS]
+    return [build_sequence(cut, level_actors, media_texture, animations) for cut in CUTS]
