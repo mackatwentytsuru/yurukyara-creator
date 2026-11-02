@@ -19,6 +19,7 @@ from m00_prims import _make, tube
 FAR = 5.0            # 体の外から光線を飛ばす距離(メートル)
 AO_FLOOR = 0.35      # 影の濃さの下限。真っ黒にしない
 MIN_RAY_START = 2e-3 # 自分の面に当たらないよう、光線の出発点を法線の向きへずらす量
+FLARE_REACH = 0.6    # 生える部品の太らせを、面から半径の何倍まで続けるか。長いと、くさび形に見える
 
 
 def body_bvh(objs):
@@ -196,6 +197,7 @@ def soft_patch(name, body, angle_deg, z, half_w, half_h, rgb, out_dir, clearance
     m.blend_method = "BLEND"
     ob = _make(name, verts, faces, m, (0, 0, 0), (0, 0, 0))
     _set_uv(ob, uvs)
+    ob["surface_only"] = True    # 検査(m03_contact)で「体」にも「部品」にも数えない印
     return ob
 
 
@@ -267,9 +269,10 @@ def _inside_any(body, p):
     return False
 
 
-def limb(name, body, root, tip, r_root, r_tip, mat=None, bury=0.8, flare=1.3, n=24, rows=16, ry_scale=1.0):
+def limb(name, body, root, tip, r_root, r_tip, mat=None, bury=0.8, flare=1.2, n=24, rows=20, ry_scale=1.0):
     """体から生える部品。root→tip の線が体の面を出る所を測り、そこから r_root × bury だけ内側を付け根にする。
-    面のあたりを r_root × flare まで太らせ、肩のくさび形の抜けをふさぐ。先は丸める。
+    面のすぐ近くだけを r_root × flare まで太らせ、肩の抜けをふさぐ。先は丸める。
+    r_root と r_tip はほぼ同じにする(差が大きいと、くさび形に見える)。
     体に当たらない置き方、付け根が体の中に入らない置き方は、例外で止まる(浮いたまま仕上げない)。
     戻り値の ob["pivot"] を、その部品の骨の位置に使う(骨が体の中にあれば、回しても付け根が開かない)。"""
     p_root, p_tip = Vector(root), Vector(tip)
@@ -290,7 +293,7 @@ def limb(name, body, root, tip, r_root, r_tip, mat=None, bury=0.8, flare=1.3, n=
         t = k / rows
         at = t * length
         r = r_root + (r_tip - r_root) * t
-        past = max(at - from_surface, 0.0) / max(r_root, 1e-4)   # 面から外へ、半径いくつ分か
+        past = max(at - from_surface, 0.0) / max(r_root * FLARE_REACH, 1e-4)   # 面から外へ、太らせる範囲のどこまで来たか
         fade = max(1.0 - past, 0.0)
         r *= 1.0 + (flare - 1.0) * fade * fade * (3 - 2 * fade)
         left = length - at
@@ -299,8 +302,13 @@ def limb(name, body, root, tip, r_root, r_tip, mat=None, bury=0.8, flare=1.3, n=
         pts.append(tuple(anchor + d * at))
         radii.append(r)
     ob = tube(name, pts, radii, mat=mat, n=n, ry_scale=ry_scale)
-    ob["pivot"] = [round(v, 4) for v in anchor]
+    ob["pivot"] = [round(float(v), 4) for v in anchor]
     return ob
+
+
+def pivot_of(ob):
+    """limb の付け根を、JSON に書ける普通の数の並びで返す(rig.json の at に使う)。"""
+    return [float(v) for v in ob["pivot"]]
 
 
 def _hemisphere(samples):

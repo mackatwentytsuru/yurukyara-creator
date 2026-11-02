@@ -291,27 +291,44 @@ def gradient_axis(ob, p0, p1, c0, c1, ease=1.0):
         ca.data[i].color = (c0[0] + (c1[0] - c0[0]) * t, c0[1] + (c1[1] - c0[1]) * t, c0[2] + (c1[2] - c0[2]) * t, 1.0)
 
 
-def fuzz_images(rgb, out_dir, name="fuzz", size=512, seed=7, grain=0.10, strength=3.0):
-    """ぬいぐるみの毛足の画像を作る(継ぎ目なしに並べられる)。色の画像(色 × 細かい明暗)と、法線の画像の 2 枚。
-    毛は、短い向きのそろわない線の重なりとして描く。AI は使わない(numpy だけ)。"""
+FUZZ_FIBRES = 24         # 毛の本数(画像の 1 辺 × この数)。少ないと 1 本ずつが引っかき傷に見える
+FUZZ_CLOUD_BLUR = 3      # 雲のなめらかさ
+FUZZ_FIBRE_SHADE = 0.6   # 細い毛の明暗の強さ(grain に掛ける)
+FUZZ_CLOUD_SHADE = 0.5   # ふわっとしたむらの強さ(grain に掛ける)
+
+
+def fuzz_images(rgb, out_dir, name="fuzz", size=512, seed=7, grain=0.10, strength=1.0):
+    """ぬいぐるみの毛足の画像を作る(継ぎ目なしに並べられる)。色の画像(色 × ふわっとしたむら × 細い毛)と、法線の画像の 2 枚。
+    毛は、向きがなめらかに変わる細い線の重なりとして描く。1 画素の粒は使わない(砂壁に見える)。AI は使わない(numpy だけ)。"""
     import numpy as np
     rng = np.random.default_rng(seed)
+
+    def soft_noise(cells):
+        """巻きつけの、なめらかな雲。cells は 1 辺のマス目の数。"""
+        n = rng.random((cells, cells)).astype(np.float32)
+        out = np.kron(n, np.ones((size // cells + 1, size // cells + 1), np.float32))[:size, :size]
+        for _ in range(FUZZ_CLOUD_BLUR):
+            out = (out + np.roll(out, size // cells // 2, 0) + np.roll(out, size // cells // 2, 1)
+                   + np.roll(np.roll(out, size // cells // 2, 0), size // cells // 2, 1)) / 4
+        return (out - out.min()) / max(out.max() - out.min(), 1e-6)
+
+    field = soft_noise(6) * 2 * math.pi           # 毛の向き: 場所ごとになめらかに変わる
     h = np.zeros((size, size), np.float32)
-    for sc, amp in ((1, 0.35), (2, 0.35), (4, 0.30)):          # 細かさの違う粒
-        n = rng.random((size // sc, size // sc)).astype(np.float32)
-        n = np.kron(n, np.ones((sc, sc), np.float32))
-        h += amp * n
-    # 短い毛の線(向きは乱れる)を足す。端でつながるよう巻きつけて描く
-    for _ in range(size * 3):
-        x, y = rng.integers(0, size, 2)
-        a = rng.random() * math.pi
-        L = int(rng.integers(5, 14))
+    for _ in range(size * FUZZ_FIBRES):
+        x, y = float(rng.integers(0, size)), float(rng.integers(0, size))
+        L = int(rng.integers(8, 22))
         for t in range(L):
-            xx, yy = int(x + math.cos(a) * t) % size, int(y + math.sin(a) * t) % size
-            h[yy, xx] += 0.35 * (1 - t / L)
-    h = (h - h.min()) / max(h.max() - h.min(), 1e-6)
-    # 色: 平均 1 の明暗(grain の幅)
-    shade = 1.0 + (h - 0.5) * 2 * grain
+            xi, yi = int(x) % size, int(y) % size
+            h[yi, xi] += 0.5 * (1 - t / L)
+            ang = field[yi, xi]
+            x += math.cos(ang)
+            y += math.sin(ang)
+    h = sum(np.roll(np.roll(h, i, 0), j, 1) for i in (-1, 0, 1) for j in (-1, 0, 1)) / 9.0   # 線の角を丸める
+    h = (h - h.mean()) / max(h.std() * 4, 1e-6) + 0.5
+    h = np.clip(h, 0, 1)
+    cloud = soft_noise(16) * 0.6 + soft_noise(8) * 0.4
+    # 色: 平均 1 の明暗。細い毛(grain の幅)と、ふわっとしたむら
+    shade = 1.0 + (h - 0.5) * 2 * grain * FUZZ_FIBRE_SHADE + (cloud - 0.5) * 2 * grain * FUZZ_CLOUD_SHADE
     col = np.clip(np.array(rgb, np.float32)[None, None, :] * shade[..., None], 0, 255).astype(np.uint8)
     # 法線: 高さの差分(巻きつけ)
     dx = np.roll(h, -1, 1) - np.roll(h, 1, 1)
@@ -432,5 +449,6 @@ def fuzz_shell(ob, rgb, out_dir, thick=0.012, density=0.28, name="shell", size=5
         sh.data.materials.clear()
         sh.data.materials.append(m)
         auto_uv(sh, tile=tile * (1 + 0.31 * k))
+        sh["surface_only"] = True    # 検査(m03_contact)で「体」にも「部品」にも数えない印。名前は自由でよい
         shells.append(sh)
     return shells

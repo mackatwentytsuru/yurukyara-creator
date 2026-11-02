@@ -84,7 +84,8 @@ def main():
     near = float(opt.get("near", 0.012))
     hug = set(filter(None, opt.get("hug", "").split(",")))
     skip = tuple(filter(None, opt.get("skip", "shell,cheek,hl").split(",")))
-    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH" and not o.name.startswith(skip) and o.data.polygons]
+    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH" and o.data.polygons and not o.name.startswith(skip)
+              and not o.get("surface_only")]   # 毛羽の殻と当て布は、部品の印で除く(古い物のために名前でも除く)
     trees = {o.name: bvh_of(o) for o in meshes}
     out = {}
     for o in meshes:
