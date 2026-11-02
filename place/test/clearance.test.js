@@ -56,3 +56,17 @@ test('床が読めないときは不合格で理由を返す', () => {
   const r = checkClearance({ spawn: [0, 0], room: { objects: [] } });
   assert.equal(r.ok, false);
 });
+
+test('findOpenSpot: 真ん中に机があっても、空いた床の点を返し、その点は通れる', async () => {
+  const { findOpenSpot } = await import('../tools/clearance.mjs');
+  const table = { transform: at(0, 0.4, 0), dimensions: [1.2, 0.8, 0.7] };
+  const r = room([table]);
+  const spot = findOpenSpot(r);
+  assert.ok(spot, '空いた床が見つかる');
+  assert.equal(checkClearance({ spawn: spot, room: r }).problems.some((p) => /近すぎる/.test(p)), false);
+});
+
+test('findOpenSpot: 床が読めなければ null', async () => {
+  const { findOpenSpot } = await import('../tools/clearance.mjs');
+  assert.equal(findOpenSpot({ objects: [] }), null);
+});

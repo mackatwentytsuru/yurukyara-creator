@@ -52,6 +52,35 @@ function objectBoxes(room) {
 }
 
 /**
+ * 立つ位置が家具の中などで塞がっているときの代わり: 歩ける升目のうち、壁と家具から一番離れた点(同じなら床の中心に近い点)。
+ * 本物の部屋は真ん中に机が来ることがあり、床の中心にキャラを立たせると家具の中に入ってしまう。
+ * @returns {[number, number]|null} [x, z]。歩ける所が無ければ null
+ */
+export function findOpenSpot(room, person = PERSON) {
+  const floor = floorBox(room);
+  if (!floor) return null;
+  const objects = objectBoxes(room);
+  const r = person.radius;
+  const wallMargin = (p) => {
+    const dx = p[0] - floor.center[0], dz = p[1] - floor.center[1];
+    const t = (axis, half) => half - Math.abs((dx * axis[0] + dz * axis[1]) / (len(axis) || 1));
+    return Math.min(t(floor.a, floor.ha), t(floor.b, floor.hb));
+  };
+  let best = null;
+  const reach = Math.hypot(floor.ha, floor.hb);
+  for (let x = floor.center[0] - reach; x <= floor.center[0] + reach; x += CELL) {
+    for (let z = floor.center[1] - reach; z <= floor.center[1] + reach; z += CELL) {
+      const p = [x, z];
+      const margin = Math.min(wallMargin(p), ...objects.map((b) => distToBox(p, b)));
+      if (margin < r) continue;
+      const toCenter = Math.hypot(x - floor.center[0], z - floor.center[1]);
+      if (!best || margin > best.margin + 1e-9 || (Math.abs(margin - best.margin) <= 1e-9 && toCenter < best.toCenter)) best = { p, margin, toCenter };
+    }
+  }
+  return best ? [Number(best.p[0].toFixed(2)), Number(best.p[1].toFixed(2))] : null;
+}
+
+/**
  * @param {{spawn:number[], room:object, person?:object}} args spawn は [x, z](水平)
  * @returns {{ok:boolean, spawnClearance:number|null, reachablePercent:number, doors:object[], problems:string[]}}
  */

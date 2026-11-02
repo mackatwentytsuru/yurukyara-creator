@@ -13,7 +13,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildPlaceJson } from './landmarks.mjs';
 import { buildBoxGlb, elementsFromRoomJson } from './glbBoxes.mjs';
 import { judgeBudget, measureGlb } from './glbBudget.mjs';
-import { checkClearance } from './clearance.mjs';
+import { checkClearance, findOpenSpot } from './clearance.mjs';
 import { writePlaceIndex } from './placeIndex.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -111,6 +111,18 @@ for (const f of ['room.glb', ...(stylized ? ['room_raw.glb'] : [])]) {
   console.log(`予算 ${j.verdict}: ${f}(三角面 ${m.triangles}、テクスチャ最大 ${m.maxTexture}px、${(m.bytes / 1024).toFixed(0)} KB)${j.reasons.map((r) => '\n  - ' + r).join('')}`);
 }
 if (existsSync(roomJson)) {
-  const c = checkClearance({ spawn: [place.spawn.position[0], place.spawn.position[2]], room: JSON.parse(readFileSync(roomJson, 'utf8')) });
+  const roomData = JSON.parse(readFileSync(roomJson, 'utf8'));
+  const first = checkClearance({ spawn: [place.spawn.position[0], place.spawn.position[2]], room: roomData });
+  if (first.spawnClearance !== null && first.problems.some((p) => p.startsWith('立つ位置が'))) {
+    const spot = findOpenSpot(roomData);
+    if (spot) {
+      console.log(`立つ位置を動かした: [${place.spawn.position[0]}, ${place.spawn.position[2]}](家具の中)→ [${spot[0]}, ${spot[1]}](空いた床)`);
+      place.spawn.position = [spot[0], 0, spot[1]];
+      const door = hints.filter((h) => h.kind === 'door').sort((a, b) => a.position[0] - b.position[0] || a.position[2] - b.position[2])[0];
+      if (door) place.spawn.yaw_deg = Number(((Math.atan2(door.position[0] - spot[0], door.position[2] - spot[1]) * 180) / Math.PI).toFixed(1));
+      writeFileSync(join(outDir, 'place.json'), JSON.stringify(place, null, 2) + '\n', 'utf8');
+    }
+  }
+  const c = checkClearance({ spawn: [place.spawn.position[0], place.spawn.position[2]], room: roomData });
   console.log(`${c.ok ? '通れる' : '通れない'}: 立つ位置の余裕 ${c.spawnClearance} m、行ける床 ${c.reachablePercent}%${c.problems.map((p) => '\n  - ' + p).join('')}`);
 }

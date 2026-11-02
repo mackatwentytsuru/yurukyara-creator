@@ -3,6 +3,7 @@
 自分で起動した http サーバーだけを止める。
 """
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -49,6 +50,8 @@ def main() -> int:
                 page.goto(f"http://127.0.0.1:{port}/place/web/demo.html?cam={cam}&place={PLACE}")
                 page.wait_for_function("window.__place && window.__place.ready", timeout=20000)
                 page.wait_for_timeout(500)
+                if os.environ.get("SHOT_CLEAN"):  # 情報欄とボタンを隠した絵(部屋を見せる用)
+                    page.add_style_tag(content="#info, #bar { display: none !important; }")
                 name = f"{cam}_{w}x{h}.png"
                 page.screenshot(path=str(OUT / name))
                 info = page.evaluate("window.__place")

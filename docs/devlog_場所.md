@@ -83,3 +83,12 @@
 - Google 公式 `dl.google.com/android/repository/platform-tools-latest-windows.zip`(8,044,989 バイト)を 作業用 PC の `D:	ools\platform-tools\` に展開。adb 1.0.41(Version 37.0.1-15733141)、署名は Google LLC で有効。PATH・設定ファイルは変えていない(`D:	ools\platform-toolsdb.exe` をフルパスで呼ぶ)。C: 472 GB、D: 125 GB の空き。
 - この時点で、作業用 PC の USB に Quest は見えない(Meta の USB の ID 2833 が無く、`adb devices` も空)。ケーブル・Quest の電源・開発者モードの確認待ち。
 - つまずき: 札の種類名は `cpu`(「CPU の重い処理」は通らない)。札を取る前にダウンロードを先に走らせてしまったので、あとから取って返した(小さな作業)。
+
+### 2026-11-02 夜 初めての本物の撮影(iPhone 12 Pro・RoomPlan)を取りこんだ
+- AirDrop は 4 ファイル(room_mesh.usdz 83 KB・room_parametric.usdz 40 KB・room.json 129 KB・landmarks_hint.json 5 KB)が別々に ~/Downloads へ届いた。`receive_scan.mjs` で集まった。
+- **Blender 5.2 は本物の room_mesh.usdz を読めた**(箱の救済に落ちず)。三角面 404、940 KB。部屋は 4.77 × 4.63 m(床 3.89 × 4.05 m、壁 4、ドア 3、窓 1、物 12)。`room.json` は想定どおり floors/walls/doors/windows/objects、各 `transform`(4x4)と `dimensions`、`category` は `{'floor':{}}` のような入れ子。
+- 見つけた不具合と直し: 床の中心にキャラを立たせる既定の立つ位置が、**机の中**だった(余裕 0 m)。`clearance.mjs` に `findOpenSpot`(壁と家具から一番離れた歩ける点)を足し、取りこみ時に塞がっていれば空いた床へ動かし、向きも最初のドアへ直す(`(-0.92, 0.54)` → `(0.27, 1.64)`、余裕 0.71 m)。
+- 検査の結果: 予算「採用」。行ける床 83%(家具で分かれている。基準 90% 未満)、ドア 2 枚が幅 0.69・0.72 m で人の幅 0.72 m に足りない・歩いて行けない(参考の情報。AR で見るには関係しない)。
+- 見た目: 「素材貼り」が床と一部の壁を木に判定した(wood 136 面)。上から見ると床が茶色の木目で、実物と合うかは本人に確かめてもらう。
+- `shot.py` は環境変数 `SHOT_CLEAN=1` で情報欄とボタンを隠せる(部屋を見せる絵用)。
+- 撮った原本は `work\scans_in\`(リポジトリの外)。`places/room_1102/` と、それを載せた `places/index.json` は、本人の OK が出るまでコミットしない。
