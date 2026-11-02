@@ -33,6 +33,7 @@ final class ShootRecorder {
     }
 
     var currentFrameCount: Int { frameCount }
+    var droppedCount: Int { dropped.count }
 
     private func setup(width: Int, height: Int, firstTimestamp: Double) {
         t0 = firstTimestamp

@@ -36,6 +36,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let recordButton = UIButton(type: .system)
     private let shareButton = UIButton(type: .system)
     private let formatControl = UISegmentedControl()
+    private let ueLink = UELinkController()
+    private let ueButton = UIButton(type: .system)
+    private var crosshair: UIView?
     private let faceControl = UISegmentedControl(items: ["LED 1面", "LED 3面(A・B・C)"])
     private let focusSwitch = UISwitch()
     private let focusLabel = UILabel()
@@ -71,6 +74,16 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         sceneView.session.delegate = self
         sceneView.session.delegateQueue = frameQueue
         view.addSubview(sceneView)
+        ueLink.webView.frame = view.bounds
+        ueLink.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(ueLink.webView)
+        ueLink.recorderInfo = { [weak self] in
+            guard let self else { return nil }
+            self.lock.lock(); defer { self.lock.unlock() }
+            guard let r = self.recorder else { return nil }
+            return (r.currentFrameCount, r.droppedCount)
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(thermalChanged), name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
         sceneView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(calibTapped)))
 
         addCrosshair()
@@ -85,6 +98,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         super.viewDidAppear(animated)
         UIApplication.shared.isIdleTimerDisabled = true
         runSession(reset: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.applyLaunchArguments() }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -101,6 +115,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let size: CGFloat = 44
         let cross = UIView(frame: CGRect(x: 0, y: 0, width: size, height: size))
         cross.isUserInteractionEnabled = false
+        crosshair = cross
         cross.translatesAutoresizingMaskIntoConstraints = false
         let path = UIBezierPath()
         path.move(to: CGPoint(x: size / 2, y: 0)); path.addLine(to: CGPoint(x: size / 2, y: size))
@@ -160,7 +175,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         recordButton.addTarget(self, action: #selector(recordTapped), for: .touchUpInside)
         shareButton.addTarget(self, action: #selector(shareTapped), for: .touchUpInside)
 
-        let bar = UIStackView(arrangedSubviews: [calibButton, resetButton, recordButton, shareButton])
+        styled(ueButton, "UE", .systemIndigo)
+        ueButton.addTarget(self, action: #selector(ueTapped), for: .touchUpInside)
+        let bar = UIStackView(arrangedSubviews: [calibButton, resetButton, recordButton, shareButton, ueButton])
         bar.axis = .horizontal
         bar.spacing = 8
         bar.distribution = .fillProportionally
@@ -512,6 +529,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let af = autoFocus
         let expStart = exposureAtStart
         let expEnd = currentExposureInfo()
+        let ueSummary: UELinkSummary? = ueLink.enabled ? ueLink.summary() : nil
         frameQueue.async { [weak self] in
             rec.finish { stats in
                 guard let self else { return }
@@ -521,7 +539,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                 let iso = ISO8601DateFormatter().string(from: started ?? Date())
                 let meta = ShootMeta(
                     startedAt: iso, device: Pack.deviceModel(), systemVersion: UIDevice.current.systemVersion,
-                    chosenFormat: fmt, supportedFormats: supported, autoFocus: af, exposureAtStart: expStart, exposureAtEnd: expEnd,
+                    chosenFormat: fmt, supportedFormats: supported, autoFocus: af, exposureAtStart: expStart, ueLink: ueSummary, exposureAtEnd: expEnd,
                     calibration: cal, events: evs, stats: stats, conventions: ShootMeta.conventionText
                 )
                 let enc = JSONEncoder()
@@ -534,6 +552,35 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             }
         }
         refreshUI()
+    }
+
+    // MARK: - UE モニター・熱
+
+    @objc private func ueTapped() {
+        let panel = UELinkPanelViewController(link: ueLink) { [weak self] in
+            guard let self else { return }
+            self.crosshair?.isHidden = self.ueLink.enabled
+            self.refreshUI()
+        }
+        present(panel, animated: true)
+    }
+
+    @objc private func thermalChanged() {
+        logEvent("thermal:\(UELinkController.thermalName(ProcessInfo.processInfo.thermalState))")
+    }
+
+    /// テスト用: 起動の引数で UE モニターを入れる(--ue-host H --ue-port P --ue-url U --ue-on --ue-latency --ue-test60)。
+    private func applyLaunchArguments() {
+        let a = ProcessInfo.processInfo.arguments
+        func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
+        guard a.contains("--ue-on") else { return }
+        ueLink.update(config: UELinkConfig(host: value("--ue-host") ?? ueLink.config.host,
+                                           port: Int(value("--ue-port") ?? "") ?? ueLink.config.port,
+                                           url: value("--ue-url") ?? ueLink.config.url))
+        ueLink.setEnabled(true)
+        crosshair?.isHidden = true
+        if a.contains("--ue-latency") { DispatchQueue.main.asyncAfter(deadline: .now() + 15) { self.ueLink.measureLatency { _ in } } }
+        if a.contains("--ue-test60") { DispatchQueue.main.asyncAfter(deadline: .now() + 30) { self.ueLink.minuteTest { _ in } } }
     }
 
     // MARK: - 共有
@@ -571,6 +618,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let rec = recorder
         lock.unlock()
         rec?.append(frame)
+        ueLink.handle(frame: frame, recording: rec != nil)
         frameTick += 1
         if frameTick % 6 == 0 { measureClip(frame) }
     }
@@ -642,7 +690,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             let sec = Int(Date().timeIntervalSince(started))
             statusLabel.text = String(format: " %02d:%02d  コマ %d  追跡 %@  白飛び %.1f%% ", sec / 60, sec % 60, rec.currentFrameCount, tracking, clip)
         } else {
-            statusLabel.text = " \(notice ?? String(format: "追跡 %@  白飛び %.1f%%", tracking, clip)) "
+            let ue = ueLink.statusText
+            statusLabel.text = " \(notice ?? String(format: "追跡 %@  白飛び %.1f%%", tracking, clip))" + (ue.isEmpty ? " " : "\n \(ue) ")
         }
     }
 }

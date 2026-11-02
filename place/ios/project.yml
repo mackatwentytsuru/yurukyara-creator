@@ -49,7 +49,10 @@ targets:
   ShootLog:
     type: application
     platform: iOS
-    sources: [ShootLog]
+    sources:
+      - ShootLog
+      - path: ue_link_defaults.json
+        optional: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.hackathon.shootlog
@@ -61,6 +64,7 @@ targets:
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: 作業用 PC の UE へ位置を送り、UE の絵を受けるためです。
         INFOPLIST_KEY_UIStatusBarHidden: YES
 schemes:
   RoomScan:

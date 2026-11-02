@@ -143,6 +143,7 @@ struct ShootMeta: Codable {
     var supportedFormats: [FormatInfo]
     var autoFocus: Bool
     var exposureAtStart: ExposureInfo?   // 録画を始めたときの露出・色・ピント(固定していれば固定した値)
+    var ueLink: UELinkSummary?           // UE モニターを使った撮影なら、送った数・熱
     var exposureAtEnd: ExposureInfo?     // 録画を止めたとき(始めと違えば、途中で動いた)
     var calibration: Calibration
     var events: [ShootEvent]
