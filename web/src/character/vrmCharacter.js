@@ -41,6 +41,10 @@ export class VrmCharacter extends CharacterBase {
       if (node) this.bones.set(name, node);
     }
     this.available = new Set(vrm.expressionManager ? Object.keys(vrm.expressionManager.expressionMap) : []);
+    // think は thinking の別名(docs/共通の決まり.md)。この VRM に thinking があれば、読み替える
+    if (this.available.has('thinking') && !this.available.has('think')) {
+      this.expressions = [...new Set(this.expressions.map((n) => (n === 'think' ? 'thinking' : n)))];
+    }
     this.emotionKeys = [...this.available].filter((k) => !NOT_EMOTION.has(k));
     this.customKeys = this.emotionKeys.filter((k) => !STANDARD_PRESETS.has(k)); // そのキャラだけの表情(ウインク・照れ など)
     this.expressionFallback = config.expressionFallback ?? {};
@@ -64,7 +68,8 @@ export class VrmCharacter extends CharacterBase {
 
   /** 名前を VRM の表情に直す。この VRM に無い名前は、近い表情に落とす(think は relaxed を弱く) */
   _resolve(name, value, out) {
-    const key = EXPRESSION_ALIAS[name] ?? name;
+    let key = EXPRESSION_ALIAS[name] ?? name;
+    if (key === 'think' && !this.available.has('think') && this.available.has('thinking')) key = 'thinking';
     if (this.available.has(key)) {
       out.set(key, Math.max(out.get(key) ?? 0, value));
       return;

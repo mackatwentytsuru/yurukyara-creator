@@ -18,8 +18,9 @@ test('近い表情: 出せるならそのまま、出せなければ標準の物
   assert.equal(nearestExpression('big_smile', only('neutral', 'happy')), 'happy'); // _ の違い
   assert.equal(nearestExpression('泣き顔', only('neutral', 'sad')), 'sad');
   assert.equal(nearestExpression('mouthO', only('neutral', 'surprised')), 'surprised'); // v5 の追加の名前
-  assert.equal(nearestExpression('singBig', only('neutral', 'happy')), 'happy');
-  assert.equal(nearestExpression('thinking', only('neutral', 'relaxed')), 'relaxed');
+  assert.equal(nearestExpression('singBig', only('neutral', 'happy')), 'neutral'); // 落とし先は口(aa)。表情の一覧に口は無いので neutral
+  assert.equal(nearestExpression('thinking', only('neutral', 'relaxed')), 'neutral'); // 共通の決まりの表どおり
+  assert.equal(nearestExpression('singBig', only('neutral', 'happy', 'aa')), 'aa'); // 口に任せる
   assert.equal(nearestExpression('wink', only('neutral')), 'neutral'); // 近い物も無ければ neutral
   assert.equal(nearestExpression('wink', only('happy')), 'happy'); // neutral が無くても、近い物があればそれ
   assert.equal(nearestExpression('wink', only('surprised')), null); // 近い物も neutral も無ければ null
@@ -151,4 +152,16 @@ test('特別な表情は 1 回の返事で 1 つまで(2 つ目以降は近い�
   assert.equal(f('mouthO'), 'surprised');
   assert.equal(oneCustomPerReply(list)('bigSmile'), 'bigSmile'); // 返事ごとに作り直す
   assert.equal(oneCustomPerReply(['neutral', 'happy'])('wink'), 'wink'); // 一覧に無い名前は、ここでは触らない(別の所で落とす)
+});
+
+test('think は thinking の別名: VRM に thinking があれば読み替え、一覧も thinking にそろえる', () => {
+  const vrm = stubVrm([...STD, 'thinking']);
+  const c = new VrmCharacter(vrm, { expressions: ['neutral', 'think', 'happy'] });
+  assert.deepEqual(c.expressions, ['neutral', 'thinking', 'happy']);
+  c.setEmotion('think', 1);
+  run(c);
+  assert.ok(vrm.values.get('thinking') > 0.9);
+  // thinking の無い VRM は、これまでどおり relaxed を半分で
+  const old = new VrmCharacter(stubVrm(STD), { expressions: ['neutral', 'think'] });
+  assert.deepEqual(old.expressions, ['neutral', 'think']);
 });
