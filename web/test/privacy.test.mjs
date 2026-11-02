@@ -20,7 +20,12 @@ const read = (p) => readFileSync(p, 'utf8');
 const code = (p) => read(p).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '');
 
 // 画像を取り出す・記録する・外へ送る道具。画面のどこにも使わない。
-const IMAGE_EXFIL = ['toDataURL', 'toBlob', 'getImageData', 'MediaRecorder', 'captureStream', 'createImageBitmap', 'sendBeacon', 'XMLHttpRequest', 'WebSocket'];
+// 'new Image(' は画像ビーコン(src に宛先を入れて送る)、EventSource・Worker は別の通り道、ImageCapture・getDisplayMedia は別の撮り方。
+// 「検査の検査」(scripts/mutation-check.mjs)で、これらが素通りだったので足した。
+const IMAGE_EXFIL = [
+  'toDataURL', 'toBlob', 'getImageData', 'MediaRecorder', 'captureStream', 'createImageBitmap', 'sendBeacon', 'XMLHttpRequest', 'WebSocket',
+  'EventSource', 'ImageCapture', 'grabFrame', 'takePhoto', 'getDisplayMedia', 'OffscreenCanvas', 'new Image(', 'new Worker', 'SharedWorker',
+];
 
 test('画像を取り出す・記録する・外へ送る道具を、画面のコードのどこでも使っていない', () => {
   for (const f of files) {
@@ -45,6 +50,30 @@ test('通信先は、自分のサーバー(/api/…)と、キャラ・場所の�
       assert.ok(allowed.some((re) => re.test(url)), `${relative(SRC, f)}: 想定していない通信先 ${url}`);
       assert.ok(!/^https?:\/\//.test(url), `${relative(SRC, f)}: 外のサーバーへ直接つないでいます ${url}`);
     }
+  }
+});
+
+// 変数を宛先にした fetch は、中身が見えない。今あるのは「読み込み」の 3 か所だけ。増えたら、中身を確かめてからここに足す。
+const VARIABLE_FETCH = {
+  'character/index.js': ['url'], // character.json(?character= で渡された物)
+  'conversation/speaker.js': ['f.url'], // /api/fillers が返した、自分のサーバーの声のファイル
+  'main.js': ['character.personaUrl'], // キャラの persona.md
+};
+
+test('fetch の宛先は、文字で書いた許可済みの物か、確かめ済みの変数だけ(変数の宛先に画像を忍ばせられない)', () => {
+  for (const f of files) {
+    const rel = relative(SRC, f).split('\\').join('/');
+    for (const m of code(f).matchAll(/\bfetch\(\s*([^,)]+)/g)) {
+      const arg = m[1].trim();
+      if (/^['"`]/.test(arg)) continue; // 文字の宛先は、上の試験が見る
+      assert.ok((VARIABLE_FETCH[rel] ?? []).includes(arg), `${rel}: 確かめていない変数の宛先 fetch(${arg})`);
+    }
+  }
+});
+
+test('外のサーバーの住所(http:// https:// ws://)を、画面のコードに書かない(import() も含めて)', () => {
+  for (const f of files) {
+    assert.ok(!/\b(?:https?|wss?):\/\//.test(code(f)), `${relative(SRC, f)} に外の住所があります`);
   }
 });
 

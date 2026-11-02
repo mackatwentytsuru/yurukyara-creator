@@ -21,7 +21,7 @@ const added = git('diff', '--cached', '-U0')
 const problems = [];
 
 for (const n of names) {
-  if (/(^|\/)\.env($|\.local$)/.test(n)) problems.push(`${n}: .env は記録しません(.env.example だけ)`);
+  if (/(^|\/)\.env(?!\.(example|sample)$)(\.[\w-]+)?$/.test(n)) problems.push(`${n}: .env は記録しません(.env.example だけ)`);
   if (/\.(vrm|glb|gltf)$/i.test(n) && !/^characters\/(?!_test)/.test(n) && !/^places\//.test(n)) problems.push(`${n}: モデルのファイルは、キャラ・場所のフォルダ以外には入れません`);
   if (/(^|\/)logs\//.test(n)) problems.push(`${n}: ログは記録しません`);
 }

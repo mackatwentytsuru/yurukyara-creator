@@ -3,7 +3,8 @@ import re
 import subprocess
 import sys
 
-BLOCKED_FILES = re.compile(r"(\.vrm|\.vrma|\.pem|\.key|\.crt|(^|/)\.env)$", re.I)
+# .env だけでなく .env.local・.env.production なども止める(見本の .env.example・.env.sample は上げてよい)
+BLOCKED_FILES = re.compile(r"(\.vrm|\.vrma|\.pem|\.key|\.crt|(^|/)\.env(?!\.(example|sample)$)(\.[\w-]+)?)$", re.I)
 SECRETS = re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}|sk_[a-f0-9]{30,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}")
 WORDS = re.compile(r"他社|別会社", re.I)
 WORD_ALLOWED = {"docs/共通の決まり.md", "tools/prepush_check.py"}
