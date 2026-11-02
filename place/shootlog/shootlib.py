@@ -151,7 +151,8 @@ def ue_camera_row(T_cam_in_led: np.ndarray, K4, width: int, height: int, led_to_
         roll = 0.0
     else:
         h /= nh
-        roll = float(np.degrees(np.arctan2(np.dot(np.cross(h, right), fwd), np.dot(h, right))))
+        # 符号は UE で実測して反転済み(10 度のロールを入れた絵と比べ、画素誤差 2.09 対 118.5)
+        roll = -float(np.degrees(np.arctan2(np.dot(np.cross(h, right), fwd), np.dot(h, right))))
     hfov, vfov = intrinsics_to_fov_deg(K4, width, height)
     return {
         "ue_x_cm": pos[0], "ue_y_cm": pos[1], "ue_z_cm": pos[2],
