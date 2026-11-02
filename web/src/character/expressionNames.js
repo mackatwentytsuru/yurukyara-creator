@@ -9,8 +9,8 @@ const norm = (s) => String(s).toLowerCase().replace(/[_\-\s]/g, '');
 
 // 近い標準の表情。キャラの character.json の expression_fallback で上書きできる
 const DEFAULT_FALLBACK = {
-  think: 'relaxed',
-  wink: 'happy', shy: 'happy', blush: 'happy', embarrassed: 'happy', bigsmile: 'happy', grin: 'happy', smile: 'happy', laugh: 'happy', joy: 'happy', fun: 'happy', proud: 'happy',
+  think: 'relaxed', thinking: 'relaxed',
+  wink: 'happy', winkright: 'happy', smug: 'happy', sparkle: 'happy', tongue: 'happy', singbig: 'happy', moutho: 'surprised', shy: 'happy', blush: 'happy', embarrassed: 'happy', bigsmile: 'happy', grin: 'happy', smile: 'happy', laugh: 'happy', joy: 'happy', fun: 'happy', proud: 'happy',
   pout: 'angry', sulk: 'angry', annoyed: 'angry', mad: 'angry',
   troubled: 'sad', worried: 'sad', cry: 'sad', crying: 'sad', tears: 'sad', sob: 'sad', sorrow: 'sad',
   confused: 'surprised', shock: 'surprised', amazed: 'surprised',

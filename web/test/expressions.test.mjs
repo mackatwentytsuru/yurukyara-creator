@@ -17,6 +17,9 @@ test('近い表情: 出せるならそのまま、出せなければ標準の物
   assert.equal(nearestExpression('bigSmile', only('neutral', 'happy')), 'happy'); // 大文字小文字
   assert.equal(nearestExpression('big_smile', only('neutral', 'happy')), 'happy'); // _ の違い
   assert.equal(nearestExpression('泣き顔', only('neutral', 'sad')), 'sad');
+  assert.equal(nearestExpression('mouthO', only('neutral', 'surprised')), 'surprised'); // v5 の追加の名前
+  assert.equal(nearestExpression('singBig', only('neutral', 'happy')), 'happy');
+  assert.equal(nearestExpression('thinking', only('neutral', 'relaxed')), 'relaxed');
   assert.equal(nearestExpression('wink', only('neutral')), 'neutral'); // 近い物も無ければ neutral
   assert.equal(nearestExpression('wink', only('happy')), 'happy'); // neutral が無くても、近い物があればそれ
   assert.equal(nearestExpression('wink', only('surprised')), null); // 近い物も neutral も無ければ null

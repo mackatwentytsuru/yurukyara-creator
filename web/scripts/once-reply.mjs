@@ -21,6 +21,7 @@ const body = {
   character: { name: ch.name, persona },
   place: { name: arg('place-name'), info: arg('place-info'), landmarks: [] },
   expressions: ch.expressions,
+  expressionHints: ch.expression_hints ?? {},
   motions: Object.keys(ch.motions ?? {}),
 };
 const res = await fetch(`http://127.0.0.1:${arg('port', '8787')}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
