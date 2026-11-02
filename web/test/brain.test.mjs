@@ -72,3 +72,29 @@ test('ユーザーの発話に見えている様子が付く', () => {
   assert.match(t, /お客さんの言葉】こんにちは/);
   assert.match(buildUserTurn({ trigger: 'approach', scene: '' }), /近づいてきた/);
 });
+
+test('最初の say に用件・段階が付いていたら、先に thought を出す', async () => {
+  const { createServer } = await import('node:http');
+  process.env.ANTHROPIC_API_KEY = 'test-key-not-real';
+  const line = '{"type":"say","text":"お手洗いですね。","expression":"happy","motion":"nod","gaze":"person","intent":"お手洗い","stage":"guide","handoff":false}\n{"type":"say","text":"左奥です。","expression":"happy","motion":"point","gaze":"landmark:お手洗い"}\n';
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text: line } })}\n\n`);
+      res.end();
+    });
+  });
+  await new Promise((r) => server.listen(0, r));
+  process.env.ANTHROPIC_API_URL = `http://127.0.0.1:${server.address().port}/v1/messages`;
+  const { runTurn } = await import(`../server/brain.mjs?${Math.random()}`);
+  const events = [];
+  try {
+    await runTurn({ text: 'お手洗い' }, { onEvent: (e) => events.push(e), signal: new AbortController().signal });
+  } finally {
+    server.close();
+  }
+  assert.deepEqual(events.map((e) => e.type), ['meta', 'thought', 'say', 'say']);
+  assert.equal(events[1].stage, 'guide');
+  assert.equal(events[1].intent, 'お手洗い');
+});

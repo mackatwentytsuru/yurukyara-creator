@@ -145,6 +145,11 @@ export async function runTurn(body, { onEvent, signal }) {
   const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
   const expressions = body.expressions?.length ? body.expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
   const emit = (obj) => {
+    // 最初の say に用件・段階が付いているときは、画面の「考え」にも先に渡す
+    if (obj.type === 'say' && (obj.intent !== undefined || obj.stage !== undefined)) {
+      const thought = normalizeEvent({ type: 'thought', intent: obj.intent, stage: obj.stage, handoff: obj.handoff }, { expressions });
+      if (thought) onEvent(thought);
+    }
     const ev = normalizeEvent(obj, { expressions });
     if (ev) onEvent(ev);
   };

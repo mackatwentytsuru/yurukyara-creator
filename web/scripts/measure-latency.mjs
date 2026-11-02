@@ -1,5 +1,5 @@
 // 返事までの時間を測る(サーバーの内側の分)。
-//   node scripts/measure-latency.mjs [回数=10] [--base http://localhost:8787] [--no-tts]
+//   node scripts/measure-latency.mjs [回数=10] [--base http://localhost:8787] [--no-tts] [--gap 5500]
 //
 // 測るもの(ms): 送信 → 最初の thought / 最初の say / 読み上げの最初の音のかけら
 //   サーバーの中の合計 = 最初の say までの時間 + 読み上げの最初のかけらまでの時間
@@ -16,6 +16,7 @@ const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) +
 const N = Number(args.find((a) => /^\d+$/.test(a)) ?? 10);
 const BASE = opt('--base', 'http://localhost:8787');
 const WITH_TTS = !flag('--no-tts');
+const GAP_MS = Number(opt('--gap', 5500)); // 1 分あたりの上限(既定 12 回)に当たらない間隔。人の間合いにも近い
 
 const PHRASES = ['こんにちは', 'お手洗いはどこですか', '休憩できる場所はありますか', 'スタッフの方と話したいです', '入口はどっちですか', 'ありがとうございます', '今日は何ができますか', 'ここは何のお店ですか', '少し教えてください', 'はじめまして'];
 const place = {
@@ -82,6 +83,7 @@ async function oneTurn(text) {
 
 const rows = [];
 for (let i = 0; i < N; i++) {
+  if (i > 0) await new Promise((r) => setTimeout(r, GAP_MS));
   const row = await oneTurn(PHRASES[i % PHRASES.length]);
   rows.push(row);
   console.log(`${String(i + 1).padStart(2)} ${row.brain.padEnd(5)} thought ${row.thoughtMs}ms  say ${row.firstSayMs}ms  音 ${row.ttsFirstChunkMs ?? '—'}ms  合計 ${row.serverTotalMs ?? '—'}ms  「${row.text}」`);
