@@ -2,10 +2,12 @@
   python place/tools/native_ar_check.py [出力フォルダ]
 偽の殻: window.webkit.messageHandlers.arhost を用意し、raycast を聞かれたら床の点 (0.5, -1.2, -2) を返す。
 姿勢は、(0, 0.2, 1) のカメラが -z(部屋の奥)を向く行列と、縦長の画面の射影行列を送る。
-確かめること: AR ボタンが使える・タップで床の点が返りキャラがそこに立つ・キャラの体が camera のほうを向く・
+確かめること: AR ボタンが使える・床を 2 回タップすると部屋が 25 度回って現実の点に重なる(向き・位置・床の高さ)・
+そのあとのタップで床の点が返りキャラがそこに立つ・キャラの体が camera のほうを向く・
 背景が透明(canvas の左上のピクセルの alpha が 0)・エラーが無い。
 """
 import json
+import math
 import socket
 import subprocess
 import sys
@@ -20,9 +22,10 @@ OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO / "place" / "shots"
 
 FAKE_HOST = """
 window.__shellMessages = [];
+window.__hitQueue = [];
 window.webkit = { messageHandlers: { arhost: { postMessage: (m) => {
   window.__shellMessages.push(m);
-  if (m.type === 'raycast') setTimeout(() => window.__arhost && window.__arhost.onHit(0.5, -1.2, -2), 20);
+  if (m.type === 'raycast') setTimeout(() => { const h = (window.__hitQueue || []).shift() || [0.5, -1.2, -2]; window.__arhost && window.__arhost.onHit(h[0], h[1], h[2]); }, 20);
 } } } };
 """
 
@@ -69,7 +72,27 @@ def main() -> int:
                   window.__arhost.onPose(world, proj);
                 }"""
             )
-            page.mouse.click(195, 600)  # 画面のタップ → raycast
+            # --- 位置合わせ: 部屋の目印の真下の床を 2 回タップ(正解は、25 度回して (1, -1.2, -3) に置いた部屋)
+            targets = page.evaluate("window.__place.align.targets")
+            yaw, tx, tz, fy = math.radians(25), 1.0, -3.0, -1.2
+
+            def to_world(x, z):
+                return [x * math.cos(yaw) + z * math.sin(yaw) + tx, fy, -x * math.sin(yaw) + z * math.cos(yaw) + tz]
+
+            page.evaluate("(q) => window.__hitQueue.push(...q)", [to_world(*t["room"]) for t in targets])
+            page.mouse.click(195, 600)
+            page.wait_for_function("window.__place.align && window.__place.align.prompt.includes('2/2')", timeout=5000)
+            page.mouse.click(195, 650)
+            page.wait_for_function("window.__place.align.done", timeout=5000)
+            align = page.evaluate("window.__place.align")
+            first = targets[0]["name"]
+            world_first = page.evaluate("(n) => window.__place.worldOfRoom(n)", first)
+            expect_first = to_world(*targets[0]["room"])
+            page.wait_for_timeout(200)
+            char_after_align = page.evaluate("window.__place.characterPosition")
+            # 位置合わせのあとのタップは、キャラを動かす
+            page.evaluate("() => window.__hitQueue.push([0.5, -1.2, -2])")
+            page.mouse.click(195, 700)
             page.wait_for_function("window.__place.nativeHit !== null", timeout=5000)
             page.wait_for_timeout(300)
             result = page.evaluate(
@@ -84,13 +107,16 @@ def main() -> int:
                 }"""
             )
             page.screenshot(path=str(OUT / "native_ar_390x844.png"))
-            result.update({"ar_button_enabled": ar_enabled, "errors": errors, "messages": page.evaluate("window.__shellMessages")})
+            result.update({"align": align, "world_first": world_first, "expect_first": expect_first, "char_after_align": char_after_align, "ar_button_enabled": ar_enabled, "errors": errors, "messages": page.evaluate("window.__shellMessages")})
             print(json.dumps(result, ensure_ascii=False, indent=1))
             browser.close()
         ok = (
             result["ar_button_enabled"]
             and result["hit"] == [0.5, -1.2, -2]
             and abs(result["pos"][1] - -1.2) < 1e-6
+            and result["align"]["ok"]
+            and abs(math.degrees(result["align"]["result"]["yaw"]) - 25) < 0.01
+            and all(abs(a - b) < 1e-4 for a, b in zip(result["world_first"], result["expect_first"]))
             and result["cornerRGBA"][3] == 0
             and not result["errors"]
         )

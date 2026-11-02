@@ -7,6 +7,9 @@
 //  - spawn と landmarks の座標は、そうして整えたあとの座標(床 y=0)で書く。
 //  - yaw_deg はキャラの object3d.rotation.y(度)。yaw 0 のキャラは +z を向く
 //    (VRM と同じ)。正が左回り(上から見て)。
+//  - AR では世界(起動した位置が原点)と部屋の座標がずれる。setAlignment で「部屋 → 世界」の変換を決めると、
+//    object3d が動き、worldFromRoom / roomFromWorld / placeCharacter / describeLandmarksFromWorld がそれを使う。
+//    spawn と landmarks は、いつでも部屋の座標のまま。
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { parsePlaceJson, bearingFrom } from './placeSchema.js';
@@ -47,6 +50,7 @@ export async function loadPlace(url, { variant } = {}) {
   model.position.y = -def.floor_y * def.scale_m;
   object3d.add(model);
 
+  const alignment = { yaw: 0, active: false };
   const originalMaterials = new Map();
   model.traverse((o) => {
     if (o.isMesh) originalMaterials.set(o, o.material);
@@ -86,10 +90,42 @@ export async function loadPlace(url, { variant } = {}) {
       }
     },
 
-    /** キャラを spawn に立たせる。 */
+    /** 部屋 → 世界の変換(既定は何もしない)。yaw はラジアン(rotation.y と同じ向き)、floorY は世界での床の高さ。 */
+    setAlignment({ yaw, tx, tz, floorY = 0 }) {
+      alignment.yaw = yaw;
+      object3d.position.set(tx, floorY, tz);
+      object3d.rotation.y = yaw;
+      object3d.updateMatrix();
+      object3d.updateMatrixWorld(true);
+      alignment.active = true;
+    },
+    clearAlignment() {
+      alignment.yaw = 0;
+      alignment.active = false;
+      object3d.position.set(0, 0, 0);
+      object3d.rotation.y = 0;
+      object3d.updateMatrixWorld(true);
+    },
+    get alignment() { return { ...alignment }; },
+    worldFromRoom(p) {
+      return (p.isVector3 ? p.clone() : toVec(p)).applyMatrix4(object3d.matrix);
+    },
+    roomFromWorld(p) {
+      return (p.isVector3 ? p.clone() : toVec(p)).applyMatrix4(object3d.matrix.clone().invert());
+    },
+
+    /** キャラを spawn に立たせる(位置合わせをしていれば、世界の中の spawn に)。 */
     placeCharacter(character3d) {
-      character3d.position.copy(spawn.position);
-      character3d.quaternion.copy(spawn.quaternion);
+      character3d.position.copy(this.worldFromRoom(spawn.position));
+      character3d.quaternion.copy(
+        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), alignment.yaw).multiply(spawn.quaternion),
+      );
+    },
+
+    /** 世界の中の位置と向き(rotation.y の度)から見た案内。位置合わせをしていれば、部屋の座標に直してから測る。 */
+    describeLandmarksFromWorld(worldPosition, worldYawDeg) {
+      const room = this.roomFromWorld(worldPosition);
+      return this.describeLandmarks({ position: room, yaw_deg: worldYawDeg - THREE.MathUtils.radToDeg(alignment.yaw) });
     },
 
     /** Claude に渡す案内用の文。from は位置と向き(既定は spawn)。 */

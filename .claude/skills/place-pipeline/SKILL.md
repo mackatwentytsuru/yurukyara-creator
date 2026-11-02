@@ -16,6 +16,10 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 - 今の版 B: `place/tools/make_textures.py`(コードで描く手続き的な素材。外の画像は使わない)→ `stylize_room.py` が面ごとに床・壁・天井・ドア・窓・家具(木・布・その他)を判定して箱の投影で貼る。名前でなく、RoomPlan の箱(room.json)と面の向き・高さで判定する(USDZ の中の名前は未確認のため)。
 - 写真から色を付ける版 A(未着手。写真を残す話なので本人の許可待ち): できたら `room_photo.glb` を作り、place.json の `variants.photo` に足す。
 
+## AR で撮った部屋を現実に重ねる
+- AR の世界は起動した位置が原点。`alignFlow.js` の手順(目印の真下の床を 2 回タップ)→ `place.setAlignment`。web/ は `createAlignFlow({place, floorY})` を AR に入ったとき作り、onHit の点を `flow.submit` に渡し、`flow.prompt` を画面に出す。重なったあとは、位置の変換に `place.worldFromRoom / roomFromWorld`、案内に `describeLandmarksFromWorld` を使う。
+- 通し試験: `python place/tools/native_ar_check.py`(偽の殻。25 度回した部屋が重なるまで見る)。
+
 ## 座標の約束(loadPlace.js の先頭にも書いてある)
 - m、y が上、右手系。GLB は `scale_m` 倍して m にし、`floor_y` だけ下げて床を y=0 にする。`spawn` と `landmarks` は整えたあとの座標。
 - `yaw_deg`: yaw 0 は +z を向く。正が +x のほうへ(上から見て左回り)。`bearingFrom()` の「左へ何度」もこの約束。

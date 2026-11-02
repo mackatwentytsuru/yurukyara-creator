@@ -62,3 +62,9 @@
 - `place/web/modeButtons.js`: 使えるモードのボタンだけを container に出す。
 - 会話の柱(web/)の `?source=pose` の窓口と、`setViewer` / `setPeople` で接続できる形(接続そのものは web/ 側の仕事。未接続)。
 - テスト 38 件通過。偽の殻の通し試験(`native_ar_check.py`)も modes.js 経由で合格のまま。
+
+### 18:20 AR での位置合わせ(撮った部屋 → 現実の部屋)
+- 会話の柱の指摘: AR の世界は起動した位置が原点で、撮った部屋と重ならない。→ 「部屋の目印(水平にいちばん離れた 2 つ、例: 入口・奥の壁)の真下の床を、現実で 2 回タップ」→ 向き(yaw)と位置を最小二乗で解き(`place/web/align.js`、three.js の rotation.y と同じ向き)、`place.setAlignment` で `object3d` を動かす(`place/web/alignFlow.js` が手順と文言)。床の高さは殻が見つけた水平面。
+- `loadPlace` に `setAlignment`・`clearAlignment`・`worldFromRoom`・`roomFromWorld`・`describeLandmarksFromWorld` を足した。`spawn` と `landmarks` は部屋の座標のまま。`placeCharacter` は位置合わせ後の世界の spawn に立たせる。
+- テスト 44 件(正解の変換を three.js で作って元に戻るか、3 cm のタップのずれでも向きは 2 度以内、点が近すぎる/足りないときの失敗、食い違い 15 cm 超でやり直しを勧める)。偽の殻での通し試験: 25 度回して (1, -1.2, -3) に置いた部屋が、タップ 2 回で yaw 25.00 度・食い違い 0 cm に重なり、入口の世界座標が正解と 1e-4 m 以内で一致、そのあとのタップでキャラが動く。合格。
+- 限界: 床の 2 点の位置合わせなので、ARKit のずれ(ドリフト)が出ると少しずつ狂う(未測定)。2 点が近いと向きが不安定(0.5 m 未満は拒否)。実機ではタップの精度に頼る。精度が足りなければ、3 点目、または壁や入口の平面を使う、AR 用の画像マーカーを置く、などを検討する。

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { loadPlace } from './loadPlace.js';
 import { headWorldPosition } from './xr.js';
 import { createPresentation } from './modes.js';
+import { createAlignFlow } from './alignFlow.js';
 
 const params = new URLSearchParams(location.search);
 const placeId = params.get('place') ?? 'test_room';
@@ -73,6 +74,7 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 let nativeHit = null;
+let floorSeen = null; // 殻が見つけた床の高さ
 let modes = null; // createPresentation が終わるまでは null(その間に最初のフレームが来ても落ちないように)
 const head = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
@@ -81,11 +83,35 @@ renderer.setAnimationLoop(() => {
 });
 
 // 画面 / AR / VR の切りかえは modes.js に任せる(iPhone の殻・Quest・画面で同じ呼び方)
+let flow = null; // 殻の AR に入ったとき、撮った部屋を現実に重ねる手順(床を 2 回タップ)
 modes = await createPresentation({
   renderer, scene, camera, place, background,
-  onHit: (p) => { nativeHit = p; character.position.copy(p); },
-  onFloor: (y) => { character.position.y = y; },
-  onChange: (m) => { info.dataset.mode = m; },
+  onHit: (p) => {
+    if (flow && !flow.done) {
+      try {
+        flow.submit(p);
+      } catch (e) {
+        info.textContent = String(e.message ?? e);
+        flow.reset();
+        return;
+      }
+      info.textContent = flow.prompt;
+      if (flow.done) place.placeCharacter(character); // 重ねたあと、部屋の spawn に立たせる
+      return;
+    }
+    nativeHit = p;
+    character.position.copy(p);
+  },
+  onFloor: (y) => { floorSeen = y; },
+  onChange: (m) => {
+    info.dataset.mode = m;
+    if (m === 'ar' && modes?.nativeAR) {
+      flow = createAlignFlow({ place, floorY: floorSeen });
+      info.textContent = flow.prompt;
+    } else {
+      flow = null;
+    }
+  },
 });
 const xr = modes.available;
 
@@ -125,6 +151,9 @@ info.textContent =
 
 window.__place = {
   ready: true,
+  get align() { return flow ? { targets: flow.targets.map((t) => ({ name: t.name, room: [t.position[0], t.position[2]] })), done: flow.done, ok: flow.ok, result: flow.result, prompt: flow.prompt } : null; },
+  worldOfRoom: (name) => { const l = place.landmarks.find((x) => x.name === name); return l ? place.worldFromRoom(l.position).toArray() : null; },
+  get roomYaw() { return place.object3d.rotation.y; },
   get nativeHit() { return nativeHit?.toArray() ?? null; },
   get characterPosition() { return character.position.toArray(); },
   get characterYaw() { return character.rotation.y; },
