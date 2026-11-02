@@ -15,7 +15,7 @@ def _sgnpow(v, e):
     return math.copysign(abs(v) ** e, v) if v != 0 else 0.0
 
 
-def material(name, rgb, rough=0.7, emit=0.0, metallic=0.0, edge_rgb=None, spec=0.3):
+def material(name, rgb, rough=0.7, emit=0.0, metallic=0.0, edge_rgb=None, spec=0.3, sheen=0.0, sheen_tint=None):
     """sRGB の 0〜255 で色を渡す(Blender の色は線形なので直す)。"""
     def lin(c):
         c = c / 255.0
@@ -32,6 +32,17 @@ def material(name, rgb, rough=0.7, emit=0.0, metallic=0.0, edge_rgb=None, spec=0
         if k in b.inputs:
             b.inputs[k].default_value = spec
             break
+    if sheen > 0:
+        # 布・ぬいぐるみの質感: 縁の毛羽立った明るさ(シーン)。glTF の KHR_materials_sheen として書き出せる
+        for k in ("Sheen Weight", "Sheen"):
+            if k in b.inputs:
+                b.inputs[k].default_value = sheen
+                break
+        if "Sheen Roughness" in b.inputs:
+            b.inputs["Sheen Roughness"].default_value = 0.5
+        if "Sheen Tint" in b.inputs:
+            t = sheen_tint or rgb
+            b.inputs["Sheen Tint"].default_value = (_lin(t[0]), _lin(t[1]), _lin(t[2]), 1.0)
     if edge_rgb is not None:
         # 頂点の色(Col)を使う。glTF に書き出せるのは、手続きの節点ではなく頂点の色や絵だけ
         nt = m.node_tree

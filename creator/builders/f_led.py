@@ -33,7 +33,7 @@ def main():
         k, v = kv.split("=")
         D[k] = eval(v)
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    navy = P.material("Navy", (30, 52, 108), rough=0.82)
+    navy = P.material("Navy", (30, 52, 108), rough=0.9, spec=0.1, sheen=1.0, sheen_tint=(120, 150, 230))
     parts = []
     parts.append(P.superquadric("body", (D["body_rx"], D["body_ry"], D["body_rz"]), D["body_e"],
                                 (0, 0, D["body_zc"]), mat=navy, seg=(72, 40)))
