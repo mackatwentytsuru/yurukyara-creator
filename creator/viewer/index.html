@@ -64,6 +64,7 @@ scene.add(c.object3d);
 document.getElementById('title').textContent = c.name ?? c.id;
 const h = c.heightM ?? 1;
 camera.position.set(0, h * 0.62, h * 3.4); camera.lookAt(0, h * 0.48, 0);
+if (q.get('lift') !== null) c.applyLift(parseFloat(q.get('lift')));
 window.__c = c; window.__camera = camera; window.__scene = scene; window.__ready = true;
 if (q.get('shot')) { scene.background = new THREE.Color(0xf2f2f2); floor.visible = false; }
 

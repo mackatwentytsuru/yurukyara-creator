@@ -72,6 +72,10 @@ export class RigCharacterV2 extends CharacterBase {
       });
     }
 
+    // 明るさの持ち上げ: three.js の光は Blender より暗く(強さ 1 で白い面が約 0.32)、絵の色が沈む。
+    // 色の絵(map)を発光にも貼って、絵の色に近づける。character.json の lift(0〜1、既定 0.55)。
+    this.applyLift(json.lift ?? 0.55);
+
     // シェイプキー(目・口)。character.json: mouth.kind = "morph"、blink = {morph}、morphs = {表情: {キー: 重み}}、look.eyes = [骨]
     this.morphMeshes = [];
     gltf.scene.traverse((o) => {
@@ -237,3 +241,23 @@ export async function loadRigCharacter(url) {
   }
   return c;
 }
+
+
+/** 明るさの持ち上げ。色の絵(map)を発光(emissiveMap)にも使い、強さ v で足す。顔(光る顔・紙の顔)と glow 材質は触らない。 */
+RigCharacterV2.prototype.applyLift = function (v) {
+  const skip = new Set();
+  if (this.face?.mesh?.material) skip.add(this.face.mesh.material);
+  const glowName = this.json?.glow?.material;
+  this.gltf.scene.traverse((o) => {
+    const m = o.isMesh ? o.material : null;
+    if (!m || skip.has(m) || (glowName && m.name === glowName) || !m.isMeshStandardMaterial) return;
+    if (m._liftBase === undefined) m._liftBase = { map: m.emissiveMap, ei: m.emissiveIntensity, e: m.emissive.clone() };
+    if (m._liftBase.map || (m._liftBase.e.r + m._liftBase.e.g + m._liftBase.e.b) > 0) return; // 元から発光のある材質は触らない
+    if (v <= 0) { m.emissiveMap = null; m.emissive.setRGB(0, 0, 0); m.emissiveIntensity = 1; m.needsUpdate = true; return; }
+    if (m.map) { m.emissive.setRGB(1, 1, 1); m.emissiveMap = m.map; }
+    else if (m.color.r + m.color.g + m.color.b < 2.99) m.emissive.copy(m.color); // 色の絵が無ければ、地の色を発光にも使う(頬が茶色く沈むのを防ぐ)
+    else return; // 地の色が白の材質は、色が頂点の色にある。発光に頂点の色は掛からないので触らない
+    m.emissiveIntensity = v;
+    m.needsUpdate = true;
+  });
+};

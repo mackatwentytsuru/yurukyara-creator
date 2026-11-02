@@ -64,6 +64,8 @@ def main():
             o.select_set(True)
         bpy.context.view_layer.objects.active = objs[0]
         kw = dict(filepath=path, export_format="GLB", use_selection=True, export_yup=True, export_apply=False)
+        if sc.get("ao_vertex"):   # m01_wrap.bake_ao の影(頂点の色 Col)を、材質が使っていなくても GLB に入れる。three.js が色の絵に掛ける
+            kw.update(export_vertex_color="ACTIVE")
         if anim:
             kw.update(export_animations=True, export_animation_mode="ACTIVE_ACTIONS", export_force_sampling=True,
                       export_frame_range=True, export_optimize_animation_size=False)

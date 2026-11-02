@@ -2,7 +2,7 @@
 
 # 読んでよい物(これだけ)
 1. スキル: repo\.claude\skills\hand-built-character\SKILL.md(最初に全部読む。手順の正本)
-2. 道具(中身を読んで使い方を知ってよい): repo\creator\pipeline\ の m00_prims.py、m02_shot.py、s04_overlay.py、s03_compare.py、b07_rig_groups.py、b04_motions.py、b06_posecheck.py、s02_posesheet.py、s01_sheet.py、f01_face_atlas.py
+2. 道具(中身を読んで使い方を知ってよい): repo\creator\pipeline\ の m00_prims.py、m01_wrap.py、m02_shot.py、m03_contact.py、s05_gaps.py、check_all.sh、pk02_check_character.py、pk03_glb_report.py、s04_overlay.py、s03_compare.py、b07_rig_groups.py、b04_motions.py、b06_posecheck.py、s02_posesheet.py、s01_sheet.py、f01_face_atlas.py
 3. 型: repo\creator\builders\_template_px.py、repo\creator\specs\_template_rig.json
 **読んではいけない物**: repo\creator\builders\ の f_led.py と d_lantern.py、repo\characters\ の中身、work\creator_work\ の他のフォルダ(作業フォルダ以外)。スキルに書いてないことが分からないときは、他のキャラの物を見ず、報告の「足りなかった知識」に書く。
 
@@ -15,15 +15,16 @@
 # 合格の条件(全部、実測で確かめる)
 1. builder が通り、.blend ができる。
 2. 元の絵との輪郭の重なり(s03_compare.py の IoU)が 90% 以上。重ねの一覧(s04_overlay.py)で、頭・胴・手・足・小物の位置と大きさがほぼ重なる。
-3. 元の絵の特徴(色・質感・顔の部品)が出ている。**元の絵が布・ぬいぐるみ(毛足・起毛が見える)なら、毛足の質感も出す**(スキルの「布・ぬいぐるみの質感」の手順。質感の合格は、別の AI 2 つが「毛足が出ている」と答えること)。顔(目・口・ほお)は部品かシェイプキーで組む。
+3. 元の絵の特徴(色・質感・顔の部品)が出ている。**元の絵が布・ぬいぐるみ(毛足・起毛が見える)なら、毛足の質感も出す**(スキルの「布・ぬいぐるみの質感」の手順。質感と色の合格は、ブラウザ(three.js)で撮った絵を見た別の AI 2 つが決める。あなたの判定には数えない)。顔(目・口・ほお)は部品かシェイプキーで組む。
 4. 骨を入れ、動き(idle・talk・nod・bow など 3 つ以上)を GLB に出す(b07_rig_groups.py)。まばたきと口の開きのシェイプキーを付ける(値は 0 に戻す)。
 5. 一覧の絵(比べ、動きの姿勢)を自分で開いて見て直す。2 周は直す。
 6. 正面・右・後ろ・斜めを見て、体が崩れていないか確かめる。
 7. ブラウザで再生できる形にする(pk02_check_character.py が OK を出すまで直す): model.glb と motions/*.glb、character.json(creator/README.md の rig の形)を {WORK}\pack\ に出す。
+8. `sh repo/creator/pipeline/check_all.sh <build.blend> {WORK}\pack <元の絵> {WORK}\check [帯の名前,…]` を、builder を直すたびに通す。全部 OK で終わる。抜け(④)が残るときは、形か部品を直す。どうしても残す抜けは、場所と理由を報告に書く。ブラウザの絵({WORK}\checkrowser\)も開いて見る。
 一覧の絵に付ける見出しは日本語で、大きく。
 
 # 報告に必ず入れること
-- 合格条件 1〜7 ごとに、できた/できない と実測(数字・ファイル名)。
+- 合格条件 1〜8 ごとに、できた/できない と実測(数字・ファイル名)。
 - builder を直した回数、かかったおおよその時間。
 - 「足りなかった知識」: スキルに書いてあれば迷わなかったのに、というもの(スキルへ書き足す文として)。
 - つまずき: うまくいかなかった試しと、直し方。

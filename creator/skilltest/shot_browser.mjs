@@ -1,6 +1,6 @@
 // ブラウザ(three.js、creator/viewer)で、pack を実際に描いた絵を撮る。見る人が見る絵で質感を判定するための道具。
 //
-// 使い方: node creator/skilltest/shot_browser.mjs <serve のポート> <character.json の URL(/trial/... など)> <出力フォルダ> [--tag 名前]
+// 使い方: node creator/skilltest/shot_browser.mjs <serve のポート> <character.json の URL(/trial/... など)> <出力フォルダ> [--lift 0〜1]
 //   例: node creator/skilltest/shot_browser.mjs 8777 /trial/h_ear/p1_sonnet_medium/pack/character.json J:/.../browser
 // 出力: <出力フォルダ>/browser_front.png、browser_q.png(斜め)、browser_close.png(顔のアップ)。1024px 四方、背景は白に近い。
 // 前提: creator/viewer/serve.py が動いている(--mount で試しのフォルダを配る)。Chrome が入っている。
@@ -9,6 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const [port, url, outDir] = process.argv.slice(2, 5);
+const li = process.argv.indexOf('--lift');
+const lift = li > 0 ? process.argv[li + 1] : null; // 明るさの持ち上げを上書きして撮る(試し用)
 fs.mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({
   executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -18,7 +20,7 @@ const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
-await page.goto(`http://127.0.0.1:${port}/creator/viewer/index.html?c=${url}&shot=1`);
+await page.goto(`http://127.0.0.1:${port}/creator/viewer/index.html?c=${url}&shot=1${lift !== null ? '&lift=' + lift : ''}`);
 try {
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 40000 });
 } catch (e) {

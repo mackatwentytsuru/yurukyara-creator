@@ -338,6 +338,9 @@ def fuzz_images(rgb, out_dir, name="fuzz", size=512, seed=7, grain=0.10, strengt
     return pc, pn
 
 
+FUZZ_NORMAL_GAIN = 0.4
+
+
 def fuzz_material(name, rgb, out_dir, rough=0.95, sheen=1.0, sheen_tint=None, normal_strength=0.8, grain=0.10, seed=7):
     """毛足の画像(色+法線)と、縁の毛羽(シーン)を持つ材質。使う物には auto_uv(ob, tile) で UV を付ける。"""
     pc, pn = fuzz_images(rgb, out_dir, name, grain=grain, seed=seed)
@@ -352,7 +355,7 @@ def fuzz_material(name, rgb, out_dir, rough=0.95, sheen=1.0, sheen_tint=None, no
     tn.image = bpy.data.images.load(pn)
     tn.image.colorspace_settings.name = "Non-Color"
     nm = nt.nodes.new("ShaderNodeNormalMap")
-    nm.inputs["Strength"].default_value = normal_strength
+    nm.inputs["Strength"].default_value = normal_strength * FUZZ_NORMAL_GAIN   # 11-02: ブラウザでは凹凸が強く見える。細かい粒は保ち、強さだけ下げる(ぼかすと革のようになる)
     nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
     nt.links.new(nm.outputs["Normal"], b.inputs["Normal"])
     return m
