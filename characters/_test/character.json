@@ -1,0 +1,10 @@
+{
+  "id": "_test",
+  "name": "試しのキャラ",
+  "model": "model.vrm",
+  "type": "vrm",
+  "height_m": 1.5,
+  "expressions": ["neutral", "happy", "surprised", "sad", "think"],
+  "motions": {},
+  "persona": "persona.md"
+}

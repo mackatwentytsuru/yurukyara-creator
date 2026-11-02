@@ -10,7 +10,7 @@
     "build": "vite build",
     "server": "node server/index.mjs",
     "start": "vite build && node server/index.mjs",
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.2.0",
