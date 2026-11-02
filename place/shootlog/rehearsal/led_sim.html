@@ -21,7 +21,7 @@ var AUTO=[['countdown',10],['sync1',SYNC_LEN],['board',40],['sync2',SYNC_LEN],['
 window.__timeline=[];
 function mark(ev){var e={event:ev,epoch_ms:Date.now()};window.__timeline.push(e);console.log(JSON.stringify(e));}
 
-var mode='black',modeStart=Date.now(),autoIdx=-1,showTL=false;
+var mode='guide',modeStart=Date.now(),autoIdx=-1,showTL=false;
 var board=new Image(),boardOK=false;
 board.onload=function(){boardOK=true;};board.onerror=function(){boardOK=false;};
 board.src='board.png?'+Date.now();
@@ -44,6 +44,7 @@ function startAuto(){autoIdx=0;setMode(AUTO[0][0],'auto_start:'+AUTO[0][0]);}
 window.addEventListener('keydown',function(e){
   var k=e.key;
   if(k===' '||k==='Enter'){e.preventDefault();startAuto();}
+  else if(k==='g'||k==='G'){autoIdx=-1;setMode('guide','manual_guide');}
   else if(k==='1'){autoIdx=-1;setMode('board','manual_board');}
   else if(k==='2'){autoIdx=-1;setMode('corners','manual_corners');}
   else if(k==='3'){autoIdx=-1;setMode('sync1','manual_sync');}
@@ -63,6 +64,27 @@ function drawCorners(){
   ctx.fillRect(W-a,0,a,t);ctx.fillRect(W-t,0,t,a);
   ctx.fillRect(0,H-t,a,t);ctx.fillRect(0,H-a,t,a);
   ctx.fillRect(W-a,H-t,a,t);ctx.fillRect(W-t,H-a,t,a);
+}
+var GUIDE_LABELS=['左上','右上','右下','左下'],GUIDE_SEC=6;
+function drawGuide(el){
+  var cur=Math.floor(el/GUIDE_SEC)%4,t,a,i,x,y,sx,sy,thick;
+  var cx=[0,W,W,0],cy=[0,0,H,H],dx=[1,-1,-1,1],dy=[1,1,-1,-1];
+  for(i=0;i<4;i++){
+    var on=(i===cur);
+    t=on?28:6;a=on?360:140;ctx.fillStyle=on?'#fff':'#555';
+    x=cx[i];y=cy[i];sx=dx[i];sy=dy[i];
+    // L 字(画面の角ぴったり)
+    ctx.fillRect(sx>0?x:x-a,sy>0?y:y-t,a,t);ctx.fillRect(sx>0?x:x-t,sy>0?y:y-a,t,a);ctx.fillRect(sx>0?x:x-a,sy>0?y:y-t,a,t);
+    if(on){ // 脈打つ円
+      var pulse=0.5+0.5*Math.sin(el*6);ctx.strokeStyle='rgba(255,60,60,'+(0.5+0.5*pulse)+')';ctx.lineWidth=10;
+      ctx.beginPath();ctx.arc(x+sx*110,y+sy*110,70+pulse*20,0,7);ctx.stroke();
+    }
+    txt(String(i+1),x+sx*110,y+sy*110,on?90:50,on?'#ff4444':'#777');
+  }
+  txt('いま狙う: '+GUIDE_LABELS[cur]+' の角('+(cur+1)+'/4)',W/2,H*0.30,Math.round(H*0.10),'#fff');
+  txt('iPhone「撮影記録」: まず「床を記録」。そのあと、光っている角に十字を合わせて「隅を記録」',W/2,H*0.50,Math.round(H*0.045),'#ccc');
+  txt('順番: 1 左上 → 2 右上 → 3 右下 → 4 左下(6 秒ごとに光る角が変わります。自分のペースでかまいません)',W/2,H*0.60,Math.round(H*0.035),'#999');
+  txt('終わったら「● 録画開始」→ このパソコンで Space(本番の流れが始まる)',W/2,H*0.75,Math.round(H*0.045),'#ccc');
 }
 function drawSync(el){
   for(var i=0;i<FLASH_T.length;i++){
@@ -120,7 +142,8 @@ function frame(){
   }else if(mode==='board'){
     if(boardOK)ctx.drawImage(board,0,0);
     else txt('board.png が無い',W/2,H/2,48,'#888');
-  }else if(mode==='corners')drawCorners();
+  }else if(mode==='guide')drawGuide(el);
+  else if(mode==='corners')drawCorners();
   else if(mode==='sync1'||mode==='sync2'){
     if(autoIdx<0&&el>=SYNC_LEN){mode='black';mark('manual_sync_end');}
     else drawSync(el);

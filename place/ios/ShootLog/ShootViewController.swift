@@ -30,6 +30,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private var notice: String?   // 保存・失敗のお知らせ(次の録画を始めるまで出す)
 
     private let stepLabel = UILabel()
+    private let guideView = GuideView()
+    private let previewLayer = AVSampleBufferDisplayLayer()
+    private var previewCount = 0
     private let statusLabel = UILabel()
     private let calibButton = UIButton(type: .system)
     private let resetButton = UIButton(type: .system)
@@ -74,6 +77,10 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         sceneView.session.delegate = self
         sceneView.session.delegateQueue = frameQueue
         view.addSubview(sceneView)
+        // カメラの映像は、ARSCNView 任せにせず、ARFrame の映像を自前で出す(ARSCNView が映さない端末・形式でも出る)
+        previewLayer.videoGravity = .resizeAspectFill
+        previewLayer.frame = view.bounds
+        view.layer.insertSublayer(previewLayer, above: sceneView.layer)
         ueLink.webView.frame = view.bounds
         ueLink.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(ueLink.webView)
@@ -94,9 +101,18 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.refreshUI() }
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer.frame = view.bounds
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         UIApplication.shared.isIdleTimerDisabled = true
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .denied, .restricted: notice = "カメラが許可されていない: 設定 → 撮影記録 → カメラ をオン"
+        default: break
+        }
         runSession(reset: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.applyLaunchArguments() }
     }
@@ -135,7 +151,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     }
 
     private func setupLabels() {
-        for (label, size) in [(stepLabel, CGFloat(17)), (statusLabel, CGFloat(13))] {
+        for (label, size) in [(stepLabel, CGFloat(20)), (statusLabel, CGFloat(13))] {
             label.numberOfLines = 0
             label.textColor = .white
             label.backgroundColor = UIColor.black.withAlphaComponent(0.55)
@@ -145,12 +161,18 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             label.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(label)
         }
+        guideView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(guideView)
         NSLayoutConstraint.activate([
             stepLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
             stepLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
             stepLabel.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.6),
             statusLabel.leadingAnchor.constraint(equalTo: stepLabel.leadingAnchor),
             statusLabel.topAnchor.constraint(equalTo: stepLabel.bottomAnchor, constant: 6),
+            guideView.leadingAnchor.constraint(equalTo: stepLabel.leadingAnchor),
+            guideView.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 6),
+            guideView.widthAnchor.constraint(equalToConstant: 250),
+            guideView.heightAnchor.constraint(equalToConstant: 118),
             statusLabel.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.6),
         ])
     }
@@ -618,6 +640,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let rec = recorder
         lock.unlock()
         rec?.append(frame)
+        if !ueLink.enabled { enqueuePreview(frame) }
         ueLink.handle(frame: frame, recording: rec != nil)
         frameTick += 1
         if frameTick % 6 == 0 { measureClip(frame) }
@@ -636,6 +659,24 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
 
     func session(_ session: ARSession, didFailWithError error: Error) {
         logEvent("session:error:\(error.localizedDescription)")
+        DispatchQueue.main.async { self.notice = "ARKit のエラー: \(error.localizedDescription)" }
+    }
+
+    /// ARFrame のカメラ映像(YpCbCr)を、色変換なしでそのまま画面の層に渡す。
+    private func enqueuePreview(_ frame: ARFrame) {
+        let pb = frame.capturedImage
+        var fmt: CMVideoFormatDescription?
+        guard CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: pb, formatDescriptionOut: &fmt) == noErr, let fmt else { return }
+        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: CMTime(seconds: frame.timestamp, preferredTimescale: 1_000_000), decodeTimeStamp: .invalid)
+        var sample: CMSampleBuffer?
+        guard CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: pb, formatDescription: fmt, sampleTiming: &timing, sampleBufferOut: &sample) == noErr,
+              let sample else { return }
+        if let arr = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: true) as? [NSMutableDictionary], let d = arr.first {
+            d[kCMSampleAttachmentKey_DisplayImmediately] = true
+        }
+        if previewLayer.status == .failed { previewLayer.flush() }
+        previewLayer.enqueue(sample)
+        lock.lock(); previewCount += 1; lock.unlock()
     }
 
     private func logEvent(_ kind: String) {
@@ -657,21 +698,26 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let started = recordStartDate
         let tracking = lastTracking
         let clip = clipPercent
+        let previewN = previewCount
         lock.unlock()
         let recording = rec != nil
         let done = calibration.corners.count
 
         if calibration.floor == nil {
-            stepLabel.text = " ① 床に十字を向けて「床を記録」 "
+            stepLabel.text = " 次: 床。十字を床に向けて「床を記録」 "
             calibButton.setTitle("床を記録", for: .normal)
         } else if done < totalCorners {
             let faceName = faceCount == 1 ? "LED" : "LED の面\(Self.faceNames[done / 4])"
-            stepLabel.text = " ② 十字を\(faceName)の「\(Self.cornerLabels[done % 4])」に合わせて「隅を記録」(\(done)/\(totalCorners)) "
+            stepLabel.text = " 次: \(faceName)の\(Self.cornerLabels[done % 4])の角(\(done % 4 + 1)/4)\n 十字をその角に合わせて「隅を記録」 "
             calibButton.setTitle("隅を記録:\(faceCount == 1 ? "" : Self.faceNames[done / 4] + " ")\(Self.cornerLabels[done % 4])", for: .normal)
         } else {
-            stepLabel.text = recording ? " ● 録画中 " : " ③ 校正おわり。「録画開始」 "
+            stepLabel.text = recording ? " ● 録画中 " : " 校正おわり。「● 録画開始」を押す "
             calibButton.setTitle("校正おわり ✓", for: .normal)
         }
+        guideView.faces = faceCount
+        guideView.done = done
+        guideView.floorDone = calibration.floor != nil
+        guideView.isHidden = recording || ueLink.enabled
         calibButton.isEnabled = calibration.floor == nil || done < totalCorners
         calibButton.alpha = calibButton.isEnabled ? 1 : 0.5
         resetButton.isEnabled = !recording
@@ -691,7 +737,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             statusLabel.text = String(format: " %02d:%02d  コマ %d  追跡 %@  白飛び %.1f%% ", sec / 60, sec % 60, rec.currentFrameCount, tracking, clip)
         } else {
             let ue = ueLink.statusText
-            statusLabel.text = " \(notice ?? String(format: "追跡 %@  白飛び %.1f%%", tracking, clip))" + (ue.isEmpty ? " " : "\n \(ue) ")
+            statusLabel.text = " \(notice ?? String(format: "追跡 %@  映像 %d コマ  白飛び %.1f%%", tracking, previewN, clip))" + (ue.isEmpty ? " " : "\n \(ue) ")
         }
     }
 }
