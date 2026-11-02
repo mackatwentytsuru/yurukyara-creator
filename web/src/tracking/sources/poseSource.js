@@ -5,6 +5,9 @@
 // 座標は place.json と同じ(ワールド、単位 m、y が上、右手系)。
 // 一定時間(staleMs)更新が無ければ「いなくなった」とみなす。
 
+const MAX_PEOPLE = 8;
+const MAX_COORD_M = 1000; // 部屋の座標としてありえない遠さ(殻の初期化中の巨大な値などを捨てる)
+
 export class PoseSource {
   constructor({ staleMs = 1500 } = {}) {
     this.kind = 'pose';
@@ -28,14 +31,26 @@ export class PoseSource {
     this.setPeople(position ? [{ id: 'viewer', position }] : []);
   }
 
+  /**
+   * 外(殻アプリ・VR)から届く値は信じない。3 つの数が有限で、部屋の外ほど遠くない物だけを受け取る。
+   * 形のおかしい人は捨てる(1 人でも NaN が入ると、キャラの首が壊れ、以降の計算が全部 NaN になる)。
+   */
   setPeople(people) {
-    this.people = people.map((p) => ({
-      id: p.id,
-      position: Array.from(p.position),
-      gaze: p.gaze ? Array.from(p.gaze) : undefined,
-      speaking: p.speaking,
-      mouth: p.mouth,
-    }));
+    const vec = (v) => {
+      const a = v && typeof v.length === 'number' && v.length === 3 ? Array.from(v, Number) : null;
+      return a && a.every((x) => Number.isFinite(x) && Math.abs(x) <= MAX_COORD_M) ? a : null;
+    };
+    this.people = (Array.isArray(people) ? people : [])
+      .slice(0, MAX_PEOPLE)
+      .map((p) => ({ p, position: vec(p?.position) }))
+      .filter((x) => x.position)
+      .map(({ p, position }) => ({
+        id: p.id,
+        position,
+        gaze: vec(p.gaze) ?? undefined,
+        speaking: typeof p.speaking === 'boolean' ? p.speaking : undefined,
+        mouth: Number.isFinite(p.mouth) ? Math.min(Math.max(p.mouth, 0), 1) : undefined,
+      }));
     this.updatedAt = performance.now();
   }
 

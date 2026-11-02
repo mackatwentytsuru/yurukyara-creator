@@ -9,6 +9,7 @@ import { runTurn } from './brain.mjs';
 import { streamSpeech, ttsStatus } from './tts.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
+import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = join(WEB_ROOT, 'logs');
@@ -41,10 +42,15 @@ async function readBody(req, limit = 64 * 1024) {
   const chunks = [];
   for await (const c of req) {
     size += c.length;
-    if (size > limit) throw new Error('本文が大きすぎます');
+    if (size > limit) throw Object.assign(new ValidationError('本文が大きすぎます'), { status: 413 });
     chunks.push(c);
   }
-  return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
+  if (!chunks.length) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    throw new ValidationError('本文が JSON ではありません');
+  }
 }
 
 /** root の外に出られないようにしてファイルを返す */
@@ -90,7 +96,8 @@ function latencySummary() {
 }
 
 async function handleChat(req, res) {
-  const body = await readBody(req, 256 * 1024);
+  // 型・長さを確かめてから先へ(枠を使う前に、おかしな本文を断る)
+  const body = sanitizeChatBody(await readBody(req, 256 * 1024)); // 日本語は 1 字 3 バイトなので、読む上限は余裕を持たせ、長さは sanitize が切る
   res.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
     'cache-control': 'no-store',
@@ -161,7 +168,7 @@ const handler = async (req, res) => {
     }
     if (req.method === 'POST' && path === '/api/metrics') {
       const body = await readBody(req);
-      appendMetric({ date: new Date().toISOString(), ...body });
+      appendMetric({ date: new Date().toISOString(), ...sanitizeMetric(body) });
       return json(res, 200, { ok: true });
     }
     if (req.method === 'GET' && path === '/api/metrics') return json(res, 200, latencySummary());
@@ -178,8 +185,8 @@ const handler = async (req, res) => {
     }
     json(res, 405, { error: 'この方法は使えません' });
   } catch (err) {
-    console.error(err);
-    if (!res.headersSent) json(res, 500, { error: err.message });
+    if (!(err instanceof ValidationError)) console.error(err);
+    if (!res.headersSent) json(res, err instanceof ValidationError ? err.status : 500, { error: err.message });
     else res.end();
   }
 };
