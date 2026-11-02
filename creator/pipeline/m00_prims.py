@@ -392,20 +392,31 @@ def auto_uv(ob, tile=4.0):
     return ob
 
 
+SHELL_HAIR_AREA = 5.0    # 毛 1 本の面積の目安(px)。本数 = 画像の面積 × density ÷ これ
+SHELL_CUT_LOW = 0.15     # 内側の層の抜きの線(低いと毛が太い)
+SHELL_CUT_HIGH = 0.6     # 外側の層の抜きの線(高いと、高い毛の先だけ残る)
+
+
 def fuzz_shell(ob, rgb, out_dir, thick=0.012, density=0.28, name="shell", size=512, seed=11, tile=3.0, layers=2):
-    """輪郭の毛羽: 物を少しふくらませた殻を重ね、毛の点の画像(透明さで抜く)を貼る。輪郭がふんわり毛羽立つ。
-    layers 枚の殻を、少しずつ大きさを変えて重ねる(毛の長さ)。アルファは MASK(抜き)なので GLB / three.js で使える。
+    """輪郭の毛羽: 物を少しふくらませた殻を重ね、毛の高さの画像を、層ごとの線で抜く(alphaMode: MASK)。
+    全部の層で同じ毛の位置を使い、外の層ほど高い毛だけを残す。下から見ると毛の柱になり、輪郭がふんわりする。
+    層ごとに模様をずらすと、毛ではなくばらばらの点に見える(試験で「輪郭に点が散る」と言われた)。
     戻り値: 作った殻の物の一覧。"""
     import bmesh
     import numpy as np
     rng = np.random.default_rng(seed)
     a = np.zeros((size, size), np.float32)
-    for _ in range(int(size * size * density / 6)):
+    for _ in range(int(size * size * density / SHELL_HAIR_AREA)):
         x, y = rng.integers(0, size, 2)
-        ang = rng.random() * math.pi
-        L = int(rng.integers(3, 8))
-        for t in range(L):
-            a[int(y + math.sin(ang) * t) % size, int(x + math.cos(ang) * t) % size] = 1.0
+        height = 0.35 + 0.65 * rng.random()
+        r = 1.2 + 1.3 * rng.random()
+        ri = int(r) + 1
+        for dy in range(-ri, ri + 1):
+            for dx in range(-ri, ri + 1):
+                d = math.hypot(dx, dy) / r
+                if d < 1.0:
+                    yy, xx = (y + dy) % size, (x + dx) % size
+                    a[yy, xx] = max(a[yy, xx], height * (1.0 - d * d))
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, name + "_alpha.png")
     rgba = np.ones((size, size, 4), np.float32)
@@ -416,25 +427,29 @@ def fuzz_shell(ob, rgb, out_dir, thick=0.012, density=0.28, name="shell", size=5
     img.filepath_raw = path
     img.file_format = "PNG"
     img.save()
-    m = bpy.data.materials.new(name)
-    m.use_nodes = True
-    nt = m.node_tree
-    b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
-    t = nt.nodes.new("ShaderNodeTexImage")
-    t.image = img
-    nt.links.new(t.outputs["Color"], b.inputs["Base Color"])
-    # 透明さを「0.5 より大きいか」で切る(Math の GREATER_THAN)。glTF の書き出しが alphaMode: MASK として読む
-    mt = nt.nodes.new("ShaderNodeMath")
-    mt.operation = "GREATER_THAN"
-    mt.inputs[1].default_value = 0.5
-    nt.links.new(t.outputs["Alpha"], mt.inputs[0])
-    nt.links.new(mt.outputs["Value"], b.inputs["Alpha"])
-    b.inputs["Roughness"].default_value = 1.0
-    try:
-        m.surface_render_method = "DITHERED"
-    except Exception:
-        pass
-    m.blend_method = "CLIP"   # glTF の alphaMode: MASK
+
+    def layer_material(k):
+        """k 層目の材質。同じ画像を、外の層ほど高い線で抜く(glTF の alphaCutoff になる)。"""
+        m = bpy.data.materials.new(f"{name}{k}")
+        m.use_nodes = True
+        nt = m.node_tree
+        b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+        t = nt.nodes.new("ShaderNodeTexImage")
+        t.image = img
+        nt.links.new(t.outputs["Color"], b.inputs["Base Color"])
+        mt = nt.nodes.new("ShaderNodeMath")
+        mt.operation = "GREATER_THAN"
+        mt.inputs[1].default_value = SHELL_CUT_LOW + (SHELL_CUT_HIGH - SHELL_CUT_LOW) * k / max(layers - 1, 1)
+        nt.links.new(t.outputs["Alpha"], mt.inputs[0])
+        nt.links.new(mt.outputs["Value"], b.inputs["Alpha"])
+        b.inputs["Roughness"].default_value = 1.0
+        try:
+            m.surface_render_method = "DITHERED"
+        except Exception:
+            pass
+        m.blend_method = "CLIP"   # glTF の alphaMode: MASK
+        return m
+
     shells = []
     for k in range(layers):
         sh = ob.copy()
@@ -449,8 +464,8 @@ def fuzz_shell(ob, rgb, out_dir, thick=0.012, density=0.28, name="shell", size=5
         bm.to_mesh(sh.data)
         bm.free()
         sh.data.materials.clear()
-        sh.data.materials.append(m)
-        auto_uv(sh, tile=tile * (1 + 0.31 * k))
+        sh.data.materials.append(layer_material(k))
+        auto_uv(sh, tile=tile)   # 全部の層で同じ UV(毛の位置をそろえる)
         sh["surface_only"] = True    # 検査(m03_contact)で「体」にも「部品」にも数えない印。名前は自由でよい
         shells.append(sh)
     return shells

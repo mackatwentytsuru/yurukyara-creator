@@ -11,6 +11,8 @@ import path from 'node:path';
 const [port, url, outDir] = process.argv.slice(2, 5);
 const li = process.argv.indexOf('--lift');
 const lift = li > 0 ? process.argv[li + 1] : null; // 明るさの持ち上げを上書きして撮る(試し用)
+const fi = process.argv.indexOf('--fur');
+const fur = fi > 0 ? encodeURIComponent(process.argv[fi + 1]) : null; // 毛の殻を足して撮る(試し用)。JSON で渡す
 fs.mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
@@ -20,7 +22,7 @@ const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
-await page.goto(`http://127.0.0.1:${port}/creator/viewer/index.html?c=${url}&shot=1${lift !== null ? '&lift=' + lift : ''}`);
+await page.goto(`http://127.0.0.1:${port}/creator/viewer/index.html?c=${url}&shot=1${lift !== null ? '&lift=' + lift : ''}${fur !== null ? '&fur=' + fur : ''}`);
 try {
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 40000 });
 } catch (e) {

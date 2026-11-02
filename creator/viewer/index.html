@@ -36,6 +36,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { loadRigCharacter } from './rigRuntime.js';
+import { applyFur } from './furShell.js';
 
 const q = new URLSearchParams(location.search);
 const url = q.get('c') ?? '../../characters/f_led/character.json';
@@ -65,6 +66,7 @@ document.getElementById('title').textContent = c.name ?? c.id;
 const h = c.heightM ?? 1;
 camera.position.set(0, h * 0.62, h * 3.4); camera.lookAt(0, h * 0.48, 0);
 if (q.get('lift') !== null) c.applyLift(parseFloat(q.get('lift')));
+if (q.get('fur')) applyFur(c.gltf.scene, JSON.parse(q.get('fur'))); // 毛の殻を試す: ?fur={"layers":8}
 window.__c = c; window.__camera = camera; window.__scene = scene; window.__ready = true;
 if (q.get('shot')) { scene.background = new THREE.Color(0xf2f2f2); floor.visible = false; }
 

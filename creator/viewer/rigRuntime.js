@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CharacterBase } from '../../web/src/character/characterBase.js';
+import { applyFur } from './furShell.js';
 
 /**
  * 人型でないキャラ(type: "rig")を動かす。キャラの柱が決めた形で character.json を読む。
@@ -75,6 +76,7 @@ export class RigCharacterV2 extends CharacterBase {
     // 明るさの持ち上げ: three.js の光は Blender より暗く(強さ 1 で白い面が約 0.32)、絵の色が沈む。
     // 色の絵(map)を発光にも貼って、絵の色に近づける。character.json の lift(0〜1、既定 0.55)。
     this.applyLift(json.lift ?? 0.55);
+    if (json.fur) applyFur(gltf.scene, json.fur); // 毛の殻(furShell.js)。持ち上げの後に足す
 
     // シェイプキー(目・口)。character.json: mouth.kind = "morph"、blink = {morph}、morphs = {表情: {キー: 重み}}、look.eyes = [骨]
     this.morphMeshes = [];
