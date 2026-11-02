@@ -7,6 +7,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
 import { streamSpeech, ttsStatus } from './tts.mjs';
+import { createLimiter } from './limits.mjs';
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = join(WEB_ROOT, 'logs');
@@ -25,6 +26,12 @@ const MIME = {
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',
 };
+
+const claudeLimiter = createLimiter({
+  file: join(LOG_DIR, 'claude_usage.json'),
+  dailyCap: config.claudeDailyCallCap,
+  perMinute: config.claudePerMinute,
+});
 
 const json = (res, status, obj) => res.writeHead(status, { 'content-type': MIME['.json'] }).end(JSON.stringify(obj));
 
@@ -90,6 +97,16 @@ async function handleChat(req, res) {
   res.on('close', () => ac.abort());
   const send = (ev) => res.write(`data: ${JSON.stringify(ev)}\n\n`);
   const t0 = Date.now();
+  // 本物の Claude を呼ぶときだけ、回数の上限を数える(仮の頭脳は無料)
+  const client = req.socket.remoteAddress ?? 'unknown';
+  const paid = Boolean(config.anthropicKey);
+  if (paid) {
+    const slot = claudeLimiter.take(client);
+    if (!slot.ok) {
+      send({ type: 'error', message: slot.message, reason: slot.reason });
+      return res.end();
+    }
+  }
   try {
     await runTurn(body, {
       signal: ac.signal,
@@ -97,7 +114,10 @@ async function handleChat(req, res) {
     });
     send({ type: 'done', serverMs: Date.now() - t0 });
   } catch (err) {
-    if (!ac.signal.aborted) send({ type: 'error', message: err.message });
+    if (!ac.signal.aborted) {
+      if (paid) claudeLimiter.refund(client); // 呼べなかった回は、数えない
+      send({ type: 'error', message: err.message });
+    }
   }
   res.end();
 }
@@ -112,6 +132,7 @@ const handler = async (req, res) => {
         brain: config.anthropicKey ? 'haiku' : 'mock',
         model: config.model,
         tts: ttsStatus(),
+        claude: claudeLimiter.status(),
         latency: latencySummary(),
       });
     }
@@ -151,7 +172,7 @@ const server = useTls
   ? createHttpsServer({ cert: readFileSync(config.tlsCert), key: readFileSync(config.tlsKey) }, handler)
   : createHttpServer(handler);
 
-server.listen(config.port, () => {
-  console.log(`会話サーバー: ${useTls ? 'https' : 'http'}://localhost:${config.port}`);
+server.listen(config.port, config.host, () => {
+  console.log(`会話サーバー: ${useTls ? 'https' : 'http'}://${config.host}:${config.port}${config.host === '127.0.0.1' ? '(この端末だけ)' : ''}`);
   console.log(`頭脳: ${config.anthropicKey ? config.model : '仮の頭脳(ANTHROPIC_API_KEY なし)'} / 読み上げ: ${config.elevenKey ? 'あり' : 'なし'}`);
 });
