@@ -42,8 +42,10 @@ export class RigCharacterV2 extends CharacterBase {
     const face = json.face ?? {};
     this.face = null;
     const mesh = gltf.scene.getObjectByName(face.mesh ?? 'Face');
-    if (mesh && mesh.material?.emissiveMap) {
-      const tex = mesh.material.emissiveMap.clone();
+    // 光る顔(led)は発光の絵、紙に描いた顔(paper)は色の絵に表がある
+    const slot = mesh?.material?.emissiveMap ? 'emissiveMap' : mesh?.material?.map ? 'map' : null;
+    if (mesh && slot) {
+      const tex = mesh.material[slot].clone();
       tex.needsUpdate = true;
       this.faceCols = face.cols ?? 4;
       this.faceRows = face.rows ?? ['neutral'];
@@ -51,7 +53,7 @@ export class RigCharacterV2 extends CharacterBase {
       this.mouthLevels = json.mouth?.levels ?? [0.08, 0.3, 0.6];
       tex.repeat.set(1 / this.faceCols, 1 / this.faceRows.length);
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      mesh.material.emissiveMap = tex;
+      mesh.material[slot] = tex;
       mesh.material.needsUpdate = true;
       this.face = { mesh, tex };
       this._cell = { col: -1, row: -1, sx: 0, sy: 0 };
