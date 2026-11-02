@@ -40,3 +40,12 @@
 - 署名つきの組み立ては `mac_install.command` を ssh から `open` で GUI セッションに出して成功(終了コード 0)。**iPhone 12 Pro(iOS 26.3.1)に com.user.hackathon.roomscan を入れた**。2 回目(床の追加)は iPhone がロック中か圏外で「destination が見つからない」(終了コード 70)。実機で撮影は未実施。
 - 変換: Blender 5.2(画面なし)で USDZ → GLB。**PC の「Blender 4.5」フォルダは空で、使えるのは 5.2**。Blender で作った偽の撮影(4×5 m、高さ 2.5 m、床 y=-1.3)で通し試験: GLB の箱 4.10 × 2.55 × 5.10 m(壁の厚み 0.1 を含む寸法どおり)、床の下端 y=-1.35、向きも保たれた。`landmarks.mjs` が名前を日本語にして床を y=0 にそろえ、spawn は床の中心でドアのほうを向く。テスト 14 件通過。ブラウザの試しページに出して、キャラが部屋の中央でドアのほうを向き、ドアまで 2.9 m と案内が出るのを撮って確認。
 - 注意: 本物の RoomPlan の USDZ を Blender が同じように読めるかは未確認(偽は Blender 自作の USD)。
+
+### 16:20〜17:00 画面/AR/VR の切りかえと iPhone の殻アプリ「ARステージ」
+- `place/web/xr.js` を作り直し: 機能は全部 optional(1 つでも required が使えないと requestSession ごと失敗するため)、`enabledFeatures` に `local-floor` が無ければ `local` に落とす、AR では背景を外して透明にし終わったら戻す、頭の位置は render に渡す camera の `getWorldPosition()`。
+- `place/web/nativeAR.js`: iPhone の殻アプリ向け。殻が毎フレーム送るカメラの世界行列と射影行列(16 個ずつ)を three.js のカメラに写す。raycast は殻に聞く。
+- テスト 26 件通過(偽の `navigator.xr`・偽の renderer で、機能一覧・床の落とし方・背景の戻し方、姿勢の写し方、変な姿勢の無視、床の優先順)。
+- 偽の殻(`window.webkit.messageHandlers.arhost` を差す)で、390×844 のブラウザを使った通し試験 `place/tools/native_ar_check.py` が合格: AR ボタン有効、ready が殻に届く、タップ → raycast → onHit の点 (0.5,-1.2,-2) にキャラが立つ、体が camera の向きへ(yaw -0.165 rad = atan2(-0.5, 3) と一致)、canvas の左上ピクセルの alpha=0(透明)、エラー 0。
+- `place/ios/ARStage/`: ARSCNView(カメラ映像と追跡だけ)+ 透明な WKWebView。毎フレーム `viewMatrix(for: .portrait)` の逆行列と `projectionMatrix(for: .portrait, ...)` を送る。水平面の最低の高さを床として送る。マイク/カメラの許可は開いているページのホストにだけ与える。開発中は、開くホストに限って自己署名を信用する。署名なしの型確認は 1 回で成功、署名つきで iPhone 12 Pro に入れた(終了コード 0)。**実機で開いて AR を見るのは未実施。**
+- `place/tools/serve_https.mjs`: 開発用 HTTPS サーバー(自己署名、LAN の IP)。Mac から PC のサーバーに届くことを確認(HTTP 200、`.git` は 403)。
+- ハマり所: PC の「Blender 4.5」フォルダは空。ARKit の `camera.transform` は横向きのセンサー基準なので、縦持ち用に `viewMatrix(for: .portrait)` を使う(この点は Apple のドキュメントの知識。実機で確かめるまで未検証)。ARKit が背面カメラを占有するため、殻の中では getUserMedia の前面カメラ(MediaPipe の顔検出)が競合する見込み → 会話の柱へ要連絡。
