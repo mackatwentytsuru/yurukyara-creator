@@ -1,0 +1,10 @@
+{
+  "id": "sample_vrm",
+  "name": "見本のキャラ",
+  "model": "model.vrm",
+  "type": "vrm",
+  "height_m": 1.6,
+  "expressions": ["neutral", "happy", "surprised", "sad", "angry", "relaxed", "think"],
+  "motions": {},
+  "persona": "persona.md"
+}

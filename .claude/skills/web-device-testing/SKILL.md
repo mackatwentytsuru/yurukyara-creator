@@ -62,3 +62,12 @@ window.webkit = { messageHandlers: { arhost: { postMessage: (m) => window.__post
 - 画面なしの Chrome も、組み込みの枠も、**実機の代わりではない**。報告には「偽の殻で通した・実機は未確認」と書く。
 - サーバーを使う試験が、構文エラーのとき、エラーでなく待ちで止まって見える。ファイルごとに `timeout 30 node --test <ファイル>` で走らせると、止まった物が分かる。
 - `Get-NetTCPConnection` でサーバーの PID を調べ、**自分で起動した物だけ**を止める(名前で `node` を止めない)。
+
+## 7. 本物の頭脳と声で、VRM を通して測る(2026-11-03)
+
+`scripts/talk-through.mjs`(画面なしの Chrome。サーバーは鍵つきの試しサーバー。声の文字数を使う)。キャラは `?character=<id>`、VRM は `characters/<id>/model.vrm` に置いて `.gitignore` で外す(リポジトリに入れない)。
+- 毎コマの記録(`requestAnimationFrame`): 声の音量(`speaker.analyser`)、口 `aa`、`blink`、頭の骨の向き、`lookLeft/Right`、揺れ物の先の節の回転。ここから、口と声の相関・ずれ、まばたきの回数、割り込みで口が閉じるまでを出す。**fps が低い(8〜13)ので、ずれは 1 コマ単位**。
+- **揺れ物は「回転の変化」で測る**(最初の姿との角度)。頭に対する位置で測ると、頭が動いただけで全部の節が同じ数字になる。立ったままの動き(お辞儀・首ふり)ではスカートは動かない。体ごと動かして(`character.object3d.position.x`)確かめる。
+- 場所は `test_room` を借り、画面の中で `app.place.name`・`info`・目印の `note` を書き換える。目印の `note` を直し忘れると、返事が元の説明(木の机など)を読み上げる。
+- 実測のログを汚さない: ページの `fetch` を包んで `/api/metrics` を握りつぶす。サーバー側の `logs/latency_server.jsonl` は、写しを取って戻す。
+- 本物の返事を 1 回だけ記録する: `scripts/once-reply.mjs`(最初の返事をそのまま JSON に書く。選び直さない)。動画に「実際の返事」と書く物の証拠。
