@@ -2,8 +2,9 @@
 # 手組み版を 1 周まわす: builder → 顔の表 → 骨 → 8 方向 → 元の絵との比べ
 # 使い方: sh run_built.sh <id> <作業フォルダ> <元の絵> [builder の追加引数…]
 ID=$1; W=$2; ORIG=$3; shift 3
-B="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"; PY=work/venv-trellis2/Scripts/python.exe
 HERE=$(cd "$(dirname "$0")" && pwd)
+ENV_SH="$HERE/run_built.sh"; . "$HERE/../env.sh"
+B=$BLENDER
 mkdir -p $W/built $W/face2 $W/rig2
 "$B" -b -P $HERE/../builders/$ID.py -- $W/built/${ID}_built.blend "$@" 2>&1 | grep -E "^BUILD|Traceback" | grep -v unregister
 STYLE=led; [ "$ID" = "d_lantern" ] && STYLE=paper

@@ -4,12 +4,11 @@
 # 検査: ① character.json の形 ② GLB の予算 ③ 埋まりと浮き ④ 元の絵と比べた抜け ⑤ ブラウザ(three.js)で撮れる
 # 出力: <出力フォルダ>/contact.json、gaps.json、gaps.png、browser/browser_front.png など、check.txt(結果)
 # ここが全部通っても、見た目の合格ではない。形・質感・色は、ブラウザの絵を作り手以外の AI に見せて判定する。
-# パスは Windows の形にそろえる(/j/… のまま Blender や node へ渡すと、J:\j\… に書かれて、絵が迷子になる)
+# Git Bash では、パスを Windows の形にそろえる(/x/… のまま Blender や node へ渡すと、別の場所に書かれて、絵が迷子になる)
 BLEND=$(cygpath -m "$1"); PACK=$(cygpath -m "$2"); ORIG=$(cygpath -m "$3"); OUT=$(cygpath -m "$4"); HUG=$5
 HERE=$(cd "$(dirname "$0")" && pwd)
-REPO=$(cd "$HERE/../.." && pwd)
-B="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
-PY=work/venv-trellis2/Scripts/python.exe
+ENV_SH="$HERE/check_all.sh"; . "$HERE/../env.sh"
+B=$BLENDER
 mkdir -p "$OUT"
 LOG="$OUT/check.txt"; : > "$LOG"
 FAIL=0

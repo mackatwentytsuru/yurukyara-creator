@@ -1,7 +1,7 @@
 // ブラウザ(three.js、creator/viewer)で、pack を実際に描いた絵を撮る。見る人が見る絵で質感を判定するための道具。
 //
 // 使い方: node creator/skilltest/shot_browser.mjs <serve のポート> <character.json の URL(/trial/... など)> <出力フォルダ> [--lift 0〜1]
-//   例: node creator/skilltest/shot_browser.mjs 8777 /trial/h_ear/p1_sonnet_medium/pack/character.json J:/.../browser
+//   例: node creator/skilltest/shot_browser.mjs 8777 /trial/h_ear/p1_sonnet_medium/pack/character.json <出力フォルダ>
 // 出力: <出力フォルダ>/browser_front.png、browser_q.png(斜め)、browser_close.png(顔のアップ)。1024px 四方、背景は白に近い。
 // 前提: creator/viewer/serve.py が動いている(--mount で試しのフォルダを配る)。Chrome が入っている。
 import { chromium } from '../../web/node_modules/playwright-core/index.mjs';
@@ -13,7 +13,7 @@ const li = process.argv.indexOf('--lift');
 const lift = li > 0 ? process.argv[li + 1] : null; // 明るさの持ち上げを上書きして撮る(試し用)
 fs.mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({
-  executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
 const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
