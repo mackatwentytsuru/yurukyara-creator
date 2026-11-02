@@ -31,6 +31,19 @@ python overlay_room.py <撮影> --room <room.json> --led-from window:0   # 動�
 python led_pnp.py --video ... --led-size ... --corners "tl=x,y ..."    # 保険: 追跡が切れたとき solvePnP で出す
 python selftest.py                                        # 合成データで計算を確かめる
 ```
+
+### 主カメラが a7 のとき(レンズの歪み・ずれ・同期)。手順は `校正の手順.md`
+```
+python make_led_board.py --face-px 1280 1240 --out-dir <出力>     # LED に出す ChArUco の盤(A 面)と board_A.json
+python make_sync_pattern.py --out sync_flash.mp4                  # LED に流す同期用のフラッシュ映像
+python sync_flash.py --a <a7> --b <iPhone video.mov> --b-shoot <撮影> --out sync.json   # 2 台の時刻合わせ
+python lens_calib.py --video <a7> --board board_A.json --out-dir lens/                  # 焦点距離・歪み・ST マップ
+python rig_offset.py --a7-video <a7> --lens lens/lens.json --iphone-shoot <撮影> --board board_A.json --sync sync.json --out-dir rig/
+python export_a7_ue.py ...                                        # a7 の各コマの UE のカメラ位置・画角の CSV
+python apply_distortion.py lens/ <CG> <出力>                      # CG に a7 と同じ歪みをかける(歪みは直さない)
+python lens_selftest.py / sync_selftest.py / rig_selftest.py      # 合成データでの確かめ
+```
+合成データでの結果: 歪みの係数 0.4 px 以内、同期の誤差 15 ms(a7 の 1/2 コマ)、iPhone と a7 のずれ 位置 7 mm・向き 0.05°。実機は撮影後。
 必要: numpy・scipy・opencv-python。
 
 ## 合格の確かめ方(家の部屋)

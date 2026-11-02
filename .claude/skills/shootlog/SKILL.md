@@ -28,3 +28,11 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 ## 確かめ方
 - 合成データ: `python place/shootlog/selftest.py` → 位置 0.1 cm・向き 0.03°・重ね合わせの輪郭距離が小さい。座標の計算の取り違えを見つけるだけ。ARKit の約束そのものは実機の撮影で確かめる。
 - 実機: 家の部屋の窓を「LED」に見立てて 30 秒撮り、`overlay_room.py` の `edge_median_px` が `baseline_median_px`(わざとずらした線)より十分小さいこと、時間がたっても増えないことを見る。
+
+## a7(主カメラ)+ iPhone のとき
+- LED に出す物は ChArUco の盤(`make_led_board.py`)。LED の 1 画素 = 4 mm(パネル 32×16 cm = 80×40 画素)で、盤の角の LED 座標(m)は画素位置から決まる。IDS つきなので一部が画面から出ても使える。四角は遠くから撮るなら大きく(64 cm 以上。a7 の 4K で 10 m 先だと 32 cm の四角は読めない)。
+- レンズ校正は `cv2.calibrateCameraExtended`。同じ撮影の動いている間は歪み、止まっている間(2 秒)は iPhone とのずれに使う。a7 のカメラ内の「歪曲収差補正」と手ぶれ補正は切(入っていると校正の前提が崩れる)。
+- 歪みは直さず CG にかける: a7 と同じ fx・fy のピンホールで CG を描き(歪みで画面の外にはみ出す分だけ広く)、ST マップ(`st_map`)で歪みをかける。
+- 時刻合わせ: LED の白いフラッシュの立ち上がり(明るさが中間値を横切る時刻、コマ間は直線補間)を対にして一次式を当てる。フラッシュが片方に写らなくても連続部分で対にできる。
+- ずれは止まっている所だけで測る(時刻の誤差が効かない)。盤から測った iPhone の姿勢で LED の位置も出せ(`alignment_board.json`)、角のタップより正確。
+- OpenCV の `cv2.imwrite` は日本語のフォルダに書けない(黙って何も書かない)。`lenslib.imwrite`(imencode + write_bytes)を使う。HEVC は `cv2.VideoCapture` で読めるが、Git Bash の `/tmp` は Python から見えない。
