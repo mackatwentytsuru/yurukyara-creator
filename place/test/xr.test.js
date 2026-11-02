@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { detectXR, startXR, applyPresentation, OPTIONAL_FEATURES } from '../web/xr.js';
+import { detectXR, startXR, applyPresentation, viewerPerson, OPTIONAL_FEATURES } from '../web/xr.js';
 import { createNativeAR, hasNativeAR, floorYFor } from '../web/nativeAR.js';
 
 // 偽の navigator.xr / renderer / session
@@ -158,4 +158,17 @@ test('floorYFor: 見つけた床 → タップした点 → カメラの 1.4 m �
   assert.equal(floorYFor({ floorY: -0.1, hitY: 0.3 }, cam), -0.1);
   assert.equal(floorYFor({ hitY: 0.3 }, cam), 0.3);
   assert.ok(Math.abs(floorYFor({}, cam) - 0.1) < 1e-9);
+});
+
+test('viewerPerson: camera のワールド位置を、見ている 1 人として返す(親があっても世界の位置)', () => {
+  const rig = new THREE.Group();
+  rig.position.set(1, 0, 0);
+  const cam = new THREE.PerspectiveCamera();
+  cam.position.set(0, 1.6, 2);
+  rig.add(cam);
+  rig.updateMatrixWorld(true);
+  const people = viewerPerson(cam).getPeople();
+  assert.equal(people.length, 1);
+  assert.equal(people[0].id, 'viewer');
+  assert.deepEqual(people[0].position, [1, 1.6, 2]);
 });

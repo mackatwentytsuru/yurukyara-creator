@@ -9,6 +9,7 @@
 //    入ったあとに session.enabledFeatures を見て分ける。
 //  - マイクは、AR/VR に入る前の 2D の画面で許可を取っておく(session の中で許可ダイアログが出ると
 //    どうなるかは資料が無い)。ここでは扱わない(会話の柱の仕事)。
+import * as THREE from 'three';
 import { hasNativeAR } from './nativeAR.js';
 
 export const MODES = ['screen', 'ar', 'vr'];
@@ -66,6 +67,21 @@ export function applyPresentation({ mode, scene, renderer, place, background }) 
 /** 頭(カメラ)のワールド位置。キャラの目線の的に使う。AR でも VR でも、render に渡した camera でよい。 */
 export function headWorldPosition(camera, out) {
   return camera.getWorldPosition(out);
+}
+
+/**
+ * AR/VR で「見ている人」を 1 人として返す(会話の柱の「人の入力」の窓口と同じ形)。
+ * 人の位置はワールド座標(m)、camera の位置 = 頭。webcam の顔検出は要らない。
+ * @returns {{ getPeople: () => Array<{id: string, position: number[]}> }}
+ */
+export function viewerPerson(camera) {
+  const head = new THREE.Vector3();
+  return {
+    getPeople() {
+      headWorldPosition(camera, head);
+      return [{ id: 'viewer', position: head.toArray() }];
+    },
+  };
 }
 
 /**
