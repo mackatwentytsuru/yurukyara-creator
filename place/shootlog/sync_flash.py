@@ -8,6 +8,7 @@ LED に流した白いフラッシュ(make_sync_pattern.py の映像)を両方�
 出力 sync.json: alpha, beta, 対の数, 残差(ms と a のコマ数)、見つけたフラッシュの時刻。
 使い方: b の時刻 t_b に対応する a の時刻は alpha * t_b + beta。
 目安: フラッシュは 4〜6 回、間隔が不ぞろい(対の取り違えを避ける)。残差が 1 コマ(a のコマ間隔)より大きければ警告。
+**時計の進みの比(alpha)は、撮影の頭と終わりの 2 か所にフラッシュがあって初めて正しく出る**(12 秒の 1 か所だけだと alpha が 1 から大きくずれる)。1 か所だけのときは alpha=1 に固定したほうがよい。
 """
 from __future__ import annotations
 
@@ -16,11 +17,45 @@ import json
 from itertools import product
 from pathlib import Path
 
+import shutil
+import subprocess
+
 import cv2
 import numpy as np
 
 
-def luma_series(video: str, times_from: list[float] | None = None, scale_w=160):
+def _fps_of(video: str) -> float:
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=avg_frame_rate", "-of", "csv=p=0", str(video)],
+                       capture_output=True, text=True)
+    num, _, den = r.stdout.strip().partition("/")
+    return float(num) / float(den or 1) if num else 30.0
+
+
+def luma_series_ffmpeg(video: str, times_from, w=160, h=90, window=None):
+    """ffmpeg で縮小して読む(長い 5680×1240 の動画でも速い)。window=(開始秒, 終了秒)で区間だけ読める。"""
+    fps = _fps_of(video)
+    cmd = ["ffmpeg", "-v", "error", "-threads", "0"]
+    if window:
+        cmd += ["-ss", str(window[0]), "-t", str(window[1] - window[0])]
+    cmd += ["-i", str(video), "-an", "-vf", f"scale={w}:{h}:flags=area,format=gray", "-f", "rawvideo", "-"]
+    raw = subprocess.run(cmd, capture_output=True).stdout
+    frames = np.frombuffer(raw, np.uint8)
+    n = len(frames) // (w * h)
+    y = frames[: n * w * h].reshape(n, h * w).mean(axis=1)
+    t0 = window[0] if window else 0.0
+    t = np.array(times_from) if times_from is not None else t0 + np.arange(n) / fps
+    m = min(n, len(t))
+    return t[:m], y[:m], fps
+
+
+def luma_series(video: str, times_from: list[float] | None = None, scale_w=160, window=None):
+    if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+        try:
+            t, y, fps = luma_series_ffmpeg(video, times_from, window=window)
+            if len(y) > 1:
+                return t, y, fps
+        except Exception:
+            pass
     cap = cv2.VideoCapture(str(video))
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     vals = []
@@ -78,9 +113,10 @@ def main():
     ap.add_argument("--b", required=True)
     ap.add_argument("--b-shoot", default=None)
     ap.add_argument("--out", default="sync.json")
+    ap.add_argument("--a-window", nargs=2, type=float, metavar=("START_S", "END_S"), help="a の動画のうち、フラッシュが入っている区間だけ読む(長い動画を速くする)")
     a = ap.parse_args()
 
-    ta, ya, fps_a = luma_series(a.a)
+    ta, ya, fps_a = luma_series(a.a, window=tuple(a.a_window) if a.a_window else None)
     tb_override = None
     if a.b_shoot:
         frames = [json.loads(line) for line in (Path(a.b_shoot) / "frames.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
