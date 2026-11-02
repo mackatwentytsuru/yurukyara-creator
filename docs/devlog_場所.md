@@ -56,3 +56,9 @@
 - 最初は漆喰が雲のように濃すぎたので、むらを弱めた(見て直した)。
 - `place.json` に任意の `variants`(見た目の名前 → GLB)を足し、`loadPlace(url, {variant})` と `?variant=` で切りかえる。**共通の決まりに無い追加なので司令塔へ連絡**。写真から色を付ける版(A)は `variants.photo` に足せる。
 - 注意: RoomPlan の USDZ に入っているノードの名前・材質は実物で未確認。判定が名前に頼らないのはそのため。
+
+### 17:50 モード切りかえの入口 `place/web/modes.js`(web/ が呼ぶだけで済む形)
+- `createPresentation({renderer, scene, camera, place, background, onViewer, onChange})` → `available`・`enter('ar'|'vr')`・`exit()`・`viewerPeople()`・`frame()`。iPhone の殻(native)と Quest(WebXR)と画面を同じ呼び方にした。AR に入ると `<html data-presentation="ar">` とクラス `presentation-ar` が付き、html と body の背景が透明になる(`data-hide-in-ar` の要素は隠れる)。見ている人の頭は、殻では姿勢が来るたび `onViewer(camera)`、WebXR では `modes.frame()` を毎フレーム呼ぶと届く。
+- `place/web/modeButtons.js`: 使えるモードのボタンだけを container に出す。
+- 会話の柱(web/)の `?source=pose` の窓口と、`setViewer` / `setPeople` で接続できる形(接続そのものは web/ 側の仕事。未接続)。
+- テスト 38 件通過。偽の殻の通し試験(`native_ar_check.py`)も modes.js 経由で合格のまま。

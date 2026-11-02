@@ -22,8 +22,9 @@ const isArr16 = (a) => Array.isArray(a) && a.length === 16 && a.every(Number.isF
  * @param {Window} [args.win]
  * @param {(p:THREE.Vector3)=>void} [args.onHit] raycast の答え
  * @param {(y:number)=>void} [args.onFloor] 床の高さの知らせ
+ * @param {(camera:THREE.PerspectiveCamera)=>void} [args.onPose] 姿勢を写すたび(毎フレーム)に呼ぶ。見ている人の頭 = camera の位置
  */
-export function createNativeAR({ camera, win = globalThis, onHit, onFloor }) {
+export function createNativeAR({ camera, win = globalThis, onHit, onFloor, onPose }) {
   const state = { poses: 0, lastPoseAt: 0, floorY: null, active: false };
 
   function post(message) {
@@ -40,6 +41,7 @@ export function createNativeAR({ camera, win = globalThis, onHit, onFloor }) {
       camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
       state.poses += 1;
       state.lastPoseAt = Date.now();
+      onPose?.(camera);
     },
     onHit(x, y, z) {
       if ([x, y, z].every(Number.isFinite)) onHit?.(new THREE.Vector3(x, y, z));
