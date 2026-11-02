@@ -15,7 +15,7 @@ def _sgnpow(v, e):
     return math.copysign(abs(v) ** e, v) if v != 0 else 0.0
 
 
-def material(name, rgb, rough=0.7, emit=0.0, metallic=0.0, edge_rgb=None):
+def material(name, rgb, rough=0.7, emit=0.0, metallic=0.0, edge_rgb=None, spec=0.3):
     """sRGB の 0〜255 で色を渡す(Blender の色は線形なので直す)。"""
     def lin(c):
         c = c / 255.0
@@ -28,6 +28,10 @@ def material(name, rgb, rough=0.7, emit=0.0, metallic=0.0, edge_rgb=None):
     b.inputs["Base Color"].default_value = col
     b.inputs["Roughness"].default_value = rough
     b.inputs["Metallic"].default_value = metallic
+    for k in ("Specular IOR Level", "Specular"):   # つや消しの平らな色にするため、反射の強さを絞る
+        if k in b.inputs:
+            b.inputs[k].default_value = spec
+            break
     if edge_rgb is not None:
         # 頂点の色(Col)を使う。glTF に書き出せるのは、手続きの節点ではなく頂点の色や絵だけ
         nt = m.node_tree
@@ -94,7 +98,7 @@ def superquadric(name, radii, exps=(1.0, 1.0), center=(0, 0, 0), rot_deg=(0, 0, 
     return _make(name, verts, faces, mat, center, rot_deg)
 
 
-def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.0, rot_deg=(0, 0, 0), xy=(1.0, 1.0)):
+def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.0, rot_deg=(0, 0, 0), xy=(1.0, 1.0), sq=1.0):
     """輪(トーラス)。squash は断面の縦の倍率。"""
     nu, nv = seg
     verts, faces = [], []
@@ -102,8 +106,9 @@ def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.
         u = 2 * math.pi * i / nu
         for j in range(nv):
             v = 2 * math.pi * j / nv
-            r = major + minor * math.cos(v)
-            verts.append((r * math.cos(u) * xy[0], r * math.sin(u) * xy[1], minor * squash * math.sin(v)))
+            # 断面: sq=1 で円、小さいほど角丸の長方形(太い帯)。minor は半径方向の半幅、minor*squash は軸方向の半幅
+            r = major + minor * _sgnpow(math.cos(v), sq)
+            verts.append((r * math.cos(u) * xy[0], r * math.sin(u) * xy[1], minor * squash * _sgnpow(math.sin(v), sq)))
     for i in range(nu):
         for j in range(nv):
             a = i * nv + j
@@ -178,3 +183,24 @@ def gradient(ob, center_rgb, edge_rgb, front=(0, -1, 0), power=1.0, vertical=0.0
         t = (1.0 - max(0.0, v.normal.dot(f))) ** power
         t = min(1.0, t * (1.0 - vertical) + vertical * abs(v.normal.z) ** 1.2 + 0.0)
         ca.data[i].color = (c0[0] + (c1[0] - c0[0]) * t, c0[1] + (c1[1] - c0[1]) * t, c0[2] + (c1[2] - c0[2]) * t, 1.0)
+
+
+def outline(ob, thick, mat, name=None):
+    """裏返しの殻で、茶色などの輪郭線を出す。物を法線の向きに thick(m)ふくらませ、面を裏返した複製を作る。
+    裏返した面は、元の物の外にはみ出した縁だけが表から見える(背面を描かない設定で)。頂点グループは複製が引きつぐ。"""
+    import bmesh
+    sh = ob.copy()
+    sh.data = ob.data.copy()
+    sh.name = name or ("ol_" + ob.name)
+    bpy.context.scene.collection.objects.link(sh)
+    bm = bmesh.new()
+    bm.from_mesh(sh.data)
+    bm.normal_update()
+    for v in bm.verts:
+        v.co += v.normal * thick
+    bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+    bm.to_mesh(sh.data)
+    bm.free()
+    sh.data.materials.clear()
+    sh.data.materials.append(mat)
+    return sh
