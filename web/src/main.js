@@ -10,6 +10,10 @@ import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
 import { createUi } from './ui/panel.js';
 import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
+import { createArPlacement } from './arPlacement.js';
+// 見せ方(画面・AR・VR)の切りかえは、場所の柱が出している入口(docs/共通の決まり.md)
+import { createPresentation } from '../../place/web/modes.js';
+import { mountModeButtons } from '../../place/web/modeButtons.js';
 
 const params = new URLSearchParams(location.search);
 const GAIN = Number(params.get('gain') ?? 2); // 視線の振れ幅の倍率
@@ -178,12 +182,13 @@ let presence = { since: 0, greetedAt: -1e9, lastSeen: 0 };
 let chipClock = 0;
 
 function frame(nowMs) {
-  requestAnimationFrame(frame);
   const dt = (nowMs - prevT) / 1000;
   prevT = nowMs;
   const c = app.character;
   if (!c) return;
   const nowS = nowMs / 1000;
+
+  modes?.frame(); // Quest の中なら、見ている人の頭の位置が onViewer で届く
 
   // 1. 人の位置(入力から。ワールド座標)を、キャラの座標に直す
   const people = (app.source?.getPeople(nowMs) ?? []).map((p) => ({
@@ -254,6 +259,73 @@ window.conversation = {
 };
 app.poseSource = poseSource;
 
+/* ---------- 見せ方(画面・AR・VR) ---------- */
+let modes = null;
+let arPlacement = null;
+let screenSource = null; // AR/VR に入る前の入力(戻るときに使う)
+const headTmp = new THREE.Vector3();
+
+/** 入力を替える。MediaPipe のカメラは、AR(殻のカメラ)と競合するので、離れるときに止める */
+async function useSource(next, mode) {
+  if (app.source === next) {
+    app.mode = mode;
+    return;
+  }
+  try {
+    await app.source?.stop?.();
+  } catch (err) {
+    console.warn('入力を止められませんでした:', err.message);
+  }
+  await next.start();
+  app.source = next;
+  app.mode = mode;
+  updatePrivacy();
+}
+
+async function onPresentationChange(mode) {
+  stage.state.immersive = mode === 'ar' && Boolean(modes.nativeAR); // 殻のあいだは、射影行列を殻に任せる
+  const place = app.place?.loaded;
+  if (mode === 'screen') {
+    arPlacement?.restore();
+    arPlacement = null;
+    if (place) place.object3d.visible = true;
+    stage.resize();
+    stage.frameCharacter(app.character, undefined, place?.object3d);
+    if (screenSource) await useSource(screenSource, screenSource.kind === 'mediapipe' ? 'camera' : screenSource.kind).catch((e) => ui.error(e.message));
+    screenSource = null;
+    return;
+  }
+  if (!screenSource) screenSource = app.source && app.source !== poseSource ? app.source : null;
+  if (mode === 'ar') {
+    // AR の世界は、撮った部屋と重ならない。部屋は隠し、キャラは現実の床に立たせる
+    if (place) place.object3d.visible = false;
+    arPlacement = createArPlacement({ object3d: app.character.object3d, camera: stage.camera });
+  }
+  await useSource(poseSource, 'pose').catch((e) => ui.error(e.message));
+}
+
+async function setupPresentation() {
+  modes = await createPresentation({
+    renderer: stage.renderer,
+    scene: stage.scene,
+    camera: stage.camera,
+    place: app.place.loaded ?? undefined,
+    background: null, // 背景は、ページの CSS(AR のときは場所の柱が透明にする)
+    onViewer: (cam) => {
+      cam.getWorldPosition(headTmp);
+      poseSource.setViewer(headTmp.toArray()); // 見ている人の頭 = カメラの位置
+      arPlacement?.onPose();
+    },
+    onChange: (mode) => void onPresentationChange(mode),
+    onHit: (p) => arPlacement?.onHit(p),
+    onFloor: (y) => arPlacement?.onFloor(y),
+  });
+  mountModeButtons({ modes, container: $('modes'), onError: (e) => ui.error(e.message) });
+  // iPhone の殻の中なら、すぐ AR に入る(殻は、入ったあとに姿勢を送り始める)
+  if (modes.available.ar_kind === 'native') await modes.enter('ar').catch((e) => ui.error(e.message));
+  app.modes = modes;
+}
+
 async function boot() {
   const status = $('gateStatus');
   const buttons = [$('startCam'), $('startSim')];
@@ -283,11 +355,12 @@ async function boot() {
     status.textContent = `キャラを読み込めませんでした: ${err.message}`;
     return;
   }
+  await setupPresentation().catch((e) => console.warn('見せ方の切りかえを用意できませんでした:', e.message));
   await refreshStatus();
   setInterval(refreshStatus, 15000);
   updatePrivacy();
   buttons.forEach((b) => (b.disabled = false));
-  requestAnimationFrame(frame);
+  stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う
 
   /** 入力を選んで始める。失敗したら理由を出して、ゲートに戻る */
   async function startSource(kind, pending) {
@@ -315,7 +388,10 @@ async function boot() {
   const wantPose = params.get('source') === 'pose'; // AR(iPhone の殻アプリ)・VR(Quest)では、位置を外から受け取る
   $('startCam').addEventListener('click', () => (wantPose ? startSource('pose', '準備しています…') : startSource('camera', 'カメラとモデルを準備しています…')));
   $('startSim').addEventListener('click', () => startSource('sim', ''));
-  if (wantPose) $('startCam').textContent = 'はじめる';
+  if (wantPose) {
+    $('startCam').textContent = 'はじめる';
+    document.querySelector('.gate .fine').textContent = 'カメラの映像は使いません。この端末の位置だけで、あなたのいる方向を知ります。';
+  }
 
   $('micBtn').addEventListener('click', toggleMic);
   $('composer').addEventListener('submit', (e) => {

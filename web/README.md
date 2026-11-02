@@ -58,6 +58,23 @@ conversation.setPeople([{ id: 'a', position: [x, y, z], speaking: true }]);  // 
 
 1.5 秒、更新が無ければ「いなくなった」とみなします。
 
+## 見せ方(画面・AR・VR)
+
+切りかえの入口は場所の柱の `place/web/modes.js`(`createPresentation`)です。`web/` は次をつないでいます。
+
+- 画面: 既定。入力は MediaPipe かマウス。
+- AR(iPhone の殻アプリ): ページが殻の中だと分かると、すぐ AR に入ります。殻の姿勢が `PoseSource` に届き(カメラは使わない)、キャラは見ている方向の 1.6m 先の床に立ち、床をタップするとそこへ移ります。撮った部屋は隠します(AR の世界と重ならないため)。
+- AR / VR(Quest): 「AR で見る」「VR で見る」のボタンが出ます。入ると入力は頭の位置になり、MediaPipe のカメラは止めます。VR では撮った部屋の中に、spawn の位置で立ちます。
+- 画面に戻ると、入力・カメラの構図・キャラの位置を元に戻します。
+
+iPhone の殻から開く HTTPS(同じネットワークに公開するときだけ。費用の上限は付いています):
+
+```bash
+cd web && npm run build
+HOST=0.0.0.0 PORT=8443 TLS_CERT=../place/.certs/192.168.x.x.crt TLS_KEY=../place/.certs/192.168.x.x.key   ANTHROPIC_API_KEY=… ELEVENLABS_API_KEY=… node server/index.mjs
+# 殻が開く URL: https://<この PC の IP>:8443/?source=pose&place=<id>
+```
+
 ## 確かめる
 
 ```bash

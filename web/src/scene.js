@@ -30,6 +30,7 @@ export function createStage(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x000000, 0);
+  renderer.xr.enabled = true; // Quest の VR/AR で使う(入らないときは、ふつうに描く)
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(28, 1, 0.05, 60);
@@ -43,7 +44,7 @@ export function createStage(canvas) {
   scene.add(rim);
   scene.add(makeFloorGlow());
 
-  const state = { view: 'bust', height: 1.5, headY: 1.35 };
+  const state = { view: 'bust', height: 1.5, headY: 1.35, immersive: false };
 
   /**
    * キャラの大きさ・位置・向きに合わせてカメラを置く。bust は腰から上、full は全身。
@@ -89,7 +90,8 @@ export function createStage(canvas) {
     const h = canvas.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    camera.updateProjectionMatrix();
+    // AR(殻)のあいだ、射影行列は殻が決める(上書きしない)
+    if (!state.immersive) camera.updateProjectionMatrix();
   }
 
   return {

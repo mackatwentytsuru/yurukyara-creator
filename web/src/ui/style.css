@@ -29,7 +29,12 @@ body {
 
 #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 
-.top { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; pointer-events: none; }
+.top { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
+.modes { display: flex; gap: 8px; pointer-events: auto; }
+.modes:empty { display: none; }
+.place-mode-button { font: inherit; font-size: 13px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.place-mode-button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.place-mode-button[hidden] { display: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   font-size: 12px; line-height: 1; padding: 7px 10px; border-radius: 999px;
@@ -96,6 +101,9 @@ body {
 .mic { background: var(--glass); border: 1px solid var(--line); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .mic[aria-pressed="true"] { background: rgba(255, 143, 122, 0.22); border-color: var(--coral); color: var(--coral); }
 .mic.hearing { box-shadow: 0 0 0 3px rgba(255, 143, 122, 0.35); }
+
+/* AR のあいだは、現実が見えるよう、入口の背景も透明にする(背景は場所の柱が透明にする) */
+html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
 
 /* 入口 */
 .gate { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(12, 10, 22, 0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 10; }
