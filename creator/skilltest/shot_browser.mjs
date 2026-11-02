@@ -38,6 +38,8 @@ await page.evaluate(() => {
 async function frame(n = 8) {
   for (let i = 0; i < n; i++) await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
 }
+// 撮影中はまばたきを止める(目を閉じた瞬間が写ると、形の判定を誤らせる)
+await page.evaluate(() => { const c = window.__c; c.blinkTimer = 1e9; c.blinkT = -1; c.blink = 0; });
 await frame(30);
 const info = await page.evaluate(() => {
   const c = window.__c;
