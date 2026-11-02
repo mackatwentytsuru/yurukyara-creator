@@ -1,0 +1,12 @@
+{
+ "n": 50,
+ "seed": 1102,
+ "judge": "DeepSeek V4.1 Flash(絵を直接見て、元の判定の ChatGPT とは別)",
+ "match": {
+  "body": 30,
+  "texture": 48,
+  "head_ratio": 23
+ },
+ "binary_body_headheavy": 34,
+ "binary_texture_cloth": 48
+}
