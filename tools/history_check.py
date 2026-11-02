@@ -2,7 +2,7 @@
 
 使い方: python tools/history_check.py [--terms 語の一覧.txt] [--json 出力.json]
   語の一覧: 1 行に 1 語。人名など、リポジトリに書けない語を書く。tools/history_terms.local.txt(リポジトリに入れない)を自動で読む。
-見る物: 全コミットで足された行と、コミットの本文。バイナリは見ない。
+見る物: 全コミットで足された行と、コミットの本文。バイナリ(画像・GLB など)の中身は見ない。
 出す物: 語ごとの件数、最初に現れたコミットとファイル。行の中身は表示しない(鍵を画面に出さないため)。
 終わりの番号: 0 = 何もなし、1 = 見つかった(止めて報告する)、2 = 動かせない。
 """
@@ -38,16 +38,22 @@ def scan(patterns):
     found = {}
     commit, path = "", "(コミットの本文)"
     count = 0
+    in_body = True
     for line in proc.stdout:
         if line.startswith("@@@COMMIT "):
             commit, path = line.split()[1][:8], "(コミットの本文)"
             count += 1
+            in_body = True
             continue
-        if line.startswith("+++ "):
-            path = line[4:].strip().removeprefix("b/")
+        if line.startswith("diff --git "):
+            in_body = False
             continue
-        if line.startswith(("--- ", "-", "@@", "diff ", "index ")):
-            continue
+        if not in_body:
+            if line.startswith("+++ "):
+                path = line[4:].strip().removeprefix("b/")
+                continue
+            if not line.startswith("+"):   # 足された行だけを見る。消された行は、その前のコミットで足された時に見ている
+                continue
         for name, rx in patterns.items():
             if rx.search(line):
                 row = found.setdefault(name, {"count": 0, "first_commit": commit, "files": {}})
@@ -70,7 +76,7 @@ def main():
     if "--json" in a:
         out = a[a.index("--json") + 1]
     patterns = {k: re.compile(v) for k, v in KEY_PATTERNS.items()}
-    patterns.update({t: re.compile(re.escape(t)) for t in terms})
+    patterns.update({t: re.compile(re.escape(t), re.I) for t in terms})
     found, commits = scan(patterns)
     print(f"点検したコミット {commits} 件、探した物 {len(patterns)} 種類(鍵の形 {len(KEY_PATTERNS)}、語 {len(terms)})")
     for name, row in sorted(found.items(), key=lambda kv: -kv[1]["count"]):
