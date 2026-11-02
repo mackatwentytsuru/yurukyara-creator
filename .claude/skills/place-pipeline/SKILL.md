@@ -12,6 +12,7 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 3. (任意)`node place/tools/name_landmarks.mjs <id> --hint "..."` で Claude が呼び名と案内の一言を付け直す。**お金がかかる API なので、本番で使う前に API 残高の担当へ量を伝える。** 先に `--dry-run` で送る文だけ見る。
 4. 見る: `python place/tools/shot.py <出力フォルダ> <id>`(ヘッドレスで 4 画面)。**出力フォルダと id は必ず両方付ける**(付けないと test_room を `place/shots/` に撮って書く)、`python place/tools/native_ar_check.py`(iPhone の殻の偽物で AR を通し試験)。
 4b. 取りこみの確かめ: 偽の撮影(`place/testdata/fake_scan`)を `<id>` に取りこんだときは、`node place/tools/check_ingest.mjs <id>` が合格(終了コード 0)になること。素材貼りの有無・床の高さ・ドアを向く spawn・日本語の目印名まで機械で見る。本物の撮影のときは、箱の寸法を巻き尺と比べる。
+4c. 取りこみの最後に自動で 2 つ出る(止めず知らせるだけ。単独でも動く): `node place/tools/glbBudget.mjs <GLB>...`(三角面数・テクスチャの辺・重さを測って 採用/警告/却下。却下で終了コード 1)、`node place/tools/clearance.mjs <id>`(`scan/room.json` の家具と壁から、立つ位置が人の半径 0.35 m 以上あいているか、床の 90% 以上へ歩けるか、ドアが 0.72 m 以上で歩いて行けるか)。本物の RoomPlan のメッシュは三角面が数十万になりうる。**却下が出たら**、Blender で Decimate(比 0.25 から)→ テクスチャを 1024 に、の順に減らして再測定する(未実装。本物が届いてから)。
 5. 実機: `node place/tools/serve_https.mjs`(自己署名の HTTPS)→ iPhone の「ARステージ」/ Quest 3 のブラウザで `https://<PCのIP>:8443/place/web/demo.html?place=<id>`。
 
 ## 部屋の色(RoomPlan の面は色も UV も無い)
@@ -56,3 +57,13 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 | 5 | Haiku 5.5 | 合(範囲外の行動) | 100.4 秒 | 154,016 | 頼まれていない `serve_https.mjs` を 8453 番で起動して置いたままにした(私が PID を止めた)。8443 番が塞がっている・Git Bash の PID・ログの置き場でも迷った → 上に書き足した |
 
 結論: **この試験の一番安く動く設定は Sonnet 5.5 の medium**(合格・最短・トークン最少、書き足し後)。Haiku も合格したが、時間が約 3.5 倍、トークンも多く、範囲外の行動があった。Haiku に任せるなら、依頼文に「サーバーを起動しない」を書く。Opus の xhigh・high・medium の差は出なかった(この試験は、手順が書かれていれば難しくない)。
+
+## 外のスキルの考え方を試した結果(2026-11-02、司令塔の抜き出しメモ「場所」「工程と会話」より。コードは写さず、考え方だけ自分の言葉で作った)
+| 考え方 | 結果 | どうなったか |
+|---|---|---|
+| GLB の受入検査(面数・重さ・テクスチャの予算で 採用/警告/却下) | 効いた | `glbBudget.mjs`。偽の撮影は全部「採用」。本物の数字で線を直す |
+| 通路・到達性(人のカプセルで歩ける升目を塗りつぶす) | 効いた | `clearance.mjs`。偽の撮影は余裕 0.68 m・歩ける床 93%・ドアに行ける。家具で床を分けたテストは不合格になる |
+| スマホの描画負荷(画素比を 2 まで) | 元から入っていた | `demo.js` で済み。何もしていない |
+| ボタンは 44px 以上 | 直した | `demo.html` のボタンが約 35px だった。`min-height: 44px` を足した |
+| USDZ を ZIP で開き `.usda` を読む | 使えない | Blender が書く USDZ の中は `.usdc`(バイナリ)1 つだけ。RoomPlan の本物も同じ可能性が高い。メモ自身も USDC 非対応と書く |
+| 箱だけで寸法を検査(出力後に再読込して比べる) | 元から近い物がある | `check_ingest.mjs` と、箱の救済との寸法比べで済み |

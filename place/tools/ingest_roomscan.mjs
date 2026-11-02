@@ -12,6 +12,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildPlaceJson } from './landmarks.mjs';
 import { buildBoxGlb, elementsFromRoomJson } from './glbBoxes.mjs';
+import { judgeBudget, measureGlb } from './glbBudget.mjs';
+import { checkClearance } from './clearance.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -97,3 +99,14 @@ const place = buildPlaceJson({
 place.variants = stylized ? { stylized: 'room.glb', raw: 'room_raw.glb' } : { raw: 'room_raw.glb' };
 writeFileSync(join(outDir, 'place.json'), JSON.stringify(place, null, 2) + '\n', 'utf8');
 console.log(`書き出した: ${outDir}(landmarks ${place.landmarks.length} 個、floor_y ${place.floor_y}、spawn ${JSON.stringify(place.spawn)})`);
+
+// 受入検査(止めずに知らせるだけ): 重さの予算と、立つ位置から歩けるか
+for (const f of ['room.glb', ...(stylized ? ['room_raw.glb'] : [])]) {
+  const m = await measureGlb(readFileSync(join(outDir, f)));
+  const j = judgeBudget(m);
+  console.log(`予算 ${j.verdict}: ${f}(三角面 ${m.triangles}、テクスチャ最大 ${m.maxTexture}px、${(m.bytes / 1024).toFixed(0)} KB)${j.reasons.map((r) => '\n  - ' + r).join('')}`);
+}
+if (existsSync(roomJson)) {
+  const c = checkClearance({ spawn: [place.spawn.position[0], place.spawn.position[2]], room: JSON.parse(readFileSync(roomJson, 'utf8')) });
+  console.log(`${c.ok ? '通れる' : '通れない'}: 立つ位置の余裕 ${c.spawnClearance} m、行ける床 ${c.reachablePercent}%${c.problems.map((p) => '\n  - ' + p).join('')}`);
+}
