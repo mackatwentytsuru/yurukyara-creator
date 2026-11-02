@@ -45,22 +45,41 @@ export function createStage(canvas) {
 
   const state = { view: 'bust', height: 1.5, headY: 1.35 };
 
-  /** キャラの大きさに合わせてカメラを置く。bust は腰から上、full は全身 */
-  function frameCharacter(character, view = state.view) {
+  /**
+   * キャラの大きさ・位置・向きに合わせてカメラを置く。bust は腰から上、full は全身。
+   * state.headY と state.camZ は、キャラの座標(足元が原点・+z が正面)での値。
+   */
+  function frameCharacter(character, view = state.view, obstacles = state.obstacles) {
     state.view = view;
+    state.obstacles = obstacles;
+    character.object3d.updateWorldMatrix(true, true);
+    const base = character.object3d.getWorldPosition(new THREE.Vector3());
     const box = new THREE.Box3().setFromObject(character.object3d);
     const height = Math.max(0.3, box.max.y - box.min.y);
+    const floor = box.min.y - base.y; // キャラの原点から見た足元の高さ
     state.height = height;
-    state.headY = box.min.y + height * 0.9;
+    state.headY = floor + height * 0.9;
     const aspect = camera.aspect;
     const fov = THREE.MathUtils.degToRad(camera.fov);
     const visibleH = view === 'full' ? height * 1.18 : height * 0.62;
-    const centerY = view === 'full' ? box.min.y + height * 0.5 : box.min.y + height * 0.67;
+    const centerY = floor + (view === 'full' ? height * 0.5 : height * 0.67);
     // 横が狭い画面(スマホ)でも、肩と腕が入るようにする
     const neededH = Math.max(visibleH, (height * (view === 'full' ? 0.55 : 0.4)) / aspect);
-    const dist = neededH / (2 * Math.tan(fov / 2));
-    camera.position.set(0, centerY, dist);
-    camera.lookAt(0, centerY, 0);
+    let dist = neededH / (2 * Math.tan(fov / 2));
+    camera.fov = 28;
+    if (obstacles) {
+      // 部屋の中では、壁の手前までしか下がれない。足りない分は画角を広げて収める
+      const origin = character.object3d.localToWorld(new THREE.Vector3(0, centerY, 0));
+      const dir = character.object3d.localToWorld(new THREE.Vector3(0, centerY, 1)).sub(origin).normalize();
+      const hit = new THREE.Raycaster(origin, dir, 0.1, dist + 1).intersectObject(obstacles, true)[0];
+      if (hit && hit.distance - 0.2 < dist) {
+        dist = Math.max(0.8, hit.distance - 0.2);
+        camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(neededH / 2 / dist)), 28, 75);
+      }
+    }
+    camera.updateProjectionMatrix();
+    camera.position.copy(character.object3d.localToWorld(new THREE.Vector3(0, centerY, dist)));
+    camera.lookAt(character.object3d.localToWorld(new THREE.Vector3(0, centerY, 0)));
     state.camZ = dist;
     return state;
   }

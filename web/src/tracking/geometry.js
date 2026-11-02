@@ -34,11 +34,23 @@ export function describeDirection(dx, dz) {
   return { text, dist };
 }
 
-/** place.landmarks に「where」を足して、Claude に渡す形にする */
-export function landmarksForPrompt(landmarks = [], origin = [0, 0, 0]) {
+/**
+ * place.landmarks に「where」を足して、Claude に渡す形にする。
+ * origin はキャラの位置、yawDeg はキャラの向き(object3d.rotation.y の度。0 のとき +z を向く)。
+ * 方向は、キャラと向かい合ったお客さんから見た右・左(キャラの左手側が、お客さんの右)。
+ */
+export function landmarksForPrompt(landmarks = [], origin = [0, 0, 0], yawDeg = 0) {
+  const th = radians(yawDeg);
+  const cos = Math.cos(th);
+  const sin = Math.sin(th);
   return landmarks.map((l) => {
-    const [x, , z] = l.position;
-    const { text, dist } = describeDirection(x - origin[0], z - origin[2]);
+    const p = Array.isArray(l.position) ? l.position : [l.position.x, l.position.y, l.position.z];
+    const wx = p[0] - origin[0];
+    const wz = p[2] - origin[2];
+    // ワールド → キャラの座標(キャラは +z を向く)
+    const lx = wx * cos - wz * sin;
+    const lz = wx * sin + wz * cos;
+    const { text, dist } = describeDirection(lx, lz);
     return { name: l.name, note: l.note ?? '', where: `${text}、約 ${dist.toFixed(1)}m` };
   });
 }

@@ -1,9 +1,11 @@
 // 場所の目印。本物の場所データ(places/<id>/place.json)が無いときの、試し用の場所。
 // 単位はメートル、y が上、キャラは原点で +z を向く。お客さんから見て右が +x、手前が +z。
+import { loadPlace } from '../../place/web/loadPlace.js'; // 場所の柱が出している入口(docs/共通の決まり.md)
 import { landmarksForPrompt } from './tracking/geometry.js';
 
 export const SAMPLE_PLACE = {
   id: 'sample',
+  spawn: { position: [0, 0, 0], yaw_deg: 0 },
   name: '試しの場所',
   info: '入口を入ると、すぐ前に受付があります。',
   landmarks: [
@@ -14,13 +16,24 @@ export const SAMPLE_PLACE = {
   ],
 };
 
-/** ?place=<place.json の URL> があれば読む。無ければ試しの場所 */
-export async function loadPlaceData(url) {
-  if (!url) return SAMPLE_PLACE;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`place.json を読めません: ${url}`);
-  const json = await res.json();
-  return { info: '', ...json };
+/**
+ * 場所のデータを読む。
+ *  - 指定なし: 試しの場所(3D の部屋は無し)
+ *  - ?place=<id> または <place.json の URL>: 場所の柱の loadPlace で、部屋の 3D・立ち位置・目印を読む
+ * @returns {Promise<{id:string,name:string,info:string,spawn:{position:number[],yaw_deg:number},landmarks:object[],loaded:object|null}>}
+ */
+export async function loadPlaceData(spec) {
+  if (!spec) return { ...SAMPLE_PLACE, loaded: null };
+  const url = /\.json($|\?)/.test(spec) ? spec : `/places/${spec}/place.json`;
+  const loaded = await loadPlace(url);
+  return {
+    id: loaded.id,
+    name: loaded.name,
+    info: '',
+    spawn: { position: loaded.spawn.position.toArray(), yaw_deg: loaded.spawn.yaw_deg },
+    landmarks: loaded.landmarks.map((l) => ({ name: l.name, position: l.position.toArray(), note: l.note })),
+    loaded,
+  };
 }
 
 /** 目印の場所(ワールド座標)。視線の先は目の高さに上げる */
@@ -30,7 +43,7 @@ export function landmarkWorld(place, name) {
   return [l.position[0], Math.max(l.position[1], 1.1), l.position[2]];
 }
 
-export function promptPlace(place, origin = [0, 0, 0]) {
-  const wheres = landmarksForPrompt(place.landmarks ?? [], origin);
+export function promptPlace(place) {
+  const wheres = landmarksForPrompt(place.landmarks ?? [], place.spawn.position, place.spawn.yaw_deg);
   return { name: place.name, info: place.info ?? '', landmarks: wheres };
 }

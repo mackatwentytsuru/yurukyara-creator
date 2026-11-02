@@ -120,7 +120,8 @@ export async function loadRig(url, config = {}) {
   if (config.heightM) {
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const h = box.max.y - box.min.y;
-    if (h > 0) character.object3d.scale.setScalar(config.heightM / h);
+    // 大きさは中身に掛ける。object3d の座標は、いつもメートルのまま
+    if (h > 0) gltf.scene.scale.multiplyScalar(config.heightM / h);
   }
   return character;
 }

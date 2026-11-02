@@ -1,4 +1,5 @@
 // 会話の本体。キャラを出し、カメラで人を見つけて目と首で追い、話しかけられたら Claude に聞いて、声で答える。
+import * as THREE from 'three';
 import { createStage } from './scene.js';
 import { loadCharacter } from './character/index.js';
 import { FaceTracker } from './tracking/faceTracker.js';
@@ -43,7 +44,11 @@ app.tracker = tracker;
 app.picker = picker;
 
 /* ---------- 視線 ---------- */
-let gazeOverride = null; // { pos:[x,y,z], until:ms }
+// 視線の先は、キャラの座標(足元が原点・+z が正面・+x がお客さんから見て右)で考えて、世界の座標に直す。
+// こうすると、場所の中でキャラが spawn の位置・向きに立っていても、同じ式で合う。
+const toWorld = (local) => app.character.object3d.localToWorld(new THREE.Vector3(...local)).toArray();
+let gazeOverride = null; // { pos:[x,y,z](世界), until:ms }
+/** @returns {number[]|null} 目印を見るときは、キャラから見たその場所(指さしに使う) */
 function setGaze(spec, ms = 2000) {
   if (!spec || spec === 'person') {
     gazeOverride = null;
@@ -51,13 +56,14 @@ function setGaze(spec, ms = 2000) {
   }
   const until = performance.now() + ms + 600;
   if (spec === 'away') {
-    gazeOverride = { pos: [-0.8, stage.state.headY + 0.3, stage.state.camZ * 0.8], until };
+    gazeOverride = { pos: toWorld([-0.8, stage.state.headY + 0.3, stage.state.camZ * 0.8]), until };
     return null;
   }
   if (spec.startsWith('landmark:')) {
     const pos = landmarkWorld(app.place, spec.slice('landmark:'.length));
-    if (pos) gazeOverride = { pos, until };
-    return pos;
+    if (!pos) return null;
+    gazeOverride = { pos, until };
+    return app.character.object3d.worldToLocal(new THREE.Vector3(...pos)).toArray();
   }
   return null;
 }
@@ -203,7 +209,7 @@ function frame(nowMs) {
     c.lookAt(gazeOverride.pos);
   } else if (primary) {
     const [x, y] = app.world.get(primary.id);
-    c.lookAt([x * GAIN, y, stage.state.camZ]);
+    c.lookAt(toWorld([x * GAIN, y, stage.state.camZ]));
   } else {
     c.lookAt(null);
   }
@@ -277,7 +283,7 @@ async function boot() {
   stage.resize();
   window.addEventListener('resize', () => {
     stage.resize();
-    if (app.character) stage.frameCharacter(app.character);
+    if (app.character) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
   });
   try {
     const url = params.get('char') ?? '/characters/_test/character.json';
@@ -285,8 +291,12 @@ async function boot() {
     const character = await loadCharacter(url);
     app.character = character;
     dialogue.character = character;
+    if (app.place.loaded) {
+      stage.scene.add(app.place.loaded.object3d);
+      app.place.loaded.placeCharacter(character.object3d); // 場所が決めた位置・向きに立たせる
+    }
     stage.scene.add(character.object3d);
-    stage.frameCharacter(character, params.get('view') === 'full' ? 'full' : 'bust');
+    stage.frameCharacter(character, params.get('view') === 'full' ? 'full' : 'bust', app.place.loaded?.object3d);
     if (character.personaUrl) app.persona = await (await fetch(character.personaUrl)).text();
     status.textContent = '';
   } catch (err) {

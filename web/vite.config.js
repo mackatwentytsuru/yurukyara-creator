@@ -4,7 +4,10 @@ import { defineConfig } from 'vite';
 const API = 'http://localhost:8787';
 
 export default defineConfig({
+  // 場所の柱(../place/web)も同じ three を使うよう、1 つにまとめる
+  resolve: { dedupe: ['three'] },
   server: {
+    fs: { allow: ['..'] },
     host: true,
     port: 5173,
     proxy: { '/api': API, '/characters': API, '/places': API },

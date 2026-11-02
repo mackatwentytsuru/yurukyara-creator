@@ -116,7 +116,8 @@ export async function loadVrm(url, config = {}) {
   if (config.heightM) {
     const box = new THREE.Box3().setFromObject(vrm.scene);
     const h = box.max.y - box.min.y;
-    if (h > 0) character.object3d.scale.setScalar(config.heightM / h);
+    // 大きさは中身に掛ける。object3d の座標は、いつもメートルのまま(場所に立たせるときに合わせやすい)
+    if (h > 0) vrm.scene.scale.multiplyScalar(config.heightM / h);
   }
   return character;
 }

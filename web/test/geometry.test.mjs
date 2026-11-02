@@ -54,3 +54,15 @@ test('見えている様子の言葉', () => {
   assert.match(text, /話している/);
   assert.equal(describeScene([], { world }), '人は見えていない');
 });
+
+test('目印の方向は、キャラの向き(yaw)を考える', () => {
+  // キャラが +x 向き(rotation.y=90度)。+x にある目印は、キャラの真正面(手前側)に見える
+  const [a] = landmarksForPrompt([{ name: 'A', position: [5, 0, 0] }], [0, 0, 0], 90);
+  assert.match(a.where, /^手前、約 5\.0m/);
+  // 同じキャラの原点が (1,0,1) にずれていても、相対で決まる
+  const [b] = landmarksForPrompt([{ name: 'B', position: [1, 0, 3] }], [1, 0, 1], 0);
+  assert.match(b.where, /^手前、約 2\.0m/);
+  // Vector3 のような { x, y, z } の位置も受け取る
+  const [c] = landmarksForPrompt([{ name: 'C', position: { x: -3, y: 0, z: -3 } }]);
+  assert.match(c.where, /^左奥/);
+});
