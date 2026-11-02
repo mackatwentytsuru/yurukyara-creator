@@ -6,7 +6,7 @@ import { applyFur } from './furShell.js';
 /**
  * 人型でないキャラ(type: "rig")を動かす。キャラの柱が決めた形で character.json を読む。
  *
- *   "look":  { "bone": "body", "max_deg": [yaw, pitch], "face_shift": [u, v] }
+ *   "look":  { "bone": "body", "max_deg": [yaw, pitch], "face_shift": [u, v], "head_bone": "頭の骨の名前", "head_y_ratio": 0.6 }
  *   "mouth": { "kind": "atlas", "mesh": "Face", "cols": 4, "levels": [0.08, 0.3, 0.6] }
  *   "face":  { "mesh": "Face", "cols": 4, "rows": ["neutral", ...], "blink_row": "blink" }
  *   "motions": { "idle": "motions/idle.glb", ... }   // 1 つの GLB に 1 つの動き(骨の名前は model.glb と同じ)
@@ -15,6 +15,7 @@ import { applyFur } from './furShell.js';
  * - 視線は、顔の絵を少しずらして目が先に動き、体(look.bone)が少し遅れて向く。
  * - 動き: idle をいつも流し、play(name) で一回きりの動きを重ねる。しゃべっている間は talk を混ぜる。
  */
+const HEAD_Y_RATIO = 0.6; // 頭の高さの既定(全身の高さに対する割合)
 const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _s = new THREE.Vector3();
@@ -37,6 +38,7 @@ export class RigCharacterV2 extends CharacterBase {
     this.lookBone = look.bone ? gltf.scene.getObjectByName(look.bone) : null;
     this.lookRest = this.lookBone ? this.lookBone.quaternion.clone() : null;
     this.lookBase = this.lookRest ? this.lookRest.clone() : null; // 視線を重ねる前の、動きだけの値
+    this.headBone = look.head_bone ? gltf.scene.getObjectByName(look.head_bone) : null;
     const ml = look.max_deg ?? [22, 14];
     this.maxYaw = THREE.MathUtils.degToRad(ml[0]);
     this.maxPitch = THREE.MathUtils.degToRad(ml[1]);
@@ -111,9 +113,11 @@ export class RigCharacterV2 extends CharacterBase {
   }
 
   _headWorld(out) {
+    // 人物のように頭の位置が割合で決まらないキャラは、look.head_bone の骨の位置を使う
+    if (this.headBone) return this.headBone.getWorldPosition(out);
     // 床から頭までの高さ(世界の座標の箱の高さ)を使う。物の置き場所(床の y)を二重に足さない
     const box = new THREE.Box3().setFromObject(this.gltf.scene);
-    const h = (box.max.y - box.min.y) * 0.6;
+    const h = (box.max.y - box.min.y) * (this.json.look?.head_y_ratio ?? HEAD_Y_RATIO);
     const sy = this.object3d.getWorldScale(_s).y || 1;
     return out.set(0, h / sy, 0).applyMatrix4(this.object3d.matrixWorld);
   }
