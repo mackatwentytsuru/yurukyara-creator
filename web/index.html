@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#14121f" />
+  <title>話す受付 — 会話</title>
+  <link rel="stylesheet" href="/src/ui/style.css" />
+</head>
+<body>
+  <canvas id="stage" aria-label="受付のキャラクター"></canvas>
+
+  <header class="top">
+    <div class="chips" id="chips" aria-live="polite"></div>
+  </header>
+
+  <section id="caption" class="caption" aria-live="polite" hidden></section>
+
+  <aside id="thought" class="thought" aria-label="Claude の考え">
+    <button class="thought-head" id="thoughtToggle" type="button" aria-expanded="true">
+      <span class="dot"></span>Claude の考え
+    </button>
+    <dl class="thought-body" id="thoughtBody">
+      <div class="row"><dt>見えた様子</dt><dd id="tSeen">—</dd></div>
+      <div class="row"><dt>用件</dt><dd id="tIntent">—</dd></div>
+      <div class="row"><dt>返事</dt><dd id="tReply">—</dd></div>
+      <div class="row"><dt>表情と動き</dt><dd id="tAct">—</dd></div>
+    </dl>
+    <footer class="thought-foot" id="tFoot"></footer>
+  </aside>
+
+  <footer class="bottom">
+    <p class="privacy" id="privacy" role="note">
+      <span class="rec"></span>
+      <span id="privacyText">カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。</span>
+    </p>
+    <form id="composer" class="composer" autocomplete="off">
+      <button type="button" id="micBtn" class="mic" aria-pressed="false" title="声で話す">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
+        <span id="micLabel">声で話す</span>
+      </button>
+      <input id="textInput" type="text" placeholder="文字で話しかける" enterkeyhint="send" />
+      <button type="submit" class="send">送る</button>
+    </form>
+  </footer>
+
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <h1>話す受付</h1>
+      <p class="lead">キャラが、あなたを目で追って、声で答えます。</p>
+      <button id="startCam" class="primary" type="button">はじめる(カメラとマイクを使います)</button>
+      <button id="startSim" class="ghost" type="button">カメラなしで試す(マウスで人を動かす)</button>
+      <p class="fine">カメラの映像は端末の外に出ません。位置を調べるだけに使い、保存もしません。</p>
+      <p class="status" id="gateStatus" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
