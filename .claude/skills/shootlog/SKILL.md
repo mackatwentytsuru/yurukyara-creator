@@ -36,3 +36,13 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - 時刻合わせ: LED の白いフラッシュの立ち上がり(明るさが中間値を横切る時刻、コマ間は直線補間)を対にして一次式を当てる。フラッシュが片方に写らなくても連続部分で対にできる。
 - ずれは止まっている所だけで測る(時刻の誤差が効かない)。盤から測った iPhone の姿勢で LED の位置も出せ(`alignment_board.json`)、角のタップより正確。
 - OpenCV の `cv2.imwrite` は日本語のフォルダに書けない(黙って何も書かない)。`lenslib.imwrite`(imencode + write_bytes)を使う。HEVC は `cv2.VideoCapture` で読めるが、Git Bash の `/tmp` は Python から見えない。
+- LED シミュレータ(`place/shootlog/rehearsal/led_sim.html`): canvas は devicePixelRatio を掛けた実ピクセルで作り、盤は `drawImage(board,0,0)` で 1:1。切り替えは次の rAF で行い、時刻は Date.now() で `__timeline` に残す。
+- 起動 `open_led_sim.ps1` は専用プロファイル + `--kiosk --app` + http.server(8090)。Windows PowerShell 5 は BOM 無し UTF-8 の日本語が化けるので、.ps1 は BOM 付きで保存する。
+- 四角い面を貼った GLB は `shootlog/glb_quads.py`(標準 + numpy)。glTF の UV は左上が原点なので、画像の上端が v=0(左下=(0,1)、左上=(0,0))。PNG は zlib + CRC32 で自前に書ける。
+- Node の GLTFLoader.parse は、`globalThis.self` と `createImageBitmap` を仮に足さないとテクスチャで落ちる(形・数の確認だけならこれで足りる)。
+
+## 写真で部屋に色を貼る(1 段目、PC 側)
+- `room_color_project.py`: 壁・床の面ごとにテクセルの 3D 位置を出し、映像のコマ(ARKit の姿勢 + 窓/ドアの 4 隅での位置合わせ)に投影して色を取る。重み = cos²/距離²×端で下げる、を 3 乗して足す。家具の箱は**大きめ(+3 cm)**に見て遮りを除く(RoomPlan の箱は実物とずれ、縁の色が混ざるため。縮めると家具の色が壁に漏れた)。
+- `cv2.remap` の地図は幅・高さが 32767 まで。点の列(数十万)は 512 列の 2 次元にして渡す(`sample_bilinear`)。
+- 合成の部屋(家具 12 個)で、見えた所の PSNR 30.5 dB(雑音なしのなめらかな模様は 40 dB)。見えた割合は歩く道しだいで 25〜50%(家具の後ろは見えない)。露出の違いは直していない。
+- WKWebView は WebRTC(RTCPeerConnection)の映像を受けて再生できた(同じページ内のループバックの試験で、10 秒に約 425 コマの動き検出が届いた)。UE の Pixel Streaming そのものは未確認。

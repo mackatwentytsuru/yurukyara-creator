@@ -87,7 +87,10 @@ def pose_at(stops, t, still=2.0, move=0.7):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path.home() / "AppData/Local/Temp/rig_selftest"))
+    ap.add_argument("--fps", type=float, default=29.97, help="a7 の動画のコマ数/秒(23.976・25・29.97・30 など)")
     a = ap.parse_args()
+    global FPS_A
+    FPS_A = a.fps
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     here = Path(__file__).resolve().parent

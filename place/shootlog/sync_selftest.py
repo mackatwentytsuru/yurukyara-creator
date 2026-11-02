@@ -28,8 +28,8 @@ def brightness(t_a: float, exposure: float) -> float:
     return 25 + 200 * float(on.mean())
 
 
-def write_video(path, times_a, noise, rng):
-    vw = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"MJPG"), 30, (160, 90))
+def write_video(path, times_a, noise, rng, fps_out=30):
+    vw = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"MJPG"), fps_out, (160, 90))
     for t in times_a:
         v = np.clip(brightness(t, 1 / 100) + rng.normal(0, noise), 0, 255)
         vw.write(np.full((90, 160, 3), v, np.uint8))
@@ -39,6 +39,7 @@ def write_video(path, times_a, noise, rng):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(Path.home() / "AppData/Local/Temp/sync_selftest"))
+    ap.add_argument("--fps", type=float, default=29.97)
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -46,9 +47,9 @@ def main():
     here = Path(__file__).resolve().parent
 
     # a7: 一定の 29.97fps。時計は a の時計そのもの
-    fps_a = 29.97
+    fps_a = a.fps
     ta = np.arange(0, 11, 1 / fps_a)
-    write_video(out / "a.avi", ta, 3.0, rng)
+    write_video(out / "a.avi", ta, 3.0, rng, fps_a)
     # iPhone: b の時計(0 から。コマ間隔は 1/30 ± 4 ms の揺れ)。a の時計では 1.0001 * t_b + 1.237 秒
     tb_clock = np.cumsum(np.concatenate([[0.0], 1 / 30 + rng.normal(0, 0.004, 320)]))
     t_a_of_b = 1.0001 * tb_clock + 1.237
