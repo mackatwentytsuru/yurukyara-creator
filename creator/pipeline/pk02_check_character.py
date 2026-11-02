@@ -20,6 +20,16 @@ def read_glb(path):
     return json.loads(d[20:20 + n])
 
 
+def has_fur_material(g):
+    """creator/viewer/furShell.js が毛の殻を重ねる材質(色の絵・法線の絵・sheen を持ち、抜きでない物)があるか。"""
+    for m in g.get("materials", []):
+        pbr = m.get("pbrMetallicRoughness", {})
+        sheen = "KHR_materials_sheen" in m.get("extensions", {})
+        if sheen and "baseColorTexture" in pbr and "normalTexture" in m and m.get("alphaMode") != "MASK":
+            return True
+    return False
+
+
 def main():
     pack = sys.argv[1]
     errs, warns = [], []
@@ -79,6 +89,8 @@ def main():
     for e in lk.get("eyes", []) or []:
         if e not in nodes:
             errs.append(f"look.eyes の '{e}' が model の骨にない")
+    if "fur" not in cj and has_fur_material(g):
+        errs.append('毛足の材質があるのに fur がない。最上位に "fur": {} を書く(ブラウザの毛の殻。使わない理由があれば "fur": false)')
     for w in warns:
         print("WARN ", w)
     for e in errs:
