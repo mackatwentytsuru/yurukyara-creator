@@ -223,6 +223,8 @@ def loft(name, secs, mat=None, n=48, e=1.0, close=True):
 
     secs: [{z, cx, cy, rx, ry, e(省略可)}, …] を下から上へ。cx, cy は断面の中心(x, y)。rx, ry は半幅。
     """
+    if secs[0]["z"] > secs[-1]["z"]:   # 上から下へ渡されても裏返らないように、下から上へそろえる
+        secs = list(reversed(secs))
     verts, faces = [], []
     for s in secs:
         ee = s.get("e", e)
