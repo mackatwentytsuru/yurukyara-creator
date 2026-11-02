@@ -25,12 +25,8 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 - `yaw_deg`: yaw 0 は +z を向く。正が +x のほうへ(上から見て左回り)。`bearingFrom()` の「左へ何度」もこの約束。
 - RoomPlan の座標は、原点も向きも撮りはじめた場所しだい。GLB と landmarks を**同じ座標のまま**扱い、床の高さだけ `floor_y` で引く(`landmarks.mjs`)。回さない。
 
-## Mac で iOS アプリを作る(`place/ios/`、xcodegen)
-- ssh では `export PATH=/opt/homebrew/bin:$HOME/.local/bin:$PATH` が要る。送る先は `~/sample_work/place_ios`。
-- 型確認だけ: `sh place/ios/tools/mac_check.sh [RoomScan|ARStage]`(署名なし、1 分ほど)。
-- 署名つきで iPhone に入れる: **GUI のセッションでないと通らない**。`scheme.txt`・`team.txt`・`device_id.txt`(・ARStage は `url.txt`)を置き、`ssh pc3 'open ~/sample_work/place_ios/mac_install.command'`。`install.done` が 0 なら成功。チーム ID は `security find-certificate -c "Apple Development: …" -p | openssl x509 -noout -subject` の OU。
-- iPhone がロック中・圏外だと「destination が見つからない」で終了コード 70。`xcrun devicectl list devices` で `available (paired)` を確かめてから。
-- 落とし穴: `simd` は `import simd` が要る。`RoomCaptureViewDelegate` は NSCoding を求めるので、入れ子のクラスにすると「unstable name」で失敗する(外に出す)。
+## Mac で iOS アプリを作る
+手順と落とし穴は別のスキル `mac-ios-build` にまとめた(型確認 `mac_check.sh`、署名つき `mac_install.command`)。
 
 ## 調べて分かったこと(出どころは docs/devlog_場所.md)
 - iPhone の Safari に WebXR は無い → ARKit の上に透明な WKWebView の殻(`ARStage`)。姿勢の送り方は `place/web/nativeAR.js` の先頭コメント。縦持ち用に `viewMatrix(for: .portrait)` の逆行列と `projectionMatrix(for: .portrait, …)`。
