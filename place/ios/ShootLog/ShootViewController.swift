@@ -1,4 +1,5 @@
 import ARKit
+import AVFoundation
 import SceneKit
 import SwiftUI
 import UIKit
@@ -25,6 +26,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private var chosenFormat: ARConfiguration.VideoFormat?
     private var autoFocus = true
     private var lastDir: URL?
+    private var exposureAtStart: ExposureInfo?
     private var notice: String?   // 保存・失敗のお知らせ(次の録画を始めるまで出す)
 
     private let stepLabel = UILabel()
@@ -37,6 +39,14 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let faceControl = UISegmentedControl(items: ["LED 1面", "LED 3面(A・B・C)"])
     private let focusSwitch = UISwitch()
     private let focusLabel = UILabel()
+    private let exposureSwitch = UISwitch()
+    private let exposureLabel = UILabel()
+    private let isoSlider = UISlider()
+    private let isoLabel = UILabel()
+    private var exposureLocked = false
+    private var isoValue: Float = 100
+    private var clipPercent: Float = 0
+    private var frameTick = 0
     private var timer: Timer?
 
     private static let cornerIds = ["tl", "tr", "br", "bl"]
@@ -169,7 +179,24 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         focusSwitch.addTarget(self, action: #selector(focusChanged), for: .valueChanged)
         let focusRow = UIStackView(arrangedSubviews: [focusLabel, focusSwitch])
         focusRow.spacing = 6
-        let side = UIStackView(arrangedSubviews: [faceControl, formatControl, focusRow])
+        exposureLabel.text = "露出・色・ピント固定(1/60)"
+        exposureLabel.textColor = .white
+        exposureLabel.font = .systemFont(ofSize: 13)
+        exposureSwitch.isOn = false
+        exposureSwitch.addTarget(self, action: #selector(exposureChanged), for: .valueChanged)
+        let exposureRow = UIStackView(arrangedSubviews: [exposureLabel, exposureSwitch])
+        exposureRow.spacing = 6
+        isoSlider.minimumValue = 0
+        isoSlider.maximumValue = 1
+        isoSlider.isEnabled = false
+        isoSlider.addTarget(self, action: #selector(isoSliderChanged), for: .valueChanged)
+        isoSlider.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        isoLabel.text = "ISO -"
+        isoLabel.textColor = .white
+        isoLabel.font = .systemFont(ofSize: 13)
+        let isoRow = UIStackView(arrangedSubviews: [isoLabel, isoSlider])
+        isoRow.spacing = 6
+        let side = UIStackView(arrangedSubviews: [faceControl, formatControl, focusRow, exposureRow, isoRow])
         side.axis = .vertical
         side.alignment = .trailing
         side.spacing = 6
@@ -257,6 +284,117 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         config.isAutoFocusEnabled = autoFocus
         sceneView.session.run(config, options: reset ? [.resetTracking, .removeExistingAnchors] : [])
         logEvent(reset ? "session:run(reset)" : "session:run")
+        if exposureLocked {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in self?.applyExposure(lockFromCurrent: false) }
+        }
+    }
+
+    // MARK: - 露出・ホワイトバランス・ピントの固定
+
+    private var captureDevice: AVCaptureDevice? { ARWorldTrackingConfiguration.configurableCaptureDeviceForPrimaryCamera }
+
+    private func isoFromSlider() -> Float {
+        guard let d = captureDevice else { return isoValue }
+        let lo = d.activeFormat.minISO, hi = d.activeFormat.maxISO
+        return lo * pow(hi / lo, isoSlider.value)
+    }
+
+    private func sliderFromISO(_ iso: Float, _ d: AVCaptureDevice) -> Float {
+        let lo = d.activeFormat.minISO, hi = d.activeFormat.maxISO
+        return min(max(log(iso / lo) / log(hi / lo), 0), 1)
+    }
+
+    @objc private func exposureChanged() {
+        guard !isRecording else { exposureSwitch.isOn = exposureLocked; return }
+        exposureLocked = exposureSwitch.isOn
+        if exposureLocked {
+            applyExposure(lockFromCurrent: true)
+        } else {
+            releaseExposure()
+        }
+        refreshUI()
+    }
+
+    @objc private func isoSliderChanged() {
+        guard exposureLocked, !isRecording else { return }
+        isoValue = isoFromSlider()
+        applyExposure(lockFromCurrent: false)
+    }
+
+    /// シャッター 1/60 に固定し、ISO は画面で決める。ホワイトバランスとピントは、固定したときの値のまま。
+    private func applyExposure(lockFromCurrent: Bool) {
+        guard let d = captureDevice else { notice = "露出を固定できない(カメラの設定を取れない)"; return }
+        do {
+            try d.lockForConfiguration()
+            defer { d.unlockForConfiguration() }
+            if lockFromCurrent {
+                isoValue = min(max(d.iso, d.activeFormat.minISO), d.activeFormat.maxISO)
+                isoSlider.value = sliderFromISO(isoValue, d)
+            }
+            let shutter = CMTime(value: 1, timescale: 60)
+            d.setExposureModeCustom(duration: shutter, iso: isoValue, completionHandler: nil)
+            if lockFromCurrent {
+                if d.isWhiteBalanceModeSupported(.locked) {
+                    let g = d.deviceWhiteBalanceGains
+                    let m = d.maxWhiteBalanceGain
+                    let clamped = AVCaptureDevice.WhiteBalanceGains(
+                        redGain: min(max(g.redGain, 1), m), greenGain: min(max(g.greenGain, 1), m), blueGain: min(max(g.blueGain, 1), m))
+                    d.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
+                }
+                if d.isFocusModeSupported(.locked) { d.focusMode = .locked }
+            }
+            logEvent("exposure:lock iso=\(Int(isoValue)) shutter=1/60")
+        } catch {
+            notice = "露出を固定できない: \(error.localizedDescription)"
+        }
+    }
+
+    private func releaseExposure() {
+        guard let d = captureDevice else { return }
+        do {
+            try d.lockForConfiguration()
+            defer { d.unlockForConfiguration() }
+            d.exposureMode = .continuousAutoExposure
+            if d.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { d.whiteBalanceMode = .continuousAutoWhiteBalance }
+            if autoFocus, d.isFocusModeSupported(.continuousAutoFocus) { d.focusMode = .continuousAutoFocus }
+            logEvent("exposure:auto")
+        } catch {
+            notice = "露出を自動に戻せない: \(error.localizedDescription)"
+        }
+    }
+
+    /// いまカメラが実際に使っている値(固定していれば固定した値)。meta.json に残す。
+    private func currentExposureInfo() -> ExposureInfo? {
+        guard let d = captureDevice else { return nil }
+        let g = d.deviceWhiteBalanceGains
+        return ExposureInfo(
+            locked: exposureLocked, shutterSeconds: d.exposureDuration.seconds, iso: d.iso,
+            exposureModeIsCustom: d.exposureMode == .custom, whiteBalanceLocked: d.whiteBalanceMode == .locked,
+            whiteBalanceGains: [g.redGain, g.greenGain, g.blueGain], focusLocked: d.focusMode == .locked, lensPosition: d.lensPosition)
+    }
+
+    /// 白飛びの割合(輝度が 250 以上の画素の %)。間引いて数える。
+    private func measureClip(_ frame: ARFrame) {
+        let pb = frame.capturedImage
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddressOfPlane(pb, 0) else { return }
+        let w = CVPixelBufferGetWidthOfPlane(pb, 0), h = CVPixelBufferGetHeightOfPlane(pb, 0)
+        let stride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+        let p = base.assumingMemoryBound(to: UInt8.self)
+        var hot = 0, total = 0
+        var y = 0
+        while y < h {
+            var x = 0
+            while x < w {
+                if p[y * stride + x] >= 250 { hot += 1 }
+                total += 1
+                x += 24
+            }
+            y += 24
+        }
+        let pct = total > 0 ? Float(hot) * 100 / Float(total) : 0
+        lock.lock(); clipPercent = pct; lock.unlock()
     }
 
     // MARK: - 校正
@@ -349,6 +487,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             events = events.filter { $0.kind.hasPrefix("floor") || $0.kind.hasPrefix("corner") || $0.kind.hasPrefix("session") }
             lock.unlock()
             lastDir = dir
+            exposureAtStart = currentExposureInfo()
             notice = nil
             logEvent("record:start")
             UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
@@ -371,6 +510,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let fmt = chosenFormat.map(Self.info)
         let supported = formats.map(Self.info)
         let af = autoFocus
+        let expStart = exposureAtStart
+        let expEnd = currentExposureInfo()
         frameQueue.async { [weak self] in
             rec.finish { stats in
                 guard let self else { return }
@@ -380,7 +521,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                 let iso = ISO8601DateFormatter().string(from: started ?? Date())
                 let meta = ShootMeta(
                     startedAt: iso, device: Pack.deviceModel(), systemVersion: UIDevice.current.systemVersion,
-                    chosenFormat: fmt, supportedFormats: supported, autoFocus: af,
+                    chosenFormat: fmt, supportedFormats: supported, autoFocus: af, exposureAtStart: expStart, exposureAtEnd: expEnd,
                     calibration: cal, events: evs, stats: stats, conventions: ShootMeta.conventionText
                 )
                 let enc = JSONEncoder()
@@ -430,6 +571,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let rec = recorder
         lock.unlock()
         rec?.append(frame)
+        frameTick += 1
+        if frameTick % 6 == 0 { measureClip(frame) }
     }
 
     func session(_ session: ARSession, cameraDidChangeTrackingState camera: ARCamera) {
@@ -465,6 +608,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let rec = recorder
         let started = recordStartDate
         let tracking = lastTracking
+        let clip = clipPercent
         lock.unlock()
         let recording = rec != nil
         let done = calibration.corners.count
@@ -487,15 +631,18 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         formatControl.isEnabled = !recording
         faceControl.isEnabled = !recording
         focusSwitch.isEnabled = !recording
+        exposureSwitch.isEnabled = !recording
+        isoSlider.isEnabled = exposureLocked && !recording
+        if exposureLocked { isoLabel.text = "ISO \(Int(isoValue)) 1/60" } else if let d = captureDevice { isoLabel.text = "自動 ISO \(Int(d.iso))" }
         recordButton.setTitle(recording ? "■ 停止" : "● 録画開始", for: .normal)
         shareButton.isEnabled = !recording && lastDir != nil
         shareButton.alpha = shareButton.isEnabled ? 1 : 0.4
 
         if let rec, let started {
             let sec = Int(Date().timeIntervalSince(started))
-            statusLabel.text = String(format: " %02d:%02d  コマ %d  追跡 %@ ", sec / 60, sec % 60, rec.currentFrameCount, tracking)
+            statusLabel.text = String(format: " %02d:%02d  コマ %d  追跡 %@  白飛び %.1f%% ", sec / 60, sec % 60, rec.currentFrameCount, tracking, clip)
         } else {
-            statusLabel.text = " \(notice ?? "追跡 \(tracking)") "
+            statusLabel.text = " \(notice ?? String(format: "追跡 %@  白飛び %.1f%%", tracking, clip)) "
         }
     }
 }

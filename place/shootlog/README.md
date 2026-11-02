@@ -10,7 +10,8 @@ iPhone で動画を撮りながら、コマごとの **カメラの位置・向�
 4. 「● 録画開始」→ 撮る →「■ 停止」。校正のあと、アプリを閉じない・画面を消さない。
 5. 「共有(AirDrop)」で Mac へ。
 
-右上で解像度とオートフォーカスを選べる(変えると校正はやり直し)。
+右上で LED の面数・解像度・オートフォーカスを選べる(変えると校正はやり直し)。
+「露出・色・ピント固定(1/60)」を入れると、シャッター 1/60・ホワイトバランス・ピントを固定し、ISO はスライダーで決める(録画中は変えられない)。画面に白飛びの割合(%)が出る。固定した値は meta.json の `exposureAtStart` / `exposureAtEnd`(同じなら途中で動いていない)。
 
 ## 出るもの(iPhone の Documents/shoots/<日時>/ と、共有の shoot_<日時>.zip)
 | ファイル | 中身 |
@@ -23,7 +24,7 @@ iPhone で動画を撮りながら、コマごとの **カメラの位置・向�
 
 ## PC 側の道具(`place/shootlog/`、Python)
 ```
-python receive_shoot.py                                   # Mac に AirDrop で届いた zip を work\shoots\<日時>\ に取りこむ
+python receive_shoot.py                                   # Mac に AirDrop で届いた zip を $SHOOTLOG_DEST/<日時>/ に取りこむ(リポジトリの外)
 python align_led.py <撮影> --led-size <横m> <縦m>          # LED の 4 隅 → ARKit 世界→LED の変換(alignment.json)
 python export_ue.py <撮影> --ue-origin X Y Z --ue-yaw 度   # UE のカメラ位置(cm)・向き・画角・焦点距離の CSV
 python overlay_room.py <撮影> --room <room.json> --led-from window:0   # 動画に部屋の線を重ねる+ずれの数字

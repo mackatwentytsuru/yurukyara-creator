@@ -1,15 +1,16 @@
 """iPhone「撮影記録」から AirDrop で Mac に届いた shoot_<日時>.zip を、PC の J: に取りこんで広げる。
 
-  python place/shootlog/receive_shoot.py [--minutes 240] [--dest work/shoots]
+  python place/shootlog/receive_shoot.py [--minutes 240] [--dest <取りこみ先。既定は環境変数 SHOOTLOG_DEST、なければ ./shoots>]
 
 Mac の ~/Downloads で一番新しい shoot_*.zip(同じ名前が重なると shoot_xxx 2.zip のようになる)を探し、scp で運び、
 <dest>/<日時>/ に広げて、中身(video.mov・frames.jsonl・meta.json)があるか、コマ数が合うか確かめる。
-撮った映像はリポジトリに入れない(J: に置く)。
+撮った映像はリポジトリに入れない(リポジトリの外に置く。例: SHOOTLOG_DEST=work/shoots)。
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import zipfile
@@ -30,7 +31,7 @@ print(max(c, key=lambda p: p.stat().st_mtime).name)
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--minutes", type=float, default=240)
-    ap.add_argument("--dest", default="work/shoots")
+    ap.add_argument("--dest", default=os.environ.get("SHOOTLOG_DEST", "./shoots"))
     ap.add_argument("--host", default="pc3")
     a = ap.parse_args()
 

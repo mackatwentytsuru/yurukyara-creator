@@ -52,7 +52,7 @@ targets:
     sources: [ShootLog]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.sample.hackathon.shootlog
+        PRODUCT_BUNDLE_IDENTIFIER: dev.hackathon.shootlog
         MARKETING_VERSION: 0.1
         CURRENT_PROJECT_VERSION: 1
         INFOPLIST_KEY_CFBundleDisplayName: 撮影記録

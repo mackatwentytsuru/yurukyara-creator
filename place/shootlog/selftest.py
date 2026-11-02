@@ -88,7 +88,7 @@ def make_shoot(room, out: Path, seed=7):
                         "camera": {"T": flat(T_world_cam), "K": K, "w": W, "h": H},
                         "rayOrigin": origin.tolist(), "rayDirection": fwd.tolist(), "hit": None, "hitKind": None})
     floor_y = float(apply(T_world_from_room, np.array(room["floors"][0]["transform"][12:15]))[0][1])
-    meta = {"format": "sample-shootlog/1", "videoFile": "video.mov", "framesFile": "frames.jsonl",
+    meta = {"format": "camera-pose-log/1", "videoFile": "video.mov", "framesFile": "frames.jsonl",
             "stats": {"frames": n, "width": W, "height": H}, "events": [],
             "calibration": {"floor": {"planeY": floor_y, "sessionTime": 990, "point": None, "planes": [], "camera": corners[0]["camera"]},
                             "corners": corners}}

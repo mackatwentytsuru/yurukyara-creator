@@ -121,8 +121,19 @@ struct ShootStats: Codable {
     var writerError: String?
 }
 
+struct ExposureInfo: Codable {
+    var locked: Bool
+    var shutterSeconds: Double
+    var iso: Float
+    var exposureModeIsCustom: Bool
+    var whiteBalanceLocked: Bool
+    var whiteBalanceGains: [Float]   // [赤, 緑, 青]
+    var focusLocked: Bool
+    var lensPosition: Float
+}
+
 struct ShootMeta: Codable {
-    var format = "sample-shootlog/1"
+    var format = "camera-pose-log/1"
     var startedAt: String
     var device: String
     var systemVersion: String
@@ -131,6 +142,8 @@ struct ShootMeta: Codable {
     var chosenFormat: FormatInfo?
     var supportedFormats: [FormatInfo]
     var autoFocus: Bool
+    var exposureAtStart: ExposureInfo?   // 録画を始めたときの露出・色・ピント(固定していれば固定した値)
+    var exposureAtEnd: ExposureInfo?     // 録画を止めたとき(始めと違えば、途中で動いた)
     var calibration: Calibration
     var events: [ShootEvent]
     var stats: ShootStats
