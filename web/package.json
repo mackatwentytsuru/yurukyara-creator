@@ -10,7 +10,8 @@
     "build": "vite build",
     "server": "node server/index.mjs",
     "start": "vite build && node server/index.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "measure": "node scripts/measure-latency.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.2.0",
