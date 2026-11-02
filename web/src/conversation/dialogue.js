@@ -5,6 +5,18 @@
 import { streamChat } from './brainClient.js';
 
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
+const FILLER_FRESH_MS = 4000; // 話し終わりの合図で先に出したあいづちは、この間なら、送るときに出し直さない
+
+/** 返事を、モデルに指示した出力の形(1 行 1 つの JSON)に戻す */
+export function assistantLines(sayEvents, thought) {
+  return sayEvents
+    .map((ev, i) => {
+      const line = { type: 'say', text: ev.text, expression: ev.expression, motion: ev.motion, gaze: ev.gaze };
+      if (i === 0 && thought) Object.assign(line, { intent: thought.intent, stage: thought.stage, handoff: thought.handoff });
+      return JSON.stringify(line);
+    })
+    .join(String.fromCharCode(10));
+}
 
 export class Dialogue {
   /**
@@ -24,15 +36,37 @@ export class Dialogue {
     this.turnId = 0;
     this.busy = false;
     this.brain = 'unknown';
+    this.pre = null; // 話し終わりの合図(声が止まった)で先に出した、あいづち { at, t0, fillerMs, fillerEndMs, text }
   }
 
-  cancel() {
+  /**
+   * 声が止まった(話し終わりらしい)ときに、先にあいづちの声を出す。確定した文字が来る前に、間をつなぐ。
+   * 話し終わっていなかった(また話し出した)ときは、聞く側の割り込みの処理が止める。
+   * @param {number} t0 声が最後に出ていた時刻
+   */
+  preFiller(t0) {
+    if (this.busy || this.speaker.speaking) return false;
+    const f = this.speaker.playFiller({
+      onStart: (tNow) => {
+        if (this.pre) this.pre.fillerMs = Math.round(tNow - t0);
+        this.character.play('nod'); // うなずきと一緒に
+      },
+    });
+    if (!f) return false;
+    this.pre = { at: performance.now(), t0, fillerMs: null, fillerEndMs: Math.round(performance.now() - t0 + f.ms), text: f.text };
+    return true;
+  }
+
+  cancel({ keepFiller = false } = {}) {
     this.turnId += 1;
     this.abort?.abort();
     this.abort = null;
     this.timers.forEach(clearTimeout);
     this.timers = [];
-    this.speaker.stop();
+    if (!keepFiller) {
+      this.pre = null;
+      this.speaker.stop();
+    }
     this.character.setMouth(0);
     this.ui.caption(null);
     this.busy = false;
@@ -43,19 +77,44 @@ export class Dialogue {
    *   t0: ユーザーが話し終えた時刻(performance.now())。声でないときは送信した時刻
    */
   async send({ text = '', trigger = null, t0 = performance.now(), mode = 'text' } = {}) {
-    this.cancel();
+    const pre = this.pre;
+    this.pre = null;
+    // 先に出したあいづちは、止めずに続ける(cancel は、前の返事とタイマーだけを止める)
+    this.cancel({ keepFiller: Boolean(pre) });
     const id = this.turnId;
     this.busy = true;
     const ac = new AbortController();
     this.abort = ac;
     const ctx = this.getContext();
-    const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven' };
+    const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null };
+    // あいづち: 先に出していればそれを、まだなら今出す(声で話しかけられた回だけ)。数字は本当の返事とは別に残す
+    let fillerWanted = mode === 'voice' && trigger !== 'approach';
+    if (fillerWanted && pre && performance.now() - pre.at < FILLER_FRESH_MS) {
+      m.fillerMs = pre.fillerMs;
+      m.fillerEndMs = pre.fillerEndMs;
+      fillerWanted = false;
+    }
+    let fillerPlayed = Boolean(m.fillerEndMs !== null);
+    if (fillerWanted) {
+      const f = this.speaker.playFiller({
+        onStart: (tNow) => {
+          m.fillerMs = Math.round(tNow - t0);
+          this.character.play('nod');
+        },
+      });
+      if (f) {
+        m.fillerEndMs = Math.round(performance.now() - t0 + f.ms);
+        fillerPlayed = true;
+      }
+    }
     let sayCount = 0;
     const spoken = [];
+    const sayEvents = []; // 履歴に、指示どおりの JSON の形で戻すため
+    let thoughtEv = null;
     if (trigger !== 'approach') this.ui.userSaid(text);
 
     // 返事が来るまでの、うなずき
-    for (const at of NOD_AT_MS) {
+    for (const at of fillerPlayed ? NOD_AT_MS.slice(1) : NOD_AT_MS) {
       const wait = Math.max(0, t0 + at - performance.now());
       this.timers.push(
         setTimeout(() => {
@@ -80,15 +139,20 @@ export class Dialogue {
         (ev) => {
           if (id !== this.turnId) return;
           if (ev.type === 'meta') {
-            this.brain = ev.brain;
-            m.brain = ev.brain;
+            // meta は何度か届く(頭脳の種類・ヘッジとキャッシュの記録)。種類が入っているものだけ使う
+            if (ev.brain) {
+              this.brain = ev.brain;
+              m.brain = ev.brain;
+            }
           } else if (ev.type === 'thought') {
+            thoughtEv = ev;
             this.ui.thought(ev);
           } else if (ev.type === 'say') {
             if (m.tFirstSay === null) m.tFirstSay = performance.now();
             sayCount += 1;
             const isFirst = sayCount === 1;
             spoken.push(ev.text);
+            sayEvents.push(ev);
             this.speaker
               .enqueue(ev.text, {
                 onFirstByte: (ms) => {
@@ -114,7 +178,9 @@ export class Dialogue {
     }
     if (id !== this.turnId) return;
     this.history.push({ role: 'user', content: trigger === 'approach' ? '(お客さんが近づいてきた)' : text });
-    if (spoken.length) this.history.push({ role: 'assistant', content: spoken.join('') });
+    // 前の返事は、指示で決めた形(1 行 1 つの JSON。最初の行に用件と段階)のまま履歴に戻す。
+    // ふつうの文で戻すと、モデルがそれをまねて、JSON でなく文章で答える回が出た(2026-11-02)
+    if (sayEvents.length) this.history.push({ role: 'assistant', content: assistantLines(sayEvents, thoughtEv) });
     this.busy = false;
     // 音が出た瞬間を待って記録する
     const waitStart = () => {
@@ -142,6 +208,9 @@ export class Dialogue {
       sendToFirstSayMs: m.tFirstSay ? Math.round(m.tFirstSay - m.tSend) : null,
       ttsFirstByteMs: m.ttsFirstByteMs ? Math.round(m.ttsFirstByteMs) : null,
       t0ToSendMs: Math.round(m.tSend - m.t0),
+      // あいづちの声(話し終わりから、その声が出るまで / 終わるまで)。本当の返事の最初の音(totalMs)とは別の数字
+      fillerMs: m.fillerMs,
+      fillerEndMs: m.fillerEndMs,
     };
     entry.valid = entry.brain === 'haiku' && entry.tts === 'eleven';
     this.onMetric(entry);

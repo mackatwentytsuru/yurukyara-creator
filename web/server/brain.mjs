@@ -68,7 +68,7 @@ export function lineSplitter(onLine) {
   };
 }
 
-async function callHaiku({ system, messages, signal, onText }) {
+async function callHaiku({ system, messages, signal, onText, onUsage }) {
   const res = await fetch(config.anthropicUrl, {
     method: 'POST',
     signal,
@@ -81,6 +81,8 @@ async function callHaiku({ system, messages, signal, onText }) {
       model: config.model,
       max_tokens: 700,
       stream: true,
+      // 考える時間を使わない(受付の短い返事には要らず、最初の文字まで約 0.6 秒縮む。2026-11-02 に測った)
+      thinking: { type: 'disabled' },
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       messages,
     }),
@@ -105,10 +107,66 @@ async function callHaiku({ system, messages, signal, onText }) {
       } catch {
         continue;
       }
+      if (ev.type === 'message_start' && ev.message?.usage) onUsage?.(ev.message.usage);
+      if (ev.type === 'message_delta' && ev.usage) onUsage?.(ev.usage);
       if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') onText(ev.delta.text);
       if (ev.type === 'error') throw new Error(ev.error?.message ?? 'stream error');
     }
   }
+}
+
+/**
+ * 最初の文字が hedgeMs たっても来なければ、同じ呼び出しをもう 1 本送り、先に文字が来た方を使う(もう一方は止める)。
+ * 遅い回(API 側のばらつき)だけを狙う。費用が 2 倍になるのは、その遅い回だけ。
+ * @param {object} o
+ * @param {number} o.hedgeMs 0 なら送らない
+ * @param {() => boolean} o.takeExtra 2 本目を送ってよいか(回数の上限を数える)。false なら送らない
+ * @returns {Promise<{hedged:boolean, winner:'a'|'b'|null, usage:object}>}
+ */
+export async function callHaikuHedged({ system, messages, signal, onText, hedgeMs = 0, takeExtra = () => true }) {
+  let winner = null;
+  const controllers = {};
+  const usage = {};
+  const run = (id) => {
+    const ac = new AbortController();
+    controllers[id] = ac;
+    signal?.addEventListener('abort', () => ac.abort(), { once: true });
+    return callHaiku({
+      system,
+      messages,
+      signal: ac.signal,
+      onUsage: (u) => {
+        if (winner === null || winner === id) Object.assign(usage, u);
+      },
+      onText: (t) => {
+        if (winner === null) {
+          winner = id;
+          for (const [k, c] of Object.entries(controllers)) if (k !== id) c.abort();
+        }
+        if (winner === id) onText(t);
+      },
+    }).then(
+      () => ({ id }),
+      (error) => ({ id, error }),
+    );
+  };
+
+  const a = run('a');
+  let b = null;
+  if (hedgeMs > 0) {
+    const timer = new Promise((r) => setTimeout(r, hedgeMs, 'timeout'));
+    const first = await Promise.race([a, timer]);
+    if (first === 'timeout' && winner === null && !signal?.aborted && takeExtra()) b = run('b');
+  }
+  const results = await Promise.all([a, b ?? Promise.resolve(null)]);
+  const winning = results.find((r) => r && r.id === winner);
+  if (winner === null) {
+    const err = results.find((r) => r?.error)?.error;
+    if (err) throw err;
+  } else if (winning?.error && !signal?.aborted) {
+    throw winning.error;
+  }
+  return { hedged: b !== null, winner, usage };
 }
 
 /**
@@ -141,7 +199,7 @@ export function* mockReply({ text, trigger, landmarks = [], seen }) {
 }
 
 /** 会話 1 ターンを実行する。onEvent には thought / say が順に渡る */
-export async function runTurn(body, { onEvent, signal }) {
+export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false } }) {
   const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
   const expressions = body.expressions?.length ? body.expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
   const emit = (obj) => {
@@ -170,10 +228,47 @@ export async function runTurn(body, { onEvent, signal }) {
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
     { role: 'user', content: buildUserTurn({ text, scene, trigger }) },
   ];
+  let raw = '';
+  let said = 0;
   const splitter = lineSplitter((line) => {
     const obj = parseLine(line);
-    if (obj) emit(obj);
+    if (obj) {
+      if (obj.type === 'say') said += 1;
+      emit(obj);
+    }
   });
-  await callHaiku({ system, messages, signal, onText: (t) => splitter.push(t) });
+  const info = await callHaikuHedged({
+    system,
+    messages,
+    signal,
+    onText: (t) => {
+      raw += t;
+      splitter.push(t);
+    },
+    hedgeMs: hedge.afterMs,
+    takeExtra: hedge.take,
+  });
   splitter.flush();
+  // 1 文も取り出せなかったときは、モデルの生の出力を、サーバーの画面に残す(直すための手がかり)
+  if (!said) {
+    console.warn(`[頭脳] 返事を取り出せませんでした。生の出力: ${JSON.stringify(raw.slice(0, 300))}`);
+    // 文章で返ってきたときは、その文を読み上げる(表情・動きは既定)。何も言わないよりよい
+    // 句点・感嘆符・疑問符(全角と半角)と改行で区切る
+    const sentences = (raw.replace(/[{}\[\]"]/g, '').match(/[^。！？!?\n]+[。！？!?]?/g) ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 3);
+    for (const [i, text] of sentences.entries()) {
+      emit(i === 0 ? { type: 'say', text, expression: 'neutral', motion: 'none', gaze: 'person', intent: '未確認', stage: 'chat', handoff: false } : { type: 'say', text, expression: 'neutral', motion: 'none', gaze: 'person' });
+    }
+  }
+  // 2 本目を送ったか・どちらが勝ったか・キャッシュを読めたか(記録と測定のため。画面は使わない)
+  onEvent({
+    type: 'meta',
+    hedged: info.hedged,
+    winner: info.winner,
+    usage: {
+      input: info.usage.input_tokens ?? null,
+      cacheRead: info.usage.cache_read_input_tokens ?? null,
+      cacheWrite: info.usage.cache_creation_input_tokens ?? null,
+      output: info.usage.output_tokens ?? null,
+    },
+  });
 }

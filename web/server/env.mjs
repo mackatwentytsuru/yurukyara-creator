@@ -21,6 +21,11 @@ export const config = {
   host: process.env.HOST ?? '127.0.0.1',
   // Claude の呼び出しの上限(1 日の回数・1 接続元あたり 1 分の回数)
   claudeDailyCallCap: Number(process.env.CLAUDE_DAILY_CALL_CAP ?? 300),
+  // 最初の文字がこの ms 来なければ、2 本目を送って早い方を使う。既定は 0(無効)。2026-11-02 の測定(n=35 組)で、効果を確認できなかったため
+  // 使うなら、2 本目が勝てる 1800〜2000 くらい(2 本目の最初の文字まで約 0.9 秒を足しても、遅い 1 本目より早い所)にする
+  hedgeMs: Number(process.env.CLAUDE_HEDGE_MS ?? 0),
+  // 測定のときだけ、リクエストごとに hedgeMs を替えられる(公開するときは付けない)
+  hedgeExperiment: process.env.HEDGE_EXPERIMENT === '1',
   claudePerMinute: Number(process.env.CLAUDE_PER_MINUTE ?? 12),
   // 試験では偽のサーバーに向ける(呼ぶたびに読む)
   get anthropicUrl() {

@@ -56,7 +56,7 @@ test('Haiku の流れから thought と say を 1 行ずつ取り出す(途中�
       { onEvent: (e) => events.push(e), signal: new AbortController().signal },
     );
     const types = events.map((e) => e.type);
-    assert.deepEqual(types, ['meta', 'thought', 'say', 'say']);
+    assert.deepEqual(types, ['meta', 'thought', 'say', 'say', 'meta']);
     assert.equal(events[0].brain, 'haiku');
     assert.equal(events[1].stage, 'guide');
     assert.equal(events[3].gaze, 'landmark:お手洗い');

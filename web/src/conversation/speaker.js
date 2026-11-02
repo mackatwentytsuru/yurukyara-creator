@@ -22,6 +22,55 @@ export class Speaker {
     this._level = 0;
     this.ttsError = null; // 読み上げが使えない理由(使えるなら null)
     this.fetchLog = [];
+    this.fillers = []; // あいづちの声 { text, samples(Float32Array), ms }
+    this.lastFiller = -1;
+  }
+
+  /** あいづちの声を、サーバーから読んでおく(前もって作られた物。無ければ何もしない) */
+  async loadFillers() {
+    try {
+      const list = (await (await fetch('/api/fillers')).json()).fillers ?? [];
+      this.fillers = await Promise.all(
+        list.map(async (f) => {
+          const bytes = new Uint8Array(await (await fetch(f.url)).arrayBuffer());
+          const view = new DataView(bytes.buffer, 0, bytes.length - (bytes.length % 2));
+          const samples = new Float32Array(view.byteLength / 2);
+          for (let i = 0; i < samples.length; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+          return { text: f.text, samples, ms: Math.round((samples.length / 24000) * 1000) };
+        }),
+      );
+    } catch (err) {
+      console.warn('あいづちの声を読めませんでした:', err.message);
+      this.fillers = [];
+    }
+    return this.fillers.length;
+  }
+
+  /**
+   * あいづちの声を 1 つ出す。同じ言葉が続かないよう、前に出した物は避ける。
+   * 本当の返事の声は、あとに続けて(これが終わってから)再生される。
+   * @returns {{text:string, ms:number}|null} 出せなければ null
+   */
+  playFiller({ onStart } = {}) {
+    if (!this.ctx || !this.fillers.length) return null;
+    let i;
+    do i = Math.floor(Math.random() * this.fillers.length);
+    while (this.fillers.length > 1 && i === this.lastFiller);
+    this.lastFiller = i;
+    const f = this.fillers[i];
+    const buffer = this.ctx.createBuffer(1, f.samples.length, 24000);
+    buffer.copyToChannel(f.samples, 0);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.analyser);
+    const startAt = Math.max(this.ctx.currentTime + 0.02, this.nextTime);
+    src.start(startAt);
+    this.nextTime = startAt + buffer.duration;
+    this.sources.add(src);
+    src.onended = () => this.sources.delete(src);
+    const delay = Math.max(0, (startAt - this.ctx.currentTime) * 1000);
+    this._later(() => onStart?.(performance.now()), delay);
+    return { text: f.text, ms: f.ms };
   }
 
   /** ユーザーのタップの中で呼ぶ。iPhone の Safari は、これが無いと音が出ない */

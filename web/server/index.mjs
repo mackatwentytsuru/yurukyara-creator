@@ -8,6 +8,7 @@ import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
 import { streamSpeech, ttsStatus } from './tts.mjs';
 import { createLimiter } from './limits.mjs';
+import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = join(WEB_ROOT, 'logs');
@@ -75,7 +76,10 @@ function latencySummary() {
   // 頭脳が Haiku で声が ElevenLabs の回だけを数える(仮の頭脳・字幕のみの回は、本物の数字にしない)
   const totals = rows.filter((r) => r.valid === true).map((r) => r.totalMs).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
   const pick = (p) => totals[Math.min(totals.length - 1, Math.floor(totals.length * p))];
+  const fillers = rows.filter((r) => r.valid === true && Number.isFinite(r.fillerMs)).map((r) => r.fillerMs).sort((a, b) => a - b);
   return {
+    // あいづちの声が出るまで(話し終わりから)。本当の返事の最初の音(totalMs)とは、別の数字として数える
+    filler: { count: fillers.length, medianMs: fillers.length ? fillers[Math.floor(fillers.length / 2)] : null },
     count: totals.length,
     ignored: rows.length - totals.length,
     medianMs: totals.length ? pick(0.5) : null,
@@ -108,9 +112,12 @@ async function handleChat(req, res) {
     }
   }
   try {
+    const afterMs = config.hedgeExperiment && Number.isFinite(body.hedgeMs) ? body.hedgeMs : config.hedgeMs;
     await runTurn(body, {
       signal: ac.signal,
       onEvent: (ev) => send({ ...ev, serverMs: Date.now() - t0 }),
+      // 2 本目も 1 回として、1 日・1 分の上限に数える。足りなければ送らない
+      hedge: { afterMs: paid ? afterMs : 0, take: () => claudeLimiter.take(client).ok },
     });
     send({ type: 'done', serverMs: Date.now() - t0 });
   } catch (err) {
@@ -135,6 +142,15 @@ const handler = async (req, res) => {
         claude: claudeLimiter.status(),
         latency: latencySummary(),
       });
+    }
+    if (req.method === 'GET' && path === '/api/fillers') return json(res, 200, { sampleRate: 24000, fillers: listFillers() });
+    if (req.method === 'GET' && path.startsWith('/api/fillers/')) {
+      const file = fillerPath(path.slice('/api/fillers/'.length));
+      if (file && existsSync(file)) {
+        res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'public, max-age=3600' });
+        return createReadStream(file).pipe(res);
+      }
+      return json(res, 404, { error: '見つかりません' });
     }
     if (req.method === 'POST' && path === '/api/chat') return await handleChat(req, res);
     if (req.method === 'POST' && path === '/api/tts') {
@@ -171,6 +187,8 @@ const handler = async (req, res) => {
 const server = useTls
   ? createHttpsServer({ cert: readFileSync(config.tlsCert), key: readFileSync(config.tlsKey) }, handler)
   : createHttpServer(handler);
+
+ensureFillers().then((r) => console.log(`あいづちの声: ${r.have} 種類(今回作った ${r.made} 種類、読み上げの文字数 ${r.chars} 字)`));
 
 server.listen(config.port, config.host, () => {
   console.log(`会話サーバー: ${useTls ? 'https' : 'http'}://${config.host}:${config.port}${config.host === '127.0.0.1' ? '(この端末だけ)' : ''}`);

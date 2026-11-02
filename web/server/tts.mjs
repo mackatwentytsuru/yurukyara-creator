@@ -94,4 +94,25 @@ export async function streamSpeech(text, res, signal) {
   res.end();
 }
 
+/** 短い文を読み上げて、PCM(16bit・24kHz・モノラル)をまとめて返す。あいづちの声を前もって作るのに使う */
+export async function synthesizePcm(text, signal) {
+  const clean = String(text ?? '').trim().slice(0, 300);
+  if (!clean || !config.elevenKey) throw new Error('読み上げの鍵か文がありません');
+  if (!reserveChars(clean.length)) throw new Error('今日の読み上げの上限に達しました');
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${config.voiceId}/stream?output_format=pcm_${SAMPLE_RATE}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      signal,
+      headers: { 'xi-api-key': config.elevenKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ text: clean, model_id: config.ttsModel, language_code: 'ja' }),
+    });
+    if (!res.ok) throw new Error(`読み上げに失敗 (${res.status})`);
+    return Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    refundChars(clean.length);
+    throw err;
+  }
+}
+
 export const hasLogDir = () => existsSync(LOG_DIR);

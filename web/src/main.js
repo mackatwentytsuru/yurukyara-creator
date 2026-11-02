@@ -109,6 +109,7 @@ function sceneText() {
 
 /* ---------- 声 ---------- */
 let listener = null;
+let lastInterimAt = 0; // 聞き取りの途中の文字が最後に届いた時刻(何か話した、の目印)
 async function toggleMic() {
   const btn = $('micBtn');
   if (listener?.listening) {
@@ -122,7 +123,10 @@ async function toggleMic() {
   try {
     speaker.unlock();
     listener = new Listener({
-      onInterim: (t) => ui.caption(t, 0, 'user'),
+      onInterim: (t) => {
+        lastInterimAt = performance.now();
+        ui.caption(t, 0, 'user');
+      },
       onFinal: (text, info) => {
         const t0 = info.lastVoicedAt || performance.now();
         dialogue.send({ text, t0, mode: 'voice' });
@@ -131,6 +135,8 @@ async function toggleMic() {
         $('micBtn').classList.toggle('hearing', active);
         // 話している最中に声が出たら、止まって聞く
         if (active && speaker.speaking) dialogue.cancel();
+        // 声が止まった(話し終わりらしい)ら、確定した文字を待たずに、あいづちの声を先に出す
+        if (!active && performance.now() - lastInterimAt < 2500) dialogue.preFiller(listener.lastVoicedAt);
       },
       onError: (msg) => ui.error(msg),
     });
@@ -173,6 +179,7 @@ function updateChips() {
   chips.push([app.mode === 'pose' ? '位置' : 'カメラ', info.label, info.ok ? 'ok' : 'warn']);
   chips.push(['人', String(app.lastAttention.tracks.length), '']);
   if (listener?.listening) chips.push(['聞き取り', 'ブラウザ', 'ok']);
+  if (speaker.fillers.length) chips.push(['あいづち', `${speaker.fillers.length} 種類`, 'ok']);
   ui.chips(chips);
 }
 
@@ -358,6 +365,7 @@ async function boot() {
   await setupPresentation().catch((e) => console.warn('見せ方の切りかえを用意できませんでした:', e.message));
   await refreshStatus();
   setInterval(refreshStatus, 15000);
+  speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
   buttons.forEach((b) => (b.disabled = false));
   stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う

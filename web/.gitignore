@@ -4,3 +4,4 @@ logs/
 public/mediapipe/
 *.vrm
 .env
+cache/
