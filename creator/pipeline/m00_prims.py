@@ -6,6 +6,7 @@
 - 向きは Blender の世界(正面が -Y、上が +Z)。物は原点に作ってから、位置と回転を直接頂点へ焼く。
 """
 import math
+import os
 
 import bpy
 from mathutils import Euler, Matrix, Vector
@@ -288,3 +289,82 @@ def gradient_axis(ob, p0, p1, c0, c1, ease=1.0):
     for i, v in enumerate(me.vertices):
         t = max(0.0, min(1.0, (v.co - a).dot(ab) / L2)) ** ease
         ca.data[i].color = (c0[0] + (c1[0] - c0[0]) * t, c0[1] + (c1[1] - c0[1]) * t, c0[2] + (c1[2] - c0[2]) * t, 1.0)
+
+
+def fuzz_images(rgb, out_dir, name="fuzz", size=512, seed=7, grain=0.10, strength=3.0):
+    """ぬいぐるみの毛足の画像を作る(継ぎ目なしに並べられる)。色の画像(色 × 細かい明暗)と、法線の画像の 2 枚。
+    毛は、短い向きのそろわない線の重なりとして描く。AI は使わない(numpy だけ)。"""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    h = np.zeros((size, size), np.float32)
+    for sc, amp in ((1, 0.35), (2, 0.35), (4, 0.30)):          # 細かさの違う粒
+        n = rng.random((size // sc, size // sc)).astype(np.float32)
+        n = np.kron(n, np.ones((sc, sc), np.float32))
+        h += amp * n
+    # 短い毛の線(向きは乱れる)を足す。端でつながるよう巻きつけて描く
+    for _ in range(size * 3):
+        x, y = rng.integers(0, size, 2)
+        a = rng.random() * math.pi
+        L = int(rng.integers(5, 14))
+        for t in range(L):
+            xx, yy = int(x + math.cos(a) * t) % size, int(y + math.sin(a) * t) % size
+            h[yy, xx] += 0.35 * (1 - t / L)
+    h = (h - h.min()) / max(h.max() - h.min(), 1e-6)
+    # 色: 平均 1 の明暗(grain の幅)
+    shade = 1.0 + (h - 0.5) * 2 * grain
+    col = np.clip(np.array(rgb, np.float32)[None, None, :] * shade[..., None], 0, 255).astype(np.uint8)
+    # 法線: 高さの差分(巻きつけ)
+    dx = np.roll(h, -1, 1) - np.roll(h, 1, 1)
+    dy = np.roll(h, -1, 0) - np.roll(h, 1, 0)
+    nx, ny, nz = -dx * strength, dy * strength, np.ones_like(h)
+    ln = np.sqrt(nx * nx + ny * ny + nz * nz)
+    nrm = np.stack([nx / ln, ny / ln, nz / ln], -1) * 0.5 + 0.5
+    os.makedirs(out_dir, exist_ok=True)
+    pc, pn = os.path.join(out_dir, name + "_color.png"), os.path.join(out_dir, name + "_normal.png")
+    def save(arr_u8, path):
+        # Blender の Python には PIL が無いので、Blender の画像として書く(RGBA の 0〜1 で、上下が逆)
+        h_, w_ = arr_u8.shape[:2]
+        rgba = np.ones((h_, w_, 4), np.float32)
+        rgba[..., :3] = arr_u8.astype(np.float32) / 255.0
+        img = bpy.data.images.new(os.path.basename(path), w_, h_, alpha=False)
+        img.pixels = rgba[::-1].reshape(-1).tolist()
+        img.filepath_raw = path
+        img.file_format = "PNG"
+        img.save()
+        bpy.data.images.remove(img)
+
+    save(col, pc)
+    save((nrm * 255).astype(np.uint8), pn)
+    return pc, pn
+
+
+def fuzz_material(name, rgb, out_dir, rough=0.95, sheen=1.0, sheen_tint=None, normal_strength=0.8, grain=0.10, seed=7):
+    """毛足の画像(色+法線)と、縁の毛羽(シーン)を持つ材質。使う物には auto_uv(ob, tile) で UV を付ける。"""
+    pc, pn = fuzz_images(rgb, out_dir, name, grain=grain, seed=seed)
+    m = material(name, rgb, rough=rough, spec=0.1, sheen=sheen, sheen_tint=sheen_tint)
+    nt = m.node_tree
+    b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    tc = nt.nodes.new("ShaderNodeTexImage")
+    tc.image = bpy.data.images.load(pc)
+    tc.image.colorspace_settings.name = "sRGB"
+    nt.links.new(tc.outputs["Color"], b.inputs["Base Color"])
+    tn = nt.nodes.new("ShaderNodeTexImage")
+    tn.image = bpy.data.images.load(pn)
+    tn.image.colorspace_settings.name = "Non-Color"
+    nm = nt.nodes.new("ShaderNodeNormalMap")
+    nm.inputs["Strength"].default_value = normal_strength
+    nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
+    nt.links.new(nm.outputs["Normal"], b.inputs["Normal"])
+    return m
+
+
+def auto_uv(ob, tile=4.0):
+    """立方体投影で UV を付け、tile 倍に繰り返す(毛足の画像が大きすぎず、細かく見えるように)。"""
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.cube_project(cube_size=2.0 / max(tile, 0.01))
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return ob
