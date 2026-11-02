@@ -45,7 +45,7 @@ export class RigCharacter extends CharacterBase {
     return super._headWorld(out);
   }
 
-  play(name) {
+  play(name, opts = {}) {
     const clip = this.clips.get(name);
     if (clip) {
       const action = this.mixer.clipAction(clip);
@@ -55,7 +55,7 @@ export class RigCharacter extends CharacterBase {
       this.currentAction = action;
       return true;
     }
-    return super.play(name);
+    return super.play(name, opts);
   }
 
   _setMorph(name, value) {

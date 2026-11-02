@@ -13,7 +13,7 @@ export class Dialogue {
    * @param {import('./speaker.js').Speaker} deps.speaker
    * @param {object} deps.ui thought / say / error / caption を受ける
    * @param {() => object} deps.getContext 見えている様子・キャラ・場所
-   * @param {(spec:string, ms:number) => void} deps.setGaze 'person' | 'away' | 'landmark:名前'
+   * @param {(spec:string, ms:number) => (number[]|null)} deps.setGaze 'person' | 'away' | 'landmark:名前'
    * @param {(entry:object) => void} deps.onMetric
    */
   constructor({ character, speaker, ui, getContext, setGaze, onMetric }) {
@@ -127,8 +127,8 @@ export class Dialogue {
 
   _performSay(ev) {
     this.character.setEmotion(ev.expression, ev.expression === 'neutral' ? 0 : 0.9);
-    if (ev.motion && ev.motion !== 'none') this.character.play(ev.motion);
-    this.setGaze(ev.gaze, 2400);
+    const pos = this.setGaze(ev.gaze, 2400); // 目印を見るときは、その場所(ワールド座標)が返る
+    if (ev.motion && ev.motion !== 'none') this.character.play(ev.motion, pos ? { dx: pos[0], dz: pos[2] } : {});
     this.ui.say(ev);
     this.ui.caption(ev.text);
   }

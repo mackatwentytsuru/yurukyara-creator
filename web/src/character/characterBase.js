@@ -71,11 +71,11 @@ export class CharacterBase {
   }
 
   /** 動きを始める。知らない名前なら false */
-  play(name) {
+  play(name, opts = {}) {
     if (!name || name === 'none') return false;
     const def = GESTURES[name];
     if (!def) return false;
-    this.active = { def, t: 0, name };
+    this.active = { def, t: 0, name, opts };
     return true;
   }
 
@@ -126,7 +126,7 @@ export class CharacterBase {
     if (this.active) {
       this.active.t += dt;
       if (this.active.t >= this.active.def.duration) this.active = null;
-      else this.active.def.apply(this.active.t, this.pose);
+      else this.active.def.apply(this.active.t, this.pose, this.active.opts);
     }
     this._mouthSm += (this.mouth - this._mouthSm) * smoothingAlpha(dt, 0.04);
     this.pose.add('head', 0.05 * this._mouthSm, 0, 0);

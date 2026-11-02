@@ -1,6 +1,7 @@
 // 会話の本体を配るサーバー。画面(dist)・キャラと場所のデータ・会話と読み上げの API を持つ。
 // カメラの絵はここに届かない(追従は端末の中だけで行う)。
-import { createServer } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createReadStream } from 'node:fs';
 import { extname, join, normalize, sep } from 'node:path';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
@@ -99,7 +100,8 @@ async function handleChat(req, res) {
   res.end();
 }
 
-const server = createServer(async (req, res) => {
+const useTls = Boolean(config.tlsCert && config.tlsKey);
+const handler = async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const path = decodeURIComponent(url.pathname);
   try {
@@ -141,9 +143,13 @@ const server = createServer(async (req, res) => {
     if (!res.headersSent) json(res, 500, { error: err.message });
     else res.end();
   }
-});
+};
+
+const server = useTls
+  ? createHttpsServer({ cert: readFileSync(config.tlsCert), key: readFileSync(config.tlsKey) }, handler)
+  : createHttpServer(handler);
 
 server.listen(config.port, () => {
-  console.log(`会話サーバー: http://localhost:${config.port}`);
+  console.log(`会話サーバー: ${useTls ? 'https' : 'http'}://localhost:${config.port}`);
   console.log(`頭脳: ${config.anthropicKey ? config.model : '仮の頭脳(ANTHROPIC_API_KEY なし)'} / 読み上げ: ${config.elevenKey ? 'あり' : 'なし'}`);
 });

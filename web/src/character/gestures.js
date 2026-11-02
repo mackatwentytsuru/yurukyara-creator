@@ -79,10 +79,18 @@ export const GESTURES = {
   },
   point: {
     duration: 2.0,
-    apply(t, p) {
+    // opts.dx, opts.dz: キャラから見た目印の位置(ワールド座標の差。+x がお客さんから見て右、+z が手前)
+    apply(t, p, opts = {}) {
       const e = envelope(t, 2.0, 0.25, 0.3);
-      p.add('rightUpperArm', 0, 1.15 * e, -1.1 * e);
-      p.add('rightLowerArm', 0, -0.1 * e, 0);
+      const dx = opts.dx ?? -1;
+      const dz = opts.dz ?? 0.5;
+      const useLeft = dx > 0; // お客さんから見て右(+x)はキャラの左手
+      // 腕は T ポーズで横を向く。前後への振りは、目印の方向の角度(水平)で決める
+      const swing = Math.max(-1.3, Math.min(1.3, useLeft ? -Math.atan2(dz, Math.abs(dx)) : Math.atan2(dz, Math.abs(dx))));
+      const side = useLeft ? 'left' : 'right';
+      const sign = useLeft ? -1 : 1;
+      p.add(`${side}UpperArm`, 0, swing * e, -sign * 1.2 * e); // 下ろした腕(±1.2)を水平まで上げる
+      p.add(`${side}LowerArm`, 0, 0, sign * -0.15 * e);
     },
   },
 };

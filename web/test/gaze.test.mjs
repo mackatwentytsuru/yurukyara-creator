@@ -35,3 +35,21 @@ test('平滑化の係数は 0〜1', () => {
   assert.ok(a > 0 && a < 1);
   assert.equal(smoothingAlpha(0.1, 0), 1);
 });
+
+import { GESTURES, Pose } from '../src/character/gestures.js';
+
+test('指さし: 目印が右(+x)なら左手、左(-x)なら右手を上げる', () => {
+  const right = new Pose();
+  GESTURES.point.apply(1.0, right, { dx: 3, dz: 0 });
+  assert.ok(right.map.has('leftUpperArm') && !right.map.has('rightUpperArm'));
+  const left = new Pose();
+  GESTURES.point.apply(1.0, left, { dx: -3, dz: 0 });
+  assert.ok(left.map.has('rightUpperArm') && !left.map.has('leftUpperArm'));
+});
+
+test('指さし: 手前(+z)の目印では、腕が前へ振れる向きに回る', () => {
+  const p = new Pose();
+  GESTURES.point.apply(1.0, p, { dx: -2, dz: 2 });
+  const [, y] = p.map.get('rightUpperArm');
+  assert.ok(y > 0);
+});

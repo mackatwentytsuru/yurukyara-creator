@@ -3,8 +3,6 @@
 import { config } from './env.mjs';
 import { buildSystemPrompt, buildUserTurn, MOTIONS } from './prompt.mjs';
 
-const API = 'https://api.anthropic.com/v1/messages';
-
 /** 1 行の JSON を直す。コードブロックや前後の文字が付いていても、できるだけ拾う */
 export function parseLine(line) {
   let s = line.trim();
@@ -71,7 +69,7 @@ export function lineSplitter(onLine) {
 }
 
 async function callHaiku({ system, messages, signal, onText }) {
-  const res = await fetch(API, {
+  const res = await fetch(config.anthropicUrl, {
     method: 'POST',
     signal,
     headers: {

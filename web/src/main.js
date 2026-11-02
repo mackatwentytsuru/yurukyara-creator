@@ -38,21 +38,28 @@ const app = {
 };
 window.__app = app; // 試験と開発の確認用
 app.speaker = speaker;
+app.stage = stage;
+app.tracker = tracker;
+app.picker = picker;
 
 /* ---------- 視線 ---------- */
 let gazeOverride = null; // { pos:[x,y,z], until:ms }
 function setGaze(spec, ms = 2000) {
   if (!spec || spec === 'person') {
     gazeOverride = null;
-    return;
+    return null;
   }
   const until = performance.now() + ms + 600;
   if (spec === 'away') {
     gazeOverride = { pos: [-0.8, stage.state.headY + 0.3, stage.state.camZ * 0.8], until };
-  } else if (spec.startsWith('landmark:')) {
+    return null;
+  }
+  if (spec.startsWith('landmark:')) {
     const pos = landmarkWorld(app.place, spec.slice('landmark:'.length));
     if (pos) gazeOverride = { pos, until };
+    return pos;
   }
+  return null;
 }
 
 /* ---------- 会話 ---------- */

@@ -30,6 +30,10 @@ export class FaceTracker {
         baseOptions: { modelAssetPath: '/mediapipe/face_landmarker.task', delegate },
         runningMode: 'VIDEO',
         numFaces: 4,
+        // アニメ調のキャラの顔でも拾えるよう、既定(0.5)より少し敏感にしておく
+        minFaceDetectionConfidence: 0.3,
+        minFacePresenceConfidence: 0.3,
+        minTrackingConfidence: 0.3,
         outputFaceBlendshapes: true,
       });
     try {
