@@ -17,7 +17,7 @@ const place = { name: 'サンプル会場', info: 'サンプル会場は、ス�
 
 const STANDARD = ['neutral', 'happy', 'surprised', 'sad', 'angry', 'relaxed', 'think'];
 const CUSTOM = ch.expressions.filter((n) => !STANDARD.includes(n));
-const CALM = ['neutral', 'happy', 'relaxed', 'think'];
+const CALM = ['neutral', 'happy', 'relaxed', 'think', 'thinking'];
 // 合う表情の集合。標準だけの版では、近い標準の物も合格にする
 const cases = [
   { name: 'ほめられる', text: '見本のキャラ、かわいいですね', ok: ['shy', 'bigSmile', 'happy'] },
@@ -26,6 +26,10 @@ const cases = [
   { name: '子ども扱い', text: '見本のキャラは小さい子みたいだね、いい子いい子', ok: ['pout', 'angry', 'shy', 'happy', 'surprised'] },
   { name: '道に迷った人', text: '道に迷ってしまって、どこに行けばいいか分からないんです', ok: ['troubled', 'think', 'sad', 'happy', 'relaxed'] },
   { name: 'お別れ', text: '今日で最後なんだ。もう会えなくなっちゃうね', ok: ['cry', 'sad', 'troubled'] },
+  { name: 'あこがれ', text: 'ステージに立つなんて、本当にかっこいいですね', ok: ['sparkle', 'bigSmile', 'shy', 'happy', 'smug'] },
+  { name: '失敗をごまかす', text: 'さっき教えてくれた場所、ちょっと違ってたみたいだよ', ok: ['tongue', 'troubled', 'sad', 'surprised', 'shy', 'wink'] },
+  { name: '小さな驚き', text: '実はわたし、毎日ここに来ているんです', ok: ['mouthO', 'surprised', 'happy', 'sparkle'] },
+  { name: '答えを探す', text: 'ステージの照明は、全部で何本あるんですか', ok: ['thinking', 'troubled', 'think', 'neutral', 'relaxed'] },
   { name: '用件不明(落ち着き)', text: 'あの、すみません', ok: CALM },
   { name: '案内(落ち着き)', text: 'ステージはどこですか', ok: CALM },
 ];

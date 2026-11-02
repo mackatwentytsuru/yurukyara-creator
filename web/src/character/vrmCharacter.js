@@ -57,6 +57,11 @@ export class VrmCharacter extends CharacterBase {
     return super._headWorld(out);
   }
 
+  /** そのキャラだけの表情か(漫符の板が値に比例して大きくなる物があるので、出すときは 1.0 で使う) */
+  isCustomExpression(name) {
+    return this.customKeys.includes(name);
+  }
+
   /** 名前を VRM の表情に直す。この VRM に無い名前は、近い表情に落とす(think は relaxed を弱く) */
   _resolve(name, value, out) {
     const key = EXPRESSION_ALIAS[name] ?? name;

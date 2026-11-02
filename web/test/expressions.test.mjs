@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { nearestExpression } from '../src/character/expressionNames.js';
+import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 import { VrmCharacter } from '../src/character/vrmCharacter.js';
 import { buildSystemPrompt } from '../server/prompt.mjs';
 import { normalizeEvent } from '../server/brain.mjs';
@@ -63,6 +63,8 @@ test('VRM にカスタムの表情があれば、そのまま出し、ほかの�
   const vrm = stubVrm([...STD, 'wink']);
   const c = new VrmCharacter(vrm, { expressions: ['neutral', 'happy', 'wink'] });
   assert.deepEqual(c.customKeys, ['wink']);
+  assert.equal(c.isCustomExpression('wink'), true);
+  assert.equal(c.isCustomExpression('happy'), false);
   c.setEmotion('happy', 0.9);
   run(c);
   assert.ok(vrm.values.get('happy') > 0.8);
@@ -137,4 +139,16 @@ test('入口の検査: 表情の説明は、一覧にある名前・文字の物
   assert.deepEqual(Object.keys(c.expressionHints), ['wink']);
   assert.equal(c.expressionHints.wink.length, 60);
   assert.deepEqual(sanitizeChatBody({ text: 'こ', expressionHints: 'x' }).expressionHints, {});
+});
+
+test('特別な表情は 1 回の返事で 1 つまで(2 つ目以降は近い標準の表情に。同じ物の続きはそのまま)', () => {
+  const list = ['neutral', 'happy', 'sad', 'surprised', 'cry', 'bigSmile', 'mouthO'];
+  const f = oneCustomPerReply(list);
+  assert.equal(f('cry'), 'cry');
+  assert.equal(f('bigSmile'), 'happy'); // 2 つ目の特別な表情は落とす
+  assert.equal(f('cry'), 'cry'); // 同じ物の続きは、そのまま
+  assert.equal(f('sad'), 'sad'); // 標準は、いつでも通す
+  assert.equal(f('mouthO'), 'surprised');
+  assert.equal(oneCustomPerReply(list)('bigSmile'), 'bigSmile'); // 返事ごとに作り直す
+  assert.equal(oneCustomPerReply(['neutral', 'happy'])('wink'), 'wink'); // 一覧に無い名前は、ここでは触らない(別の所で落とす)
 });

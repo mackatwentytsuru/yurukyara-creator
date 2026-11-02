@@ -16,7 +16,7 @@ export function describeExpressions(expressions = [], hints = {}) {
   const names = expressions.length ? expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
   const described = names.filter((n) => hints[n]).map((n) => `  - ${n}: ${hints[n]}`);
   return { names: names.join(' '), described: described.length ? `
-- 次の表情は、説明の場面で使う(気持ちがはっきり出る場面だけ。ふだんは neutral か happy):
+- 次の表情は、説明の場面で使う(気持ちがはっきり出る場面だけ。ふだんは neutral か happy。特別な表情は、1 回の返事で 1 つまで):
 ${described.join(String.fromCharCode(10))}` : '' };
 }
 

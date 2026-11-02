@@ -204,7 +204,9 @@ export class Dialogue {
   }
 
   _performSay(ev) {
-    this.character.setEmotion(ev.expression, ev.expression === 'neutral' ? 0 : 0.9);
+    // カスタムの表情は、漫符(頬の赤み・涙・汗)が値に比例して大きくなるので 1.0 で出す。標準は 0.9
+    const weight = ev.expression === 'neutral' ? 0 : this.character.isCustomExpression?.(ev.expression) ? 1 : 0.9;
+    this.character.setEmotion(ev.expression, weight);
     const pos = this.setGaze(ev.gaze, 2400); // 目印を見るときは、その場所(ワールド座標)が返る
     if (ev.motion && ev.motion !== 'none') this.character.play(ev.motion, pos ? { dx: pos[0], dz: pos[2] } : {});
     this.ui.say(ev);

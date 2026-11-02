@@ -67,6 +67,10 @@ export class CharacterBase {
     this.setExpression(name, weight);
   }
 
+  isCustomExpression() {
+    return false;
+  }
+
   setMouth(level) {
     this.mouth = THREE.MathUtils.clamp(level, 0, 1);
   }

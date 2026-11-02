@@ -33,3 +33,22 @@ export function nearestExpression(name, canShow, explicit = {}) {
   }
   return canShow('neutral') ? 'neutral' : null;
 }
+
+/**
+ * 1 回の返事のあいだ、特別な表情(標準でない物)は 1 つまで。2 つ目以降は、近い標準の表情に落とす。
+ * 漫符(頬の赤み・涙・汗など)を持つ表情が続けて切り替わると、板が重なって飛び出すため。同じ表情の続きはそのまま。
+ * @param {string[]} expressions そのキャラの表情の一覧
+ * @returns {(name:string)=>string} 文ごとに通す関数(返事ごとに作り直す)
+ */
+export function oneCustomPerReply(expressions) {
+  const std = new Set(STANDARD_EXPRESSIONS);
+  let used = null;
+  return (name) => {
+    if (std.has(name) || !expressions.includes(name)) return name;
+    if (used === null || used === name) {
+      used = name;
+      return name;
+    }
+    return nearestExpression(name, (n) => std.has(n) && expressions.includes(n)) ?? 'neutral';
+  };
+}

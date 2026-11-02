@@ -2,7 +2,7 @@
 // 鍵が無いときは、同じ形で返す仮の頭脳(固定の台本)を使う。
 import { config } from './env.mjs';
 import { buildSystemPrompt, buildUserTurn, MOTIONS } from './prompt.mjs';
-import { nearestExpression } from '../src/character/expressionNames.js';
+import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 
 /** 1 行の JSON を直す。コードブロックや前後の文字が付いていても、できるだけ拾う */
 export function parseLine(line) {
@@ -206,6 +206,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   const expressions = body.expressions?.length ? body.expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
   // そのキャラが実際に使える動き(rig は、動きのファイルがある物だけ)
   const motions = Array.isArray(body.motions) && body.motions.length ? body.motions.filter((m) => typeof m === 'string').slice(0, 24) : MOTIONS;
+  const limitCustom = oneCustomPerReply(expressions); // 特別な表情は、1 回の返事で 1 つまで
   const emit = (obj) => {
     // 最初の say に用件・段階が付いているときは、画面の「考え」にも先に渡す
     if (obj.type === 'say' && (obj.intent !== undefined || obj.stage !== undefined)) {
@@ -213,7 +214,10 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       if (thought) onEvent(thought);
     }
     const ev = normalizeEvent(obj, { expressions, motions });
-    if (ev) onEvent(ev);
+    if (ev) {
+      if (ev.type === 'say') ev.expression = limitCustom(ev.expression);
+      onEvent(ev);
+    }
   };
 
   if (!config.anthropicKey) {
