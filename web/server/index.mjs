@@ -65,10 +65,12 @@ function latencySummary() {
   const file = join(LOG_DIR, 'latency.jsonl');
   if (!existsSync(file)) return { count: 0 };
   const rows = readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-  const totals = rows.map((r) => r.totalMs).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  // 頭脳が Haiku で声が ElevenLabs の回だけを数える(仮の頭脳・字幕のみの回は、本物の数字にしない)
+  const totals = rows.filter((r) => r.valid === true).map((r) => r.totalMs).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
   const pick = (p) => totals[Math.min(totals.length - 1, Math.floor(totals.length * p))];
   return {
     count: totals.length,
+    ignored: rows.length - totals.length,
     medianMs: totals.length ? pick(0.5) : null,
     p90Ms: totals.length ? pick(0.9) : null,
     underTargetRate: totals.length ? totals.filter((v) => v <= 1200).length / totals.length : null,
