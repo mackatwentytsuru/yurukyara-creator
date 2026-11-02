@@ -57,6 +57,14 @@ body {
 }
 .caption.user { color: var(--lav); font-size: clamp(16px, 2.4vw, 26px); font-weight: 500; }
 
+/* AR の位置合わせの案内(部屋を現実に重ねる、床のタップ) */
+.align {
+  position: fixed; left: 50%; top: calc(max(12px, env(safe-area-inset-top)) + 96px); transform: translateX(-50%);
+  width: min(86vw, 520px); margin: 0; text-align: center; font-size: 15px; font-weight: 700; line-height: 1.5;
+  padding: 10px 16px; border-radius: 16px; background: rgba(12, 10, 22, 0.78); border: 1px solid var(--lav); color: var(--text);
+}
+.align.bad { border-color: var(--warn); color: var(--warn); }
+
 /* Claude の考え */
 .thought {
   position: fixed; top: max(52px, calc(env(safe-area-inset-top) + 40px)); right: 12px; width: min(340px, calc(100vw - 24px));

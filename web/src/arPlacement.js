@@ -23,6 +23,13 @@ export function createArPlacement({ object3d, camera }) {
     get placed() {
       return placed;
     },
+    get floor() {
+      return floorY;
+    },
+    /** 位置合わせで、部屋の立ち位置にキャラを立たせたとき、置いたことにする(姿勢が来ても動かさない) */
+    markPlaced() {
+      placed = true;
+    },
     /** 殻が床の高さを見つけた */
     onFloor(y) {
       floorY = y;

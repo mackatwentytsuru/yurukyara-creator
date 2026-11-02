@@ -76,6 +76,13 @@ export function createUi() {
       els.act.replaceChildren(...actParts.flatMap((t, i) => (i ? [document.createElement('br'), document.createTextNode(t)] : [document.createTextNode(t)])));
     },
     caption: setCaption,
+    /** AR の位置合わせの案内。null で隠す。bad は、食い違いが大きいときの色 */
+    align(text, bad = false) {
+      const el = $('align');
+      el.hidden = !text;
+      el.textContent = text ?? '';
+      el.classList.toggle('bad', bad);
+    },
     error(message) {
       els.reply.textContent = `エラー: ${message}`;
       setCaption(null);

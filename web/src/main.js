@@ -11,6 +11,7 @@ import { Listener, webSpeechSupported } from './conversation/listener.js';
 import { createUi } from './ui/panel.js';
 import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
 import { createArPlacement } from './arPlacement.js';
+import { createAlignFlow } from '../../place/web/alignFlow.js'; // 撮った部屋を現実に重ねる手順(場所の柱)
 // 見せ方(画面・AR・VR)の切りかえは、場所の柱が出している入口(docs/共通の決まり.md)
 import { createPresentation } from '../../place/web/modes.js';
 import { mountModeButtons } from '../../place/web/modeButtons.js';
@@ -80,7 +81,7 @@ const dialogue = new Dialogue({
   getContext: () => ({
     scene: sceneText(),
     character: { name: app.character.name, persona: app.persona },
-    place: promptPlace(app.place),
+    place: promptPlace(app.place, { character: app.character, arUnaligned: app.arUnaligned }),
   }),
   onMetric: (entry) => {
     app.metrics.push(entry);
@@ -265,10 +266,13 @@ window.conversation = {
   setPeople: (people) => poseSource.setPeople(people),
 };
 app.poseSource = poseSource;
+Object.defineProperty(app, 'alignFlow', { get: () => alignFlow }); // 確認用
 
 /* ---------- 見せ方(画面・AR・VR) ---------- */
 let modes = null;
 let arPlacement = null;
+let alignFlow = null; // AR で、撮った部屋を現実に重ねる手順(床を 2 回タップ)
+let alignHits = 0;
 let screenSource = null; // AR/VR に入る前の入力(戻るときに使う)
 const headTmp = new THREE.Vector3();
 
@@ -295,6 +299,10 @@ async function onPresentationChange(mode) {
   if (mode === 'screen') {
     arPlacement?.restore();
     arPlacement = null;
+    alignFlow?.reset();
+    alignFlow = null;
+    app.arUnaligned = false;
+    ui.align(null);
     if (place) place.object3d.visible = true;
     stage.resize();
     stage.frameCharacter(app.character, undefined, place?.object3d);
@@ -307,8 +315,43 @@ async function onPresentationChange(mode) {
     // AR の世界は、撮った部屋と重ならない。部屋は隠し、キャラは現実の床に立たせる
     if (place) place.object3d.visible = false;
     arPlacement = createArPlacement({ object3d: app.character.object3d, camera: stage.camera });
+    // 撮った部屋があれば、床を 2 回タップして現実に重ねる。重なるまで、部屋の目印は Claude に渡さない
+    if (place && modes.nativeAR) {
+      app.arUnaligned = true;
+      alignHits = 0;
+      alignFlow = createAlignFlow({ place });
+      ui.align(alignFlow.prompt);
+    }
   }
   await useSource(poseSource, 'pose').catch((e) => ui.error(e.message));
+}
+
+/** 殻で床をタップした点。位置合わせの途中ならそれに使い、終わったあとは、キャラをそこへ移す */
+function handleHit(p) {
+  const place = app.place?.loaded;
+  if (alignFlow && !alignFlow.done) {
+    // 床の高さが分かっていれば、1 回目のタップの前に作り直して渡す(床の高さは、あとから届くことがある)
+    if (alignHits === 0 && arPlacement?.floor != null) alignFlow = createAlignFlow({ place, floorY: arPlacement.floor });
+    alignHits += 1;
+    alignFlow.submit(p);
+    ui.align(alignFlow.prompt, alignFlow.done && !alignFlow.ok);
+    if (alignFlow.done && alignFlow.ok) {
+      place.placeCharacter(app.character.object3d); // 部屋の立ち位置(現実の中の)に立たせる
+      arPlacement.markPlaced();
+      place.object3d.visible = true; // 位置が合ったので、撮った部屋は、見えない遮蔽物として使う
+      app.arUnaligned = false;
+      setTimeout(() => ui.align(null), 3500);
+    } else if (alignFlow.done) {
+      // 食い違いが大きい。少し見せてから、やり直す
+      setTimeout(() => {
+        alignFlow?.reset();
+        alignHits = 0;
+        if (alignFlow) ui.align(alignFlow.prompt);
+      }, 3000);
+    }
+    return;
+  }
+  arPlacement?.onHit(p);
 }
 
 async function setupPresentation() {
@@ -324,7 +367,7 @@ async function setupPresentation() {
       arPlacement?.onPose();
     },
     onChange: (mode) => void onPresentationChange(mode),
-    onHit: (p) => arPlacement?.onHit(p),
+    onHit: (p) => handleHit(p),
     onFloor: (y) => arPlacement?.onFloor(y),
   });
   mountModeButtons({ modes, container: $('modes'), onError: (e) => ui.error(e.message) });
