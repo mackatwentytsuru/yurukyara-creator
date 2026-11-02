@@ -1,7 +1,7 @@
 """手組みの形(.blend)を、正面・横・斜めから撮る(Blender の背景モード)。比べる絵を作るための道具。
 
 使い方: blender -b -P m02_shot.py -- <入力.blend> <出力フォルダ> [--views front,right,back,left,q] [--size 700]
-        [--center x,z] [--scale 1.2]
+        [--center x,z] [--scale 1.2] [--morph 名前=値,…]
 - 正射影。既定は、部品全体の外接箱に合わせる。--center と --scale(メートル)で、頭だけなどの範囲を指定できる。
 - 出力: <出力フォルダ>/shot_<向き>.png(白に近い背景)。向き: front(正面 -Y から)、right(キャラの右 -X から)、
   back、left、q(右前 45°)。
@@ -19,13 +19,21 @@ VIEWS = {"front": 0.0, "q": 40.0, "right": 90.0, "back": 180.0, "left": 270.0}
 def main():
     a = sys.argv[sys.argv.index("--") + 1:]
     src, out = a[0], a[1]
-    opt = {"--views": "front,right,q", "--size": "700", "--center": None, "--scale": None}
+    opt = {"--views": "front,right,q", "--size": "700", "--center": None, "--scale": None, "--morph": None}
     for k in opt:
         if k in a:
             opt[k] = a[a.index(k) + 1]
     os.makedirs(out, exist_ok=True)
     bpy.ops.wm.open_mainfile(filepath=src)
     sc = bpy.context.scene
+    if opt["--morph"]:
+        # 例: --morph eye_blink=1,mouth_open=0.7  (その名前のシェイプキーに値を入れて撮る)
+        want = {kv.split("=")[0]: float(kv.split("=")[1]) for kv in opt["--morph"].split(",")}
+        for o in bpy.data.objects:
+            if o.type == "MESH" and o.data.shape_keys:
+                for kb in o.data.shape_keys.key_blocks:
+                    if kb.name in want:
+                        kb.value = want[kb.name]
     meshes = [o for o in sc.objects if o.type == "MESH"]
     vs = [o.matrix_world @ v.co for o in meshes for v in o.data.vertices]
     mn = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))

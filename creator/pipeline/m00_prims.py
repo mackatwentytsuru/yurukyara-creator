@@ -94,7 +94,7 @@ def superquadric(name, radii, exps=(1.0, 1.0), center=(0, 0, 0), rot_deg=(0, 0, 
     return _make(name, verts, faces, mat, center, rot_deg)
 
 
-def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.0, rot_deg=(0, 0, 0)):
+def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.0, rot_deg=(0, 0, 0), xy=(1.0, 1.0)):
     """輪(トーラス)。squash は断面の縦の倍率。"""
     nu, nv = seg
     verts, faces = [], []
@@ -103,7 +103,7 @@ def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.
         for j in range(nv):
             v = 2 * math.pi * j / nv
             r = major + minor * math.cos(v)
-            verts.append((r * math.cos(u), r * math.sin(u), minor * squash * math.sin(v)))
+            verts.append((r * math.cos(u) * xy[0], r * math.sin(u) * xy[1], minor * squash * math.sin(v)))
     for i in range(nu):
         for j in range(nv):
             a = i * nv + j

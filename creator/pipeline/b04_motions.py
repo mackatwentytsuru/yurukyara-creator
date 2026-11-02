@@ -131,7 +131,42 @@ def build_all(spec):
                     flap_L={"rot": (0, 8, 0)}, flap_R={"rot": (0, -8, 0)},
                     lid={"rot": (6, 0, 0)})
 
-    return {
+    def extra(name, t):
+        """頭(head)と羽(wing_*)の動き。この役割を持つキャラだけに効く。"""
+        out = {}
+        w6 = 2 * math.pi * 6.0 * t        # 羽ばたき 6Hz(3 秒の繰り返しにそろう)
+        flut = {"idle": 7.0, "talk": 12.0, "jump": 30.0}.get(name, 5.0)
+        for role in R:
+            if role.startswith("wing_"):
+                ph = 0.0 if role.endswith("up") else 1.2
+                sgn = 1.0 if "_L_" in role else -1.0
+                out[role] = {"rot": (flut * math.sin(w6 + ph), 0.0, sgn * 0.0)}
+        if "head" in R:
+            if name == "idle":
+                out["head"] = {"rot": (1.5 * math.sin(2 * math.pi * t / 3.0), 3.0 * math.sin(2 * math.pi * t / 6.0 * 2), 0)}
+            elif name == "talk":
+                out["head"] = {"rot": (3.0 * math.sin(2 * math.pi * t / 0.6), 2.0 * math.sin(2 * math.pi * t / 1.2), 0)}
+            elif name == "nod":
+                a = tri(t, 0.0, 0.2, 0.25, 0.45) * 16 + tri(t, 0.45, 0.65, 0.7, 0.95) * 11
+                out["head"] = {"rot": (a, 0, 0)}
+            elif name == "bow":
+                out["head"] = {"rot": (14 * tri(t, 0.0, 0.7, 1.1, 1.8), 0, 0)}
+            elif name == "sad":
+                out["head"] = {"rot": (10, 0, 0)}
+            elif name == "think":
+                out["head"] = {"rot": (-4, 0, 14)}
+        return out
+
+    def wrap(name, fn):
+        def g(t):
+            p = fn(t)
+            for role, v in extra(name, t).items():
+                if role in R:
+                    p[R[role]] = v
+            return p
+        return g
+
+    motions = {
         "idle": {"duration": 3.0, "loop": True, "fn": idle},
         "talk": {"duration": 1.2, "loop": True, "fn": talk},
         "wave": {"duration": 2.4, "loop": False, "fn": wave_fix},
@@ -141,3 +176,10 @@ def build_all(spec):
         "think": {"duration": 4.0, "loop": True, "fn": think},
         "sad": {"duration": 4.0, "loop": True, "fn": sad},
     }
+    keep = M.get("only")
+    out = {}
+    for name, m in motions.items():
+        if keep and name not in keep:
+            continue
+        out[name] = {**m, "fn": wrap(name, m["fn"])}
+    return out

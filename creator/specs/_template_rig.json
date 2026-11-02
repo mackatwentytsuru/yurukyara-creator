@@ -1,0 +1,9 @@
+{
+  "bones": [
+    {"name": "root", "at": [0, 0, 0], "parent": null},
+    {"name": "body", "at": [0, 0, 0.12], "parent": "root"},
+    {"name": "head", "at": [0, 0, 0.35], "parent": "body"}
+  ],
+  "roles": {"root": "root", "body": "body", "head": "head"},
+  "motion": {"only": ["idle", "talk", "nod", "bow"]}
+}

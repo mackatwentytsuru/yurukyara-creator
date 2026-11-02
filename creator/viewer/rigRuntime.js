@@ -72,6 +72,15 @@ export class RigCharacterV2 extends CharacterBase {
       });
     }
 
+    // シェイプキー(目・口)。character.json: mouth.kind = "morph"、blink = {morph}、morphs = {表情: {キー: 重み}}、look.eyes = [骨]
+    this.morphMeshes = [];
+    gltf.scene.traverse((o) => {
+      if (o.isMesh && o.morphTargetDictionary) this.morphMeshes.push(o);
+    });
+    this.morphCfg = json.morphs ?? {};
+    this.eyeBones = (look.eyes ?? []).map((n) => gltf.scene.getObjectByName(n)).filter(Boolean);
+    this.eyeRest = new Map(this.eyeBones.map((b) => [b, b.quaternion.clone()]));
+
     this.mixer = new THREE.AnimationMixer(gltf.scene);
     this.actions = new Map();
     for (const [name, clip] of clips) {
@@ -149,6 +158,35 @@ export class RigCharacterV2 extends CharacterBase {
       const pq = this.lookBone.parent.getWorldQuaternion(_q2);
       const qd = pq.clone().invert().multiply(oq).multiply(qc).multiply(oq.clone().invert()).multiply(pq);
       this.lookBone.quaternion.premultiply(qd);
+    }
+
+    // シェイプキー: 口の開き・まばたき・表情ごとの口の形
+    if (this.morphMeshes.length) {
+      const w = new Map();
+      const mc = this.json.mouth ?? {};
+      if (mc.kind === 'morph') w.set(mc.morph ?? 'mouth_open', Math.min(1, s.mouth * (mc.gain ?? 1.4)));
+      if (this.json.blink?.morph) w.set(this.json.blink.morph, s.blink);
+      for (const [name, v] of s.expr) {
+        const m = this.morphCfg[name];
+        if (!m) continue;
+        for (const [key, k] of Object.entries(m)) w.set(key, Math.max(w.get(key) ?? 0, v * k));
+      }
+      for (const mesh of this.morphMeshes) {
+        for (const [key, idx] of Object.entries(mesh.morphTargetDictionary)) mesh.morphTargetInfluences[idx] = w.get(key) ?? 0;
+      }
+    }
+    // 目の骨: 目標の向きのうち、体が回りきらない分だけ、黒目を動かす(目が先)
+    if (this.eyeBones.length) {
+      const ey = THREE.MathUtils.clamp((this.debug.wantYaw ?? 0) - s.headYaw * 0.6, -0.5, 0.5);
+      const ep = THREE.MathUtils.clamp((this.debug.wantPitch ?? 0) - s.headPitch * 0.6, -0.4, 0.4);
+      const qc = new THREE.Quaternion().setFromEuler(new THREE.Euler(-ep * 0.8, ey * 0.8, 0, 'YXZ'));
+      const oq = this.object3d.getWorldQuaternion(_q1);
+      for (const b of this.eyeBones) {
+        b.quaternion.copy(this.eyeRest.get(b));
+        const pq = b.parent.getWorldQuaternion(_q2);
+        const qd = pq.clone().invert().multiply(oq).multiply(qc).multiply(oq.clone().invert()).multiply(pq);
+        b.quaternion.premultiply(qd);
+      }
     }
 
     // 顔の表から 1 マスを選ぶ

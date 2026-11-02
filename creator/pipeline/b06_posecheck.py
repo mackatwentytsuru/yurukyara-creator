@@ -48,8 +48,7 @@ def main():
     so.rotation_euler = (math.radians(50), 0, math.radians(-30))
     cam = bpy.data.cameras.new("C")
     cam.type = "ORTHO"
-    body = bpy.data.objects["Body"]
-    zs = [v.co.z for v in body.data.vertices]
+    zs = [v.co.z for o in bpy.data.objects if o.type == "MESH" for v in o.data.vertices]
     H = max(zs) - min(zs)
     cam.ortho_scale = H * 1.75
     co = bpy.data.objects.new("C", cam)
