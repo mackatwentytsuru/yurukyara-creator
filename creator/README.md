@@ -4,20 +4,15 @@
 
 ## 2 つの道(同じ「絵 1 枚から」)
 
-- **手組み(本命)**: Claude が元の絵を見て部品の一覧(形・色・位置・大きさ)を決め、Blender の Python(`creator/builders/<id>.py`)で数式から一から組み、撮って元の絵と並べて比べ、数字を直す。1 周 16 秒。色むらが出ず、TRELLIS.2 まわりの許諾の問題がなく、VRAM も要らない。骨・顔・動きは同じ道具を使う。
-- **AI の 3D 生成(比べ用)**: TRELLIS.2 で形を作り、自分の絵から色を塗る。形は元の絵に近い(輪郭の重なり 88〜96%)が、色むらと許諾が残る。この版はリポジトリには入れていない。
+- **手組み(本命)**: Claude が元の絵を見て部品の一覧(形・色・位置・大きさ)を決め、Blender の Python(`creator/builders/<id>.py`)で数式から一から組み、撮って元の絵と並べて比べ、数字を直す。1 周 16 秒。色むらが出ず、AI の 3D 生成 まわりの許諾の問題がなく、VRAM も要らない。骨・顔・動きは同じ道具を使う。
+- **AI の 3D 生成(開発中の比べだけ。提出物のコードには含まない)**: AI で形を作り、自分の絵から色を塗る。形は元の絵に近い(輪郭の重なり 88〜96%)が、色むらと許諾が残る。この版はリポジトリには入れていない。
 
 一覧(元の絵・手組み・AI 生成)は `creator/samples/*_元の絵と比べ.png`。手組みの 1 周は `sh creator/pipeline/run_built.sh <id> <作業フォルダ> x`。
 
-## 流れ(`creator/pipeline/`、AI 生成の道)
+## 流れ(`creator/pipeline/`)
 
 | 段 | 道具 | 内容 | 使う物 |
 |---|---|---|---|
-| 0 | Codex の画像生成 | 顔なしの絵(目・口・光る点を消した同じ絵) | 外の AI |
-| 1 | `p01_prep.py` | 背景を抜く | OpenCV |
-| 3 | `p03_trellis.py` | 3D の形だけ作る(約 9〜15 分、VRAM 24〜27GB) | TRELLIS.2(重みは使う人が入手) |
-| 4 | `b01_mesh.py` | 高さ・向き・面の数・UV を整える | Blender |
-| 5 | `p05_paint.py` | 自分の絵だけから UV に色を塗る(AI なし) | trimesh, OpenCV |
 | 6 | `f01_face_atlas.py` | 顔の表(表情 × 口の開き)を描く | Pillow |
 | 7 | `b03_rig.py` + `b04_motions.py` | 骨・重み・顔の面・動きを作り GLB に書き出す | Blender |
 | 8 | `b06_posecheck.py` + `s02_posesheet.py` | 動きの途中の姿勢を撮って一覧にする(崩れを見つける) | Blender |
@@ -26,7 +21,7 @@
 | 比べ | `s03_compare.py` | 元の絵と作った物を並べ、輪郭の重なり(IoU)を測る | |
 | 10 | `pk01_package.py` | `characters/<id>/` に並べて `character.json` を書く | |
 
-骨と重みはキャラごとの `creator/specs/<id>.json`(位置は外接箱に対する割合)で決める。
+骨と重みはキャラごとの `creator/specs/<id>_built.json`(位置は外接箱に対する割合)で決める。
 
 ## `type: "rig"` の character.json(キャラの柱が決めた形)
 

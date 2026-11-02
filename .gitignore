@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 creator/env.local.sh
 _trials/
+tools/history_terms.local.txt
