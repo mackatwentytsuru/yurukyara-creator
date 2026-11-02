@@ -92,3 +92,8 @@
 - 見た目: 「素材貼り」が床と一部の壁を木に判定した(wood 136 面)。上から見ると床が茶色の木目で、実物と合うかは本人に確かめてもらう。
 - `shot.py` は環境変数 `SHOT_CLEAN=1` で情報欄とボタンを隠せる(部屋を見せる絵用)。
 - 撮った原本は `work\scans_in\`(リポジトリの外)。`places/room_1102/` と、それを載せた `places/index.json` は、本人の OK が出るまでコミットしない。
+
+### 2026-11-02 夜 参考リポジトリの調査(本人の依頼「ラスト 30 日で調べて」)
+- last30days(DeepSeek 要約)は 4 題とも薄かった(Wi-Fi 転送と Gaussian Splatting は中身なし)。収穫は wesbos/3d-model-anything(LiDAR+写真 → three.js の部屋、★2,632、10-27)の発見。そこで DeepSeek に「URL・ライセンス・最終更新・スターを実際に確かめる」調べ方で 4 題を頼み直し、10 件前後ずつの表を得た。主要 10 件は GitHub API で実在・ライセンス・更新日を私が確認(一致)。
+- まとめは `workesearch_30d\まとめ.md`(リポジトリの外)。写真の色貼りは Open3D / mvs-texturing / xatlas、Wi-Fi 転送は iLiDAR・NeRFCapture、Gaussian Splatting は COLMAP → LichtFeld か nerfstudio → Spark・GaussianSplats3D、テレビの窓は three.js + MediaPipe の非対称視錐台(off-axis)。コードは写さず、使うときは `docs/部品の一覧.md` に載せる。
+- 本人の指示: 自宅の部屋の写真・映像は使ってよい。サンプル会場は箱が広く(天井 10 m)LiDAR(約 5 m)では撮れない → 既存の UE の箱を使う / パノラマ / 寸法を測って箱を作る、を提案済み。
