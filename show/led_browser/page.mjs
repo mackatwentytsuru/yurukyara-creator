@@ -30,8 +30,7 @@ scene.add(rim);
 const camera = new THREE.PerspectiveCamera(28, W / H, 0.05, 60);
 const character = await loadCharacter(characterUrl(q.get('character') ?? 'f_led'));
 scene.add(character.object3d);
-// 視線で体を回す処理は切る(静かな録画用)。creator/viewer/rigRuntime.js の lookBone は毎コマ premultiply するだけで
-// 元の回転に戻さないため、動きの骨(body)の値が一定のあいだ角度が積み上がって体が回る。
+// 録画では視線の目標を与えないので、体を視線へ回す処理は切る(?look=1 で戻す)。
 if (q.get('look') !== '1') character.lookBone = null;
 character.update(0);
 const box = new THREE.Box3().setFromObject(character.object3d);
