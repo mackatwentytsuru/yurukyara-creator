@@ -19,7 +19,7 @@ VIEWS = {"front": 0.0, "q": 40.0, "right": 90.0, "back": 180.0, "left": 270.0}
 def main():
     a = sys.argv[sys.argv.index("--") + 1:]
     src, out = a[0], a[1]
-    opt = {"--views": "front,right,q", "--size": "700", "--center": None, "--scale": None, "--morph": None, "--transparent": None}
+    opt = {"--views": "front,right,q", "--size": "700", "--center": None, "--scale": None, "--morph": None}
     for k in opt:
         if k in a:
             opt[k] = a[a.index(k) + 1]
