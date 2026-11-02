@@ -37,29 +37,31 @@ def add(buf, pos, snd):
         buf[pos:end] += snd[: end - pos]
 
 
-def backing():
+def backing(nbars=5):
+    """nbars 小節の仮の伴奏。コード進行は 5 小節でくり返す。"""
+    total = BEAT * 4 * nbars
     rng = np.random.default_rng(1)
-    b = np.zeros(TOTAL)
+    b = np.zeros(total)
     n = int(BEAT * 0.9)
     tk = np.arange(n) / FS
     kick = np.sin(2 * np.pi * np.cumsum(45 + 90 * np.exp(-tk * 30)) / FS) * env(n, 0.12)
-    for i in range(NBEATS):
+    for i in range(nbars * 4):
         add(b, i * BEAT, kick * 0.9)
         add(b, i * BEAT + BEAT // 2, np.diff(rng.standard_normal(2000), prepend=0) * env(2000, 0.02) * 0.12)  # ハット
         if i % 2 == 1:
             nz = np.diff(rng.standard_normal(6000), prepend=0)
             add(b, i * BEAT, nz * env(6000, 0.06) * 0.35)  # クラップ
-    for bar in range(5):
+    for bar in range(nbars):
         for e in range(8):  # 8 分でベース
             p = bar * 4 * BEAT + e * BEAT // 2
-            m = ROOTS[bar] + (12 if e % 4 == 3 else 0)
+            m = ROOTS[bar % 5] + (12 if e % 4 == 3 else 0)
             add(b, p, np.sin(2 * np.pi * hz(m) * np.arange(BEAT // 2) / FS) * env(BEAT // 2, 0.18) * 0.45)
         for e in range(8):  # 明るいコード(裏拍多め)
             if e % 2 == 0 and e != 0:
                 continue
             p = bar * 4 * BEAT + e * BEAT // 2
             ln = BEAT
-            s = sum(saw(hz(m), ln) + saw(hz(m) * 1.004, ln) for m in CHORDS[bar]) * 0.06
+            s = sum(saw(hz(m), ln) + saw(hz(m) * 1.004, ln) for m in CHORDS[bar % 5]) * 0.06
             add(b, p, s * env(ln, 0.25))
     return b
 

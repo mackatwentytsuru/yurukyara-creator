@@ -1,0 +1,204 @@
+{
+  "_説明": "キャラの動きの台本。シーケンサーの代わり。曲の中は秒でなく小節で書く(bar は曲の section の中の 0 始まりの小節。beat はその中の拍)。曲以外は at_sec(section の頭から)・at_frac(割合)・from_end_sec(section の終わりから)。beats を書くと、動きの長さをその拍数に合わせる。weight は動きの大きさ(jump を小さくすると、キャラを面いっぱいに大きくできる)。min_drive を書くと、曲の盛り上がり(0〜1)がその値より低い所では動かない(静かなイントロで飛び跳ねない)。timeline に answer_says があれば、answer の events の代わりにそちらを使う。",
+  "bounce": {
+    "height_m": 0.022,
+    "squash": 0.028,
+    "sway_deg": 1.6
+  },
+  "sections": {
+    "enter": {
+      "expr": "neutral",
+      "events": []
+    },
+    "line": {
+      "expr": "happy",
+      "events": [
+        {
+          "at_sec": 0.05,
+          "play": "wave"
+        }
+      ],
+      "expr_weight": 0.2
+    },
+    "song": {
+      "expr": "happy",
+      "bounce": 1,
+      "events": [
+        {
+          "on": "chorus",
+          "play": "jump",
+          "beats": 2,
+          "weight": 0.55
+        },
+        {
+          "on": "chorus",
+          "after_bars": 2,
+          "play": "wave",
+          "beats": 4,
+          "min_drive": 0.45
+        },
+        {
+          "every_bars": 8,
+          "offset_bars": 4,
+          "play": "wave",
+          "beats": 4,
+          "min_drive": 0.45
+        },
+        {
+          "every_bars": 8,
+          "offset_bars": 6,
+          "beat": 2,
+          "play": "jump",
+          "beats": 2,
+          "weight": 0.55,
+          "min_drive": 0.6
+        },
+        {
+          "every_bars": 4,
+          "offset_bars": 3,
+          "beat": 2,
+          "play": "nod",
+          "beats": 2,
+          "min_drive": 0.2
+        },
+        {
+          "from_end_sec": 1.8,
+          "expr": "happy",
+          "expr_weight": 1
+        }
+      ],
+      "expr_weight": 0.15
+    },
+    "bow": {
+      "expr": "happy",
+      "events": [
+        {
+          "at_sec": 0.5,
+          "play": "bow"
+        },
+        {
+          "at_sec": 2.8,
+          "expr": "happy",
+          "expr_weight": 1
+        },
+        {
+          "at_sec": 4.3,
+          "expr": "happy",
+          "expr_weight": 0.2
+        }
+      ],
+      "expr_weight": 0.2
+    },
+    "listen": {
+      "expr": "neutral",
+      "turn_deg": -30,
+      "look_at": [
+        -3.2,
+        0.75,
+        2.4
+      ],
+      "events": [
+        {
+          "at_sec": 1.6,
+          "expr": "surprised"
+        },
+        {
+          "at_sec": 2.6,
+          "expr": "neutral"
+        },
+        {
+          "from_end_sec": 1.1,
+          "play": "nod"
+        }
+      ]
+    },
+    "answer": {
+      "expr": "happy",
+      "turn_deg": -16,
+      "look_at": [
+        -3.2,
+        0.75,
+        4.5
+      ],
+      "events": [
+        {
+          "at_frac": 0.4,
+          "play": "nod"
+        }
+      ],
+      "expr_weight": 0.2,
+      "finish_events": [
+        {
+          "from_end_sec": 1.1,
+          "expr": "happy",
+          "expr_weight": 1
+        }
+      ]
+    },
+    "outro": {
+      "expr": "happy",
+      "turn_deg": 0,
+      "events": [],
+      "expr_weight": 1
+    }
+  },
+  "vrm": {
+    "_説明": "VRM のときだけ効く設定。mouth は口の値の曲線(出力 = gain × 入力の power 乗)。口の入力は高い値に集まるので、power で開け閉めの差を広げる。motion_map は VRM に無い動きの読みかえ(hop は体ごと跳ねる、none は動かない)。section_motion_map はセクションごとの読みかえ(サビは腕を大きく横へ出すと寄れないので wave をしない)。zoom はサビの寄り。太ももの辺りが中央の面の下の端に来る大きさを自動で計算する(腕が境目を越える分だけ小さくなる)。 expression_map は VRM に無い表情だけの読みかえ。expression_hold はその表情を決まった秒だけ出して戻す。say_weights は返事の文の表情の強さ。sing_big はサビの強い音で singBig を少し足す。",
+    "mouth": {
+      "gain": 0.95,
+      "power": 2.0
+    },
+    "motion_map": {
+      "jump": "hop",
+      "sad": "shake",
+      "talk": "none"
+    },
+    "hop_m": 0.09,
+    "light_gain": 0.8,
+    "zoom": {
+      "at_song_sec": null,
+      "fallback_song_sec": 24,
+      "in_sec": 1.6,
+      "out_sec": 1.6,
+      "top_y": 135
+    },
+    "section_motion_map": {
+      "song": {
+        "wave": "none"
+      }
+    },
+    "expression_map": {
+      "shy": {
+        "expr": "surprised",
+        "weight": 0.5,
+        "look_down_m": 0.9
+      },
+      "bigSmile": {
+        "expr": "happy",
+        "weight": 1
+      }
+    },
+    "sing_big": {
+      "from_input": 0.93,
+      "max": 0.3,
+      "min_drive": 0.9
+    },
+    "expression_hold": {
+      "bigSmile": {
+        "sec": 1.0,
+        "then": "happy",
+        "then_weight": 0.2
+      }
+    },
+    "say_weights": {
+      "happy": 0.25
+    }
+  },
+  "song_structure": {
+    "_説明": "曲の構成(曲の頭からの秒)。intro_song_sec は歌声が入る秒で、その直前の小節の頭で LED が一気に灯る。それまでは暗い舞台のまま。chorus_song_sec でもう一段上げる。timeline に同じ名前があれば、そちらを使う。drive は光の盛り上がり(0〜1)。",
+    "intro_song_sec": 8.5,
+    "chorus_song_sec": 24,
+    "verse_drive": 0.72,
+    "chorus_drive": 1.0
+  }
+}

@@ -14,6 +14,8 @@
 | `ue/try_motion_import.py` | 動きの glb をそのまま取り込む試し(失敗の記録用) |
 | `run/ue_py.sh` `run/render_cut.sh` `run/build_then_render.sh` | UE を動かす |
 | `check/measure_cuts.py` `check/make_sheet.py` | 明るさ・継ぎ目の測定、確認シート |
+| `ue/build_sim.py` `ue/sim_layout.py` `run/render_sim.sh` `run/render_sim.py` | シミュレーター: 全編の映像と音を、LED だけが光るレベル `L_Sim` に流し、3 つのカメラで撮る |
+| `check/make_sim_test.py` `check/measure_sim_sync.py` `check/make_sim_sheet.py` | シミュレーターの同期のテスト素材、ずれの測定、3 案の並べ絵 |
 
 ## 動かし方
 
@@ -25,6 +27,32 @@ sh show/run/build_then_render.sh Cut1_StandWide Cut2_StandClose Cut3_LedCharacte
 python show/check/measure_cuts.py
 python show/check/make_sheet.py <出力の jpg>
 ffmpeg -framerate 30 -i <render>/Move_DoorOpens/Move_DoorOpens.%04d.png -an -c:v libx264 -crf 16 -pix_fmt yuv420p -map_metadata -1 <出力の mp4>
+```
+
+全編のシミュレーター(`build_stage.py` を 1 度動かしたあと。素材の差し替えもこの 1 行):
+
+```sh
+sh show/run/render_sim.sh <映像> <show_mix.wav> <出力フォルダ>            # 全編、Cam1〜3.mp4
+sh show/run/render_sim.sh <映像> <show_mix.wav> <出力フォルダ> --range 27 37 --cams 2   # 一部だけ
+python show/check/make_sim_sheet.py <出力フォルダ> <並べ絵の jpg> --at 2
+```
+
+撮影の記録と実写の合成(`show/composite/`):
+
+```sh
+python show/ue/import_shoot.py <撮影フォルダ> <シーケンス名>      # 記録 → Cine Camera のキー。面ごとの残差と切れた秒を報告
+python show/composite/solve_tripod.py <動画か写真> <12 点の json> --out <撮影フォルダ>   # 三脚の保険。同じ形の記録を作る
+python show/composite/sync_by_led.py <実写> <元の LED 映像>      # 音の無い実写が全編の何秒かを出す
+python show/composite/make_fake_shoot.py <撮影フォルダ>          # 正解の分かる合成の記録
+python show/composite/render_comp.py <撮影フォルダ> <LED の映像のフォルダ> <出力> --show-start 30    # 素材を撮る
+python show/composite/fake_phone.py <連番> <mp4>                 # 実写の代わりにする(本物の実写では要らない)
+python show/composite/composite.py <連番の親> <実写> <出力の連番> --first 390 --last 600
+python show/composite/measure_comp.py <撮影フォルダ> <連番の親> <comp_config.json>   # 足と目印の画素の誤差、ロールの符号
+python show/composite/build_demo.py <連番の親> <実写> <合成の連番> <音> <出力 mp4>
+python show/composite/lens_render.py <lens_calib の出力> --out-dir <出力> --width 1920   # 主点を真ん中に直して UE で描く大きさと ST マップ。render_comp と composite の --stmap へ
+python show/composite/focal_options.py <出力の jpg> --video <LED> --wav <音> --out-dir <作業>   # 焦点距離の案の表と 3 枚
+python show/composite/make_distort_sheet.py ...                  # 歪みあり・なしの比べ
+# make_fake_shoot・make_chain_trial・make_calib_trial・fake_phone は試し専用
 ```
 
 ## 今の状態

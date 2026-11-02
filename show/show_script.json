@@ -1,0 +1,42 @@
+{
+  "character": "f_led",
+  "line": "今日は誰もいないけど、私の初ステージ。みんな見てね",
+  "question": "初めてのステージ、どうだった?",
+  "answer_file": "answer.json",
+  "answer_placeholder": "えへへ、ちょっと緊張したけど、楽しかった!",
+  "voice_id": "fUjY9K2nAIwlALOwSiwc",
+  "tts_model": "eleven_v4_turbo",
+  "durations": {
+    "preroll": 20,
+    "sync_head": 12,
+    "dark": 4,
+    "enter": 3,
+    "bow": 5,
+    "listen": 7,
+    "outro": 4,
+    "tail": 5,
+    "sync_tail": 12,
+    "black_end": 3
+  },
+  "song": {
+    "start_sec": 0,
+    "len_sec": 43.4,
+    "line_over_intro": true,
+    "line_at_sec": 2.0,
+    "line_duck_db": 9
+  },
+  "sync": {
+    "flash_starts": [
+      1.0,
+      2.5,
+      3.2,
+      5.5,
+      6.0,
+      8.5
+    ],
+    "flash_sec": 0.2,
+    "beep_hz": 1000,
+    "beep_sec": 0.1,
+    "beep_db": -18.0
+  }
+}
