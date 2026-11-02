@@ -80,7 +80,7 @@
 - 未確認: 本物の AirDrop が実際に ~/Downloads に 4 つ別々のファイルとして届くか(ShareLink の挙動)。実機で ARステージを開くのも未実施。
 
 ### 2026-11-02 夜 Quest をつなぐ道具(adb)を作業用 PC に入れた
-- Google 公式 `dl.google.com/android/repository/platform-tools-latest-windows.zip`(8,044,989 バイト)を 作業用 PC の `D:	ools\platform-tools\` に展開。adb 1.0.41(Version 37.0.1-15733141)、署名は Google LLC で有効。PATH・設定ファイルは変えていない(`D:	ools\platform-toolsdb.exe` をフルパスで呼ぶ)。C: 472 GB、D: 125 GB の空き。
+- Google 公式 `dl.google.com/android/repository/platform-tools-latest-windows.zip`(8,044,989 バイト)を 作業用 PC の `work\tools\platform-tools\` に展開。adb 1.0.41(Version 37.0.1-15733141)、署名は Google LLC で有効。PATH・設定ファイルは変えていない(`work\tools\platform-tools\adb.exe` をフルパスで呼ぶ)。C: 472 GB、D: 125 GB の空き。
 - この時点で、作業用 PC の USB に Quest は見えない(Meta の USB の ID 2833 が無く、`adb devices` も空)。ケーブル・Quest の電源・開発者モードの確認待ち。
 - つまずき: 札の種類名は `cpu`(「CPU の重い処理」は通らない)。札を取る前にダウンロードを先に走らせてしまったので、あとから取って返した(小さな作業)。
 
@@ -95,6 +95,14 @@
 
 ### 2026-11-02 夜 参考リポジトリの調査(本人の依頼「ラスト 30 日で調べて」)
 - last30days(DeepSeek 要約)は 4 題とも薄かった(Wi-Fi 転送と Gaussian Splatting は中身なし)。収穫は wesbos/3d-model-anything(LiDAR+写真 → three.js の部屋、★2,632、10-27)の発見。そこで DeepSeek に「URL・ライセンス・最終更新・スターを実際に確かめる」調べ方で 4 題を頼み直し、10 件前後ずつの表を得た。主要 10 件は GitHub API で実在・ライセンス・更新日を私が確認(一致)。
-- まとめは `work
-esearch_30d\まとめ.md`(リポジトリの外)。写真の色貼りは Open3D / mvs-texturing / xatlas、Wi-Fi 転送は iLiDAR・NeRFCapture、Gaussian Splatting は COLMAP → LichtFeld か nerfstudio → Spark・GaussianSplats3D、テレビの窓は three.js + MediaPipe の非対称視錐台(off-axis)。コードは写さず、使うときは `docs/部品の一覧.md` に載せる。
+- まとめは `work\research_30d\まとめ.md`(リポジトリの外)。写真の色貼りは Open3D / mvs-texturing / xatlas、Wi-Fi 転送は iLiDAR・NeRFCapture、Gaussian Splatting は COLMAP → LichtFeld か nerfstudio → Spark・GaussianSplats3D、テレビの窓は three.js + MediaPipe の非対称視錐台(off-axis)。コードは写さず、使うときは `docs/部品の一覧.md` に載せる。
 - 本人の指示: 自宅の部屋の写真・映像は使ってよい。サンプル会場は箱が広く(天井 10 m)LiDAR(約 5 m)では撮れない → 既存の UE の箱を使う / パノラマ / 寸法を測って箱を作る、を提案済み。
+
+### 2026-11-03 未明 撮影記録(動画+コマごとのカメラ位置・向き・画角)を作った
+- 依頼: 本人の「カメラに iPhone を付けてトラッキングして、UE のサンプル会場のどこで、どの画角・何ミリで撮ったかを記録すれば、あとで入れ替えや合体ができる」。
+- 3 つ目の iPhone アプリ「撮影記録」(`place/ios/ShootLog/`、識別子は本人のハンドルを含まない `app.sample.hackathon.shootlog`)。ARKit の `capturedImage` を AVAssetWriter(HEVC)へ、同じコマの姿勢・画角・追跡状態を `frames.jsonl` へ。床と LED の 4 隅(十字を合わせてタップ)を校正として `meta.json` に残す。横向き固定、4K30 と最大 fps の形式を画面で選べる(`supportedVideoFormats` の一覧は meta に残る)。
+- 署名なしの型確認は 1 回で通り(警告は `contentEdgeInsets` の非推奨のみ)、署名つきも通って、本人の iPhone 12 Pro に入れて起動確認(6 秒後も動作中)。カメラの許可は本人の「許可」待ち。つまずき: iPhone が `unavailable` の間は組み立てが終了コード 70 → 先に `generic/platform=iOS` で署名つきを通し、つながってから `devicectl install` だけ。`grep available` が `unavailable` にも当たる罠。
+- PC 側 `place/shootlog/`(Python): `align_led.py`(4 隅のレイ → ARKit 世界→LED の変換。未知数は y 回転+位置の 4 つ)、`export_ue.py`(UE 用 CSV: 位置 cm・Pitch/Yaw/Roll・画角・35mm 換算 mm)、`overlay_room.py`(room.json の窓/ドア/物の 4 隅を LED 代わりに位置合わせ → 動画に部屋の線を重ね、輪郭までの距離を測る)、`led_pnp.py`(保険: 固定カメラの映像で solvePnP)、`receive_shoot.py`(AirDrop の zip → J: に取りこみ)、`selftest.py`。
+- 合成データでの確かめ(家の部屋の窓を LED に見立て、仮の ARKit 世界で 10 秒): 変換の復元 位置 0.13 cm・向き 0.034°、角の再投影誤差 0.14〜0.27 px、重ね合わせの輪郭距離の中央値 1.9 px(わざとずらした線は 11.8 px)。solvePnP は最初のコマで正解(0.3 px)、細い線だけの合成映像では LK 追跡が 10 コマ程度で外れ、10 コマごとに指定し直すと中央値 6.8 cm(最大 43 cm)。実映像での追跡は未確認。
+- **未確認(実機が要る)**: ARKit の座標の約束どおりに映像と姿勢が合うか、4K で何 fps が出るか・コマが落ちるか、手ぶれ補正やピント合わせで K がどう動くか、暗所で追跡が切れる様子、AirDrop の zip が Mac に届くこと、本人の家での 30 秒の合格確認(重ねた絵とずれの数字)。
+- 撮った映像・家の部屋のデータはリポジトリに入れない(`work\shoots\`)。
