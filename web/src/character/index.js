@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { loadVrm } from './vrmCharacter.js';
 // 人型でないキャラ(type: "rig")は、キャラの柱が作った読み込み(creator/viewer/rigRuntime.js)を使う。
 // CharacterBase を継いでいるので、lookAt・setExpression・setMouth・play・update は VRM と同じ呼び方。
@@ -9,16 +8,6 @@ export function characterUrl(spec) {
   if (!spec) return '/characters/_test/character.json';
   if (/[/.]/.test(spec)) return spec;
   return `/characters/${spec}/character.json`;
-}
-
-/** 身長合わせの大きさは、中身に掛ける。object3d の座標は、いつもメートルのまま(場所に立たせる・視線の計算が合うように) */
-function moveScaleInside(character) {
-  const s = character.object3d.scale.x;
-  if (Math.abs(s - 1) < 1e-9) return;
-  character.object3d.scale.setScalar(1);
-  const inner = character.gltf?.scene ?? character.vrm?.scene;
-  inner?.scale.multiplyScalar(s);
-  character.object3d.updateMatrixWorld(true);
 }
 
 /**
@@ -37,9 +26,8 @@ export async function loadCharacter(url, overrides = {}) {
   const type = json.type ?? 'vrm';
 
   if (type === 'rig') {
-    const character = await loadRigCharacter(url);
-    moveScaleInside(character);
-    return Object.assign(character, { kind: 'rig' });
+    // 身長合わせの大きさは、rigRuntime が中身(gltf.scene)に掛ける。object3d の座標は、メートルのまま
+    return Object.assign(await loadRigCharacter(url), { kind: 'rig' });
   }
   if (type !== 'vrm') throw new Error(`知らない type です: ${type}`);
   const base = new URL(url, location.href);
