@@ -170,6 +170,7 @@ def main():
         cz = mn.z + f["center"][1] * size.z
         w, h = f["size"][0] * size.x, f["size"][1] * size.z
         ys, nrm = {}, {}
+        missed = set()
         for j in range(gz + 1):
             for i in range(gx + 1):
                 x = cx + (i / gx - 0.5) * w
@@ -177,9 +178,12 @@ def main():
                 hit = tree.ray_cast(Vector((x, mn.y - 1.0, z)), Vector((0, 1, 0)))
                 if hit[0] is None:
                     miss += 1
+                    missed.add((i, j))
                     ys[i, j] = None
                 else:
                     ys[i, j] = hit[0].y
+                    if abs(hit[1].y) < f.get("min_facing", 0.55):   # 面の向きが正面からそれすぎ(丸い縁)
+                        missed.add((i, j))
                 uvs.append((i / gx, 1 - j / gz))
         # 光線が体に当たらなかった点(丸い角の外)は、いちばん近い当たった点の奥行きにそろえる
         # (体の最前面に置くと、角が空中に浮いて、横から見ると飛び出して見える)
@@ -201,6 +205,8 @@ def main():
                 verts.append(Vector((x, ys[i, j] - f.get("lift", 0.003), z)))
         for j in range(gz):
             for i in range(gx):
+                if {(i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)} & missed:
+                    continue   # 体に当たらない角(空中)の四角は作らない
                 a = j * (gx + 1) + i
                 faces.append((a, a + 1, a + gx + 2, a + gx + 1))
         me = bpy.data.meshes.new("FaceMesh")
@@ -211,6 +217,7 @@ def main():
             for li in poly.loop_indices:
                 uvl.data[li].uv = uvs[me.loops[li].vertex_index]
         face_obj = bpy.data.objects.new("Face", me)
+        face_obj.visible_shadow = False   # 貼った面は影を落とさない(影の解像度の粗い四角いにじみが出る)
         sc.collection.objects.link(face_obj)
         fmat = bpy.data.materials.new("FaceMat")
         fmat.use_nodes = True

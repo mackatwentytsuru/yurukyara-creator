@@ -19,6 +19,8 @@ COLS = 4
 ROWS = ["neutral", "happy", "surprised", "sad", "think", "blink"]
 GW, GH = 40, 24          # 点の格子(led は main で 40×40 の正方形に変える)
 EYE_Y, MOUTH_Y = 9, 17
+EYE_R = 4.6   # 目の輪の外側の半径(点の数)
+EYE_X = 11    # 左の目の中心(点の位置。右は対称)
 CELL_W, CELL_H = 400, 240  # 1 マス(点の間隔 10 画素)
 SS = 3                    # 描くときの拡大(ぎざぎざ除け)
 
@@ -63,9 +65,9 @@ def hline(cx, cy, w):
 
 
 def eyes(kind):
-    lx, rx, y = 11, 29, EYE_Y
+    lx, rx, y = EYE_X, GW - 1 - EYE_X, EYE_Y
     if kind in ("neutral", "sad"):
-        out = ring(lx, y, 4.6, 3.0) | disc(lx, y, 1.2) | ring(rx, y, 4.6, 3.0) | disc(rx, y, 1.2)
+        out = ring(lx, y, EYE_R, EYE_R - 1.9) | disc(lx, y, 1.5) | ring(rx, y, EYE_R, EYE_R - 1.9) | disc(rx, y, 1.5)
         if kind == "sad":
             out = {(x, yy + 1) for x, yy in out}
         return out
@@ -92,7 +94,7 @@ def mouth(kind, level):
             return hline(cx + 3, cy, 8) | hline(cx - 2, cy + 1, 4)
         if kind == "surprised":
             return ring(cx, cy, 2.6, 1.4)
-        return smile(cx, cy - 1, 10, 2.4, 1.2)
+        return smile(cx, cy - 1, 12, 2.8, 1.8)
     # 開いた口: 楕円。段階で大きくなる
     r = {1: (3.2, 1.6), 2: (4.8, 2.6), 3: (5.6, 3.6)}[level]
     pts = {(x, y) for x in range(GW) for y in range(GH)
@@ -131,7 +133,7 @@ def draw_cell(on, w=CELL_W, h=CELL_H):
 
 
 INK = (92, 54, 30, 255)
-BLUSH = (238, 140, 80, 120)
+BLUSH = (238, 150, 90, 70)
 
 
 def paper_cell(kind, level, w=CELL_W, h=CELL_H):
@@ -169,7 +171,7 @@ def paper_cell(kind, level, w=CELL_W, h=CELL_H):
         line(arc(lx, ey + 0.05, 0.075, 0.09, 200, 340), 0.04)
         line(arc(rx_, ey + 0.05, 0.075, 0.09, 200, 340), 0.04)
     else:
-        er = {"neutral": (0.072, 0.140), "surprised": (0.085, 0.17), "sad": (0.072, 0.140), "think": (0.072, 0.140)}[kind]
+        er = {"neutral": (0.092, 0.178), "surprised": (0.105, 0.21), "sad": (0.092, 0.178), "think": (0.092, 0.178)}[kind]
         for i, cx in enumerate((lx, rx_)):
             e = er
             cy = ey
@@ -223,11 +225,11 @@ def draw_overlay(on, w=None, h=None):
     gd = ImageDraw.Draw(glow)
     for (x, y) in on:
         cx, cy = (x + 0.5) * pitch, (y + 0.5) * ph
-        gd.ellipse([cx - pitch * 1.1, cy - pitch * 1.1, cx + pitch * 1.1, cy + pitch * 1.1], fill=(30, 140, 255, 150))
-    glow = glow.filter(ImageFilter.GaussianBlur(pitch * 0.8))
+        gd.ellipse([cx - pitch * 1.1, cy - pitch * 1.1, cx + pitch * 1.1, cy + pitch * 1.1], fill=(30, 150, 255, 230))
+    glow = glow.filter(ImageFilter.GaussianBlur(pitch * 1.1))
     img = Image.alpha_composite(off, glow)
     d = ImageDraw.Draw(img)
-    r_on = pitch * 0.46
+    r_on = pitch * 0.52
     for (x, y) in on:
         cx, cy = (x + 0.5) * pitch, (y + 0.5) * ph
         d.ellipse([cx - r_on, cy - r_on, cx + r_on, cy + r_on], fill=(60, 235, 255, 255))
@@ -251,12 +253,13 @@ def edge_mask(w, h, fade=0.07, radius=0.10):
 
 
 def main():
-    global GW, GH, CELL_W, CELL_H, EYE_Y, MOUTH_Y
+    global GW, GH, CELL_W, CELL_H, EYE_Y, MOUTH_Y, EYE_R, EYE_X
     style, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
     if style == "led":
         # 体の前面いっぱいの正方形の画面。目と口の位置は、元の絵の高さに合わせた
-        GW, GH, CELL_W, CELL_H, EYE_Y, MOUTH_Y = 40, 40, 400, 400, 18, 27
+        GW, GH, CELL_W, CELL_H, EYE_Y, MOUTH_Y = 40, 40, 400, 400, 17, 28
+        EYE_R, EYE_X = 6.2, 9.5
     if style not in ("led", "paper"):
         raise SystemExit("led か paper")
     atlas = Image.new("RGBA", (COLS * CELL_W, len(ROWS) * CELL_H), (0, 0, 0, 0))
