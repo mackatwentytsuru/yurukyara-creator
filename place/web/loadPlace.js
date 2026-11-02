@@ -31,11 +31,13 @@ const occluderMaterial = new THREE.MeshBasicMaterial({ colorWrite: false });
 
 /**
  * @param {string} url place.json の URL(model はそこからの相対で読む)
+ * @param {{variant?: string}} [options] variant: place.json の variants の名前(例 'stylized'・'raw'・'photo')。無い名前なら model を読む。
  */
-export async function loadPlace(url) {
+export async function loadPlace(url, { variant } = {}) {
   const base = new URL(url, globalThis.location?.href ?? 'http://localhost/');
   const def = parsePlaceJson(await fetchJson(base));
-  const gltf = await loadGlb(new URL(def.model, base).href);
+  const file = (variant && def.variants[variant]) || def.model;
+  const gltf = await loadGlb(new URL(file, base).href);
 
   const object3d = new THREE.Group();
   object3d.name = `place:${def.id}`;
@@ -71,6 +73,7 @@ export async function loadPlace(url) {
   return {
     id: def.id,
     name: def.name,
+    variants: Object.keys(def.variants),
     object3d,
     spawn,
     landmarks,

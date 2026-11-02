@@ -1,5 +1,5 @@
 // 場所の柱だけで動かす試しのページ。web/ の本体ができるまでの確かめ用。
-// ?place=<フォルダ名>  ?cam=entrance|top|side  ?height=<キャラの身長 m>
+// ?place=<フォルダ名>  ?variant=<見た目の名前>  ?cam=entrance|top|side  ?height=<キャラの身長 m>
 import * as THREE from 'three';
 import { loadPlace } from './loadPlace.js';
 import { detectXR, startXR, applyPresentation, headWorldPosition } from './xr.js';
@@ -51,7 +51,7 @@ function boxCharacter(height) {
   return g;
 }
 
-const place = await loadPlace(`/places/${placeId}/place.json`);
+const place = await loadPlace(`/places/${placeId}/place.json`, { variant: params.get('variant') ?? undefined });
 scene.add(place.object3d);
 const character = boxCharacter(characterHeight);
 place.placeCharacter(character);

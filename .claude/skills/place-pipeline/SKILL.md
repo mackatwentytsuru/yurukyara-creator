@@ -7,10 +7,14 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 
 ## 全体の流れ
 1. iPhone の「場所スキャン」(`place/ios/RoomScan`)で部屋を撮る → `room_mesh.usdz`・`room.json`・`landmarks_hint.json` が出る。AirDrop で Mac へ。
-2. Mac から PC へ取る(`scp`)。`node place/tools/ingest_roomscan.mjs <撮ったフォルダ> <id> [表示名]` → `places/<id>/room.glb` と `place.json`。
+2. Mac から PC へ取る(`scp`)。`node place/tools/ingest_roomscan.mjs <撮ったフォルダ> <id> [表示名] [--plain]` → `room_raw.glb`(Blender 変換のまま)・`room.glb`(種類ごとの素材を貼った版。`--plain` なら raw と同じ)・`place.json`(`variants` に見た目の名前)・`scan/`(撮った物の写し。素材や色を作り直すため)。ブラウザは `?variant=raw|stylized|photo` で見た目を切りかえる。
 3. (任意)`node place/tools/name_landmarks.mjs <id> --hint "..."` で Claude が呼び名と案内の一言を付け直す。**お金がかかる API なので、本番で使う前に API 残高の担当へ量を伝える。** 先に `--dry-run` で送る文だけ見る。
 4. 見る: `python place/tools/shot.py <出力> <id>`(ヘッドレスで 4 画面)、`python place/tools/native_ar_check.py`(iPhone の殻の偽物で AR を通し試験)。
 5. 実機: `node place/tools/serve_https.mjs`(自己署名の HTTPS)→ iPhone の「ARステージ」/ Quest 3 のブラウザで `https://<PCのIP>:8443/place/web/demo.html?place=<id>`。
+
+## 部屋の色(RoomPlan の面は色も UV も無い)
+- 今の版 B: `place/tools/make_textures.py`(コードで描く手続き的な素材。外の画像は使わない)→ `stylize_room.py` が面ごとに床・壁・天井・ドア・窓・家具(木・布・その他)を判定して箱の投影で貼る。名前でなく、RoomPlan の箱(room.json)と面の向き・高さで判定する(USDZ の中の名前は未確認のため)。
+- 写真から色を付ける版 A(未着手。写真を残す話なので本人の許可待ち): できたら `room_photo.glb` を作り、place.json の `variants.photo` に足す。
 
 ## 座標の約束(loadPlace.js の先頭にも書いてある)
 - m、y が上、右手系。GLB は `scale_m` 倍して m にし、`floor_y` だけ下げて床を y=0 にする。`spawn` と `landmarks` は整えたあとの座標。
@@ -33,3 +37,5 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 ## 試し方の鉄則
 - 実機が無いうちは、偽物で端から端まで通す(`make_fake_scan.py`、偽の殻)。実機で確かめた物と、偽物でだけ確かめた物を、devlog で分けて書く。
 - テストは `cd place && npm test`(node の組みこみ)。
+- 偽の撮影を端から端まで通す: `blender -b --python place/tools/make_fake_scan.py -- <フォルダ>`(30 度回した 4×5 m の部屋・table と sofa つき)→ `node place/tools/ingest_roomscan.mjs <フォルダ> _fake_scan` → `python place/tools/shot.py <出力> _fake_scan`。終わったら `places/_fake_scan` を消す(コミットしない)。
+- Blender を画面なしで終えるとき、`blender_mcp.py … unregister` の RuntimeError が出るが無害(PC の Blender に入っているアドオンの後始末)。

@@ -49,3 +49,10 @@
 - `place/ios/ARStage/`: ARSCNView(カメラ映像と追跡だけ)+ 透明な WKWebView。毎フレーム `viewMatrix(for: .portrait)` の逆行列と `projectionMatrix(for: .portrait, ...)` を送る。水平面の最低の高さを床として送る。マイク/カメラの許可は開いているページのホストにだけ与える。開発中は、開くホストに限って自己署名を信用する。署名なしの型確認は 1 回で成功、署名つきで iPhone 12 Pro に入れた(終了コード 0)。**実機で開いて AR を見るのは未実施。**
 - `place/tools/serve_https.mjs`: 開発用 HTTPS サーバー(自己署名、LAN の IP)。Mac から PC のサーバーに届くことを確認(HTTP 200、`.git` は 403)。
 - ハマり所: PC の「Blender 4.5」フォルダは空。ARKit の `camera.transform` は横向きのセンサー基準なので、縦持ち用に `viewMatrix(for: .portrait)` を使う(この点は Apple のドキュメントの知識。実機で確かめるまで未検証)。ARKit が背面カメラを占有するため、殻の中では getUserMedia の前面カメラ(MediaPipe の顔検出)が競合する見込み → 会話の柱へ要連絡。
+
+### 17:00〜17:40 部屋の色(案 B: 様式化)
+- RoomPlan の面は色も UV も無いので、`place/tools/make_textures.py`(周期つきノイズで描く木目・漆喰・布・ガラス。外の画像は使わない、1 枚約 1 m 四方、計 8 枚で約 1.1 MB)と `place/tools/stylize_room.py`(Blender 画面なし)を書いた。面ごとに、room.json の箱(ドア・窓・家具、向きつき)と面の向き・高さで種類を決め、箱の投影で m 単位に貼る。
+- 偽の撮影(30 度回した 4×5 m、table・sofa つき)で通した: 種類の内訳は床 1・壁 38・ドア 1・窓 1・木 13・布 12・その他 18(壁は穴の無い箱なので、ドアと窓は 1 面ずつしか拾えない。本物は穴が開いている)。ブラウザで床の木目・壁の漆喰・ソファの青い布が出るのを撮って確認。GLB は約 0.94 MB。
+- 最初は漆喰が雲のように濃すぎたので、むらを弱めた(見て直した)。
+- `place.json` に任意の `variants`(見た目の名前 → GLB)を足し、`loadPlace(url, {variant})` と `?variant=` で切りかえる。**共通の決まりに無い追加なので司令塔へ連絡**。写真から色を付ける版(A)は `variants.photo` に足せる。
+- 注意: RoomPlan の USDZ に入っているノードの名前・材質は実物で未確認。判定が名前に頼らないのはそのため。

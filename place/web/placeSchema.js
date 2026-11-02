@@ -31,6 +31,15 @@ export function parsePlaceJson(raw) {
   const floorY = raw.floor_y ?? 0;
   if (!isNum(floorY)) problems.push('floor_y は数');
 
+  const variantsRaw = raw.variants ?? {};
+  if (variantsRaw === null || typeof variantsRaw !== 'object' || Array.isArray(variantsRaw)) {
+    problems.push('variants は { 名前: GLB のファイル名 } のオブジェクト');
+  } else {
+    for (const [k, v] of Object.entries(variantsRaw)) {
+      if (typeof v !== 'string' || v === '') problems.push(`variants.${k} は GLB のファイル名`);
+    }
+  }
+
   const spawnRaw = raw.spawn ?? { position: [0, 0, 0], yaw_deg: 0 };
   if (!isVec3(spawnRaw.position)) problems.push('spawn.position は [x, y, z] の数');
   if (!isNum(spawnRaw.yaw_deg ?? 0)) problems.push('spawn.yaw_deg は数');
@@ -54,6 +63,7 @@ export function parsePlaceJson(raw) {
     id: raw.id,
     name: typeof raw.name === 'string' && raw.name !== '' ? raw.name : raw.id,
     model: raw.model,
+    variants: { ...variantsRaw },
     scale_m: scale,
     floor_y: floorY,
     spawn: {
