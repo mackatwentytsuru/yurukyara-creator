@@ -6,10 +6,10 @@ import * as THREE from 'three';
  * - 各層を、骨で動かした後の法線の向きへ少しずつふくらませる。
  * - 全部の層で同じ毛の位置を使い、外の層ほど高い毛だけを残す。下から見ると毛の柱になる。根元を暗くすると厚みが出る。
  * - 対象は毛足の材質(色の絵と法線の絵と sheen を持つ物)。Blender で作った殻(alphaTest で抜く物)は隠す。
- * - 目・口・頬など、毛足でない部品の周りは毛を短くする。埋もれて顔が消えるのを防ぐ。
+ * - 目・口・頬など、毛足でない部品と、色の違う毛の部品の周りは毛を短くする。埋もれて顔が消えたり、毛が混ざったりするのを防ぐ。
  *
  * character.json: "fur": { "layers": 12 }  省略できる値: length、hairWidth、tile、root、sheen、normal、flat、pile、cloud、gain、stray、strayReach、clear
- *   layers: 層の数。弱い GPU では減らす。length: 毛の長さ(既定はキャラの高さの 2%)。hairWidth: 毛 1 本の太さ(キャラの高さに対する割合)。tile: UV の 1 あたりの毛の模様の繰り返し(書けば hairWidth より優先)。
+ *   layers: 層の数。弱い GPU では減らす。length: 毛の長さ(既定はキャラの高さの 1.5%)。hairWidth: 毛 1 本の太さ(キャラの高さに対する割合)。tile: UV の 1 あたりの毛の模様の繰り返し(書けば hairWidth より優先)。
  *   root: 根元の明るさ。normal: 毛足の法線の強さに掛ける値。flat: 色の絵の筋を消す割合(1 で一色)。pile: 毛 1 本ずつの明暗の強さ。cloud: ふわっとしたむらの強さ。gain: 毛の明るさに掛ける値。stray: 外へ飛び出す毛の層の数。strayReach: 飛び出す長さ(毛の長さの何倍か)。clear: 顔の部品から、毛を生やさない距離(毛の長さの何倍か)。
  */
 const FUR_TEXTURE_SIZE = 256;
@@ -19,7 +19,7 @@ const CUT_OUTER = 0.8;
 const CUT_STRAY = 0.93;
 const HAIR_WIDTH_TEXELS = 3.4; // 毛の画像の中の毛 1 本の太さの目安(画素)
 const UV_JUMP = 0.25;
-const LENGTH_OF_HEIGHT = 0.02;
+const LENGTH_OF_HEIGHT = 0.015;
 const PATCH_KEEP_RADIUS = 0.3; // 当て布の絵の中心からの距離(絵の幅が 1)
 const CLEAR_FADE = 1.5; // 毛を生やさない範囲の外で、元の長さへ戻すまでの距離(毛の長さの何倍か)
 
@@ -212,15 +212,15 @@ export function applyFur(scene, options = {}) {
     layers: 12,
     tile: null,
     hairWidth: 0.004,
-    root: 0.88,
+    root: 0.93,
     sheen: 0.35,
     normal: 0.15,
     flat: 0.95,
-    pile: 0.5,
+    pile: 0.25,
     cloud: 0.18,
     gain: 1.1,
     stray: 4,
-    strayReach: 1.2,
+    strayReach: 0.8,
     clear: 0.6,
     ...options,
   };
@@ -233,12 +233,23 @@ export function applyFur(scene, options = {}) {
     else if (isFurMaterial(o.material)) targets.push(o);
     else faceParts.push(o);
   });
+  const joinPoints = (chunks) => {
+    const out = new Float32Array(chunks.reduce((n, a) => n + a.length, 0));
+    chunks.reduce((at, a) => {
+      out.set(a, at);
+      return at + a.length;
+    }, 0);
+    return out;
+  };
   const faceChunks = faceParts.map(faceKeepPoints);
-  const facePoints = new Float32Array(faceChunks.reduce((n, a) => n + a.length, 0));
-  faceChunks.reduce((at, a) => {
-    facePoints.set(a, at);
-    return at + a.length;
-  }, 0);
+  // 色の違う毛の部品の境目でも毛を短くする(青とクリームの毛が混ざって汚れて見えるのを防ぐ)
+  const furChunks = targets.map((m) => ({ material: m.material, points: worldPositions(m) }));
+  const avoidFor = new Map();
+  for (const m of targets) {
+    if (avoidFor.has(m.material)) continue;
+    const others = furChunks.filter((c) => c.material !== m.material).map((c) => c.points);
+    avoidFor.set(m.material, joinPoints([...faceChunks, ...others]));
+  }
   const clear = cfg.length * cfg.clear;
   const fade = cfg.length * CLEAR_FADE;
 
@@ -264,7 +275,7 @@ export function applyFur(scene, options = {}) {
   }
   let added = 0;
   for (const mesh of targets) {
-    mesh.geometry.setAttribute('aFurLength', furLengthAttribute(mesh, facePoints, clear, fade));
+    mesh.geometry.setAttribute('aFurLength', furLengthAttribute(mesh, avoidFor.get(mesh.material), clear, fade));
     for (const material of layersOf.get(mesh.material)) {
       const shell = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, material) : new THREE.Mesh(mesh.geometry, material);
       if (mesh.isSkinnedMesh) shell.bind(mesh.skeleton, mesh.bindMatrix);
