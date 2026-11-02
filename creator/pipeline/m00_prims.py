@@ -368,3 +368,66 @@ def auto_uv(ob, tile=4.0):
     bpy.ops.uv.cube_project(cube_size=2.0 / max(tile, 0.01))
     bpy.ops.object.mode_set(mode="OBJECT")
     return ob
+
+
+def fuzz_shell(ob, rgb, out_dir, thick=0.012, density=0.28, name="shell", size=512, seed=11, tile=3.0, layers=2):
+    """輪郭の毛羽: 物を少しふくらませた殻を重ね、毛の点の画像(透明さで抜く)を貼る。輪郭がふんわり毛羽立つ。
+    layers 枚の殻を、少しずつ大きさを変えて重ねる(毛の長さ)。アルファは MASK(抜き)なので GLB / three.js で使える。
+    戻り値: 作った殻の物の一覧。"""
+    import bmesh
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    a = np.zeros((size, size), np.float32)
+    for _ in range(int(size * size * density / 6)):
+        x, y = rng.integers(0, size, 2)
+        ang = rng.random() * math.pi
+        L = int(rng.integers(3, 8))
+        for t in range(L):
+            a[int(y + math.sin(ang) * t) % size, int(x + math.cos(ang) * t) % size] = 1.0
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, name + "_alpha.png")
+    rgba = np.ones((size, size, 4), np.float32)
+    rgba[..., :3] = np.array(rgb, np.float32)[None, None, :] / 255.0
+    rgba[..., 3] = a
+    img = bpy.data.images.new(name + "_alpha", size, size, alpha=True)
+    img.pixels = rgba[::-1].reshape(-1).tolist()
+    img.filepath_raw = path
+    img.file_format = "PNG"
+    img.save()
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    t = nt.nodes.new("ShaderNodeTexImage")
+    t.image = img
+    nt.links.new(t.outputs["Color"], b.inputs["Base Color"])
+    # 透明さを「0.5 より大きいか」で切る(Math の GREATER_THAN)。glTF の書き出しが alphaMode: MASK として読む
+    mt = nt.nodes.new("ShaderNodeMath")
+    mt.operation = "GREATER_THAN"
+    mt.inputs[1].default_value = 0.5
+    nt.links.new(t.outputs["Alpha"], mt.inputs[0])
+    nt.links.new(mt.outputs["Value"], b.inputs["Alpha"])
+    b.inputs["Roughness"].default_value = 1.0
+    try:
+        m.surface_render_method = "DITHERED"
+    except Exception:
+        pass
+    m.blend_method = "CLIP"   # glTF の alphaMode: MASK
+    shells = []
+    for k in range(layers):
+        sh = ob.copy()
+        sh.data = ob.data.copy()
+        sh.name = f"{name}{k}"
+        bpy.context.scene.collection.objects.link(sh)
+        bm = bmesh.new()
+        bm.from_mesh(sh.data)
+        bm.normal_update()
+        for v in bm.verts:
+            v.co += v.normal * thick * (k + 1) / layers
+        bm.to_mesh(sh.data)
+        bm.free()
+        sh.data.materials.clear()
+        sh.data.materials.append(m)
+        auto_uv(sh, tile=tile * (1 + 0.31 * k))
+        shells.append(sh)
+    return shells
