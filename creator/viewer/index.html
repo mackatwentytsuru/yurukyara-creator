@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ゆるキャラの確かめ画面</title>
+<script type="importmap">
+{ "imports": { "three": "../../web/node_modules/three/build/three.module.js",
+               "three/addons/": "../../web/node_modules/three/examples/jsm/" } }
+</script>
+<style>
+  :root { --bg:#eef1f6; --ink:#16223a; --accent:#1e6bff; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 "Yu Gothic UI","Meiryo",sans-serif; }
+  #stage { position:fixed; inset:0; }
+  #panel { position:fixed; left:12px; top:12px; width:min(330px, calc(100vw - 24px)); background:#fffd; backdrop-filter:blur(6px);
+           border-radius:12px; padding:10px 12px; box-shadow:0 2px 12px #0002; max-height:calc(100vh - 24px); overflow:auto; }
+  h1 { font-size:18px; margin:0 0 6px; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
+  button { font:inherit; padding:5px 10px; border:1px solid #c5cde0; border-radius:8px; background:#fff; cursor:pointer; }
+  button:hover { border-color:var(--accent); } button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  label { display:block; font-size:14px; } input[type=range] { width:100%; }
+  #msg { font-size:13px; color:#a00; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="panel">
+  <h1 id="title">読み込み中…</h1>
+  <div>うごき</div><div class="row" id="motions"></div>
+  <div>表情</div><div class="row" id="exprs"></div>
+  <label>口の開き <input id="mouth" type="range" min="0" max="1" step="0.01" value="0"></label>
+  <label><input id="auto" type="checkbox"> 口を自動でぱくぱく</label>
+  <label><input id="look" type="checkbox" checked> マウスを見る</label>
+  <div id="msg"></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { loadRigCharacter } from './rigRuntime.js';
+
+const q = new URLSearchParams(location.search);
+const url = q.get('c') ?? '../../characters/f_led/character.json';
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+stage.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xeef1f6);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a93a8, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(2, 3, 3); scene.add(sun);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(1.2, 48), new THREE.MeshBasicMaterial({ color: 0xd9deea }));
+floor.rotation.x = -Math.PI / 2; scene.add(floor);
+const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 50);
+function resize() {
+  const w = innerWidth, h = innerHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+const c = await loadRigCharacter(url).catch((e) => { document.getElementById('msg').textContent = String(e); throw e; });
+scene.add(c.object3d);
+document.getElementById('title').textContent = c.name ?? c.id;
+const h = c.heightM ?? 1;
+camera.position.set(0, h * 0.62, h * 3.4); camera.lookAt(0, h * 0.48, 0);
+window.__c = c; window.__ready = true;
+
+const mk = (id, items, fn) => { const el = document.getElementById(id);
+  items.forEach((n) => { const b = document.createElement('button'); b.textContent = n; b.onclick = () => fn(n, b); el.appendChild(b); }); };
+mk('motions', c.motionNames.filter((n) => n !== 'idle'), (n) => c.play(n));
+mk('exprs', c.expressions, (n, b) => { c.setEmotion(n, 1); [...b.parentNode.children].forEach((x) => x.classList.toggle('on', x === b)); });
+const mouth = document.getElementById('mouth');
+mouth.oninput = () => c.setMouth(+mouth.value);
+const auto = document.getElementById('auto');
+const mouse = new THREE.Vector3(0, h * 0.5, 3);
+addEventListener('pointermove', (e) => {
+  mouse.set(((e.clientX / innerWidth) - 0.5) * 2.4, h * (1.1 - (e.clientY / innerHeight) * 1.0), 2.0);
+});
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  if (auto.checked) c.setMouth(0.5 + 0.5 * Math.sin(clock.elapsedTime * 11) * Math.sin(clock.elapsedTime * 3.1));
+  c.lookAt(document.getElementById('look').checked ? mouse : null);
+  c.update(dt);
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
