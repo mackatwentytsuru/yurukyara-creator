@@ -30,6 +30,30 @@ def _ray_residuals(params, pts_led, origins, dirs):
     return np.concatenate([perp.ravel(), behind * 10.0])
 
 
+def _free_residuals(params, origins, dirs):
+    theta, tx, ty, tz, w, h = params
+    led = led_corners(abs(w), abs(h))
+    pts = np.array([led[i] for i in CORNER_IDS])
+    return _ray_residuals([theta, tx, ty, tz], pts, origins, dirs)[:12]
+
+
+def refine_free_size(corners, x0, w, h):
+    """寸法(横・縦)も未知にして解き直す。戻り: (横, 縦, 横の標準偏差, 縦の標準偏差, theta, t)。
+    標準偏差は、レイの向きの狙いずれ 0.1°(距離に比例)を仮定した見積もり。角を記録した位置が近いと大きくなる。"""
+    origins = np.array([c["rayOrigin"] for c in corners], dtype=float)
+    dirs = np.array([c["rayDirection"] for c in corners], dtype=float)
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+    r = least_squares(_free_residuals, [*x0, w, h], args=(origins, dirs), method="lm")
+    dist = np.linalg.norm(np.array(corners[0]["rayOrigin"]) - np.array(r.x[1:4]), axis=0)
+    sigma = np.radians(0.1) * max(dist, 1.0)
+    try:
+        cov = np.linalg.inv(r.jac.T @ r.jac) * sigma**2
+        sw, sh = float(np.sqrt(abs(cov[4, 4]))), float(np.sqrt(abs(cov[5, 5])))
+    except np.linalg.LinAlgError:
+        sw = sh = float("inf")
+    return abs(float(r.x[4])), abs(float(r.x[5])), sw, sh, r.x[0], r.x[1:4]
+
+
 def solve(corners: list[dict], w: float, h: float):
     led = led_corners(w, h)
     pts = np.array([led[c["id"]] for c in corners])
@@ -58,7 +82,7 @@ def solve(corners: list[dict], w: float, h: float):
     return best[1]
 
 
-def align(shoot_dir: str | Path, w: float, h: float, face: str = "A") -> dict:
+def align(shoot_dir: str | Path, w: float, h: float, face: str = "A", free_size: bool = False) -> dict:
     shoot = load_shoot(shoot_dir)
     cal = shoot.meta["calibration"]
     corners = {c["id"]: c for c in cal["corners"] if c.get("face", "A") == face}
@@ -67,6 +91,13 @@ def align(shoot_dir: str | Path, w: float, h: float, face: str = "A") -> dict:
         raise SystemExit(f"LED の面 {face} の角が足りない: {missing}")
     ordered = [corners[i] for i in CORNER_IDS]
     theta, tx, ty, tz = solve(ordered, w, h)
+    size_est = None
+    if free_size:
+        ew, eh, sw, sh, th2, t2 = refine_free_size(ordered, [theta, tx, ty, tz], w, h)
+        size_est = {"width_m": round(ew, 3), "height_m": round(eh, 3), "aspect_w_over_h": round(ew / eh, 4),
+                    "width_std_m": round(sw, 3), "height_std_m": round(sh, 3),
+                    "given_aspect_w_over_h": round(w / h, 4),
+                    "note": "std は狙いずれ 0.1° を仮定した見積もり。大きい(数 cm 以上)ときは、角を記録するカメラの位置をもっと離して撮り直す。変換(T)は与えた寸法で解いたもの。"}
     T_world_from_led = rigid(rot_y(theta), np.array([tx, ty, tz]))
     T_led_from_world = invert_rigid(T_world_from_led)
 
@@ -94,6 +125,7 @@ def align(shoot_dir: str | Path, w: float, h: float, face: str = "A") -> dict:
         "led_bottom_above_floor_m": None if not floor else round(float(ty - floor["planeY"]), 3),
         "corners": report,
         "max_reprojection_error_px": max(r["reprojection_error_px"] for r in report),
+        "estimated_size": size_est,
         "notes": "reprojection_error_px は十字(画像の中心)と、解いた角の位置との画素差。hit_distance_cm は ARKit のレイが当たった点との差(参考)。",
     }
     return out
@@ -104,13 +136,16 @@ def main():
     ap.add_argument("shoot_dir")
     ap.add_argument("--led-size", nargs=2, type=float, required=True, metavar=("W_M", "H_M"))
     ap.add_argument("--face", default="A", help="LED の面(A・B・C。客席から見て左から)。1面の撮影は A")
+    ap.add_argument("--free-size", action="store_true", help="寸法も未知にして解き直し、結果の横・縦・縦横比を出す(本物の寸法の確かめ用)")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
-    out = align(a.shoot_dir, *a.led_size, face=a.face)
+    out = align(a.shoot_dir, *a.led_size, face=a.face, free_size=a.free_size)
     dest = Path(a.out) if a.out else Path(a.shoot_dir) / f"alignment_{a.face}.json"
     dest.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"書いた: {dest}")
     print(f"LED の向き yaw {out['yaw_deg']:.1f}°、左下の角(世界) {np.round(out['led_origin_world'], 3).tolist()}、床からの高さ {out['led_bottom_above_floor_m']} m")
+    if out["estimated_size"]:
+        print("推定した寸法:", out["estimated_size"])
     for r in out["corners"]:
         print("  ", r)
 
