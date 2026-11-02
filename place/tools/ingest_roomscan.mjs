@@ -1,7 +1,8 @@
 // 場所スキャンで撮ったフォルダ(room_mesh.usdz と landmarks_hint.json)を places/<id>/ にする。
-//   node place/tools/ingest_roomscan.mjs <撮ったフォルダ> <id> [表示の名前] [--plain]
+//   node place/tools/ingest_roomscan.mjs <撮ったフォルダ> <id> [表示の名前] [--plain] [--boxes]
 //   環境変数 BLENDER で blender の場所を変えられる(既定: Blender 5.2)。
 // やること: Blender(画面なし)で USDZ → room_raw.glb、箱の大きさを測って報告、種類ごとの素材を貼って room.glb、place.json を作る。
+// --boxes: USDZ を使わず、room.json の箱(壁・床・ドア・窓・家具)から GLB を組み立てる。Blender が USDZ を読めなかったときは自動でこちらになる。
 // --plain: 素材を貼らず、room.glb を room_raw.glb と同じにする。写真の色の版(A)ができたら room_photo.glb を variants に足す。
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -10,10 +11,12 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildPlaceJson } from './landmarks.mjs';
+import { buildBoxGlb, elementsFromRoomJson } from './glbBoxes.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const plain = argv.includes('--plain');
+const forceBoxes = argv.includes('--boxes');
 const [scanDirArg, id, nameArg] = argv.filter((a) => !a.startsWith('--'));
 if (!scanDirArg || !id) {
   console.error('使い方: node place/tools/ingest_roomscan.mjs <撮ったフォルダ> <id> [表示の名前] [--plain]');
@@ -32,10 +35,25 @@ const rawPath = join(outDir, 'room_raw.glb');
 const glbPath = join(outDir, 'room.glb');
 
 const blender = process.env.BLENDER ?? 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe';
-const run = spawnSync(blender, ['-b', '--python', join(here, 'usdz_to_glb.py'), '--', usdz, rawPath], { encoding: 'utf8' });
-if (run.status !== 0 || !existsSync(rawPath)) {
-  console.error('Blender の変換に失敗:\n', run.stdout?.slice(-1500), run.stderr?.slice(-1500));
-  process.exit(3);
+const roomJsonPath = join(scanDir, 'room.json');
+let viaBoxes = forceBoxes;
+if (!forceBoxes) {
+  const run = spawnSync(blender, ['-b', '--python', join(here, 'usdz_to_glb.py'), '--', usdz, rawPath], { encoding: 'utf8' });
+  if (run.status !== 0 || !existsSync(rawPath)) {
+    if (!existsSync(roomJsonPath)) {
+      console.error('Blender の変換に失敗(room.json も無いので箱での救済もできない):\n', run.stdout?.slice(-1500), run.stderr?.slice(-1500));
+      process.exit(3);
+    }
+    console.warn('Blender が USDZ を読めなかった。room.json の箱で組み立てる。');
+    viaBoxes = true;
+  }
+}
+if (viaBoxes) {
+  if (!existsSync(roomJsonPath)) { console.error('見つからない:', roomJsonPath); process.exit(2); }
+  const els = elementsFromRoomJson(JSON.parse(readFileSync(roomJsonPath, 'utf8')));
+  if (els.length === 0) { console.error('room.json から箱を 1 つも作れなかった(形が想定とちがう?)'); process.exit(3); }
+  writeFileSync(rawPath, await buildBoxGlb(els));
+  console.log(`箱で組み立てた: ${els.length} 個`);
 }
 
 // 箱の大きさを測る(縮尺の確かめ。巻き尺の値と比べる)
