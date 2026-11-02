@@ -86,6 +86,11 @@ def main():
                       "cg_principal_point": [cal["K"][0, 2] + (cg_size[0] - size[0]) / 2, cal["K"][1, 2] + (cg_size[1] - size[1]) / 2],
                       "how": "CG は a7 と同じ fx, fy の歪みなしピンホールで、この大きさ・この主点で描く。st_map.png の R=u、G=v(0〜1)が、歪んだ出力の各画素が CG のどこを見るか。"}
     (out / "lens.json").write_text(json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8")
+    o = info["distortion_opencv"]
+    lens_a7 = {"width": size[0], "height": size[1], "K": [info["fx"], info["fy"], info["cx"], info["cy"]],
+               "dist": [o["k1"], o["k2"], o["p1"], o["p2"], o["k3"]], "rms_px": info["rms_reprojection_px"],
+               "focal_mm_nominal": a.focal_mm35, "focal_mm_35_measured": info["focal_mm_35"], "model": a.model}
+    (out / "lens_a7.json").write_text(json.dumps(lens_a7, indent=2), encoding="utf-8")
     write_st_png16(out / "st_map.png", mx, my, cg_size)
     np.savez_compressed(out / "st_map.npz", map_x=mx, map_y=my, cg_size=np.array(cg_size))
 

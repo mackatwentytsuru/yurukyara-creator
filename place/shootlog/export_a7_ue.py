@@ -32,6 +32,7 @@ def main():
     ap.add_argument("--ue-origin", nargs=3, type=float, required=True)
     ap.add_argument("--ue-yaw", type=float, required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--world-jsonl", default=None, help="ARKit の世界での a7 の姿勢を frames.jsonl と同じ形(T・K・pts=a7 の秒・ok)でも書く")
     a = ap.parse_args()
 
     shoot = load_shoot(a.iphone_shoot)
@@ -44,6 +45,7 @@ def main():
     sync = json.loads(Path(a.sync).read_text(encoding="utf-8")) if a.sync else {"alpha": 1.0, "beta": 0.0}
     led_to_ue = led_to_ue_matrix(a.ue_origin, a.ue_yaw)
 
+    jl = open(a.world_jsonl, "w", encoding="utf-8") if a.world_jsonl else None
     cols = ["frame", "time_s", "ue_x_cm", "ue_y_cm", "ue_z_cm", "ue_pitch_deg", "ue_yaw_deg", "ue_roll_deg",
             "hfov_deg", "vfov_deg", "focal_mm_35", "tracking_ok"]
     with open(a.out, "w", newline="", encoding="utf-8") as f:
@@ -56,8 +58,13 @@ def main():
             T_w, ok, gap = interp_pose(shoot.frames, pts, min(max(t_b, pts[0]), pts[-1]))
             ok = bool(ok and inside and gap < 0.1)
             T_led_a7 = T_led_from_world @ T_w @ T_iph_from_a7
+            if jl:
+                T_w_a7 = T_w @ T_iph_from_a7
+                jl.write(json.dumps({"i": i, "pts": round(t_a, 6), "T": [float(v) for v in T_w_a7.T.reshape(-1)], "K": K4, "ok": ok, "track": "normal" if ok else "unreliable"}, separators=(",", ":")) + "\n")
             row = ue_camera_row(T_led_a7, K4, W, H, led_to_ue)
             wr.writerow([i, f"{t_a:.5f}", *[f"{row[c]:.4f}" for c in cols[2:11]], str(ok).lower()])
+    if jl:
+        jl.close()
     print(f"書いた: {a.out}({a.a7_frames} コマ)")
 
 
