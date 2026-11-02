@@ -88,7 +88,7 @@ def build_all(spec):
         up = tri(t, 0.0, 0.45, 1.95, 2.4)
         osc = math.sin(2 * math.pi * 2.6 * max(0.0, t - 0.45)) * 16 * up
         if "arm_R" in R:
-            p[R["arm_R"]] = {"rot": (0.0, (115 + osc) * up * amp + 5, 0.0)}
+            p[R["arm_R"]] = {"rot": (0.0, (145 + osc) * up * amp + 5, 0.0)}
         return p
 
     def nod(t):

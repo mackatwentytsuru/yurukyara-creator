@@ -1,0 +1,60 @@
+{
+  "id": "f_led",
+  "name": "パネルくん",
+  "model": "model.glb",
+  "type": "rig",
+  "height_m": 0.9,
+  "expressions": [
+    "neutral",
+    "happy",
+    "surprised",
+    "sad",
+    "think"
+  ],
+  "motions": {
+    "bow": "motions/bow.glb",
+    "idle": "motions/idle.glb",
+    "jump": "motions/jump.glb",
+    "nod": "motions/nod.glb",
+    "sad": "motions/sad.glb",
+    "talk": "motions/talk.glb",
+    "think": "motions/think.glb",
+    "wave": "motions/wave.glb"
+  },
+  "look": {
+    "bone": "body",
+    "max_deg": [
+      22,
+      14
+    ],
+    "face_shift": [
+      0.03,
+      0.025
+    ]
+  },
+  "mouth": {
+    "kind": "atlas",
+    "mesh": "Face",
+    "cols": 4,
+    "levels": [
+      0.08,
+      0.3,
+      0.6
+    ]
+  },
+  "face": {
+    "mesh": "Face",
+    "atlas": "face_atlas.png",
+    "cols": 4,
+    "rows": [
+      "neutral",
+      "happy",
+      "surprised",
+      "sad",
+      "think",
+      "blink"
+    ],
+    "blink_row": "blink"
+  },
+  "persona": "persona.md"
+}

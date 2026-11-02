@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 
@@ -24,7 +25,14 @@ START_PS1 = r"work\AI\scripts\start_comfyui_trellis_8190.ps1"
 
 
 def get(path):
-    return json.load(urllib.request.urlopen(BASE + path, timeout=10))
+    # 生成の最中は応答が遅れるので、時間切れでは落とさず何度か試す
+    for i in range(6):
+        try:
+            return json.load(urllib.request.urlopen(BASE + path, timeout=60))
+        except (TimeoutError, urllib.error.URLError, ConnectionError):
+            if i == 5:
+                raise
+            time.sleep(5)
 
 
 def post(path, obj):
@@ -141,7 +149,7 @@ def main():
                         peak[0] = max(peak[0], vram_mb())
                         time.sleep(2)
 
-                th = threading.Thread(target=sample)
+                th = threading.Thread(target=sample, daemon=True)  # 例外で止まっても居残らない
                 th.start()
                 t0 = time.time()
                 r = post("/prompt", {"prompt": graph(f"{name}.png", seed, prefix), "client_id": str(uuid.uuid4())})

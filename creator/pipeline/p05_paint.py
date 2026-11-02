@@ -63,6 +63,26 @@ def raster_uv(uv, w):
     return tid, bary
 
 
+def push_pull(img, valid):
+    """valid(真)の画素の色で、それ以外を埋める。"""
+    f = img.astype(np.float32) * valid[..., None]
+    w = valid.astype(np.float32)
+    levels = [(f, w)]
+    while min(levels[-1][0].shape[:2]) > 4:
+        cf, cw = levels[-1]
+        h2, w2 = cf.shape[0] // 2, cf.shape[1] // 2
+        nf = cf[:h2 * 2, :w2 * 2].reshape(h2, 2, w2, 2, 3).sum(axis=(1, 3))
+        nw = cw[:h2 * 2, :w2 * 2].reshape(h2, 2, w2, 2).sum(axis=(1, 3))
+        levels.append((nf, nw))
+    cf, cw = levels[-1]
+    col = cf / np.maximum(cw[..., None], 1e-6)
+    for lf, lw in reversed(levels[:-1]):
+        up = cv2.resize(col, (lf.shape[1], lf.shape[0]), interpolation=cv2.INTER_LINEAR)
+        own = lf / np.maximum(lw[..., None], 1e-6)
+        col = np.where((lw > 0.5)[..., None], own, up)
+    return np.clip(col, 0, 255).astype(np.uint8)
+
+
 def depth_buffer(verts, faces, right, d, scale, offs, w, h):
     """正射影の深度バッファ(視線方向の距離。小さいほど手前)。"""
     u = verts @ right
@@ -122,6 +142,7 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--size", type=int, default=2048)
     ap.add_argument("--power", type=float, default=2.5)
+    ap.add_argument("--smooth", type=float, default=0.0, help="塗った色をぼかす幅(画素)。大きいほど、絵の光や影の筋が消えて無地に近づく")
     a = ap.parse_args()
     m = trimesh.load(a.mesh, process=False, maintain_order=True, force="mesh")
     verts = np.asarray(m.vertices, np.float64)
@@ -164,7 +185,7 @@ def main():
         ix = np.clip(np.round(sx).astype(int), 0, w - 1)
         iy = np.clip(np.round(sy).astype(int), 0, h - 1)
         z = P @ d
-        vis = (z <= zbuf[iy, ix] + vcfg.get("depth_eps", 0.012) * (verts @ d).ptp()) & er[iy, ix]
+        vis = (z <= zbuf[iy, ix] + vcfg.get("depth_eps", 0.012) * np.ptp(verts @ d)) & er[iy, ix]
         facing = np.clip(-(N @ d), 0, 1)
         wgt = (facing ** a.power) * vis * vcfg.get("weight", 1.0)
         # 双一次補間
@@ -187,8 +208,10 @@ def main():
     print("painted texel ratio of UV area:", float(good.mean()))
     tex8 = np.clip(tex, 0, 255).astype(np.uint8)
     hole = (ok & ~painted) | (~ok)
-    # 穴埋め: まず Telea、足りない縁(ガター)は膨張
-    filled = cv2.inpaint(tex8, hole.astype(np.uint8) * 255, 4, cv2.INPAINT_TELEA)
+    # 穴埋め: 塗れた色を縮小して平均し、広げて穴に当てる(筋の出ない押し引き。Telea は細長い筋が出る)
+    filled = push_pull(tex8, ~hole)
+    if a.smooth > 0:
+        filled = cv2.GaussianBlur(filled, (0, 0), a.smooth)
     Image.fromarray(filled).save(a.out)
     json.dump({"views": info, "painted_ratio": float(good.mean())},
               open(os.path.splitext(a.out)[0] + "_paint.json", "w", encoding="utf-8"), indent=1)

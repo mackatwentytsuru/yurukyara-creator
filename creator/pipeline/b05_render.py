@@ -28,6 +28,9 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
     bpy.ops.import_scene.gltf(filepath=src)
+    # 読み込みが作る骨の飾り(Icosphere)は、親のない丸い玉。除く
+    for o in [o for o in sc.objects if o.type == "MESH" and o.parent is None]:
+        bpy.data.objects.remove(o)
     meshes = [o for o in sc.objects if o.type == "MESH"]
     for o in meshes:
         if o.name.startswith("Face"):
@@ -35,8 +38,11 @@ def main():
             for d in uvl.data:
                 u, v = d.uv
                 d.uv = (u / cols, 1 - (1 - v) / rows)
-    root = [o for o in sc.objects if o.parent is None and o.type in ("ARMATURE", "EMPTY")]
-    root = root[0] if root else meshes[0]
+    # 全体を 1 つの軸(空の物)にぶら下げて、それを回す
+    root = bpy.data.objects.new("Pivot", None)
+    sc.collection.objects.link(root)
+    for o in [o for o in sc.objects if o.parent is None and o is not root]:
+        o.parent = root
     if "--pose" in a:
         pgl, fr = arg("--pose", "", str).rsplit(":", 1)
         arm = next(o for o in sc.objects if o.type == "ARMATURE")
@@ -51,8 +57,13 @@ def main():
             if o.type == "ARMATURE" and o is not arm:
                 bpy.data.objects.remove(o)
     vs = []
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
     for o in meshes:
-        vs += [o.matrix_world @ Vector(c) for c in o.bound_box]
+        eo = o.evaluated_get(dg)
+        me = eo.to_mesh()
+        vs += [eo.matrix_world @ v.co for v in me.vertices]
+        eo.to_mesh_clear()
     mn = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
     mx = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
     ctr = (mn + mx) / 2

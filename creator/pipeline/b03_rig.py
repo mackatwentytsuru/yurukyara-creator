@@ -57,6 +57,12 @@ def main():
     bpy.ops.wm.obj_import(filepath=obj_path, forward_axis="NEGATIVE_Y", up_axis="Z")
     body = [o for o in sc.objects if o.type == "MESH"][0]
     body.name = "Body"
+    # 読み込みは物の向きを 180° 回して入れる。重みも顔の面も絵のとおりの座標で測るので、物の回転は 0 に戻す
+    # (これを戻さないと、Blender の中の変形が骨とずれて、腕が細長く伸びる)
+    body.rotation_euler = (0, 0, 0)
+    body.scale = (1, 1, 1)
+    body.location = (0, 0, 0)
+    bpy.context.view_layer.update()
     # 高さをキャラの実寸にそろえる
     vs = [v.co.copy() for v in body.data.vertices]
     mn = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
@@ -219,6 +225,7 @@ def main():
     report = {"weights_top_bone_counts": stats, "bbox_m": [list(mn), list(mx)], "motions": {}}
     for name, m in motions.items():
         act = bpy.data.actions.new(name)
+        act.use_fake_user = True
         arm.animation_data_create()
         arm.animation_data.action = act
         n = int(round(m["duration"] * 30))

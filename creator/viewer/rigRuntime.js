@@ -145,7 +145,11 @@ export class RigCharacterV2 extends CharacterBase {
       const sx = THREE.MathUtils.clamp(-wy * 0.5, -1, 1) * this.faceShift[0];
       const sy = THREE.MathUtils.clamp(-wp * 0.5, -1, 1) * this.faceShift[1];
       const tex = this.face.tex;
-      tex.offset.set(level / this.faceCols + sx / this.faceCols, 1 - (row + 1) / this.faceRows.length + sy / this.faceRows.length);
+      // glTF の絵は上が v=0(flipY が偽)。上から row 番目の行を選ぶ
+      const n = this.faceRows.length;
+      const vBase = tex.flipY ? 1 - (row + 1) / n : row / n;
+      const vShift = tex.flipY ? sy / n : -sy / n;
+      tex.offset.set(level / this.faceCols + sx / this.faceCols, vBase + vShift);
     }
   }
 }
