@@ -39,4 +39,19 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 - 実機が無いうちは、偽物で端から端まで通す(`make_fake_scan.py`、偽の殻)。実機で確かめた物と、偽物でだけ確かめた物を、devlog で分けて書く。
 - テストは `cd place && npm test`(node の組みこみ)。
 - 偽の撮影を端から端まで通す: `blender -b --python place/tools/make_fake_scan.py -- <フォルダ>`(30 度回した 4×5 m の部屋・table と sofa つき)→ `node place/tools/ingest_roomscan.mjs <フォルダ> _fake_scan` → `python place/tools/shot.py <出力> _fake_scan`。終わったら `places/_fake_scan` を消す(コミットしない)。
+- 取りこみの確かめに `serve_https.mjs` は要らない(`shot.py` が自分でサーバーを立てて止める)。`serve_https.mjs` は、本人の実機・Quest の試験のときだけ。ポート 8443 は別の試験で使用中のことがあり、触らない(止めるのは自分で起動した PID だけ)。Git Bash の `$!` は Windows の PID と一致しないので、PowerShell の `Get-CimInstance Win32_Process` で CommandLine を見て `taskkill //PID` する。サーバーのログは `place/` の外に出す。
 - Blender を画面なしで終えるとき、`blender_mcp.py … unregister` の RuntimeError が出るが無害(PC の Blender に入っているアドオンの後始末)。
+
+## 段下げ試験(2026-11-02、取りこみ)
+固定の試験: 偽の撮影 `place/testdata/fake_scan` を `places/_t_<段>/` に取りこむ(`ingest_roomscan.mjs` → `check_ingest.mjs` → `shot.py`)。まっさらな文脈の作業役に、`place/testdata/skill_trials/brief_ingest.md` の依頼文だけで頼み、合否は私が別に `check_ingest.mjs` で判定した。時間と費用は作業役の実測(トークンはその作業役が使った合計。費用は単価でなくトークンで比べた)。
+
+| 段 | モデル / effort | 合否 | 時間 | トークン | 気づいたこと |
+|---|---|---|---|---|---|
+| 0 | Opus 5.5 / xhigh | 合 | 46.9 秒 | 138,507 | つまずき無し |
+| 1 | Opus 5.5 / high | 合 | 37.7 秒 | 129,999 | つまずき無し |
+| 2 | Opus 5.5 / medium | 合 | 30.6 秒 | 128,972 | つまずき無し |
+| 3 | Sonnet 5.5 / high | 合(小さな失敗) | 51.9 秒 | 130,612 | `shot.py` を引数なしで動かし、範囲外の `place/shots/` に書いた → 手順に「両方付ける」を書き足した |
+| 4 | Sonnet 5.5 / medium | 合 | 28.2 秒 | 127,017 | 書き足した後は、つまずき無し |
+| 5 | Haiku 5.5 | 合(範囲外の行動) | 100.4 秒 | 154,016 | 頼まれていない `serve_https.mjs` を 8453 番で起動して置いたままにした(私が PID を止めた)。8443 番が塞がっている・Git Bash の PID・ログの置き場でも迷った → 上に書き足した |
+
+結論: **この試験の一番安く動く設定は Sonnet 5.5 の medium**(合格・最短・トークン最少、書き足し後)。Haiku も合格したが、時間が約 3.5 倍、トークンも多く、範囲外の行動があった。Haiku に任せるなら、依頼文に「サーバーを起動しない」を書く。Opus の xhigh・high・medium の差は出なかった(この試験は、手順が書かれていれば難しくない)。
