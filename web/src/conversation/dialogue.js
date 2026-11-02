@@ -7,6 +7,15 @@ import { streamChat } from './brainClient.js';
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
 const FILLER_FRESH_MS = 4000; // 話し終わりの合図で先に出したあいづちは、この間なら、送るときに出し直さない
 
+export const HISTORY_KEEP = 24; // サーバーが使うのは直近 12 件。画面側は余裕を見て 24 件だけ持つ(全部送ると、長い一日の後に本文が上限を超える)
+
+/** 履歴を直近 keep 件にする。先頭は、いつも user から(assistant から始まる履歴は、API が受け付けない) */
+export function trimHistory(history, keep = HISTORY_KEEP) {
+  const tail = history.slice(-keep);
+  const firstUser = tail.findIndex((m) => m.role === 'user');
+  return firstUser < 0 ? [] : tail.slice(firstUser);
+}
+
 /** 返事を、モデルに指示した出力の形(1 行 1 つの JSON)に戻す */
 export function assistantLines(sayEvents, thought) {
   return sayEvents
@@ -182,6 +191,7 @@ export class Dialogue {
     // 前の返事は、指示で決めた形(1 行 1 つの JSON。最初の行に用件と段階)のまま履歴に戻す。
     // ふつうの文で戻すと、モデルがそれをまねて、JSON でなく文章で答える回が出た(2026-11-02)
     if (sayEvents.length) this.history.push({ role: 'assistant', content: assistantLines(sayEvents, thoughtEv) });
+    this.history = trimHistory(this.history);
     this.busy = false;
     // 音が出た瞬間を待って記録する
     const waitStart = () => {

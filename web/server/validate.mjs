@@ -40,6 +40,8 @@ export function sanitizeChatBody(raw) {
     .filter((m) => isObject(m) && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.length > 0)
     .slice(-LIMITS.historyItems)
     .map((m) => ({ role: m.role, content: m.content.slice(0, LIMITS.historyText) }));
+  // Claude に渡す会話は user から始める。直近 N 件で切ると assistant から始まることがある(返事が無かった回があると、ずれる)
+  while (history.length && history[0].role !== 'user') history.shift();
 
   const character = isObject(raw.character) ? raw.character : {};
   const place = isObject(raw.place) ? raw.place : {};

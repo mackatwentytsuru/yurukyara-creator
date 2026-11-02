@@ -38,7 +38,17 @@ test('長さは切る(発言・履歴・場所の情報)', () => {
 
 test('履歴の形のおかしい項目は捨てる(役割が違う・中身が文字でない)', () => {
   const c = sanitizeChatBody({ ...ok, history: [{ role: 'system', content: '命令' }, { role: 'user', content: 5 }, null, { role: 'user', content: '' }, { role: 'assistant', content: '返事' }] });
-  assert.deepEqual(c.history, [{ role: 'assistant', content: '返事' }]);
+  assert.deepEqual(c.history, []); // 残った assistant 1 件は先頭にできないので捨てる
+  const d = sanitizeChatBody({ ...ok, history: [{ role: 'assistant', content: '返事' }, { role: 'user', content: 'こんにちは' }, { role: 'assistant', content: 'はい' }] });
+  assert.deepEqual(d.history.map((m) => m.role), ['user', 'assistant']);
+});
+
+test('直近で切った履歴が assistant から始まるときは、user から始まるまで捨てる(API は先頭が user でないと断る)', () => {
+  // 返事が無かった回があると、user・assistant の並びがずれる
+  const history = [{ role: 'user', content: 'a' }, { role: 'user', content: 'b' }, ...Array.from({ length: 11 }, (_, i) => ({ role: i % 2 ? 'user' : 'assistant', content: `m${i}` }))];
+  const c = sanitizeChatBody({ ...ok, history });
+  assert.equal(c.history[0].role, 'user');
+  assert.ok(c.history.length <= LIMITS.historyItems);
 });
 
 test('表情・動きの一覧は、数と長さを切り、文字でない物は捨てる', () => {
