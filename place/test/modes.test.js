@@ -141,3 +141,16 @@ test('mountModeButtons: Safari では ar・vr のボタンを出さない', asyn
   const { buttons } = mountModeButtons({ modes: m, container: { appendChild() {} }, doc: fakeButtonDoc() });
   assert.deepEqual(Object.keys(buttons), ['screen']);
 });
+
+test('mountModeButtons: modes.enter を直に呼んで(自動で AR に入って)も、ボタンの表示が今のモードに合う', async () => {
+  const nav = webxrNav();
+  const s = setup({ nav });
+  const m = await createPresentation({ ...s, background: s.bg });
+  const { buttons } = mountModeButtons({ modes: m, container: { appendChild() {} }, doc: fakeButtonDoc() });
+  await m.enter('ar'); // ボタンを押さずに入る
+  assert.equal(buttons.ar.hidden, true);
+  assert.equal(buttons.screen.hidden, false);
+  await m.exit();
+  assert.equal(buttons.ar.hidden, false);
+  assert.equal(buttons.screen.hidden, true);
+});

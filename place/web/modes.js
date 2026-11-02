@@ -47,10 +47,12 @@ export async function createPresentation({
   let restore = null;
   setDocumentMode(win, 'screen');
 
+  const listeners = new Set();
   function setMode(next) {
     mode = next;
     setDocumentMode(win, next);
     onChange?.(next);
+    for (const fn of listeners) fn(next);
   }
 
   async function exit() {
@@ -96,6 +98,11 @@ export async function createPresentation({
     get session() { return session; },
     enter,
     exit,
+    /** モードが変わるたび fn(mode) を呼ぶ(ボタンの表示の更新など)。戻り値で解除。 */
+    subscribe(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
     viewerPeople: () => viewer.getPeople(),
     /** WebXR のとき、毎フレームの中で呼ぶと onViewer(camera) が届く(殻では nativeAR が自分で呼ぶ)。 */
     frame() {

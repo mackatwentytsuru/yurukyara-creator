@@ -30,5 +30,7 @@ export function mountModeButtons({ modes, container, onError = () => {}, doc = c
     container.appendChild(btn);
   }
   refresh();
+  // 自動で AR に入る(殻)ときや、ヘッドセット側で終わらせたときも、表示を今のモードに合わせる
+  modes.subscribe?.(refresh);
   return { buttons, refresh };
 }
