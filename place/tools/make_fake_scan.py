@@ -30,11 +30,15 @@ def rot(p):
     return (x * math.cos(ALPHA) + z * math.sin(ALPHA), y, -x * math.sin(ALPHA) + z * math.cos(ALPHA))
 
 
-def transform(center, base_yaw=0.0):
-    """RoomPlan の transform のつもりの、列優先の 4x4(入れ子)。x 軸が幅、z 軸が法線。"""
+def transform(center, base_yaw=0.0, flat=False):
+    """RoomPlan の transform のつもりの、列優先の 4x4(入れ子)。x 軸が幅、z 軸が法線。
+    flat=True は床(水平の面): 局所の z(法線)が真上、局所の y が奥行き(-z 方向)。"""
     g = base_yaw + ALPHA
     c, s = math.cos(g), math.sin(g)
     cx, cy, cz = rot(center)
+    if flat:
+        # Ry(g) * Rx(-90 度): x=(c,0,-s)、y=Ry*(0,0,-1)=(-s,0,-c)、z=(0,1,0)
+        return [[c, 0, -s, 0], [-s, 0, -c, 0], [0, 1, 0, 0], [cx, cy, cz, 1]]
     return [[c, 0, -s, 0], [0, 1, 0, 0], [s, 0, c, 0], [cx, cy, cz, 1]]
 
 
@@ -73,7 +77,7 @@ room_json = {"floors": [], "walls": [], "doors": [], "windows": [], "openings": 
 for kind, name, center, dims, yaw in ELEMENTS:
     hints.append({"kind": kind, "name": name, "position": [round(v, 4) for v in rot(center)],
                   "dimensions": list(dims), "confidence": "high"})
-    room_json[kind + "s"].append({"transform": transform(center, yaw), "dimensions": list(dims)})
+    room_json[kind + "s"].append({"transform": transform(center, yaw, flat=(kind == "floor")), "dimensions": list(dims)})
 
 (out / "landmarks_hint.json").write_text(json.dumps(hints, ensure_ascii=False, indent=2), encoding="utf-8")
 (out / "room.json").write_text(json.dumps(room_json, indent=2), encoding="utf-8")
