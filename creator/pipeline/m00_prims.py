@@ -94,7 +94,7 @@ def superquadric(name, radii, exps=(1.0, 1.0), center=(0, 0, 0), rot_deg=(0, 0, 
     return _make(name, verts, faces, mat, center, rot_deg)
 
 
-def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.0):
+def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.0, rot_deg=(0, 0, 0)):
     """輪(トーラス)。squash は断面の縦の倍率。"""
     nu, nv = seg
     verts, faces = [], []
@@ -111,7 +111,7 @@ def ring(name, major, minor, center=(0, 0, 0), mat=None, seg=(64, 12), squash=1.
             c = ((i + 1) % nu) * nv + (j + 1) % nv
             d = i * nv + (j + 1) % nv
             faces.append((a, b, c, d))
-    return _make(name, verts, faces, mat, center, (0, 0, 0))
+    return _make(name, verts, faces, mat, center, rot_deg)
 
 
 def cloth(name, width, height, bend=0.04, flare=0.35, thick=0.014, center=(0, 0, 0), rot_deg=(0, 0, 0), mat=None,
