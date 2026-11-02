@@ -1,7 +1,7 @@
 """手組みの形(.blend)を、正面・横・斜めから撮る(Blender の背景モード)。比べる絵を作るための道具。
 
 使い方: blender -b -P m02_shot.py -- <入力.blend> <出力フォルダ> [--views front,right,back,left,q] [--size 700]
-        [--center x,z] [--scale 1.2] [--morph 名前=値,…]
+        [--center x,z] [--scale 1.2] [--morph 名前=値,…] [--transparent]
 - 正射影。既定は、部品全体の外接箱に合わせる。--center と --scale(メートル)で、頭だけなどの範囲を指定できる。
 - 出力: <出力フォルダ>/shot_<向き>.png(白に近い背景)。向き: front(正面 -Y から)、right(キャラの右 -X から)、
   back、left、q(右前 45°)。
@@ -19,7 +19,7 @@ VIEWS = {"front": 0.0, "q": 40.0, "right": 90.0, "back": 180.0, "left": 270.0}
 def main():
     a = sys.argv[sys.argv.index("--") + 1:]
     src, out = a[0], a[1]
-    opt = {"--views": "front,right,q", "--size": "700", "--center": None, "--scale": None, "--morph": None}
+    opt = {"--views": "front,right,q", "--size": "700", "--center": None, "--scale": None, "--morph": None, "--transparent": None}
     for k in opt:
         if k in a:
             opt[k] = a[a.index(k) + 1]
@@ -70,6 +70,9 @@ def main():
     co.rotation_euler = (math.radians(90), 0, 0)
     size = int(opt["--size"])
     sc.render.resolution_x = sc.render.resolution_y = size
+    if "--transparent" in a:
+        sc.render.film_transparent = True   # 背景を透明に。輪郭の重なり(s03)が、白や明るい色の部品を体の外と数えなくなる
+        sc.render.image_settings.color_mode = "RGBA"
     try:
         sc.render.engine = "BLENDER_EEVEE"
     except TypeError:

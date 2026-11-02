@@ -25,7 +25,10 @@ def main():
     bg = Image.new("RGBA", A.size, (255, 255, 255, 255))
     bg.alpha_composite(A)
     A = bg.convert("RGB")
-    B = Image.open(shot).convert("RGB").resize(A.size)
+    B0 = Image.open(shot).convert("RGBA")
+    gbg = Image.new("RGBA", B0.size, (231, 231, 231, 255))
+    gbg.alpha_composite(B0)
+    B = gbg.convert("RGB").resize(A.size)
     if crop:
         A, B = A.crop(crop), B.crop(crop)
     # 元の絵の輪郭(隣との色の差が大きい所)

@@ -14,6 +14,10 @@ FONT = r"C:\Windows\Fonts\meiryob.ttc"
 
 
 def silhouette(im):
+    if im.mode == "RGBA":
+        al = np.array(im)[..., 3]
+        if al.min() < 250:      # 透明な背景がある絵は、透明さで輪郭を取る(白や明るい部品も体と数える)
+            return al > 128
     a = np.array(im.convert("RGB")).astype(int)
     bg = np.median(np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]]), axis=0)
     return (np.abs(a - bg).sum(axis=2) > 40)
