@@ -41,7 +41,7 @@ enum ScanExporter {
     }
 
     struct Hint: Codable {
-        var kind: String          // door / window / opening / wall / object
+        var kind: String          // floor / door / window / opening / wall / object
         var name: String          // category の名前(door, table, sofa ...)
         var position: [Float]     // 部屋の座標での中心 [x, y, z](m)
         var dimensions: [Float]   // [幅, 高さ, 奥行き](m)
@@ -56,6 +56,7 @@ enum ScanExporter {
                         confidence: "\(confidence)")
         }
         var out: [Hint] = []
+        for s in room.floors { out.append(hint(kind: "floor", name: "floor", transform: s.transform, dimensions: s.dimensions, confidence: s.confidence)) }
         for s in room.doors { out.append(hint(kind: "door", name: "door", transform: s.transform, dimensions: s.dimensions, confidence: s.confidence)) }
         for s in room.windows { out.append(hint(kind: "window", name: "window", transform: s.transform, dimensions: s.dimensions, confidence: s.confidence)) }
         for s in room.openings { out.append(hint(kind: "opening", name: "opening", transform: s.transform, dimensions: s.dimensions, confidence: s.confidence)) }

@@ -1,5 +1,5 @@
 """ヘッドレスのブラウザで demo.html を撮る。
-使い方: python place/tools/shot.py [出力フォルダ]   (リポジトリの外のどこからでも動く)
+使い方: python place/tools/shot.py [出力フォルダ] [places/ の下のフォルダ名]   (リポジトリの外のどこからでも動く)
 自分で起動した http サーバーだけを止める。
 """
 import json
@@ -14,6 +14,7 @@ from playwright.sync_api import sync_playwright
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO / "place" / "shots"
+PLACE = sys.argv[2] if len(sys.argv) > 2 else "test_room"
 SHOTS = [("entrance", 1280, 720), ("top", 1000, 700), ("side", 1280, 720), ("entrance", 390, 844)]
 
 
@@ -45,7 +46,7 @@ def main() -> int:
                 errors = []
                 page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
                 page.on("pageerror", lambda e: errors.append(str(e)))
-                page.goto(f"http://127.0.0.1:{port}/place/web/demo.html?cam={cam}")
+                page.goto(f"http://127.0.0.1:{port}/place/web/demo.html?cam={cam}&place={PLACE}")
                 page.wait_for_function("window.__place && window.__place.ready", timeout=20000)
                 page.wait_for_timeout(500)
                 name = f"{cam}_{w}x{h}.png"
