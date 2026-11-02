@@ -74,9 +74,9 @@ def main():
     world.use_nodes = True
     bg = world.node_tree.nodes["Background"]
     bg.inputs[0].default_value = (1, 1, 1, 1)
-    bg.inputs[1].default_value = 0.9
+    bg.inputs[1].default_value = 0.7
     sun = bpy.data.lights.new("Sun", "SUN")
-    sun.energy = 2.5
+    sun.energy = 1.8
     so = bpy.data.objects.new("Sun", sun)
     sc.collection.objects.link(so)
     so.rotation_euler = (math.radians(50), 0, math.radians(-30))

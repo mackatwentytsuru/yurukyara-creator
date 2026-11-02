@@ -19,6 +19,7 @@ def main():
     ap.add_argument("--height", type=float, default=0.9)
     ap.add_argument("--persona", default=None)
     ap.add_argument("--look-bone", default="body")
+    ap.add_argument("--glow", default=None, help="材質名:R,G,B:強さ(内側から光らせる材質。例 Paper:1,0.84,0.58:0.45)")
     a = ap.parse_args()
     rig, face = os.path.join(a.work, "rig"), os.path.join(a.work, "face")
     atlas = json.load(open(os.path.join(face, "face_atlas.json"), encoding="utf-8"))
@@ -43,6 +44,9 @@ def main():
     }
     if a.persona:
         cj["persona"] = "persona.md"
+    if a.glow:
+        name, rgb, k = a.glow.split(":")
+        cj["glow"] = {"material": name, "color": [float(x) for x in rgb.split(",")], "intensity": float(k)}
     with open(os.path.join(a.out, "character.json"), "w", encoding="utf-8") as f:
         json.dump(cj, f, ensure_ascii=False, indent=2)
     print("packaged", a.out, "expressions", exprs, "motions", list(motions))

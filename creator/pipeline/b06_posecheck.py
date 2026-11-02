@@ -14,7 +14,7 @@ from mathutils import Vector
 
 def main():
     a = sys.argv[sys.argv.index("--") + 1:]
-    size, yaw = 360, 25.0
+    size, yaw = 560, 20.0
     if "--size" in a:
         i = a.index("--size")
         size = int(a[i + 1])
@@ -40,20 +40,23 @@ def main():
     nt = world.node_tree
     bgn = next(n for n in nt.nodes if n.type == "BACKGROUND")
     bgn.inputs[0].default_value = (1, 1, 1, 1)
-    bgn.inputs[1].default_value = 0.9
+    bgn.inputs[1].default_value = 0.7
     sun = bpy.data.lights.new("S", "SUN")
-    sun.energy = 2.5
+    sun.energy = 1.8
     so = bpy.data.objects.new("S", sun)
     sc.collection.objects.link(so)
     so.rotation_euler = (math.radians(50), 0, math.radians(-30))
     cam = bpy.data.cameras.new("C")
     cam.type = "ORTHO"
-    cam.ortho_scale = 1.9
+    body = bpy.data.objects["Body"]
+    zs = [v.co.z for v in body.data.vertices]
+    H = max(zs) - min(zs)
+    cam.ortho_scale = H * 1.75
     co = bpy.data.objects.new("C", cam)
     sc.collection.objects.link(co)
     sc.camera = co
     r = 10.0
-    co.location = (r * math.sin(math.radians(yaw)), -r * math.cos(math.radians(yaw)), 0.55)
+    co.location = (r * math.sin(math.radians(yaw)), -r * math.cos(math.radians(yaw)), H * 0.55)
     co.rotation_euler = (math.radians(90), 0, math.radians(yaw))
     sc.render.resolution_x = sc.render.resolution_y = size
     try:

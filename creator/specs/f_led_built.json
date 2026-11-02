@@ -1,0 +1,22 @@
+{
+  "id": "f_led",
+  "height_m": 0.9,
+  "bones": [
+    {"name": "root",  "at": [0.5, 0.5, 0.0],   "parent": null},
+    {"name": "body",  "at": [0.5, 0.5, 0.19],  "parent": "root"},
+    {"name": "arm_L", "at": [0.88, 0.5, 0.50], "parent": "body"},
+    {"name": "arm_R", "at": [0.12, 0.5, 0.50], "parent": "body"},
+    {"name": "leg_L", "at": [0.67, 0.5, 0.20], "parent": "root"},
+    {"name": "leg_R", "at": [0.33, 0.5, 0.20], "parent": "root"}
+  ],
+  "base_bone": "body",
+  "rules": [
+    {"bone": "arm_L", "x": [0.905, null], "z": [0.20, 0.62], "blend": 0.03},
+    {"bone": "arm_R", "x": [null, 0.095], "z": [0.20, 0.62], "blend": 0.03},
+    {"bone": "leg_L", "x": [0.5, null], "z": [null, 0.19], "blend": 0.04},
+    {"bone": "leg_R", "x": [null, 0.5], "z": [null, 0.19], "blend": 0.04}
+  ],
+  "face": {"center": [0.5, 0.60], "size": [0.68, 0.66], "grid": [40, 40], "lift": 0.005, "bone": "body",
+           "emission": 2.0, "alpha": true},
+  "roles": {"root": "root", "body": "body", "arm_L": "arm_L", "arm_R": "arm_R", "leg_L": "leg_L", "leg_R": "leg_R"}
+}

@@ -56,5 +56,14 @@
     ],
     "blink_row": "blink"
   },
-  "persona": "persona.md"
+  "persona": "persona.md",
+  "glow": {
+    "material": "Paper",
+    "color": [
+      1.0,
+      0.82,
+      0.52
+    ],
+    "intensity": 0.5
+  }
 }

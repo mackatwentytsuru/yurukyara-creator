@@ -51,11 +51,26 @@ def main():
     spec_path, obj_path, tex_path, face_dir, out = argv[:5]
     spec = json.load(open(spec_path, encoding="utf-8"))
     os.makedirs(os.path.join(out, "motions"), exist_ok=True)
-    bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
+    if obj_path.endswith(".blend"):
+        # 手組みの形(m00_prims で作った部品の集まり)。部品を 1 つにまとめる(材質は部品ごとに残る)
+        bpy.ops.wm.open_mainfile(filepath=obj_path)
+        sc = bpy.context.scene
+        parts = [o for o in sc.objects if o.type == "MESH"]
+        for o in parts:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = parts[0]
+        if len(parts) > 1:
+            bpy.ops.object.join()
+        body = bpy.context.view_layer.objects.active
+        built = True
+    else:
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        sc = bpy.context.scene
+        bpy.ops.wm.obj_import(filepath=obj_path, forward_axis="NEGATIVE_Y", up_axis="Z")
+        body = [o for o in sc.objects if o.type == "MESH"][0]
+        built = False
     sc.render.fps = 30
-    bpy.ops.wm.obj_import(filepath=obj_path, forward_axis="NEGATIVE_Y", up_axis="Z")
-    body = [o for o in sc.objects if o.type == "MESH"][0]
     body.name = "Body"
     # 読み込みは物の向きを 180° 回して入れる。重みも顔の面も絵のとおりの座標で測るので、物の回転は 0 に戻す
     # (これを戻さないと、Blender の中の変形が骨とずれて、腕が細長く伸びる)
@@ -80,15 +95,16 @@ def main():
         return Vector((mn.x + p[0] * size.x, mn.y + p[1] * size.y, mn.z + p[2] * size.z))
 
     # --- 材質(色の絵) ---
-    mat = bpy.data.materials.new("BodyMat")
-    mat.use_nodes = True
-    nt = mat.node_tree
-    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
-    tex = nt.nodes.new("ShaderNodeTexImage")
-    tex.image = bpy.data.images.load(tex_path)
-    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-    bsdf.inputs["Roughness"].default_value = spec.get("roughness", 0.7)
-    body.data.materials.append(mat)
+    if not built:
+        mat = bpy.data.materials.new("BodyMat")
+        mat.use_nodes = True
+        nt = mat.node_tree
+        bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+        tex = nt.nodes.new("ShaderNodeTexImage")
+        tex.image = bpy.data.images.load(tex_path)
+        nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        bsdf.inputs["Roughness"].default_value = spec.get("roughness", 0.7)
+        body.data.materials.append(mat)
     bpy.ops.object.select_all(action="DESELECT")
     body.select_set(True)
     bpy.context.view_layer.objects.active = body
@@ -161,10 +177,18 @@ def main():
                 hit = tree.ray_cast(Vector((x, mn.y - 1.0, z)), Vector((0, 1, 0)))
                 if hit[0] is None:
                     miss += 1
-                    ys[i, j] = mn.y
+                    ys[i, j] = None
                 else:
                     ys[i, j] = hit[0].y
                 uvs.append((i / gx, 1 - j / gz))
+        # 光線が体に当たらなかった点(丸い角の外)は、いちばん近い当たった点の奥行きにそろえる
+        # (体の最前面に置くと、角が空中に浮いて、横から見ると飛び出して見える)
+        if miss:
+            hits = [(i, j) for (i, j), y in ys.items() if y is not None]
+            for (i, j), y in list(ys.items()):
+                if y is None:
+                    bi, bj = min(hits, key=lambda q: (q[0] - i) ** 2 + (q[1] - j) ** 2)
+                    ys[i, j] = ys[bi, bj]
         # 表面の細かい凹凸(提灯の骨など)を拾わないよう、奥行きをなめらかにならして浮かせる
         for _ in range(f.get("smooth_iter", 0)):
             ys = {(i, j): sum(ys[min(max(i + di, 0), gx), min(max(j + dj, 0), gz)]
@@ -194,6 +218,7 @@ def main():
         fb = next(n for n in fn.nodes if n.type == "BSDF_PRINCIPLED")
         ft = fn.nodes.new("ShaderNodeTexImage")
         ft.image = bpy.data.images.load(os.path.join(face_dir, "face_atlas.png"))
+        ft.extension = "EXTEND"   # 表の端で反対側の絵を拾わない(角に別の行のにじみが出る)
         if f.get("mode") == "paint":
             # 紙に描いた顔: 色と透明さをそのまま使う(光らせない)
             fn.links.new(ft.outputs["Color"], fb.inputs["Base Color"])

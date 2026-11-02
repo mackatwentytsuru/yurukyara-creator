@@ -42,10 +42,11 @@ export class RigCharacterV2 extends CharacterBase {
     const face = json.face ?? {};
     this.face = null;
     const mesh = gltf.scene.getObjectByName(face.mesh ?? 'Face');
-    // 光る顔(led)は発光の絵、紙に描いた顔(paper)は色の絵に表がある
-    const slot = mesh?.material?.emissiveMap ? 'emissiveMap' : mesh?.material?.map ? 'map' : null;
-    if (mesh && slot) {
-      const tex = mesh.material[slot].clone();
+    // 光る顔(led)は発光の絵、紙に描いた顔(paper)は色の絵に表がある。縁を消すアルファのために両方に同じ絵が付くこともある
+    const mat = mesh?.material;
+    const slots = ['emissiveMap', 'map'].filter((k) => mat?.[k]);
+    if (mesh && slots.length) {
+      const tex = mat[slots[0]].clone();
       tex.needsUpdate = true;
       this.faceCols = face.cols ?? 4;
       this.faceRows = face.rows ?? ['neutral'];
@@ -53,10 +54,21 @@ export class RigCharacterV2 extends CharacterBase {
       this.mouthLevels = json.mouth?.levels ?? [0.08, 0.3, 0.6];
       tex.repeat.set(1 / this.faceCols, 1 / this.faceRows.length);
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      mesh.material[slot] = tex;
-      mesh.material.needsUpdate = true;
+      for (const k of slots) mat[k] = tex; // 同じ 1 枚(同じ offset)を全部に使う
+      mat.needsUpdate = true;
       this.face = { mesh, tex };
       this._cell = { col: -1, row: -1, sx: 0, sy: 0 };
+    }
+
+    // 紙のあかり: 頂点の色で濃淡をつけた材質には、発光の色を足して内側から光らせる
+    if (json.glow) {
+      const g = json.glow;
+      gltf.scene.traverse((o) => {
+        if (o.isMesh && o.material && o.material.name === g.material) {
+          o.material.emissive = new THREE.Color(...(g.color ?? [1, 0.85, 0.6]));
+          o.material.emissiveIntensity = g.intensity ?? 0.4;
+        }
+      });
     }
 
     this.mixer = new THREE.AnimationMixer(gltf.scene);
