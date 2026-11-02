@@ -51,6 +51,24 @@ description: キャラの絵(正面と横の 2 枚など)から、Blender の Py
 
 `s03_compare.py` は、輪郭の重なり(IoU)に加えて、**中心のずれ(正規化した 500px の絵で、何 px)・外接箱の幅の差(%)・高さの差(%)** を出す。目安: IoU 0.90 以上、中心のずれ 6px 以内、幅・高さの差 3% 以内。外れた数字で、直す所を決める(中心のずれ → 体の置き場所、幅の差 → 部品の半径、高さの差 → 全体の高さの割り当て)。顔の部品のずれは `s04_overlay.py` の重ねで、画素で読む。
 
+## character.json の正しい形(最上位に置く。`rig` の入れ子は使わない)
+
+```json
+{
+  "id": "peach", "name": "もも", "model": "model.glb", "type": "rig", "height_m": 1.0,
+  "expressions": ["neutral", "happy", "surprised", "sad", "think"],
+  "motions": { "idle": "motions/idle.glb", "talk": "motions/talk.glb", "nod": "motions/nod.glb" },
+  "look":  { "bone": "head", "max_deg": [22, 14], "eyes": ["eye_L", "eye_R"] },
+  "mouth": { "kind": "morph", "morph": "mouth_open", "gain": 1.2 },
+  "blink": { "morph": "eye_blink" },
+  "morphs": { "happy": { "mouth_wide": 0.9 }, "surprised": { "mouth_o": 1.0 }, "sad": { "eye_blink": 0.3 } }
+}
+```
+
+- `expressions` は表情ボタンの名前。`morphs` は、表情の名前 → シェイプキーの重み(キーは model.glb にある名前)。
+- `look.bone` は体を向ける骨、`look.eyes` は黒目の骨(無ければ省く)。口は `mouth.kind = "morph"` と `mouth.morph`(口を開くキー)が要る。
+- **pack を作ったら、必ず `python creator/pipeline/pk02_check_character.py <pack>` を通す**(最上位のキー、モーフの名前、骨の名前、動きのファイルを機械で確かめ、外れた所を ERROR で出す)。`OK` が出るまで直す。ブラウザで確かめる前に、ここで落ちる誤りが多い(入れ子にした、`mouth.kind` を書き忘れた、`expressions` が空)。
+
 ## 試験で見つかった知識(スキルだけで作らせた作業役が、足りないと書いた物)
 
 - 1 つのメッシュで**頂点の色を使う材質は 1 つだけ**にする。Blender 5.2 の glTF 書き出しは、2 つ目の材質から `COLOR_0` を白で書き、色が飛ぶ。色の濃淡が要る部品が複数あるときは、1 つの材質に寄せるか、濃淡を材質の色そのものと `sheen` で出す。

@@ -19,7 +19,7 @@
 4. 骨を入れ、動き(idle・talk・nod・bow など 3 つ以上)を GLB に出す(b07_rig_groups.py)。まばたきと口の開きのシェイプキーを付ける(値は 0 に戻す)。
 5. 一覧の絵(比べ、動きの姿勢)を自分で開いて見て直す。2 周は直す。
 6. 正面・右・後ろ・斜めを見て、体が崩れていないか確かめる。
-7. ブラウザで再生できる形にする: model.glb と motions/*.glb、character.json(creator/README.md の rig の形)を {WORK}\pack\ に出す。
+7. ブラウザで再生できる形にする(pk02_check_character.py が OK を出すまで直す): model.glb と motions/*.glb、character.json(creator/README.md の rig の形)を {WORK}\pack\ に出す。
 一覧の絵に付ける見出しは日本語で、大きく。
 
 # 報告に必ず入れること
