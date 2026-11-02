@@ -43,12 +43,14 @@ const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = THREE.NoToneMapping;   // web/(会話の柱の本体)と同じ。トーンマップを掛けると、色が沈んで見える
 stage.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xeef1f6);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8a93a8, 1.1));
-const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(2, 3, 3); scene.add(sun);
+// web/src/scene.js と同じ光(見る人が見る色で、質感と色を判定するため)
+scene.add(new THREE.HemisphereLight(0xfff1e0, 0x2a2540, 1.0));
+const sun = new THREE.DirectionalLight(0xffffff, 1.7); sun.position.set(1.2, 2.4, 3); scene.add(sun);
+const rim = new THREE.DirectionalLight(0x9fd8ff, 0.8); rim.position.set(-2, 1.6, -1.5); scene.add(rim);
 const floor = new THREE.Mesh(new THREE.CircleGeometry(1.2, 48), new THREE.MeshBasicMaterial({ color: 0xd9deea }));
 floor.rotation.x = -Math.PI / 2; scene.add(floor);
 const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 50);
@@ -62,7 +64,8 @@ scene.add(c.object3d);
 document.getElementById('title').textContent = c.name ?? c.id;
 const h = c.heightM ?? 1;
 camera.position.set(0, h * 0.62, h * 3.4); camera.lookAt(0, h * 0.48, 0);
-window.__c = c; window.__ready = true;
+window.__c = c; window.__camera = camera; window.__scene = scene; window.__ready = true;
+if (q.get('shot')) { scene.background = new THREE.Color(0xf2f2f2); floor.visible = false; }
 
 const mk = (id, items, fn) => { const el = document.getElementById(id);
   items.forEach((n) => { const b = document.createElement('button'); b.textContent = n; b.onclick = () => fn(n, b); el.appendChild(b); }); };
