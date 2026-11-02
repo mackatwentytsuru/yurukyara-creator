@@ -18,7 +18,6 @@ import os
 
 import cv2
 import numpy as np
-import trimesh
 from PIL import Image
 
 # 視点ごとの (画面の右向き, 視線の向き)。Z が上。
@@ -63,6 +62,37 @@ def raster_uv(uv, w):
     return tid, bary
 
 
+def load_obj(path):
+    """OBJ を自分で読む。UV は面の角ごと(継ぎ目で値が変わる)に持つ。trimesh は継ぎ目の UV を平均してしまう。"""
+    v, vt, tris, tri_uv = [], [], [], []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("v "):
+                v.append([float(x) for x in line.split()[1:4]])
+            elif line.startswith("vt "):
+                vt.append([float(x) for x in line.split()[1:3]])
+            elif line.startswith("f "):
+                corners = []
+                for tok in line.split()[1:]:
+                    parts = tok.split("/")
+                    corners.append((int(parts[0]) - 1, int(parts[1]) - 1 if len(parts) > 1 and parts[1] else -1))
+                for k in range(1, len(corners) - 1):
+                    tri = (corners[0], corners[k], corners[k + 1])
+                    tris.append([c[0] for c in tri])
+                    tri_uv.append([vt[c[1]] for c in tri])
+    return np.array(v, np.float64), np.array(tris, np.int64), np.array(tri_uv, np.float64)
+
+
+def vertex_normals(verts, faces):
+    """面積で重みをつけた頂点法線。"""
+    e1, e2 = verts[faces[:, 1]] - verts[faces[:, 0]], verts[faces[:, 2]] - verts[faces[:, 0]]
+    fn = np.cross(e1, e2)
+    vn = np.zeros_like(verts)
+    for k in range(3):
+        np.add.at(vn, faces[:, k], fn)
+    return vn / np.maximum(np.linalg.norm(vn, axis=1, keepdims=True), 1e-12)
+
+
 def push_pull(img, valid):
     """valid(真)の画素の色で、それ以外を埋める。"""
     f = img.astype(np.float32) * valid[..., None]
@@ -76,6 +106,9 @@ def push_pull(img, valid):
         levels.append((nf, nw))
     cf, cw = levels[-1]
     col = cf / np.maximum(cw[..., None], 1e-6)
+    # どこからも届かない島(絵に写らない面)は、塗れた色の平均で埋める(黒にしない)
+    mean = f.sum(axis=(0, 1)) / max(float(w.sum()), 1.0)
+    col = np.where((cw > 0)[..., None], col, mean)
     for lf, lw in reversed(levels[:-1]):
         up = cv2.resize(col, (lf.shape[1], lf.shape[0]), interpolation=cv2.INTER_LINEAR)
         own = lf / np.maximum(lw[..., None], 1e-6)
@@ -144,21 +177,17 @@ def main():
     ap.add_argument("--power", type=float, default=2.5)
     ap.add_argument("--smooth", type=float, default=0.0, help="塗った色をぼかす幅(画素)。大きいほど、絵の光や影の筋が消えて無地に近づく")
     a = ap.parse_args()
-    m = trimesh.load(a.mesh, process=False, maintain_order=True, force="mesh")
-    verts = np.asarray(m.vertices, np.float64)
-    faces = np.asarray(m.faces, np.int64)
-    uv = np.asarray(m.visual.uv, np.float64)
-    print("verts", len(verts), "faces", len(faces), "uv", len(uv))
+    verts, faces, uv_c = load_obj(a.mesh)
+    print("verts", len(verts), "faces", len(faces))
     cfg = json.load(open(a.views, encoding="utf-8"))
     W = a.size
-    tid, bary = raster_uv(uv[faces], W)
+    tid, bary = raster_uv(uv_c, W)
     ok = tid >= 0
     t_ok = tid[ok]
     b_ok = bary[ok]
     P = (verts[faces[t_ok]] * b_ok[..., None]).sum(axis=1)
-    fn = m.face_normals[t_ok]
     # 頂点法線で滑らかに(境界で段が出ないように)
-    vn = np.asarray(m.vertex_normals, np.float64)
+    vn = vertex_normals(verts, faces)
     N = (vn[faces[t_ok]] * b_ok[..., None]).sum(axis=1)
     N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
     acc = np.zeros((len(P), 3))

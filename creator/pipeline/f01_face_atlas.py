@@ -1,10 +1,11 @@
 """段 6: 顔の絵の表(アトラス)を自分で描く。AI は使わない。
 
-使い方: python f01_face_atlas.py led <出力フォルダ>
+使い方: python f01_face_atlas.py led|paper <出力フォルダ>
 
 表の並び: 横 = 口の開き 4 段階(0 閉じる〜3 大きく開く)、縦 = 表情(neutral happy surprised sad think)と
 まばたき(blink = neutral の目を閉じた形)。1 マスの縦横比は 5:3。
 - led: 光る点(ドット)で顔を作る。点の格子は 40×24。光らない点もうっすら見える(画面らしさ)。
+- paper: 紙に墨で描いたようなやわらかい顔(茶色の目と口、ほおの赤み)。背景は透明で、体に重ねて使う。
 出力: face_atlas.png と face_atlas.json(マスの並びと、表情ごとの行)
 """
 import json
@@ -128,17 +129,93 @@ def draw_cell(on, w=CELL_W, h=CELL_H):
     return img.resize((w, h), Image.LANCZOS)
 
 
+INK = (92, 54, 30, 255)
+BLUSH = (240, 120, 90, 90)
+
+
+def paper_cell(kind, level, w=CELL_W, h=CELL_H):
+    """紙の顔。座標は 0〜1 の割合で書く(横 w、縦 h に合わせる)。"""
+    k = 4
+    img = Image.new("RGBA", (w * k, h * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+
+    def X(v):
+        return v * w * k
+
+    def Y(v):
+        return v * h * k
+
+    def oval(cx, cy, rx, ry, fill):
+        d.ellipse([X(cx - rx), Y(cy - ry), X(cx + rx), Y(cy + ry)], fill=fill)
+
+    def line(pts, width):
+        d.line([(X(a), Y(b)) for a, b in pts], fill=INK, width=int(width * h * k), joint="curve")
+        for a, b in (pts[0], pts[-1]):
+            oval(a, b, width / 2 * h / w, width / 2, INK)
+
+    def arc(cx, cy, rx, ry, a0, a1, n=24):
+        return [(cx + rx * math.cos(math.radians(a0 + (a1 - a0) * i / n)), cy + ry * math.sin(math.radians(a0 + (a1 - a0) * i / n))) for i in range(n + 1)]
+
+    lx, rx_, ey = 0.30, 0.70, 0.36
+    # ほお
+    oval(0.17, 0.66, 0.085, 0.10, BLUSH)
+    oval(0.83, 0.66, 0.085, 0.10, BLUSH)
+    # 目
+    if kind == "blink":
+        line(arc(lx, ey - 0.02, 0.07, 0.05, 20, 160), 0.035)
+        line(arc(rx_, ey - 0.02, 0.07, 0.05, 20, 160), 0.035)
+    elif kind == "happy":
+        line(arc(lx, ey + 0.05, 0.075, 0.09, 200, 340), 0.04)
+        line(arc(rx_, ey + 0.05, 0.075, 0.09, 200, 340), 0.04)
+    else:
+        er = {"neutral": (0.060, 0.115), "surprised": (0.075, 0.15), "sad": (0.060, 0.115), "think": (0.060, 0.115)}[kind]
+        for i, cx in enumerate((lx, rx_)):
+            e = er
+            cy = ey
+            if kind == "think" and i == 1:
+                e, cy = (0.045, 0.085), ey - 0.04
+            if kind == "sad":
+                cy += 0.03
+            oval(cx, cy, e[0] * h / w * 1.6, e[1], INK)
+            oval(cx + e[0] * h / w * 0.5, cy - e[1] * 0.4, e[0] * h / w * 0.6, e[1] * 0.28, (255, 255, 255, 255))
+        if kind == "sad":
+            line([(lx - 0.07, ey - 0.12), (lx + 0.06, ey - 0.17)], 0.03)
+            line([(rx_ + 0.07, ey - 0.12), (rx_ - 0.06, ey - 0.17)], 0.03)
+    # 口
+    mx, my = 0.5, 0.70
+    if level == 0:
+        if kind == "happy":
+            line(arc(mx, my - 0.10, 0.16, 0.16, 20, 160), 0.04)
+        elif kind == "sad":
+            line(arc(mx, my + 0.16, 0.10, 0.09, 200, 340), 0.035)
+        elif kind == "surprised":
+            oval(mx, my, 0.032, 0.07, INK)
+        elif kind == "think":
+            line([(mx - 0.06, my + 0.02), (mx - 0.02, my), (mx + 0.02, my + 0.03), (mx + 0.06, my + 0.01)], 0.03)
+        else:
+            line(arc(mx, my - 0.08, 0.12, 0.12, 25, 155), 0.035)
+    else:
+        rx_m, ry_m = {1: (0.045, 0.045), 2: (0.075, 0.085), 3: (0.095, 0.13)}[level]
+        oval(mx, my + 0.02, rx_m * 1.0, ry_m, INK)
+        if level >= 2:
+            oval(mx, my + 0.02 + ry_m * 0.45, rx_m * 0.62, ry_m * 0.5, (205, 90, 80, 255))
+    return img.resize((w, h), Image.LANCZOS)
+
+
 def main():
     style, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
-    if style != "led":
-        raise SystemExit("今は led だけ")
-    atlas = Image.new("RGB", (COLS * CELL_W, len(ROWS) * CELL_H))
+    if style not in ("led", "paper"):
+        raise SystemExit("led か paper")
+    atlas = Image.new("RGB" if style == "led" else "RGBA", (COLS * CELL_W, len(ROWS) * CELL_H), (0, 0, 0, 0) if style == "paper" else None)
     for r, kind in enumerate(ROWS):
         for c in range(COLS):
             base = "neutral" if kind == "blink" else kind
-            on = eyes(kind) | mouth(base, c)
-            atlas.paste(draw_cell(on), (c * CELL_W, r * CELL_H))
+            if style == "led":
+                on = eyes(kind) | mouth(base, c)
+                atlas.paste(draw_cell(on), (c * CELL_W, r * CELL_H))
+            else:
+                atlas.paste(paper_cell(kind, c), (c * CELL_W, r * CELL_H))
     atlas.save(os.path.join(out, "face_atlas.png"))
     spec = {"style": style, "cols": COLS, "rows": ROWS, "cell_aspect": CELL_W / CELL_H,
             "mouth_levels": COLS, "blink_row": "blink"}

@@ -153,6 +153,7 @@ def main():
         cx = mn.x + f["center"][0] * size.x
         cz = mn.z + f["center"][1] * size.z
         w, h = f["size"][0] * size.x, f["size"][1] * size.z
+        ys, nrm = {}, {}
         for j in range(gz + 1):
             for i in range(gx + 1):
                 x = cx + (i / gx - 0.5) * w
@@ -160,10 +161,20 @@ def main():
                 hit = tree.ray_cast(Vector((x, mn.y - 1.0, z)), Vector((0, 1, 0)))
                 if hit[0] is None:
                     miss += 1
-                    verts.append(Vector((x, mn.y, z)))
+                    ys[i, j] = mn.y
                 else:
-                    verts.append(hit[0] + hit[1] * f.get("lift", 0.003))
+                    ys[i, j] = hit[0].y
                 uvs.append((i / gx, 1 - j / gz))
+        # 表面の細かい凹凸(提灯の骨など)を拾わないよう、奥行きをなめらかにならして浮かせる
+        for _ in range(f.get("smooth_iter", 0)):
+            ys = {(i, j): sum(ys[min(max(i + di, 0), gx), min(max(j + dj, 0), gz)]
+                              for di in (-1, 0, 1) for dj in (-1, 0, 1)) / 9.0
+                  for i in range(gx + 1) for j in range(gz + 1)}
+        for j in range(gz + 1):
+            for i in range(gx + 1):
+                x = cx + (i / gx - 0.5) * w
+                z = cz + (0.5 - j / gz) * h
+                verts.append(Vector((x, ys[i, j] - f.get("lift", 0.003), z)))
         for j in range(gz):
             for i in range(gx):
                 a = j * (gx + 1) + i
@@ -183,10 +194,20 @@ def main():
         fb = next(n for n in fn.nodes if n.type == "BSDF_PRINCIPLED")
         ft = fn.nodes.new("ShaderNodeTexImage")
         ft.image = bpy.data.images.load(os.path.join(face_dir, "face_atlas.png"))
-        fn.links.new(ft.outputs["Color"], fb.inputs["Emission Color"])
-        fb.inputs["Emission Strength"].default_value = f.get("emission", 1.0)
-        fb.inputs["Base Color"].default_value = (0, 0, 0, 1)
-        fb.inputs["Roughness"].default_value = 0.4
+        if f.get("mode") == "paint":
+            # 紙に描いた顔: 色と透明さをそのまま使う(光らせない)
+            fn.links.new(ft.outputs["Color"], fb.inputs["Base Color"])
+            fn.links.new(ft.outputs["Alpha"], fb.inputs["Alpha"])
+            fb.inputs["Roughness"].default_value = 0.9
+            try:
+                fmat.surface_render_method = "BLENDED"
+            except Exception:
+                fmat.blend_method = "BLEND"
+        else:
+            fn.links.new(ft.outputs["Color"], fb.inputs["Emission Color"])
+            fb.inputs["Emission Strength"].default_value = f.get("emission", 1.0)
+            fb.inputs["Base Color"].default_value = (0, 0, 0, 1)
+            fb.inputs["Roughness"].default_value = 0.4
         face_obj.data.materials.append(fmat)
         vg = face_obj.vertex_groups.new(name=f.get("bone", spec["base_bone"]))
         vg.add(list(range(len(verts))), 1.0, "REPLACE")

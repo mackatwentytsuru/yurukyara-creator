@@ -1,7 +1,7 @@
 """段 4: TRELLIS の GLB を、塗れて動かせるメッシュに整える(Blender の背景モード)。
 
 使い方:
-  blender -b -P b01_mesh.py -- <入力.glb> <出力.obj> --height 1.0 --faces 30000 [--yaw 0] [--info 出力.json]
+  blender -b -P b01_mesh.py -- <入力.glb> <出力.obj> --height 1.0 --faces 30000 [--yaw 0] [--smooth 0] [--info 出力.json]
 
 - 大きさ: 高さを --height(m)にそろえ、足元を z=0、左右と前後の中心を原点に置く。
 - 向き: 正面が -Y、上が +Z(p05 の決まり)。--yaw は Z まわりの回転(度)で、向きの直しに使う。
@@ -19,11 +19,11 @@ from mathutils import Vector
 
 def args():
     argv = sys.argv[sys.argv.index("--") + 1:]
-    out = {"yaw": 0.0, "height": 1.0, "faces": 30000, "info": None, "pos": []}
+    out = {"yaw": 0.0, "height": 1.0, "faces": 30000, "smooth": 0, "info": None, "pos": []}
     i = 0
     while i < len(argv):
         a = argv[i]
-        if a in ("--yaw", "--height", "--faces", "--info"):
+        if a in ("--yaw", "--height", "--faces", "--smooth", "--info"):
             out[a[2:]] = type(out[a[2:]])(argv[i + 1]) if out[a[2:]] is not None else argv[i + 1]
             i += 2
         else:
@@ -69,6 +69,12 @@ def main():
         mod.decimate_type = "COLLAPSE"
         mod.ratio = a["faces"] / n_tri
         bpy.ops.object.modifier_apply(modifier=mod.name)
+    # 減らした後の面のかたかたを、軽くならす(薄い所が縮まないよう少しだけ)
+    if a["smooth"] > 0:
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.vertices_smooth(factor=0.4, repeat=a["smooth"])
+        bpy.ops.object.mode_set(mode="OBJECT")
     # 大きさと置き場所
     vs = [ob.matrix_world @ v.co for v in ob.data.vertices]
     mn = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
