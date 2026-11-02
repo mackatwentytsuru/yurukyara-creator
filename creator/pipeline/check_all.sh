@@ -1,7 +1,7 @@
 #!/bin/sh
 # 作った物を、まとめて機械で検査する(人が見る前に、毎回通す)。どれかが落ちると、終わりの番号が 1 になる。
 # 使い方: sh check_all.sh <build.blend> <pack のフォルダ> <元の絵> <出力フォルダ> [帯の名前,…]
-# 検査: ① character.json の形 ② GLB の予算 ③ 埋まりと浮き ④ 元の絵と比べた抜け ⑤ ブラウザ(three.js)で撮れる
+# 検査: ① character.json の形 ② GLB の予算 ③ 埋まりと浮き ④ 元の絵と比べた抜け ⑤ ブラウザ(three.js)で撮れる ⑥ 視線で体の骨が回り続けない
 # 出力: <出力フォルダ>/contact.json、gaps.json、gaps.png、browser/browser_front.png など、check.txt(結果)
 # ここが全部通っても、見た目の合格ではない。形・質感・色は、ブラウザの絵を作り手以外の AI に見せて判定する。
 # Git Bash では、パスを Windows の形にそろえる(/x/… のまま Blender や node へ渡すと、別の場所に書かれて、絵が迷子になる)
@@ -32,7 +32,8 @@ fi
 # ⑤ ブラウザで撮る。サーバーは自分で立て、自分の番号だけを止める
 PORT=$((8800 + $$ % 150))
 PARENT=$(cd "$PACK/.." && pwd); NAME=$(basename "$PACK")
-python "$REPO/creator/viewer/serve.py" "$PORT" "--mount=/trial=$(cygpath -w "$PARENT" 2>/dev/null || echo "$PARENT")" > /dev/null 2>&1 &
+SERVE=$(cygpath -m "$REPO/creator/viewer/serve.py")
+MSYS_NO_PATHCONV=1 python "$SERVE" "$PORT" "--mount=/trial=$(cygpath -m "$PARENT" 2>/dev/null || echo "$PARENT")" > /dev/null 2>&1 &
 SRV=$!
 sleep 2
 SHOT=$(cygpath -m "$REPO/creator/skilltest/shot_browser.mjs")
@@ -40,6 +41,12 @@ if MSYS_NO_PATHCONV=1 node "$SHOT" "$PORT" "/trial/$NAME/character.json" "$OUT/b
   say "⑤ OK ブラウザで撮れた($OUT/browser/)"
 else
   say "⑤ NG ブラウザで読めない"; tail -3 "$OUT/_shot.txt" | tee -a "$LOG"; FAIL=1
+fi
+LOOK=$(cygpath -m "$REPO/creator/skilltest/test_look_drift.mjs")
+if MSYS_NO_PATHCONV=1 node "$LOOK" "$PORT" "/trial/$NAME/character.json" --frames 300 > "$OUT/_look.txt" 2>&1; then
+  say "⑥ OK 視線で体の骨が回り続けない"
+else
+  say "⑥ NG 視線の回転が積み上がる"; tail -3 "$OUT/_look.txt" | tee -a "$LOG"; FAIL=1
 fi
 kill "$SRV" 2> /dev/null
 

@@ -36,6 +36,7 @@ export class RigCharacterV2 extends CharacterBase {
     const look = json.look ?? {};
     this.lookBone = look.bone ? gltf.scene.getObjectByName(look.bone) : null;
     this.lookRest = this.lookBone ? this.lookBone.quaternion.clone() : null;
+    this.lookBase = this.lookRest ? this.lookRest.clone() : null; // 視線を重ねる前の、動きだけの値
     const ml = look.max_deg ?? [22, 14];
     this.maxYaw = THREE.MathUtils.degToRad(ml[0]);
     this.maxPitch = THREE.MathUtils.degToRad(ml[1]);
@@ -153,10 +154,14 @@ export class RigCharacterV2 extends CharacterBase {
     const talk = this.actions.get('talk');
     if (idle) idle.setEffectiveWeight(shotOn ? 0.0 : 1 - this._talkW);
     if (talk) talk.setEffectiveWeight(this._talkW);
+    // ミキサーは値が前と同じだと骨に書き直さない。視線を重ねたままにすると、毎コマ積み上がる。
+    // 先に「動きだけの値」へ戻す(動きが骨を動かすコマは、下の update が上書きする)
+    if (this.lookBone) this.lookBone.quaternion.copy(this.lookBase);
     this.mixer.update(s.dt);
 
     // 体を視線の向きへ(遅れて追う)。回転はキャラの向きの軸で作り、骨の局所の軸へ直して重ねる
     if (this.lookBone) {
+      this.lookBase.copy(this.lookBone.quaternion);
       const yaw = THREE.MathUtils.clamp(s.headYaw, -this.maxYaw, this.maxYaw);
       const pitch = THREE.MathUtils.clamp(s.headPitch, -this.maxPitch, this.maxPitch);
       const qc = new THREE.Quaternion().setFromEuler(new THREE.Euler(-pitch * 0.6, yaw * 0.6, 0, 'YXZ'));
