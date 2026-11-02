@@ -2,7 +2,8 @@
 // ?place=<フォルダ名>  ?cam=entrance|top|side  ?height=<キャラの身長 m>
 import * as THREE from 'three';
 import { loadPlace } from './loadPlace.js';
-import { detectXR, startXR } from './xr.js';
+import { detectXR, startXR, applyPresentation, headWorldPosition } from './xr.js';
+import { createNativeAR, floorYFor } from './nativeAR.js';
 
 const params = new URLSearchParams(location.search);
 const placeId = params.get('place') ?? 'test_room';
@@ -16,7 +17,8 @@ renderer.xr.enabled = true;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x20232a);
+const background = new THREE.Color(0x20232a);
+scene.background = background;
 scene.add(new THREE.HemisphereLight(0xffffff, 0x665544, 1.6));
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
 sun.position.set(2, 4, 3);
@@ -70,13 +72,54 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
-renderer.setAnimationLoop(() => renderer.render(scene, camera));
+let nativeAR = null;
+let nativeHit = null;
+const head = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  if (nativeAR?.state.active || renderer.xr.isPresenting) faceViewer();
+  renderer.render(scene, camera);
+});
 
 const xr = await detectXR();
+/** iPhone の殻アプリの中の AR。殻が送る姿勢で camera を動かし、タップした床にキャラを立たせる。 */
+function startNativeAR() {
+  const restore = applyPresentation({ mode: 'ar', scene, renderer, place, background });
+  document.documentElement.classList.add('ar');
+  nativeAR = createNativeAR({
+    camera,
+    onHit: (p) => { nativeHit = p; character.position.copy(p); },
+    onFloor: (y) => { character.position.y = y; },
+  });
+  nativeAR.start();
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+    nativeAR.raycast(e.clientX / innerWidth, e.clientY / innerHeight);
+  });
+  return restore;
+}
+
 for (const mode of ['ar', 'vr']) {
   const btn = document.getElementById(`btn-${mode}`);
   btn.disabled = !xr[mode];
-  btn.addEventListener('click', () => startXR({ renderer, mode, place }).catch((e) => (info.textContent = String(e))));
+  btn.addEventListener('click', async () => {
+    try {
+      if (mode === 'ar' && xr.ar_kind === 'native') {
+        startNativeAR();
+      } else {
+        const s = await startXR({ renderer, mode, scene, place, background });
+        info.textContent = `${mode} に入った(床=${s.floor ? 'local-floor' : 'local'}、機能: ${s.features.join(', ') || 'なし'})`;
+      }
+    } catch (e) {
+      info.textContent = String(e);
+    }
+  });
+}
+
+// キャラは、見ている人の頭(camera)のほうへ体を向ける(AR でも VR でも画面でも同じ)
+function faceViewer() {
+  headWorldPosition(camera, head);
+  const dx = head.x - character.position.x;
+  const dz = head.z - character.position.z;
+  if (Math.hypot(dx, dz) > 0.05) character.rotation.y = Math.atan2(dx, dz);
 }
 
 const size = place.bounds.getSize(new THREE.Vector3());
@@ -90,6 +133,10 @@ info.textContent =
 
 window.__place = {
   ready: true,
+  get nativeHit() { return nativeHit?.toArray() ?? null; },
+  get characterPosition() { return character.position.toArray(); },
+  get characterYaw() { return character.rotation.y; },
+  get nativePoses() { return nativeAR?.state.poses ?? 0; },
   size: size.toArray(),
   floorMinY: place.bounds.min.y,
   characterHeight: new THREE.Box3().setFromObject(character).getSize(new THREE.Vector3()).y,
