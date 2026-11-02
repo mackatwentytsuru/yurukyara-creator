@@ -78,7 +78,7 @@ def detect_corners(gray: np.ndarray, board: Board, min_corners=12):
     return cc.reshape(-1, 2).astype(np.float32), ci.reshape(-1)
 
 
-def calibrate(views: list[tuple[np.ndarray, np.ndarray]], board: Board, size: tuple[int, int], model="standard", focal_guess_px=None):
+def calibrate(views: list[tuple[np.ndarray, np.ndarray]], board: Board, size: tuple[int, int], model="standard", focal_guess_px=None, fix_principal_point=False):
     """views = [(画素の角(N,2), id(N))]。戻り: dict(K, dist, rms, per_view_rms, std)"""
     obj = [board.corner_led_m(ids) for _, ids in views]
     img = [c.reshape(-1, 1, 2) for c, _ in views]
@@ -86,6 +86,8 @@ def calibrate(views: list[tuple[np.ndarray, np.ndarray]], board: Board, size: tu
     f0 = focal_guess_px or 1.2 * w
     K0 = np.array([[f0, 0, w / 2], [0, f0, h / 2], [0, 0, 1.0]])
     flags = cv2.CALIB_USE_INTRINSIC_GUESS
+    if fix_principal_point:   # 平らな面 1 枚で主点が決まりにくいとき、主点を画像の中心に固定する
+        flags |= cv2.CALIB_FIX_PRINCIPAL_POINT
     if model == "standard":
         nd = 5
     elif model == "simple":     # k1, k2 だけ(接線・k3 は 0)

@@ -29,6 +29,10 @@ ALPHA, BETA = 1.0001, 1.237          # t_a = ALPHA * t_b + BETA
 FPS_A = 29.97
 
 
+def mat4_from_flat(flat):
+    return np.array(flat, dtype=float).reshape(4, 4).T
+
+
 def cv_pose_look_at(eye, target):
     """LED の座標での OpenCV 流のカメラの姿勢 4x4(カメラ→LED)。"""
     eye, target = np.asarray(eye, float), np.asarray(target, float)
@@ -141,7 +145,22 @@ def main():
                        "K": [KI[0, 0], KI[1, 1], KI[0, 2], KI[1, 2]], "track": "normal", "ok": True, "exp": 0.01})
     vw.release()
     (shoot / "frames.jsonl").write_text("\n".join(json.dumps(f) for f in frames) + "\n", encoding="utf-8")
-    (shoot / "meta.json").write_text(json.dumps({"videoFile": "video.mov", "stats": {"width": SI[0], "height": SI[1], "frames": len(frames)}}), encoding="utf-8")
+    # 撮影のはじめの 4 隅のタップ(実際は十字を LED の角に合わせる)。各隅 0.1° ほどの狙いずれ
+    from shootlib import led_corners
+    ledc = led_corners(board.face_px[0] * board.pitch_m, board.face_px[1] * board.pitch_m)
+    corners_meta = []
+    for k, cid in enumerate(["tl", "tr", "br", "bl"]):
+        j = int(np.argmin(np.abs(np.array([f["pts"] for f in frames]) - (ALPHA ** -1) * ((k * 2.7 + 1.0) - BETA))))
+        Tw = mat4_from_flat(frames[j]["T"])
+        target = apply(T_world_from_led, ledc[cid])[0]
+        d = target - Tw[:3, 3]
+        d /= np.linalg.norm(d)
+        d = Rot.from_rotvec(rng.normal(0, np.radians(0.1), 3)).as_matrix() @ d
+        corners_meta.append({"id": cid, "face": "A", "label": cid, "sessionTime": 0, "videoFrame": None, "camera": {"T": frames[j]["T"], "K": frames[j]["K"], "w": SI[0], "h": SI[1]},
+                             "rayOrigin": Tw[:3, 3].tolist(), "rayDirection": d.tolist(), "hit": None, "hitKind": None})
+    meta = {"videoFile": "video.mov", "stats": {"width": SI[0], "height": SI[1], "frames": len(frames)}, "events": [],
+            "calibration": {"floor": {"planeY": float(T_world_from_led[1, 3]), "sessionTime": 0, "point": None, "planes": [], "camera": corners_meta[0]["camera"]}, "corners": corners_meta}}
+    (shoot / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
 
     lens = {"image_size": list(SA), "fx": 1000.0, "fy": 1000.0, "cx": 640.0, "cy": 360.0,
             "distortion_opencv": {"k1": DA[0], "k2": DA[1], "p1": DA[2], "p2": DA[3], "k3": DA[4]}}

@@ -56,6 +56,7 @@ def main():
     ap.add_argument("--min-corners", type=int, default=12)
     ap.add_argument("--model", default="standard", choices=["standard", "simple", "rational"])
     ap.add_argument("--focal-mm35", type=float, default=None, help="おおよその焦点距離(35mm 換算)。初期値に使う")
+    ap.add_argument("--fix-principal-point", action="store_true", help="主点を画像の中心に固定する(視点が少ない・傾きが小さいとき)")
     a = ap.parse_args()
 
     board = Board.load(a.board)
@@ -63,13 +64,13 @@ def main():
     if len(views) < 8:
         raise SystemExit(f"盤が見つかった異なる構図が少ない({len(views)} 枚)。8 枚以上要る。盤の明るさ・大きさ・ピントを確かめる")
     f0 = a.focal_mm35 * size[0] / 36.0 if a.focal_mm35 else None
-    cal = calibrate(views, board, size, a.model, f0)
+    cal = calibrate(views, board, size, a.model, f0, a.fix_principal_point)
     info = lens_json(cal, size, Path(a.video).name, len(views), a.model)
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
     # 保持して確かめる: 半分の構図で解いた結果が、残り半分でどれだけ合うか
-    cal2 = calibrate(views[::2], board, size, a.model, f0)
+    cal2 = calibrate(views[::2], board, size, a.model, f0, a.fix_principal_point)
     errs = []
     for c, ids in views[1::2]:
         obj = board.corner_led_m(ids)
