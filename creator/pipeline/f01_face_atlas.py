@@ -202,18 +202,35 @@ def paper_cell(kind, level, w=CELL_W, h=CELL_H):
     return img.resize((w, h), Image.LANCZOS)
 
 
+def edge_mask(w, h, fade=0.07, radius=0.10):
+    """丸い角と、縁がなめらかに消えるアルファ(横から見ても貼った板に見えない)。"""
+    import numpy as np
+    ys, xs = np.mgrid[0:h, 0:w]
+    u, v = xs / (w - 1), ys / (h - 1)
+    r = radius * h / w
+    dx = np.maximum(np.maximum(r - u, u - (1 - r)), 0) / r
+    dy = np.maximum(np.maximum(radius - v, v - (1 - radius)), 0) / radius
+    corner = np.sqrt(dx ** 2 + dy ** 2)                      # 角の外で 1 を超える
+    edge = np.minimum(np.minimum(u, 1 - u) / fade, np.minimum(v, 1 - v) / (fade * w / h))
+    a = np.clip(np.minimum(edge, (1 - corner) * 6.0), 0, 1)
+    a = a * a * (3 - 2 * a)
+    return Image.fromarray((a * 255).astype("uint8"))
+
+
 def main():
     style, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
     if style not in ("led", "paper"):
         raise SystemExit("led か paper")
-    atlas = Image.new("RGB" if style == "led" else "RGBA", (COLS * CELL_W, len(ROWS) * CELL_H), (0, 0, 0, 0) if style == "paper" else None)
+    atlas = Image.new("RGBA", (COLS * CELL_W, len(ROWS) * CELL_H), (0, 0, 0, 0))
     for r, kind in enumerate(ROWS):
         for c in range(COLS):
             base = "neutral" if kind == "blink" else kind
             if style == "led":
                 on = eyes(kind) | mouth(base, c)
-                atlas.paste(draw_cell(on), (c * CELL_W, r * CELL_H))
+                cell = draw_cell(on).convert("RGBA")
+                cell.putalpha(edge_mask(CELL_W, CELL_H))
+                atlas.paste(cell, (c * CELL_W, r * CELL_H))
             else:
                 atlas.paste(paper_cell(kind, c), (c * CELL_W, r * CELL_H))
     atlas.save(os.path.join(out, "face_atlas.png"))

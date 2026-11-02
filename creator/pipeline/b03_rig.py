@@ -208,6 +208,13 @@ def main():
             fb.inputs["Emission Strength"].default_value = f.get("emission", 1.0)
             fb.inputs["Base Color"].default_value = (0, 0, 0, 1)
             fb.inputs["Roughness"].default_value = 0.4
+            if f.get("alpha"):
+                # 縁をなめらかに消す(横から見ても、貼った板に見えない)
+                fn.links.new(ft.outputs["Alpha"], fb.inputs["Alpha"])
+                try:
+                    fmat.surface_render_method = "BLENDED"
+                except Exception:
+                    fmat.blend_method = "BLEND"
         face_obj.data.materials.append(fmat)
         vg = face_obj.vertex_groups.new(name=f.get("bone", spec["base_bone"]))
         vg.add(list(range(len(verts))), 1.0, "REPLACE")

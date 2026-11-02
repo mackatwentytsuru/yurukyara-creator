@@ -15,7 +15,7 @@
     {"bone": "flap_R", "x": [null, 0.075], "z": [0.10, 0.66], "blend": 0.03},
     {"bone": "lid", "z": [0.80, null], "blend": 0.04}
   ],
-  "face": {"center": [0.5, 0.46], "size": [0.46, 0.33], "grid": [32, 20], "lift": 0.012, "smooth_iter": 6,
+  "face": {"center": [0.5, 0.46], "size": [0.46, 0.33], "grid": [32, 20], "lift": 0.007, "smooth_iter": 4,
            "bone": "body", "mode": "paint"},
   "roles": {"root": "root", "body": "body", "flap_L": "flap_L", "flap_R": "flap_R", "lid": "lid"},
   "motion": {"arm_amp": 1.0}
