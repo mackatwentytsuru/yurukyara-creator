@@ -1,0 +1,14 @@
+#!/bin/sh
+# brief を自分で用意した試験を、API の枠で回す。
+# 使い方: sh run_custom.sh <作業フォルダ(絶対パス)> <brief.md> <モデル> <effort> [上限ドル]
+WORK=$1; BRIEF=$2; MODEL=$3; EFFORT=$4; BUDGET=${5:-10}
+BASE=work/creator_work/skilltest
+mkdir -p "$WORK" "$BASE/empty_cfg"
+cp "$BRIEF" "$WORK/brief.md"
+cd "$WORK"
+START=$(date +%s)
+timeout 3300 env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH -u CLAUDE_CODE_OAUTH_TOKEN \
+  CLAUDE_CONFIG_DIR="$BASE/empty_cfg" ANTHROPIC_API_KEY="$CLAUDE_CREDIT_API_KEY" \
+  claude -p "$(cat brief.md)" --model "$MODEL" --effort "$EFFORT" --output-format json --max-budget-usd "$BUDGET" \
+  --allowedTools "Read Write Edit Bash Glob Grep" --add-dir "repo" --add-dir "$WORK" --add-dir "work/sample_charakuru_1102" --add-dir "work/parts/sample" > result.json 2> stderr.txt
+echo "exit=$? seconds=$(( $(date +%s) - START ))" > done.txt
