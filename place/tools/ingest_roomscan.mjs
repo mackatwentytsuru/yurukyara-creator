@@ -14,6 +14,7 @@ import { buildPlaceJson } from './landmarks.mjs';
 import { buildBoxGlb, elementsFromRoomJson } from './glbBoxes.mjs';
 import { judgeBudget, measureGlb } from './glbBudget.mjs';
 import { checkClearance } from './clearance.mjs';
+import { writePlaceIndex } from './placeIndex.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -99,6 +100,9 @@ const place = buildPlaceJson({
 place.variants = stylized ? { stylized: 'room.glb', raw: 'room_raw.glb' } : { raw: 'room_raw.glb' };
 writeFileSync(join(outDir, 'place.json'), JSON.stringify(place, null, 2) + '\n', 'utf8');
 console.log(`書き出した: ${outDir}(landmarks ${place.landmarks.length} 個、floor_y ${place.floor_y}、spawn ${JSON.stringify(place.spawn)})`);
+
+const indexed = writePlaceIndex();
+console.log(`一覧に入れた: places/index.json(${indexed.map((p) => p.id).join(', ')})`);
 
 // 受入検査(止めずに知らせるだけ): 重さの予算と、立つ位置から歩けるか
 for (const f of ['room.glb', ...(stylized ? ['room_raw.glb'] : [])]) {

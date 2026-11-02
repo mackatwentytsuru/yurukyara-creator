@@ -7,13 +7,13 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 
 ## 全体の流れ
 1. iPhone の「場所スキャン」(`place/ios/RoomScan`)で部屋を撮る → `room_mesh.usdz`・`room.json`・`landmarks_hint.json` が出る。AirDrop で Mac へ。
-2. Mac から PC へ取る(`scp`)。`node place/tools/ingest_roomscan.mjs <撮ったフォルダ> <id> [表示名] [--plain]` → `room_raw.glb`(Blender 変換のまま)・`room.glb`(種類ごとの素材を貼った版。`--plain` なら raw と同じ)・`place.json`(`variants` に見た目の名前)・`scan/`(撮った物の写し。素材や色を作り直すため)。ブラウザは `?variant=raw|stylized|photo` で見た目を切りかえる。
+2. **一発で: `node place/tools/receive_scan.mjs <id> [表示名]`**(Mac の ~/Downloads に届いた 4 ファイルを `mac_collect_scan.py` で集め、scp で `work\scans_in\<日時>\`(リポジトリの外)へ、取りこみまで通す。`--local=<フォルダ>` で Mac を通さない試し。id は半角小文字・数字・_ -。AirDrop の名前が `room_mesh 2.usdz` のように重なっても一番新しい物を取り、時刻が 10 分以上離れていたら混ざりの警告で止まる)。手でやるなら Mac から PC へ `scp`。`node place/tools/ingest_roomscan.mjs <撮ったフォルダ> <id> [表示名] [--plain]` → `room_raw.glb`(Blender 変換のまま)・`room.glb`(種類ごとの素材を貼った版。`--plain` なら raw と同じ)・`place.json`(`variants` に見た目の名前)・`scan/`(撮った物の写し。素材や色を作り直すため)。ブラウザは `?variant=raw|stylized|photo` で見た目を切りかえる。
 2b. **本物の USDZ を Blender が読めなかったとき**: `ingest_roomscan.mjs` は自動で、`room.json`(壁・床・ドア・窓・家具の transform と寸法)の箱から GLB を組み立てる(`glbBoxes.mjs`。`--boxes` で強制)。形は箱のままだが、寸法と位置は RoomPlan の値そのもの。ほかの救済(未実装): USDZ は ZIP なので、中が `.usda`(テキスト)なら形を読める(バイナリの `.usdc` は不可。RoomPlan の本物の中身は未確認)、three.js r187 の `USDLoader`(USDC も読めるとソースにある)、ARKit のメッシュを自前で書き出す(`ARMeshAnchor`)。
 3. (任意)`node place/tools/name_landmarks.mjs <id> --hint "..."` で Claude が呼び名と案内の一言を付け直す。**お金がかかる API なので、本番で使う前に API 残高の担当へ量を伝える。** 先に `--dry-run` で送る文だけ見る。
 4. 見る: `python place/tools/shot.py <出力フォルダ> <id>`(ヘッドレスで 4 画面)。**出力フォルダと id は必ず両方付ける**(付けないと test_room を `place/shots/` に撮って書く)、`python place/tools/native_ar_check.py`(iPhone の殻の偽物で AR を通し試験)。
 4b. 取りこみの確かめ: 偽の撮影(`place/testdata/fake_scan`)を `<id>` に取りこんだときは、`node place/tools/check_ingest.mjs <id>` が合格(終了コード 0)になること。素材貼りの有無・床の高さ・ドアを向く spawn・日本語の目印名まで機械で見る。本物の撮影のときは、箱の寸法を巻き尺と比べる。
 4c. 取りこみの最後に自動で 2 つ出る(止めず知らせるだけ。単独でも動く): `node place/tools/glbBudget.mjs <GLB>...`(三角面数・テクスチャの辺・重さを測って 採用/警告/却下。却下で終了コード 1)、`node place/tools/clearance.mjs <id>`(`scan/room.json` の家具と壁から、立つ位置が人の半径 0.35 m 以上あいているか、床の 90% 以上へ歩けるか、ドアが 0.72 m 以上で歩いて行けるか)。本物の RoomPlan のメッシュは三角面が数十万になりうる。**却下が出たら**、Blender で Decimate(比 0.25 から)→ テクスチャを 1024 に、の順に減らして再測定する(未実装。本物が届いてから)。
-5. 実機: `node place/tools/serve_https.mjs`(自己署名の HTTPS)→ iPhone の「ARステージ」/ Quest 3 のブラウザで `https://<PCのIP>:8443/place/web/demo.html?place=<id>`。
+5. 実機: ARステージは開く URL を組み立て時に固定する(今は `?place=test_room`)ので、新しい部屋は**ページ上の「場所」の選び口**(`places/index.json` が 2 つ以上のとき出る。ingest が作り直す。新しい順)から選ぶ。作り直しは要らない。`node place/tools/serve_https.mjs`(自己署名の HTTPS)→ iPhone の「ARステージ」/ Quest 3 のブラウザで `https://<PCのIP>:8443/place/web/demo.html?place=<id>`。
 
 ## 部屋の色(RoomPlan の面は色も UV も無い)
 - 今の版 B: `place/tools/make_textures.py`(コードで描く手続き的な素材。外の画像は使わない)→ `stylize_room.py` が面ごとに床・壁・天井・ドア・窓・家具(木・布・その他)を判定して箱の投影で貼る。名前でなく、RoomPlan の箱(room.json)と面の向き・高さで判定する(USDZ の中の名前は未確認のため)。

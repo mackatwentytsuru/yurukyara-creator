@@ -11,6 +11,23 @@ const placeId = params.get('place') ?? 'test_room';
 const characterHeight = Number(params.get('height') ?? 1.2);
 
 const info = document.getElementById('info');
+
+// 「場所」の選び口。ARステージは開く URL を組み立て時に固定するので、新しく撮った部屋はここから開く。
+// places/index.json(ingest_roomscan.mjs が作る)に 2 つ以上あるときだけ出す。
+try {
+  const { places } = await (await fetch('/places/index.json', { cache: 'no-store' })).json();
+  if (places.length > 1) {
+    const select = document.createElement('select');
+    select.id = 'place-select';
+    for (const p of places) select.add(new Option(p.name, p.id, false, p.id === placeId));
+    select.addEventListener('change', () => {
+      const next = new URLSearchParams(location.search);
+      next.set('place', select.value);
+      location.search = next.toString();
+    });
+    document.getElementById('bar').append(select);
+  }
+} catch { /* 一覧が無ければ選び口を出さないだけ */ }
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);

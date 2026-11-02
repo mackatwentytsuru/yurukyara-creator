@@ -73,3 +73,8 @@
 - 実機なしで試せた 5 つだけ試した。効いた: GLB の予算検査(`glbBudget.mjs`)、歩けるかの検査(`clearance.mjs`、偽の撮影で通り、家具で床を分けると不合格になる)、ボタン 44px。元から入っていた: 画素比 2 まで。使えない: USDZ を ZIP で開いて `.usda` を読む(Blender の書く USDZ は `.usdc` 1 つだけ)。
 - 実機・本物の部屋が要る物は、スキル place-pipeline の末尾の表に「未試」で残した。
 - 試験は偽の撮影だけ。本物の RoomPlan の room.json と USDZ の形は、まだ未確認のまま(`clearance.mjs` も `glbBoxes.mjs` と同じ形の前提)。
+
+### 2026-11-02 夜 本人の実機試験に向けた受け入れの準備
+- 作業用 PC のサーバー(PID 88820、8443)が動き続け、`?place=test_room` は 200。ARステージが開く URL は組み立て時に固定(`?place=test_room`)なので、新しく撮った部屋はページ上の「場所」の選び口から開く(`places/index.json`、`placeIndex.mjs`。ingest が作り直す)。作り直し不要。
+- `place/tools/receive_scan.mjs`: Mac の ~/Downloads に AirDrop で届いた 4 ファイルを集めて(`mac_collect_scan.py`)作業用 PC へ scp、取りこみまで一発。偽の AirDrop(`room_mesh 2.usdz` の名前重なり)で通し予行 6 秒、予算「採用」・通れる 93%。390 px の画面で選び口を確認。予行の物は全部消した。
+- 未確認: 本物の AirDrop が実際に ~/Downloads に 4 つ別々のファイルとして届くか(ShareLink の挙動)。実機で ARステージを開くのも未実施。
