@@ -10,7 +10,7 @@
 入力の絵: {IMAGE}(正面 1 枚だけ。横の形は推測してよい)。
 作業フォルダ(ここだけに書く): {WORK}
 - builder: そのフォルダの builder.py(Blender の Python。m00_prims を使う)。リポジトリ(repo)には何も書かない・コミットしない・push しない。
-- Blender: "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" -b -P ... 。Python(PIL・numpy): work\venv-trellis2\Scripts\python.exe 。claude や node を名前で止めない(taskkill /IM などは禁止)。
+- Blender: "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" -b -t 4 -P ... 。Python(PIL・numpy): work\venv-trellis2\Scripts\python.exe 。claude や node を名前で止めない(taskkill /IM などは禁止)。
 
 # 合格の条件(全部、実測で確かめる)
 1. builder が通り、.blend ができる。
