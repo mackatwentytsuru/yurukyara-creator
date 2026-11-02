@@ -78,3 +78,8 @@
 - 作業用 PC のサーバー(PID 88820、8443)が動き続け、`?place=test_room` は 200。ARステージが開く URL は組み立て時に固定(`?place=test_room`)なので、新しく撮った部屋はページ上の「場所」の選び口から開く(`places/index.json`、`placeIndex.mjs`。ingest が作り直す)。作り直し不要。
 - `place/tools/receive_scan.mjs`: Mac の ~/Downloads に AirDrop で届いた 4 ファイルを集めて(`mac_collect_scan.py`)作業用 PC へ scp、取りこみまで一発。偽の AirDrop(`room_mesh 2.usdz` の名前重なり)で通し予行 6 秒、予算「採用」・通れる 93%。390 px の画面で選び口を確認。予行の物は全部消した。
 - 未確認: 本物の AirDrop が実際に ~/Downloads に 4 つ別々のファイルとして届くか(ShareLink の挙動)。実機で ARステージを開くのも未実施。
+
+### 2026-11-02 夜 Quest をつなぐ道具(adb)を作業用 PC に入れた
+- Google 公式 `dl.google.com/android/repository/platform-tools-latest-windows.zip`(8,044,989 バイト)を 作業用 PC の `D:	ools\platform-tools\` に展開。adb 1.0.41(Version 37.0.1-15733141)、署名は Google LLC で有効。PATH・設定ファイルは変えていない(`D:	ools\platform-toolsdb.exe` をフルパスで呼ぶ)。C: 472 GB、D: 125 GB の空き。
+- この時点で、作業用 PC の USB に Quest は見えない(Meta の USB の ID 2833 が無く、`adb devices` も空)。ケーブル・Quest の電源・開発者モードの確認待ち。
+- つまずき: 札の種類名は `cpu`(「CPU の重い処理」は通らない)。札を取る前にダウンロードを先に走らせてしまったので、あとから取って返した(小さな作業)。
