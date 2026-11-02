@@ -1,7 +1,7 @@
 // 会話の本体。キャラを出し、カメラで人を見つけて目と首で追い、話しかけられたら Claude に聞いて、声で答える。
 import * as THREE from 'three';
 import { createStage } from './scene.js';
-import { loadCharacter } from './character/index.js';
+import { characterUrl, loadCharacter, motionChoices } from './character/index.js';
 import { MediapipeSource, SimSource, PoseSource } from './tracking/sources/index.js';
 import { AttentionPicker } from './tracking/attention.js';
 import { describeScene } from './tracking/geometry.js';
@@ -78,6 +78,7 @@ const dialogue = new Dialogue({
   speaker,
   ui,
   setGaze,
+  motionChoices,
   getContext: () => ({
     scene: sceneText(),
     character: { name: app.character.name, persona: app.persona },
@@ -387,7 +388,7 @@ async function boot() {
     if (app.character) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
   });
   try {
-    const url = params.get('char') ?? '/characters/_test/character.json';
+    const url = characterUrl(params.get('character') ?? params.get('char')); // id・URL のどちらでもよい
     app.place = await loadPlaceData(params.get('place'));
     const character = await loadCharacter(url);
     app.character = character;
@@ -397,7 +398,9 @@ async function boot() {
       app.place.loaded.placeCharacter(character.object3d); // 場所が決めた位置・向きに立たせる
     }
     stage.scene.add(character.object3d);
-    stage.frameCharacter(character, params.get('view') === 'full' ? 'full' : 'bust', app.place.loaded?.object3d);
+    // 人型でないキャラ(rig)は、上半身でなく全身を見せる
+    const view = params.get('view') ?? (character.kind === 'rig' ? 'full' : 'bust');
+    stage.frameCharacter(character, view === 'full' ? 'full' : 'bust', app.place.loaded?.object3d);
     if (character.personaUrl) app.persona = await (await fetch(character.personaUrl)).text();
     status.textContent = '';
   } catch (err) {

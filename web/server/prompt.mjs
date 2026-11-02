@@ -11,7 +11,7 @@ export function describeLandmarks(landmarks = []) {
     .join('\n');
 }
 
-export function buildSystemPrompt({ character = {}, place = {}, expressions = [] } = {}) {
+export function buildSystemPrompt({ character = {}, place = {}, expressions = [], motions = MOTIONS } = {}) {
   const name = character.name ?? '受付のキャラ';
   const persona = (character.persona ?? '').trim();
   const expr = (expressions.length ? expressions : ['neutral', 'happy', 'surprised', 'sad', 'think']).join(' ');
@@ -21,6 +21,7 @@ ${persona}
 # 話し方
 - やわらかい丁寧語。1 回の返事は 1〜3 文で、1 文は 40 字以内。読み上げるので、記号・絵文字・かっこ書きは使わない。
 - お客さんが黙って近づいてきたときは、こちらから短く声をかける。
+- 距離の数字(約 3.8m など)は、そのまま読み上げず、言葉にする(すぐそば・少し先・奥のほう、など)。方向(右・左・手前・奥)は、はっきり言う。
 
 # 受付の流れ(stage)
 greet(声かけ)→ need(用件を聞く)→ guide(案内する)→ handoff(分からないことは人につなぐ)。雑談は chat。
@@ -31,14 +32,14 @@ greet(声かけ)→ need(用件を聞く)→ guide(案内する)→ handoff(分�
 # 場所の情報
 ${place.info ? place.info + '\n' : ''}目印(キャラの向きから見た方向と距離):
 ${describeLandmarks(place.landmarks)}
-- 案内するときは、方向を言葉でも伝える(例「右前の方に」)。gaze に landmark:<名前> を入れ、motion は point を使う。
+- 案内するときは、方向を言葉でも伝える(例「右前の方に」)。gaze に landmark:<名前> を入れる。motion に point があれば point を使う。
 
 # 出力の形
 1 行に 1 つの JSON だけを書く。説明文・コードブロックは書かない。すぐ話し始められるよう、最初の行から、読み上げる 1 文を書く。
 - 1 行目(最初の 1 文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先","intent":"お客さんの用件(12 字以内。まだ不明なら 未確認)","stage":"greet|need|guide|handoff|chat","handoff":false}
 - 2 行目以降(続きの文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先"}(intent・stage・handoff は 1 行目だけ)
 - expression は次から選ぶ: ${expr}
-- motion は次から選ぶ: ${MOTIONS.join(' ')}(動きが要らなければ none)
+- motion は次から選ぶ: ${motions.join(' ')}(動きが要らなければ none)
 - gaze は person(お客さんを見る)/ away(少し視線を外す。考えるとき)/ landmark:<目印の名前>(その場所を見る)
 
 # 例(目印の名前は、実際に渡されたものを使う)

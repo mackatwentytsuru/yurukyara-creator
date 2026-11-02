@@ -28,8 +28,8 @@ export class Dialogue {
    * @param {(spec:string, ms:number) => (number[]|null)} deps.setGaze 'person' | 'away' | 'landmark:名前'
    * @param {(entry:object) => void} deps.onMetric
    */
-  constructor({ character, speaker, ui, getContext, setGaze, onMetric }) {
-    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric });
+  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices }) {
+    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices });
     this.history = [];
     this.abort = null;
     this.timers = [];
@@ -131,6 +131,7 @@ export class Dialogue {
       character: ctx.character,
       place: ctx.place,
       expressions: this.character.expressions,
+      motions: this.motionChoices?.(this.character),
     };
 
     try {

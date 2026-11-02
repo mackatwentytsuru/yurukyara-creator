@@ -28,7 +28,7 @@ export function cleanSpeech(text) {
 }
 
 /** 受け取った 1 つの JSON を、画面に渡せる形にそろえる */
-export function normalizeEvent(obj, { expressions }) {
+export function normalizeEvent(obj, { expressions, motions = MOTIONS }) {
   if (obj.type === 'thought') {
     return {
       type: 'thought',
@@ -42,7 +42,7 @@ export function normalizeEvent(obj, { expressions }) {
     const text = cleanSpeech(obj.text);
     if (!text) return null;
     const expression = expressions.includes(obj.expression) ? obj.expression : 'neutral';
-    const motion = MOTIONS.includes(obj.motion) ? obj.motion : 'none';
+    const motion = motions.includes(obj.motion) ? obj.motion : 'none';
     return { type: 'say', text, expression, motion, gaze: String(obj.gaze ?? 'person') };
   }
   return null;
@@ -202,13 +202,15 @@ export function* mockReply({ text, trigger, landmarks = [], seen }) {
 export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false } }) {
   const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
   const expressions = body.expressions?.length ? body.expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
+  // そのキャラが実際に使える動き(rig は、動きのファイルがある物だけ)
+  const motions = Array.isArray(body.motions) && body.motions.length ? body.motions.filter((m) => typeof m === 'string').slice(0, 24) : MOTIONS;
   const emit = (obj) => {
     // 最初の say に用件・段階が付いているときは、画面の「考え」にも先に渡す
     if (obj.type === 'say' && (obj.intent !== undefined || obj.stage !== undefined)) {
-      const thought = normalizeEvent({ type: 'thought', intent: obj.intent, stage: obj.stage, handoff: obj.handoff }, { expressions });
+      const thought = normalizeEvent({ type: 'thought', intent: obj.intent, stage: obj.stage, handoff: obj.handoff }, { expressions, motions });
       if (thought) onEvent(thought);
     }
-    const ev = normalizeEvent(obj, { expressions });
+    const ev = normalizeEvent(obj, { expressions, motions });
     if (ev) onEvent(ev);
   };
 
@@ -223,7 +225,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   }
 
   onEvent({ type: 'meta', brain: 'haiku', model: config.model });
-  const system = buildSystemPrompt({ character, place, expressions });
+  const system = buildSystemPrompt({ character, place, expressions, motions });
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
     { role: 'user', content: buildUserTurn({ text, scene, trigger }) },

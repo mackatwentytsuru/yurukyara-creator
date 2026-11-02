@@ -24,7 +24,7 @@ npm run server              # http://localhost:8787
 
 ## 画面の呼び出しの引数
 
-`?char=<character.json の URL>` `?place=<place.json の URL>` `?view=full`(全身)`?gain=2`(視線の振れ)`?hfov=65`(カメラの画角)`?auto=0`(近づいた人への声かけをしない)
+`?character=<id か character.json の URL>`(`f_led` のように id だけでもよい。`?char=` も同じ) `?place=<place.json の URL>` `?view=full`(全身)`?gain=2`(視線の振れ)`?hfov=65`(カメラの画角)`?auto=0`(近づいた人への声かけをしない)
 
 ## 作り
 
@@ -58,6 +58,12 @@ conversation.setPeople([{ id: 'a', position: [x, y, z], speaking: true }]);  // 
 
 1.5 秒、更新が無ければ「いなくなった」とみなします。
 
+## キャラの種類
+
+- `type: "vrm"`: 人型。表情・口・視線(目が先・首が後)・手続きの動き(うなずき・お辞儀・手を振る・指さし ほか)。
+- `type: "rig"`: 人型でないキャラ。キャラの柱の `creator/viewer/rigRuntime.js`(`loadRigCharacter`)で読み、顔の絵の表(表情 × 口の開き)・体の向き・動きのファイル(`motions/*.glb`)で動く。呼び方は VRM と同じ(`CharacterBase`)。Claude に選ばせる「動き」の一覧は、そのキャラにある動きのファイルだけを渡す(`motionChoices`)。全身を見せる(`?view=full` が既定)。
+- 身長合わせの大きさは、中身(モデルのシーン)に掛け、`object3d` の座標はいつもメートルのまま。場所に立たせる・視線を計算するときに、単位が狂わない。
+
 ## 見せ方(画面・AR・VR)
 
 切りかえの入口は場所の柱の `place/web/modes.js`(`createPresentation`)です。`web/` は次をつないでいます。
@@ -66,6 +72,7 @@ conversation.setPeople([{ id: 'a', position: [x, y, z], speaking: true }]);  // 
 - AR(iPhone の殻アプリ): ページが殻の中だと分かると、すぐ AR に入ります。殻の姿勢が `PoseSource` に届き(カメラは使わない)、キャラは見ている方向の 1.6m 先の床に立ち、床をタップするとそこへ移ります。撮った部屋は隠します(AR の世界と重ならないため)。
 - AR / VR(Quest): 「AR で見る」「VR で見る」のボタンが出ます。入ると入力は頭の位置になり、MediaPipe のカメラは止めます。VR では撮った部屋の中に、spawn の位置で立ちます。
 - 画面に戻ると、入力・カメラの構図・キャラの位置を元に戻します。
+- **AR の位置合わせ**: 殻の中で撮った部屋(`?place=`)があると、「『入口』の真下の床をタップしてください(1/2)」と案内が出ます(場所の柱の `alignFlow`)。2 か所タップすると、撮った部屋が現実の部屋に重なり、キャラは部屋の立ち位置に立ち、撮った部屋は見えない遮蔽物になります。食い違いが 15cm を超えると、やり直しになります。**重なるまでは、部屋の目印を Claude に渡しません**(現実と合わないため)。重なったあとは、位置合わせを織りこんだ距離と向きを渡します。
 
 iPhone の殻から開く HTTPS(同じネットワークに公開するときだけ。費用の上限は付いています):
 
