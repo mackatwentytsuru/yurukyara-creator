@@ -22,6 +22,11 @@ export function createUi() {
   let replyParts = [];
   let actParts = [];
 
+  // 狭い画面では、最初は畳んでおく(字幕と顔を隠さないため)
+  if (window.matchMedia('(max-width: 640px)').matches) {
+    $('thought').classList.add('collapsed');
+    $('thoughtToggle').setAttribute('aria-expanded', 'false');
+  }
   $('thoughtToggle').addEventListener('click', () => {
     const box = $('thought');
     box.classList.toggle('collapsed');

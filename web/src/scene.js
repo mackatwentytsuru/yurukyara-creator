@@ -57,7 +57,7 @@ export function createStage(canvas) {
     const visibleH = view === 'full' ? height * 1.18 : height * 0.62;
     const centerY = view === 'full' ? box.min.y + height * 0.5 : box.min.y + height * 0.67;
     // 横が狭い画面(スマホ)でも、肩と腕が入るようにする
-    const neededH = Math.max(visibleH, (height * 0.55) / aspect);
+    const neededH = Math.max(visibleH, (height * (view === 'full' ? 0.55 : 0.4)) / aspect);
     const dist = neededH / (2 * Math.tan(fov / 2));
     camera.position.set(0, centerY, dist);
     camera.lookAt(0, centerY, 0);
