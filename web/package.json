@@ -1,0 +1,24 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ブラウザで動く会話の本体(VRM・追従・Claude・声)",
+  "scripts": {
+    "postinstall": "node scripts/setup-assets.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "server": "node server/index.mjs",
+    "start": "vite build && node server/index.mjs",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.0",
+    "@pixiv/three-vrm": "^3.5.5",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0",
+    "vite": "^8.3.5"
+  }
+}
