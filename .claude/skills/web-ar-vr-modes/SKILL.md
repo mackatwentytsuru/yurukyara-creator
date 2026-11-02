@@ -23,6 +23,7 @@ renderer.setAnimationLoop(() => { modes.frame(); renderer.render(scene, camera);
 
 ## 実機が無くても試す(偽物で端から端まで)
 - `node --test`(`place/test/`): 偽の `navigator.xr`・偽の renderer で、機能一覧・背景の戻し方・モードの切りかえ・ボタン。
+- ページを作ったら `python place/tools/check_modes_page.py <ページのパス>` で確かめる(殻あり・なしの両方。ページの決まりは、そのファイルの先頭に書いてある)。three は `importmap` で `/place/node_modules/three/…` を指す(`place/web/demo.html` が見本)。
 - `python place/tools/native_ar_check.py`: ヘッドレス Chrome に `window.webkit.messageHandlers.arhost` を差し、姿勢(`window.__arhost.onPose`)を送って、AR に入る→床 2 回タップで部屋が重なる→タップでキャラが動く、背景が透明、エラー 0 を見る。
 - はまった所: アニメーションのループが、あとで `let` する変数を参照して起動直後に落ちる(TDZ)→ 先に `let x = null` を宣言。`html` と `body` の背景は、`body.ar html` では効かない(`html.ar, html.ar body`)。
 - 実機で確かめた物と、偽物でだけ確かめた物は、devlog で分けて書く。

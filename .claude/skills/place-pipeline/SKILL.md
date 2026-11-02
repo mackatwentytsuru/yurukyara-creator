@@ -10,6 +10,7 @@ description: 部屋を iPhone の LiDAR で撮って places/<id>/ にし、ブ�
 2. Mac から PC へ取る(`scp`)。`node place/tools/ingest_roomscan.mjs <撮ったフォルダ> <id> [表示名] [--plain]` → `room_raw.glb`(Blender 変換のまま)・`room.glb`(種類ごとの素材を貼った版。`--plain` なら raw と同じ)・`place.json`(`variants` に見た目の名前)・`scan/`(撮った物の写し。素材や色を作り直すため)。ブラウザは `?variant=raw|stylized|photo` で見た目を切りかえる。
 3. (任意)`node place/tools/name_landmarks.mjs <id> --hint "..."` で Claude が呼び名と案内の一言を付け直す。**お金がかかる API なので、本番で使う前に API 残高の担当へ量を伝える。** 先に `--dry-run` で送る文だけ見る。
 4. 見る: `python place/tools/shot.py <出力> <id>`(ヘッドレスで 4 画面)、`python place/tools/native_ar_check.py`(iPhone の殻の偽物で AR を通し試験)。
+4b. 取りこみの確かめ: 偽の撮影(`place/testdata/fake_scan`)を `<id>` に取りこんだときは、`node place/tools/check_ingest.mjs <id>` が合格(終了コード 0)になること。素材貼りの有無・床の高さ・ドアを向く spawn・日本語の目印名まで機械で見る。本物の撮影のときは、箱の寸法を巻き尺と比べる。
 5. 実機: `node place/tools/serve_https.mjs`(自己署名の HTTPS)→ iPhone の「ARステージ」/ Quest 3 のブラウザで `https://<PCのIP>:8443/place/web/demo.html?place=<id>`。
 
 ## 部屋の色(RoomPlan の面は色も UV も無い)
