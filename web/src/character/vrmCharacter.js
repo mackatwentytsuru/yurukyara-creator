@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { CharacterBase } from './characterBase.js';
 import { REST_POSE } from './gestures.js';
+import { nearestExpression } from './expressionNames.js';
 
 /** VRM の表情の別名。character.json の expressions にある名前を、VRM の名前に直す。 */
 const EXPRESSION_ALIAS = {
@@ -16,6 +17,9 @@ const EXPRESSION_ALIAS = {
 };
 const MOUTH_EXPRESSIONS = ['aa', 'ih', 'ou', 'ee', 'oh'];
 const EMOTIONS = ['happy', 'sad', 'angry', 'surprised', 'relaxed'];
+// 口・まばたき・目線は感情ではない(別の所で動かす)。それ以外の表情は、感情として毎コマ決める
+const NOT_EMOTION = new Set([...MOUTH_EXPRESSIONS, 'blink', 'blinkLeft', 'blinkRight', 'lookUp', 'lookDown', 'lookLeft', 'lookRight']);
+const STANDARD_PRESETS = new Set(['neutral', ...EMOTIONS]);
 
 // 視線の回転を骨に配る割合(足して 1)。目は VRM の lookAt が別に受け持つ
 const GAZE_SPLIT = { chest: 0.1, neck: 0.4, head: 0.5 };
@@ -37,6 +41,10 @@ export class VrmCharacter extends CharacterBase {
       if (node) this.bones.set(name, node);
     }
     this.available = new Set(vrm.expressionManager ? Object.keys(vrm.expressionManager.expressionMap) : []);
+    this.emotionKeys = [...this.available].filter((k) => !NOT_EMOTION.has(k));
+    this.customKeys = this.emotionKeys.filter((k) => !STANDARD_PRESETS.has(k)); // そのキャラだけの表情(ウインク・照れ など)
+    this.expressionFallback = config.expressionFallback ?? {};
+    this._warned = new Set();
     if (!config.expressions?.length) {
       this.expressions = ['neutral', ...EMOTIONS.filter((e) => this.available.has(e))];
     }
@@ -49,14 +57,20 @@ export class VrmCharacter extends CharacterBase {
     return super._headWorld(out);
   }
 
-  /** 名前を VRM の表情に直す。think が無いモデルでは relaxed を弱く使う */
+  /** 名前を VRM の表情に直す。この VRM に無い名前は、近い表情に落とす(think は relaxed を弱く) */
   _resolve(name, value, out) {
     const key = EXPRESSION_ALIAS[name] ?? name;
     if (this.available.has(key)) {
       out.set(key, Math.max(out.get(key) ?? 0, value));
-    } else if (key === 'think' && this.available.has('relaxed')) {
-      out.set('relaxed', Math.max(out.get('relaxed') ?? 0, value * 0.5));
+      return;
     }
+    const near = nearestExpression(key, (n) => this.available.has(n), this.expressionFallback);
+    if (!near) return;
+    if (key !== 'think' && !this._warned.has(key)) {
+      this._warned.add(key);
+      console.warn(`この VRM に表情 ${key} が無いので ${near} で出します`);
+    }
+    out.set(near, Math.max(out.get(near) ?? 0, key === 'think' ? value * 0.5 : value));
   }
 
   _apply(s) {
@@ -83,8 +97,7 @@ export class VrmCharacter extends CharacterBase {
     if (em) {
       const out = new Map();
       for (const [name, value] of expr) this._resolve(name, value, out);
-      for (const key of EMOTIONS) em.setValue(key, out.get(key) ?? 0);
-      if (this.available.has('neutral')) em.setValue('neutral', out.get('neutral') ?? 0);
+      for (const key of this.emotionKeys) em.setValue(key, out.get(key) ?? 0);
       // 口: 母音は aa を主に、少しだけ oh を混ぜる
       const m = s.mouth;
       const wob = 0.5 + 0.5 * Math.sin(this.time * 9);
@@ -92,7 +105,8 @@ export class VrmCharacter extends CharacterBase {
       em.setValue('aa', m * (0.65 + 0.35 * wob));
       em.setValue('oh', m * 0.35 * (1 - wob));
       // 笑顔などで目が細くなっているときは、まばたきを弱める
-      const emotional = Math.max(out.get('happy') ?? 0, out.get('relaxed') ?? 0);
+      // そのキャラだけの表情(ウインク・泣き顔 など)も、目の形が変わるので、まばたきを弱める
+      const emotional = Math.max(out.get('happy') ?? 0, out.get('relaxed') ?? 0, ...this.customKeys.map((k) => out.get(k) ?? 0));
       em.setValue('blink', s.blink * (1 - 0.7 * emotional));
     }
     this.vrm.update(s.dt);

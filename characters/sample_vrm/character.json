@@ -4,7 +4,29 @@
   "model": "model.vrm",
   "type": "vrm",
   "height_m": 1.6,
-  "expressions": ["neutral", "happy", "surprised", "sad", "angry", "relaxed", "think"],
+  "expressions": [
+    "neutral",
+    "happy",
+    "surprised",
+    "sad",
+    "angry",
+    "relaxed",
+    "think",
+    "wink",
+    "shy",
+    "bigSmile",
+    "pout",
+    "troubled",
+    "cry"
+  ],
   "motions": {},
-  "persona": "persona.md"
+  "persona": "persona.md",
+  "expression_hints": {
+    "wink": "ウインク。いたずらっぽく、ないしょ話やからかいのとき",
+    "shy": "照れ。ほめられたとき、かわいいと言われたとき",
+    "bigSmile": "満面の笑み。とてもうれしいとき、ありがとうと言われたとき",
+    "pout": "ふくれっ面。子ども扱いされたとき、すねたいとき",
+    "troubled": "困り顔。道に迷った人への返事、むずかしい頼み、返事に困るとき",
+    "cry": "泣き顔。お別れ、悲しいお知らせ、感動したとき"
+  }
 }

@@ -16,6 +16,7 @@ export class CharacterBase {
     this.id = id;
     this.name = name;
     this.expressions = expressions;
+    this.expressionHints = {}; // 名前 → いつ使うか(日本語)。character.json の expression_hints。頭脳への説明に使う
     this.motionNames = Object.keys(motions);
     this.heightM = heightM;
     this.object3d = new THREE.Group();

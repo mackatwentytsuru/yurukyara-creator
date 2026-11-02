@@ -140,6 +140,7 @@ export class Dialogue {
       character: ctx.character,
       place: ctx.place,
       expressions: this.character.expressions,
+      expressionHints: this.character.expressionHints,
       motions: this.motionChoices?.(this.character),
     };
 

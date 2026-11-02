@@ -11,10 +11,19 @@ export function describeLandmarks(landmarks = []) {
     .join('\n');
 }
 
-export function buildSystemPrompt({ character = {}, place = {}, expressions = [], motions = MOTIONS } = {}) {
+/** 表情の一覧を、名前だけの行と、説明つきの行にして返す */
+export function describeExpressions(expressions = [], hints = {}) {
+  const names = expressions.length ? expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
+  const described = names.filter((n) => hints[n]).map((n) => `  - ${n}: ${hints[n]}`);
+  return { names: names.join(' '), described: described.length ? `
+- 次の表情は、説明の場面で使う(気持ちがはっきり出る場面だけ。ふだんは neutral か happy):
+${described.join(String.fromCharCode(10))}` : '' };
+}
+
+export function buildSystemPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS } = {}) {
   const name = character.name ?? '受付のキャラ';
   const persona = (character.persona ?? '').trim();
-  const expr = (expressions.length ? expressions : ['neutral', 'happy', 'surprised', 'sad', 'think']).join(' ');
+  const expr = describeExpressions(expressions, expressionHints);
   return `あなたは「${name}」。${place.name ?? 'お店'}の入口に立つ、受付のキャラクターです。お客さんの目の前に立ち、声で話します。
 ${persona}
 
@@ -38,7 +47,7 @@ ${describeLandmarks(place.landmarks)}
 1 行に 1 つの JSON だけを書く。説明文・コードブロックは書かない。すぐ話し始められるよう、最初の行から、読み上げる 1 文を書く。
 - 1 行目(最初の 1 文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先","intent":"お客さんの用件(12 字以内。まだ不明なら 未確認)","stage":"greet|need|guide|handoff|chat","handoff":false}
 - 2 行目以降(続きの文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先"}(intent・stage・handoff は 1 行目だけ)
-- expression は次から選ぶ: ${expr}
+- expression は次から選ぶ: ${expr.names}${expr.described}
 - motion は次から選ぶ: ${motions.join(' ')}(動きが要らなければ none)
 - gaze は person(お客さんを見る)/ away(少し視線を外す。考えるとき)/ landmark:<目印の名前>(その場所を見る)
 

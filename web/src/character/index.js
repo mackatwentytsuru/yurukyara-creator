@@ -27,7 +27,7 @@ export async function loadCharacter(url, overrides = {}) {
 
   if (type === 'rig') {
     // 身長合わせの大きさは、rigRuntime が中身(gltf.scene)に掛ける。object3d の座標は、メートルのまま
-    return Object.assign(await loadRigCharacter(url), { kind: 'rig' });
+    return Object.assign(await loadRigCharacter(url), { kind: 'rig', expressionHints: json.expression_hints ?? {} });
   }
   if (type !== 'vrm') throw new Error(`知らない type です: ${type}`);
   const base = new URL(url, location.href);
@@ -37,10 +37,11 @@ export async function loadCharacter(url, overrides = {}) {
     expressions: json.expressions ?? [],
     motions: json.motions ?? {},
     heightM: json.height_m ?? null,
+    expressionFallback: json.expression_fallback ?? {},
     ...overrides,
   };
   const character = await loadVrm(new URL(json.model, base).href, config);
-  return Object.assign(character, { kind: 'vrm', personaUrl: json.persona ? new URL(json.persona, base).href : null });
+  return Object.assign(character, { kind: 'vrm', expressionHints: json.expression_hints ?? {}, personaUrl: json.persona ? new URL(json.persona, base).href : null });
 }
 
 /** そのキャラが実際に使える動きの名前(Claude に選ばせる一覧)。idle と talk は自動なので外す */

@@ -2,6 +2,7 @@
 // 鍵が無いときは、同じ形で返す仮の頭脳(固定の台本)を使う。
 import { config } from './env.mjs';
 import { buildSystemPrompt, buildUserTurn, MOTIONS } from './prompt.mjs';
+import { nearestExpression } from '../src/character/expressionNames.js';
 
 /** 1 行の JSON を直す。コードブロックや前後の文字が付いていても、できるだけ拾う */
 export function parseLine(line) {
@@ -41,7 +42,8 @@ export function normalizeEvent(obj, { expressions, motions = MOTIONS }) {
   if (obj.type === 'say') {
     const text = cleanSpeech(obj.text);
     if (!text) return null;
-    const expression = expressions.includes(obj.expression) ? obj.expression : 'neutral';
+    // 一覧に無い表情は、近い物(ウインク → happy など)に落とす。無ければ neutral
+    const expression = nearestExpression(String(obj.expression ?? ''), (n) => expressions.includes(n)) ?? 'neutral';
     const motion = motions.includes(obj.motion) ? obj.motion : 'none';
     return { type: 'say', text, expression, motion, gaze: String(obj.gaze ?? 'person') };
   }
@@ -225,7 +227,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   }
 
   onEvent({ type: 'meta', brain: 'haiku', model: config.model });
-  const system = buildSystemPrompt({ character, place, expressions, motions });
+  const system = buildSystemPrompt({ character, place, expressions, expressionHints: body.expressionHints, motions });
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
     { role: 'user', content: buildUserTurn({ text, scene, trigger }) },

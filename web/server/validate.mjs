@@ -23,10 +23,19 @@ export const LIMITS = {
   landmarkText: 200,
   choices: 32, // 表情・動きの名前の数
   choiceName: 40,
+  hintText: 60, // 表情の「いつ使うか」の説明
 };
 
 function choiceList(v, max = LIMITS.choices) {
   return list(v, max).filter((s) => typeof s === 'string' && s.length > 0).map((s) => s.slice(0, LIMITS.choiceName));
+}
+
+/** 表情の説明。一覧にある名前の物だけ、文字の物だけを、短くして残す */
+function hintMap(v, names) {
+  const out = {};
+  if (!isObject(v)) return out;
+  for (const n of names) if (typeof v[n] === 'string' && v[n].trim()) out[n] = v[n].trim().slice(0, LIMITS.hintText);
+  return out;
 }
 
 /** /api/chat の本文を、決まった形・長さにして返す。形が根本から違う物は ValidationError */
@@ -59,6 +68,7 @@ export function sanitizeChatBody(raw) {
     expressions: choiceList(raw.expressions),
     motions: choiceList(raw.motions, 24),
   };
+  clean.expressionHints = hintMap(raw.expressionHints, clean.expressions);
   // 試験用の遅延の指定は、有限の数で範囲内の物だけ
   if (Number.isFinite(raw.hedgeMs)) clean.hedgeMs = Math.min(Math.max(raw.hedgeMs, 0), 10_000);
   return clean;
