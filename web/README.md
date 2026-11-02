@@ -38,6 +38,26 @@ server/           Haiku の流し読み・読み上げの中継(文字数の上�
 
 Claude は、1 行に 1 つの JSON で、まず `thought`(見えた様子・用件・段階)を返し、続けて読み上げる 1 文ごとに `say`(言葉・表情・動き・視線の先)を返します。画面は、`say` が届くたびに読み上げを始め、その文が話し始める瞬間に、表情・動き・視線・字幕を合わせます。
 
+## 人の位置の入力(差し替え口)
+
+キャラの目と首は、`src/tracking/sources/` の「入力」が返す人の位置の先を向きます。入力は `getPeople(nowMs)` で、
+`[{ id?, position:[x,y,z], gaze?, speaking?, mouth? }]` を返します(座標は place.json と同じ。ワールド、m、y が上、右手系。詳しくは `sources/index.js`)。
+
+| 入力 | 使う場面 |
+|---|---|
+| `MediapipeSource` | 画面(screen)。端末のカメラ。既定 |
+| `SimSource` | カメラなしの試し。マウスの位置が人の位置 |
+| `PoseSource` | AR(iPhone の殻アプリ)・VR(Quest)。外から位置を受け取る。`?source=pose` で始める |
+
+`PoseSource` へは、ページの `window.conversation` から渡します。
+
+```js
+conversation.setViewer([x, y, z]);                       // 見ている人の頭のワールド座標。null で「いなくなった」
+conversation.setPeople([{ id: 'a', position: [x, y, z], speaking: true }]);  // 複数人
+```
+
+1.5 秒、更新が無ければ「いなくなった」とみなします。
+
 ## 確かめる
 
 ```bash

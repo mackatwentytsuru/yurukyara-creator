@@ -2,9 +2,9 @@
 import * as THREE from 'three';
 import { createStage } from './scene.js';
 import { loadCharacter } from './character/index.js';
-import { FaceTracker } from './tracking/faceTracker.js';
+import { MediapipeSource, SimSource, PoseSource } from './tracking/sources/index.js';
 import { AttentionPicker } from './tracking/attention.js';
-import { faceToWorld, describeScene } from './tracking/geometry.js';
+import { describeScene } from './tracking/geometry.js';
 import { Speaker } from './conversation/speaker.js';
 import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
@@ -23,30 +23,29 @@ const ui = createUi();
 const stage = createStage($('stage'));
 const speaker = new Speaker();
 const picker = new AttentionPicker();
-const tracker = new FaceTracker();
 
 const app = {
   character: null,
   place: null,
   persona: '',
-  mode: 'none', // 'camera' | 'sim'
+  source: null, // 人の位置を返す入力(tracking/sources)。選ぶ前は null
+  mode: 'none', // 'camera' | 'sim' | 'pose'
   autoGreet: params.get('auto') !== '0',
-  simFaces: [],
   status: null,
   metrics: [],
   lastAttention: { tracks: [], primaryId: null, speakerId: null },
-  world: new Map(),
 };
 window.__app = app; // 試験と開発の確認用
 app.speaker = speaker;
 app.stage = stage;
-app.tracker = tracker;
 app.picker = picker;
 
 /* ---------- 視線 ---------- */
 // 視線の先は、キャラの座標(足元が原点・+z が正面・+x がお客さんから見て右)で考えて、世界の座標に直す。
 // こうすると、場所の中でキャラが spawn の位置・向きに立っていても、同じ式で合う。
 const toWorld = (local) => app.character.object3d.localToWorld(new THREE.Vector3(...local)).toArray();
+const toLocal = (world) => app.character.object3d.worldToLocal(new THREE.Vector3(...world)).toArray();
+const frameInfo = () => ({ toWorld, headY: stage.state.headY, camZ: stage.state.camZ });
 let gazeOverride = null; // { pos:[x,y,z](世界), until:ms }
 /** @returns {number[]|null} 目印を見るときは、キャラから見たその場所(指さしに使う) */
 function setGaze(spec, ms = 2000) {
@@ -101,7 +100,7 @@ app.dialogue = dialogue;
 let lastSceneText = '';
 function sceneText() {
   const a = app.lastAttention;
-  return describeScene(a.tracks, { primaryId: a.primaryId, speakerId: a.speakerId, world: app.world });
+  return describeScene(a.tracks, { primaryId: a.primaryId, speakerId: a.speakerId });
 }
 
 /* ---------- 声 ---------- */
@@ -141,13 +140,14 @@ async function toggleMic() {
 }
 
 function updatePrivacy() {
-  const cam = app.mode === 'camera';
-  const mic = listener?.listening;
-  let text = cam
-    ? 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。'
-    : 'カメラは使っていません(マウスで人の位置を動かしています)。';
-  if (mic) text += ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
-  ui.privacy(text, !cam);
+  const texts = {
+    camera: 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
+    pose: 'カメラの映像は使っていません。この端末の位置だけで、あなたのいる方向を知っています。',
+    sim: 'カメラは使っていません(マウスで人の位置を動かしています)。',
+  };
+  let text = texts[app.mode] ?? texts.sim;
+  if (listener?.listening) text += ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
+  ui.privacy(text, app.mode !== 'camera');
 }
 
 /* ---------- 画面の状態 ---------- */
@@ -165,11 +165,8 @@ function updateChips() {
   chips.push(['頭脳', s ? (s.brain === 'haiku' ? 'Claude Haiku' : '仮(鍵なし)') : '—', s?.brain === 'haiku' ? 'ok' : 'warn']);
   const ttsOk = s?.tts?.available && !speaker.ttsError;
   chips.push(['声', ttsOk ? `ElevenLabs(残り ${s.tts.remainingToday}字)` : '字幕のみ', ttsOk ? 'ok' : 'warn']);
-  chips.push([
-    'カメラ',
-    app.mode === 'camera' ? `${tracker.delegate} ${tracker.fps.toFixed(0)}fps` : app.mode === 'sim' ? 'マウスで試し中' : 'なし',
-    app.mode === 'camera' ? 'ok' : 'warn',
-  ]);
+  const info = app.source?.info() ?? { label: 'なし', ok: false };
+  chips.push([app.mode === 'pose' ? '位置' : 'カメラ', info.label, info.ok ? 'ok' : 'warn']);
   chips.push(['人', String(app.lastAttention.tracks.length), '']);
   if (listener?.listening) chips.push(['聞き取り', 'ブラウザ', 'ok']);
   ui.chips(chips);
@@ -188,35 +185,30 @@ function frame(nowMs) {
   if (!c) return;
   const nowS = nowMs / 1000;
 
-  // 1. 顔の位置(カメラ or マウス)
-  let faces = [];
-  if (app.mode === 'camera') faces = tracker.step(nowMs);
-  else if (app.mode === 'sim') faces = app.simFaces;
+  // 1. 人の位置(入力から。ワールド座標)を、キャラの座標に直す
+  const people = (app.source?.getPeople(nowMs) ?? []).map((p) => ({
+    ...p,
+    position: toLocal(p.position),
+    gaze: p.gaze ? toLocal(p.gaze) : undefined,
+  }));
 
   // 2. 誰を見るか
-  const att = picker.update(faces, nowS, { voiceActive: Boolean(listener?.voiceActive) });
+  const att = picker.update(people, nowS, { voiceActive: Boolean(listener?.voiceActive) });
   app.lastAttention = att;
-  app.world = new Map(
-    att.tracks.map((t) => [
-      t.id,
-      faceToWorld(t, { hfovDeg: HFOV, aspect: tracker.video ? tracker.video.videoWidth / tracker.video.videoHeight : 4 / 3, headY: stage.state.headY }),
-    ]),
-  );
   const primary = att.tracks.find((t) => t.id === att.primaryId);
 
   // 3. キャラの目と首
   if (gazeOverride && nowMs < gazeOverride.until) {
     c.lookAt(gazeOverride.pos);
   } else if (primary) {
-    const [x, y] = app.world.get(primary.id);
-    c.lookAt(toWorld([x * GAIN, y, stage.state.camZ]));
+    c.lookAt(toWorld(primary.gaze ?? primary.position));
   } else {
     c.lookAt(null);
   }
 
   // 4. 近づいた人に、こちらから声をかける
   if (primary) {
-    const dist = app.world.get(primary.id)[2];
+    const dist = Math.hypot(primary.position[0], primary.position[2]);
     if (!presence.since) presence.since = nowS;
     presence.lastSeen = nowS;
     if (
@@ -251,29 +243,16 @@ function frame(nowMs) {
 }
 
 /* ---------- 起動 ---------- */
-function setupSimInput() {
-  const stageEl = $('stage');
-  let width = 0.18;
-  const set = (clientX, clientY) => {
-    const r = stageEl.getBoundingClientRect();
-    app.simFaces = [{ x: 1 - (clientX - r.left) / r.width, y: (clientY - r.top) / r.height, width, mouth: 0 }];
-  };
-  window.addEventListener('pointermove', (e) => {
-    if (app.mode === 'sim' && e.target === stageEl) set(e.clientX, e.clientY);
-  });
-  stageEl.addEventListener('pointerleave', () => {
-    if (app.mode === 'sim') app.simFaces = [];
-  });
-  stageEl.addEventListener(
-    'wheel',
-    (e) => {
-      if (app.mode !== 'sim') return;
-      width = Math.min(0.5, Math.max(0.04, width * (e.deltaY < 0 ? 1.1 : 0.9)));
-      e.preventDefault();
-    },
-    { passive: false },
-  );
-}
+/* ---------- 外から位置を受け取る口(AR の殻アプリ・VR) ---------- */
+// 座標は place.json と同じ(ワールド、m、y が上、右手系)。?source=pose で始めると、この位置の先を見る。
+const poseSource = new PoseSource();
+window.conversation = {
+  /** 見ている人の頭のワールド座標(1 人)。null なら誰もいない */
+  setViewer: (position) => poseSource.setViewer(position),
+  /** 複数人: [{ id, position, speaking? }] */
+  setPeople: (people) => poseSource.setPeople(people),
+};
+app.poseSource = poseSource;
 
 async function boot() {
   const status = $('gateStatus');
@@ -306,32 +285,37 @@ async function boot() {
   }
   await refreshStatus();
   setInterval(refreshStatus, 15000);
-  setupSimInput();
   updatePrivacy();
   buttons.forEach((b) => (b.disabled = false));
   requestAnimationFrame(frame);
 
-  $('startCam').addEventListener('click', async () => {
+  /** 入力を選んで始める。失敗したら理由を出して、ゲートに戻る */
+  async function startSource(kind, pending) {
     speaker.unlock(); // 音を出す許可は、最初のタップの中で取る
     buttons.forEach((b) => (b.disabled = true));
-    status.textContent = 'カメラとモデルを準備しています…';
+    status.textContent = pending;
     try {
-      await tracker.start();
-      app.mode = 'camera';
+      const source =
+        kind === 'camera'
+          ? new MediapipeSource({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV })
+          : kind === 'pose'
+            ? poseSource
+            : new SimSource({ element: $('stage'), getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV });
+      await source.start();
+      app.source = source;
+      app.mode = kind;
       $('gate').classList.add('hidden');
       updatePrivacy();
     } catch (err) {
       console.error(err);
-      status.textContent = `カメラを使えませんでした(${err.message})。「カメラなしで試す」なら動かせます。`;
+      status.textContent = `${kind === 'camera' ? 'カメラ' : '入力'}を使えませんでした(${err.message})。「カメラなしで試す」なら動かせます。`;
       buttons.forEach((b) => (b.disabled = false));
     }
-  });
-  $('startSim').addEventListener('click', () => {
-    speaker.unlock();
-    app.mode = 'sim';
-    $('gate').classList.add('hidden');
-    updatePrivacy();
-  });
+  }
+  const wantPose = params.get('source') === 'pose'; // AR(iPhone の殻アプリ)・VR(Quest)では、位置を外から受け取る
+  $('startCam').addEventListener('click', () => (wantPose ? startSource('pose', '準備しています…') : startSource('camera', 'カメラとモデルを準備しています…')));
+  $('startSim').addEventListener('click', () => startSource('sim', ''));
+  if (wantPose) $('startCam').textContent = 'はじめる';
 
   $('micBtn').addEventListener('click', toggleMic);
   $('composer').addEventListener('submit', (e) => {

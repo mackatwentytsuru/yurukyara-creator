@@ -55,15 +55,18 @@ export function landmarksForPrompt(landmarks = [], origin = [0, 0, 0], yawDeg = 
   });
 }
 
-/** 見えている様子を、数字から言葉にする(Claude に渡す。絵は渡さない) */
-export function describeScene(tracks, { primaryId, speakerId, world }) {
+/**
+ * 見えている様子を、数字から言葉にする(Claude に渡す。絵は渡さない)。
+ * tracks の position は、キャラの座標(+z が正面・+x がお客さんから見て右)。
+ */
+export function describeScene(tracks, { primaryId, speakerId }) {
   if (!tracks.length) return '人は見えていない';
   const lines = tracks.map((t) => {
-    const w = world.get(t.id);
-    const side = w ? (Math.abs(w[0]) < 0.12 * w[2] ? '正面' : w[0] > 0 ? '右寄り' : '左寄り') : '';
-    const dist = w ? `約 ${w[2].toFixed(1)}m` : '';
+    const [x, , z] = t.position;
+    const dist = Math.hypot(x, z);
+    const side = Math.abs(x) < 0.12 * Math.max(z, 0.3) ? '正面' : x > 0 ? '右寄り' : '左寄り';
     const mark = t.id === speakerId ? '(話している)' : '';
-    return `${side} ${dist}${mark}`.trim();
+    return `${side} 約 ${dist.toFixed(1)}m${mark}`;
   });
   const head = tracks.length === 1 ? '1 人が見えている' : `${tracks.length} 人が見えている`;
   const primary = tracks.find((t) => t.id === primaryId);

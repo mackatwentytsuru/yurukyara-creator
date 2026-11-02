@@ -45,14 +45,14 @@ test('目印を Claude に渡す形にする', () => {
 });
 
 test('見えている様子の言葉', () => {
-  const world = new Map([[1, [0.5, 1.4, 1.0]], [2, [-0.4, 1.4, 2.0]]]);
   const text = describeScene(
-    [{ id: 1 }, { id: 2 }],
-    { primaryId: 1, speakerId: 1, world },
+    [{ id: 1, position: [0.5, 1.4, 1.0] }, { id: 2, position: [-0.4, 1.4, 2.0] }],
+    { primaryId: 1, speakerId: 1 },
   );
   assert.match(text, /2 人が見えている/);
-  assert.match(text, /話している/);
-  assert.equal(describeScene([], { world }), '人は見えていない');
+  assert.match(text, /右寄り 約 1\.1m（?\(?話している/);
+  assert.match(text, /左寄り 約 2\.0m/);
+  assert.equal(describeScene([], {}), '人は見えていない');
 });
 
 test('目印の方向は、キャラの向き(yaw)を考える', () => {
