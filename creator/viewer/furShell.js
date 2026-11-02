@@ -8,15 +8,16 @@ import * as THREE from 'three';
  * - 対象は毛足の材質(色の絵と法線の絵と sheen を持つ物)。Blender で作った殻(alphaTest で抜く物)は隠す。
  * - 目・口・頬など、毛足でない部品の周りは毛を短くする。埋もれて顔が消えるのを防ぐ。
  *
- * character.json: "fur": { "layers": 8 }  省略できる値: length、tile、root、sheen、normal、flat、clear
- *   layers: 層の数。弱い GPU では減らす。length: 毛の長さ(既定はキャラの高さの 1.4%)。tile: 色の絵 1 枚あたりの毛の模様の繰り返し。
- *   root: 根元の明るさ。normal: 毛足の法線の強さに掛ける値。flat: 色の絵の筋を消す割合(1 で一色)。clear: 顔の部品から、毛を生やさない距離(毛の長さの何倍か)。
+ * character.json: "fur": { "layers": 12 }  省略できる値: length、tile、root、sheen、normal、flat、pile、cloud、gain、clear
+ *   layers: 層の数。弱い GPU では減らす。length: 毛の長さ(既定はキャラの高さの 2%)。tile: 色の絵 1 枚あたりの毛の模様の繰り返し。
+ *   root: 根元の明るさ。normal: 毛足の法線の強さに掛ける値。flat: 色の絵の筋を消す割合(1 で一色)。pile: 毛 1 本ずつの明暗の強さ。cloud: ふわっとしたむらの強さ。gain: 毛の明るさに掛ける値。clear: 顔の部品から、毛を生やさない距離(毛の長さの何倍か)。
  */
 const FUR_TEXTURE_SIZE = 256;
 const FUR_HAIR_COUNT = 26000;
 const CUT_INNER = 0.08;
 const CUT_OUTER = 0.8;
-const LENGTH_OF_HEIGHT = 0.014;
+const LENGTH_OF_HEIGHT = 0.02;
+const PATCH_KEEP_RADIUS = 0.3; // 当て布の絵の中心からの距離(絵の幅が 1)
 const CLEAR_FADE = 1.5; // 毛を生やさない範囲の外で、元の長さへ戻すまでの距離(毛の長さの何倍か)
 
 /** 毛の高さの画像を作る。乱数は固定し、毎回同じ見た目にする。 */
@@ -78,6 +79,18 @@ function worldPositions(mesh) {
   return out;
 }
 
+/** 毛を短くする基準の点。頬のような透明の当て布は、四角い網の全部ではなく、色の付いた丸の中だけを使う(四角い跡が出ないように)。 */
+function faceKeepPoints(mesh) {
+  const pos = worldPositions(mesh);
+  const uv = mesh.geometry.attributes.uv;
+  if (!mesh.material?.transparent || !uv) return pos;
+  const kept = [];
+  for (let i = 0; i < uv.count; i += 1) {
+    if (Math.hypot(uv.getX(i) - 0.5, uv.getY(i) - 0.5) < PATCH_KEEP_RADIUS) kept.push(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+  }
+  return new Float32Array(kept);
+}
+
 /** 毛の長さの倍率を頂点ごとに決める。顔の部品の近くは 0、離れると 1。 */
 function furLengthAttribute(mesh, facePoints, clear, fade) {
   const cell = clear + fade;
@@ -120,6 +133,9 @@ function layerMaterial(source, hairs, layer, cfg) {
     uFurShade: { value: cfg.root + (1 - cfg.root) * layer },
     uFurTile: { value: cfg.tile },
     uFurFlat: { value: cfg.flat },
+    uFurPile: { value: cfg.pile },
+    uFurCloud: { value: cfg.cloud },
+    uFurGain: { value: cfg.gain },
     uFurHairs: { value: hairs },
   };
   m.onBeforeCompile = (shader) => {
@@ -140,12 +156,27 @@ function layerMaterial(source, hairs, layer, cfg) {
         uniform float uFurShade;
         uniform float uFurTile;
         uniform float uFurFlat;
-        uniform sampler2D uFurHairs;`)
+        uniform float uFurPile;
+        uniform float uFurCloud;
+        uniform float uFurGain;
+        uniform sampler2D uFurHairs;
+        float furHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float furCloud(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(furHash(i), furHash(i + vec2(1.0, 0.0)), f.x), mix(furHash(i + vec2(0.0, 1.0)), furHash(i + vec2(1.0, 1.0)), f.x), f.y);
+        }
+        float furTint;`)
       .replace('#include <map_fragment>', `#include <map_fragment>
-        if (vFurLength < uFurLayer * 0.999 || texture2D(uFurHairs, vMapUv * uFurTile).r < uFurCut) discard;
-        diffuseColor.rgb = mix(diffuseColor.rgb, textureLod(map, vMapUv, 8.0).rgb * diffuse, uFurFlat) * uFurShade;`)
+        float furHair = texture2D(uFurHairs, vMapUv * uFurTile).r;
+        if (vFurLength < uFurLayer * 0.999 || furHair < uFurCut) discard;
+        // 1 本ずつの明暗(細かい)と、ふわっとしたむら(大きい)。色の絵の筋の代わりに、ここで布らしさを出す
+        furTint = uFurGain * uFurShade * (1.0 + uFurPile * (furHair - 0.5))
+          * (1.0 + uFurCloud * (furCloud(vMapUv * 18.0) * 0.6 + furCloud(vMapUv * 46.0) * 0.4 - 0.5));
+        diffuseColor.rgb = mix(diffuseColor.rgb, textureLod(map, vMapUv, 8.0).rgb * diffuse, uFurFlat) * furTint;`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance = mix(totalEmissiveRadiance, textureLod(map, vMapUv, 8.0).rgb * emissive, uFurFlat) * uFurShade;`);
+        totalEmissiveRadiance = mix(totalEmissiveRadiance, textureLod(map, vMapUv, 8.0).rgb * emissive, uFurFlat) * furTint;`);
   };
   m.customProgramCacheKey = () => 'fur-shell';
   return m;
@@ -156,12 +187,15 @@ export function applyFur(scene, options = {}) {
   const size = new THREE.Box3().setFromObject(scene).getSize(new THREE.Vector3());
   const cfg = {
     length: Math.max(size.y, 1e-3) * LENGTH_OF_HEIGHT,
-    layers: 8,
-    tile: 24,
-    root: 0.85,
+    layers: 12,
+    tile: 14,
+    root: 0.88,
     sheen: 0.35,
-    normal: 0.5,
-    flat: 0.7,
+    normal: 0.15,
+    flat: 0.95,
+    pile: 0.5,
+    cloud: 0.18,
+    gain: 1.1,
     clear: 0.6,
     ...options,
   };
@@ -174,7 +208,7 @@ export function applyFur(scene, options = {}) {
     else if (isFurMaterial(o.material)) targets.push(o);
     else faceParts.push(o);
   });
-  const faceChunks = faceParts.map(worldPositions);
+  const faceChunks = faceParts.map(faceKeepPoints);
   const facePoints = new Float32Array(faceChunks.reduce((n, a) => n + a.length, 0));
   faceChunks.reduce((at, a) => {
     facePoints.set(a, at);
