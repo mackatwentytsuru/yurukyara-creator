@@ -58,13 +58,13 @@ def solve(corners: list[dict], w: float, h: float):
     return best[1]
 
 
-def align(shoot_dir: str | Path, w: float, h: float) -> dict:
+def align(shoot_dir: str | Path, w: float, h: float, face: str = "A") -> dict:
     shoot = load_shoot(shoot_dir)
     cal = shoot.meta["calibration"]
-    corners = {c["id"]: c for c in cal["corners"]}
+    corners = {c["id"]: c for c in cal["corners"] if c.get("face", "A") == face}
     missing = [i for i in CORNER_IDS if i not in corners]
     if missing:
-        raise SystemExit(f"LED の角が足りない: {missing}")
+        raise SystemExit(f"LED の面 {face} の角が足りない: {missing}")
     ordered = [corners[i] for i in CORNER_IDS]
     theta, tx, ty, tz = solve(ordered, w, h)
     T_world_from_led = rigid(rot_y(theta), np.array([tx, ty, tz]))
@@ -85,6 +85,7 @@ def align(shoot_dir: str | Path, w: float, h: float) -> dict:
 
     floor = cal.get("floor")
     out = {
+        "face": face,
         "led_size_m": [w, h],
         "T_world_from_led": T_world_from_led.tolist(),
         "T_led_from_world": T_led_from_world.tolist(),
@@ -102,10 +103,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("shoot_dir")
     ap.add_argument("--led-size", nargs=2, type=float, required=True, metavar=("W_M", "H_M"))
+    ap.add_argument("--face", default="A", help="LED の面(A・B・C。客席から見て左から)。1面の撮影は A")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
-    out = align(a.shoot_dir, *a.led_size)
-    dest = Path(a.out) if a.out else Path(a.shoot_dir) / "alignment.json"
+    out = align(a.shoot_dir, *a.led_size, face=a.face)
+    dest = Path(a.out) if a.out else Path(a.shoot_dir) / f"alignment_{a.face}.json"
     dest.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"書いた: {dest}")
     print(f"LED の向き yaw {out['yaw_deg']:.1f}°、左下の角(世界) {np.round(out['led_origin_world'], 3).tolist()}、床からの高さ {out['led_bottom_above_floor_m']} m")

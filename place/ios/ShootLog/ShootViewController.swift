@@ -34,12 +34,16 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let recordButton = UIButton(type: .system)
     private let shareButton = UIButton(type: .system)
     private let formatControl = UISegmentedControl()
+    private let faceControl = UISegmentedControl(items: ["LED 1面", "LED 3面(A・B・C)"])
     private let focusSwitch = UISwitch()
     private let focusLabel = UILabel()
     private var timer: Timer?
 
     private static let cornerIds = ["tl", "tr", "br", "bl"]
     private static let cornerLabels = ["左上", "右上", "右下", "左下"]
+    private static let faceNames = ["A", "B", "C"]   // 客席から見て左から A・B・C
+    private var faceCount: Int { faceControl.selectedSegmentIndex == 0 ? 1 : 3 }
+    private var totalCorners: Int { faceCount * 4 }
 
     private var isRecording: Bool {
         lock.lock(); defer { lock.unlock() }
@@ -153,6 +157,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         bar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bar)
 
+        faceControl.selectedSegmentIndex = 1
+        faceControl.addTarget(self, action: #selector(faceChanged), for: .valueChanged)
+        faceControl.translatesAutoresizingMaskIntoConstraints = false
         formatControl.addTarget(self, action: #selector(formatChanged), for: .valueChanged)
         formatControl.translatesAutoresizingMaskIntoConstraints = false
         focusLabel.text = "オートフォーカス"
@@ -162,7 +169,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         focusSwitch.addTarget(self, action: #selector(focusChanged), for: .valueChanged)
         let focusRow = UIStackView(arrangedSubviews: [focusLabel, focusSwitch])
         focusRow.spacing = 6
-        let side = UIStackView(arrangedSubviews: [formatControl, focusRow])
+        let side = UIStackView(arrangedSubviews: [faceControl, formatControl, focusRow])
         side.axis = .vertical
         side.alignment = .trailing
         side.spacing = 6
@@ -229,6 +236,12 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         runSession(reset: true)
     }
 
+    @objc private func faceChanged() {
+        guard !isRecording else { return }
+        calibration = Calibration()
+        refreshUI()
+    }
+
     @objc private func focusChanged() {
         guard !isRecording else { focusSwitch.isOn = autoFocus; return }
         autoFocus = focusSwitch.isOn
@@ -253,7 +266,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let now = frame.timestamp
         if calibration.floor == nil {
             markFloor(frame, time: now)
-        } else if calibration.corners.count < 4 {
+        } else if calibration.corners.count < totalCorners {
             markCorner(frame, time: now)
         }
         refreshUI()
@@ -295,7 +308,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     }
 
     private func markCorner(_ frame: ARFrame, time: Double) {
-        let index = calibration.corners.count
+        let count = calibration.corners.count
+        let index = count % 4
+        let face = Self.faceNames[count / 4]
         let t = frame.camera.transform
         let origin = simd_float3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
         let forward = -simd_normalize(simd_float3(t.columns.2.x, t.columns.2.y, t.columns.2.z))
@@ -305,11 +320,11 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let videoFrame = recorder?.currentFrameCount
         lock.unlock()
         calibration.corners.append(CornerMark(
-            id: Self.cornerIds[index], label: Self.cornerLabels[index], sessionTime: time, videoFrame: videoFrame,
+            id: Self.cornerIds[index], face: face, label: "面\(face) " + Self.cornerLabels[index], sessionTime: time, videoFrame: videoFrame,
             camera: Pack.camera(frame), rayOrigin: Pack.flat(origin), rayDirection: Pack.flat(forward),
             hit: hitPoint, hitKind: hit.map { $0.target == .estimatedPlane ? "estimatedPlane" : "plane" }
         ))
-        logEvent("corner:\(Self.cornerIds[index])")
+        logEvent("corner:\(face)_\(Self.cornerIds[index])")
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
@@ -457,18 +472,20 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         if calibration.floor == nil {
             stepLabel.text = " ① 床に十字を向けて「床を記録」 "
             calibButton.setTitle("床を記録", for: .normal)
-        } else if done < 4 {
-            stepLabel.text = " ② 十字を LED の「\(Self.cornerLabels[done])」に合わせて「隅を記録」(\(done)/4) "
-            calibButton.setTitle("隅を記録:\(Self.cornerLabels[done])", for: .normal)
+        } else if done < totalCorners {
+            let faceName = faceCount == 1 ? "LED" : "LED の面\(Self.faceNames[done / 4])"
+            stepLabel.text = " ② 十字を\(faceName)の「\(Self.cornerLabels[done % 4])」に合わせて「隅を記録」(\(done)/\(totalCorners)) "
+            calibButton.setTitle("隅を記録:\(faceCount == 1 ? "" : Self.faceNames[done / 4] + " ")\(Self.cornerLabels[done % 4])", for: .normal)
         } else {
             stepLabel.text = recording ? " ● 録画中 " : " ③ 校正おわり。「録画開始」 "
             calibButton.setTitle("校正おわり ✓", for: .normal)
         }
-        calibButton.isEnabled = calibration.floor == nil || done < 4
+        calibButton.isEnabled = calibration.floor == nil || done < totalCorners
         calibButton.alpha = calibButton.isEnabled ? 1 : 0.5
         resetButton.isEnabled = !recording
         resetButton.alpha = recording ? 0.4 : 1
         formatControl.isEnabled = !recording
+        faceControl.isEnabled = !recording
         focusSwitch.isEnabled = !recording
         recordButton.setTitle(recording ? "■ 停止" : "● 録画開始", for: .normal)
         shareButton.isEnabled = !recording && lastDir != nil

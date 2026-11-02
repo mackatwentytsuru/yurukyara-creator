@@ -80,6 +80,7 @@ struct FloorMark: Codable {
 
 struct CornerMark: Codable {
     var id: String          // tl / tr / br / bl(客席から LED を見て 左上・右上・右下・左下)
+    var face: String        // LED の面。1面なら A、3面は客席から見て左から A・B・C
     var label: String
     var sessionTime: Double
     var videoFrame: Int?    // 録画中に記録したときのコマ番号

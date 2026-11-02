@@ -2,7 +2,7 @@
 
   python place/shootlog/export_ue.py <撮影フォルダ> --ue-origin <X> <Y> <Z> --ue-yaw <度> [--alignment alignment.json] [--out camera_track_ue.csv]
 
-前もって align_led.py で alignment.json(ARKit の世界 → LED の座標)を作っておく。
+前もって align_led.py で alignment_<面>.json(ARKit の世界 → LED の座標)を作っておく。
 --ue-origin … UE のレベルで、LED の「客席から見て左下の角」がある位置(cm)。
 --ue-yaw    … 客席から見た LED の「右」が向く向き(UE の Yaw、+X から +Y へ測った度)。
 出力の列: コマ番号, 時刻(秒、映像の pts), UE の位置(cm)と向き(Pitch/Yaw/Roll 度), 画角(横・縦の度), 35mm 換算の焦点距離(mm),
@@ -49,7 +49,7 @@ def main():
     ap.add_argument("--alignment", default=None)
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
-    al = a.alignment or str(Path(a.shoot_dir) / "alignment.json")
+    al = a.alignment or str(Path(a.shoot_dir) / "alignment_A.json")
     out = a.out or str(Path(a.shoot_dir) / "camera_track_ue.csv")
     n = export(a.shoot_dir, al, a.ue_origin, a.ue_yaw, out)
     print(f"書いた: {out}({n} コマ)")
