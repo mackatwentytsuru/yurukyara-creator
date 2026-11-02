@@ -16,7 +16,7 @@
     {"bone": "leg_L", "x": [0.5, null], "z": [null, 0.19], "blend": 0.04},
     {"bone": "leg_R", "x": [null, 0.5], "z": [null, 0.19], "blend": 0.04}
   ],
-  "face": {"center": [0.5, 0.60], "size": [0.68, 0.66], "grid": [40, 40], "lift": 0.005, "bone": "body",
-           "emission": 2.0, "alpha": true},
+  "face": {"center": [0.5, 0.60], "size": [0.60, 0.58], "grid": [40, 40], "lift": 0.005, "bone": "body",
+           "emission": 3.5, "alpha": true},
   "roles": {"root": "root", "body": "body", "arm_L": "arm_L", "arm_R": "arm_R", "leg_L": "leg_L", "leg_R": "leg_R"}
 }
