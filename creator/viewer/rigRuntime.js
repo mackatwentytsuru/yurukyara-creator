@@ -16,6 +16,7 @@ import { CharacterBase } from '../../web/src/character/characterBase.js';
  */
 const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
+const _s = new THREE.Vector3();
 
 export class RigCharacterV2 extends CharacterBase {
   constructor(gltf, clips, json, base) {
@@ -94,8 +95,11 @@ export class RigCharacterV2 extends CharacterBase {
   }
 
   _headWorld(out) {
+    // 床から頭までの高さ(世界の座標の箱の高さ)を使う。物の置き場所(床の y)を二重に足さない
     const box = new THREE.Box3().setFromObject(this.gltf.scene);
-    return out.set(0, box.max.y * 0.6, 0).applyMatrix4(this.object3d.matrixWorld);
+    const h = (box.max.y - box.min.y) * 0.6;
+    const sy = this.object3d.getWorldScale(_s).y || 1;
+    return out.set(0, h / sy, 0).applyMatrix4(this.object3d.matrixWorld);
   }
 
   /** 一回きりの動きを重ねる。ない名前は false */
@@ -190,7 +194,8 @@ export async function loadRigCharacter(url) {
   if (json.height_m) {
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const h = box.max.y - box.min.y;
-    if (h > 0) c.object3d.scale.setScalar(json.height_m / h);
+    // 大きさは gltf.scene に掛ける。object3d の座標はメートルのまま(場所に立たせる側が、そのまま使える)
+    if (h > 0) gltf.scene.scale.setScalar(json.height_m / h);
   }
   return c;
 }
