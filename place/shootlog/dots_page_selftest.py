@@ -99,6 +99,15 @@ def main():
         r = solve(bad)
         check("悪いレイだけなら、前の校正を保持する", r["T"] == before and "保持" in r["align"], r["align"])
 
+        # フラッシュの取り消し: 点の映像の緑の合図で始まっても、点のレイが届いたら取り消す。手で始めた時刻は取り消さない
+        page.evaluate("() => { const h = window.__arShow.host; h.onFlash(100); }")
+        solve(rays(pts, th, t, cam, rng))
+        st0 = page.evaluate("window.__arShow.showTime")
+        page.evaluate("() => { const h = window.__arShow.host; h.onManualStart(); }")
+        solve(rays(pts, th, t, cam, rng))
+        st1 = page.evaluate("window.__arShow.showTime")
+        check("点が届くとフラッシュの開始を取り消し、手の開始は残す", st0 is None and st1 is not None, f"フラッシュのあと {st0}、手のあと {st1}")
+
         # ⑤面 B が図面より奥
         moved = [list(p) for p in pts]
         for i, a in enumerate(led3):

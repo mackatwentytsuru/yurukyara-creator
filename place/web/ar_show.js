@@ -277,6 +277,7 @@ function updateLedViz() {
 }
 
 // ---- 時刻 ------------------------------------------------------------------------------
+let anchorByFlash = false;  // 時刻をフラッシュで始めたか(手で始めた時刻は取り消さない)
 let anchorTs = null;       // ショーの startAt 秒に当たる ARFrame の時刻
 let lastTs = 0;
 function showTime() {
@@ -324,6 +325,7 @@ host.onCalibration = (json) => {
   const corners = typeof json === 'string' ? JSON.parse(json) : json;
   const isDots = corners.some((c) => c.dot !== undefined);
   if (isDots) {
+    if (anchorByFlash) { anchorTs = null; anchorByFlash = false; info(''); }   // 点の映像の緑の合図で始まってしまった分を取り消す(本物のフラッシュは点のあと)
     const r = solveDots(corners);
     const all = new Set(corners.map((c) => c.dot)).size, total = dotTotal;
     if (r && r.nDots >= 10 && r.rms_cm <= dotRms) {
@@ -332,6 +334,7 @@ host.onCalibration = (json) => {
       const perFace = r.faces ? ` [${Object.entries(r.faces).map(([f, v]) => `${f} ${v.toFixed(1)}`).join(' ')}]` : '';
       alignInfo = `点 ${r.nDots}/${total}(レイ ${r.n}/${r.nAll}) 残差 ${r.rms_cm.toFixed(1)} cm${perFace} yaw ${r.yaw_deg.toFixed(1)}°`;
       updateLedViz();
+      if (testCenter && anchorTs === null) anchorTs = lastTs;   // 自宅のテスト: 校正ができたらすぐ出す
     } else if (lastGoodDots) {
       alignInfo = `前の校正を保持(点 ${lastGoodDots.nDots}/${total} 残差 ${lastGoodDots.rms_cm.toFixed(1)} cm)。今は 点 ${r ? r.nDots : all} 残差 ${r ? r.rms_cm.toFixed(1) : '-'} cm`;
     } else {
@@ -345,7 +348,7 @@ host.onCalibration = (json) => {
 };
 host.onManualStart = () => { anchorTs = lastTs; info('手で開始'); };
 host.onFlash = (ts) => {
-  if (anchorTs === null) { anchorTs = ts; info('フラッシュで開始'); }   // 最初の 1 回だけ(同期用の後のフラッシュでずらさない。やり直しは「やり直し」ボタン)
+  if (anchorTs === null) { anchorTs = ts; anchorByFlash = true; info('フラッシュで開始'); }   // 最初の 1 回だけ(同期用の後のフラッシュでずらさない。やり直しは「やり直し」ボタン)
 };
 let infoText = '';
 function info(t) { infoText = t; }
