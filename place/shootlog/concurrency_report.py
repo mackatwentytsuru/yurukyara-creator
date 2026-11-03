@@ -40,8 +40,10 @@ def row(label: str, shoot: Path, recv: Path | None) -> dict:
         s = json.loads((recv / "summary.json").read_text(encoding="utf-8"))
         r["作業用 PC fps/Mbps"] = f"{s.get('fps')}/{s.get('mbps')}"
         r["作業用 PC 欠け"] = s.get("seq_missing")
-        lat = s.get("apparent_latency_ms") or {}
-        r["見かけの遅れ 中央/p95/最大(ms)"] = f"{lat.get('median')}/{lat.get('p95')}/{lat.get('max')}"
+        lat = s.get("latency_corrected_ms") or {}
+        r["映像の遅れ(時計補正) 中央/p95/最大(ms)"] = f"{lat.get('median')}/{lat.get('p95')}/{lat.get('max')}" if lat else "-"
+        clk = s.get("clock") or {}
+        r["往復 RTT 中央(ms)"] = clk.get("rtt_median_ms", "-")
     return r
 
 

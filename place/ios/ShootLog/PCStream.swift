@@ -3,12 +3,13 @@ import CoreImage
 import Foundation
 import Network
 import UIKit
+import VideoToolbox
 
 /// 「作業用 PC へ映像」(確認用): ARKit のカメラ映像を縮小した JPEG にして、姿勢・画角・時刻と一緒に TCP で PC へ送る。
 /// 本番の録画(4K の video.mov)は端末の中に残り、これは別の確認用。ネットワークが遅い・切れても録画には影響しない:
 /// 送り中は新しいコマを捨てる(待たせない)、切れたら 2 秒おきにつなぎ直す。
 /// 1 コマの形(大きい順に、すべてビッグエンディアン): "PCF1" / jpegLen u32 / seq u32 / recFrame i32(録画中なら録画のコマ番号、でなければ -1) /
-///   arTimestamp f64(ARFrame.timestamp、frames.jsonl の t と同じ) / sentEpochMs f64 / w u16 / h u16 / flags u8(bit0 録画中、bit1 追跡が正常) /
+///   arTimestamp f64(ARFrame.timestamp、frames.jsonl の t と同じ) / captureEpochMs f64(映像を撮った時刻。端末の時計) / w u16 / h u16 / flags u8(bit0 録画中、bit1 追跡が正常) /
 ///   T f32×16(カメラ→世界、列順) / K f32×4(元の映像の画素で fx fy cx cy) / jpeg バイト列。
 struct PCStreamSummary: Codable {
     var enabled: Bool
@@ -37,6 +38,10 @@ final class PCStreamer {
     private var lastSentTs = -1.0
     private var seq: UInt32 = 0
     private var retry: DispatchWorkItem?
+    private var transfer: VTPixelTransferSession?
+    private var destPool: CVPixelBufferPool?
+    private var destPoolSize = CGSize.zero
+    private(set) var pongCount = 0
 
     private(set) var enabled = false
     private(set) var host = ""
@@ -84,7 +89,9 @@ final class PCStreamer {
             guard let self else { return }
             self.lock.lock()
             switch s {
-            case .ready: self.ready = true
+            case .ready:
+                self.ready = true
+                self.startReceive(c)
             case .failed, .cancelled, .waiting:
                 self.ready = false
                 if self.enabled { self.scheduleRetry() }
@@ -94,6 +101,44 @@ final class PCStreamer {
         }
         lock.lock(); conn = c; lock.unlock()
         c.start(queue: queue)
+    }
+
+    /// PC からの時計合わせの問い合わせ(PNG1 + サーバー時刻 f64 + 通し番号 u32 = 16 バイト)に、PON1 + 同じ時刻 + 端末の時刻 f64 + 通し番号 u32 で答える。
+    private func startReceive(_ c: NWConnection) {
+        c.receive(minimumIncompleteLength: 16, maximumLength: 16) { [weak self] data, _, isComplete, err in
+            guard let self else { return }
+            if let data, data.count == 16, data.prefix(4) == Data([0x50, 0x4E, 0x47, 0x31]) {
+                let nowMs = Date().timeIntervalSince1970 * 1000
+                var out = Data([0x50, 0x4F, 0x4E, 0x31])
+                out.append(data.subdata(in: 4..<12))
+                var x = nowMs.bitPattern.bigEndian
+                out.append(Data(bytes: &x, count: 8))
+                out.append(data.subdata(in: 12..<16))
+                c.send(content: out, completion: .contentProcessed { _ in })
+                self.lock.lock(); self.pongCount += 1; self.lock.unlock()
+            }
+            if err == nil && !isComplete { self.startReceive(c) }
+        }
+    }
+
+    /// 縮小は VideoToolbox(専用の回路)で。CPU で 4K を縮める時間を避ける。
+    private func scaled(_ pb: CVPixelBuffer, width: Int) -> CVPixelBuffer? {
+        let srcW = CVPixelBufferGetWidth(pb), srcH = CVPixelBufferGetHeight(pb)
+        let dw = width, dh = Int((Double(width) * Double(srcH) / Double(srcW)).rounded())
+        if transfer == nil { VTPixelTransferSessionCreate(allocator: kCFAllocatorDefault, pixelTransferSessionOut: &transfer) }
+        if destPool == nil || destPoolSize != CGSize(width: dw, height: dh) {
+            let attrs: [String: Any] = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                                        kCVPixelBufferWidthKey as String: dw, kCVPixelBufferHeightKey as String: dh,
+                                        kCVPixelBufferIOSurfacePropertiesKey as String: [:]]
+            var pool: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary, &pool)
+            destPool = pool
+            destPoolSize = CGSize(width: dw, height: dh)
+        }
+        var dst: CVPixelBuffer?
+        guard let pool = destPool, CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &dst) == kCVReturnSuccess, let dstBuf = dst, let t = transfer else { return nil }
+        guard VTPixelTransferSessionTransferImage(t, from: pb, to: dstBuf) == noErr else { return nil }
+        return dstBuf
     }
 
     /// lock を持って呼ぶ
@@ -137,6 +182,8 @@ final class PCStreamer {
         lock.unlock()
 
         let pb = frame.capturedImage
+        // 映像を撮った時刻(エポック ms): いまの時刻から、ARFrame の時刻(端末の起動からの秒)との差を引く。符号化と送りの遅れを含めて測れる
+        let captureMs = Date().timeIntervalSince1970 * 1000 - (ProcessInfo.processInfo.systemUptime - frame.timestamp) * 1000
         let cam = frame.camera
         let ts = frame.timestamp
         let T = Pack.flat(cam.transform)
@@ -145,9 +192,10 @@ final class PCStreamer {
         queue.async { [weak self] in
             guard let self else { return }
             let t0 = CACurrentMediaTime()
-            let src = CIImage(cvPixelBuffer: pb)
-            let s = CGFloat(outW) / src.extent.width
-            let scaled = src.transformed(by: CGAffineTransform(scaleX: s, y: s))
+            let small = self.scaled(pb, width: outW)
+            let src = CIImage(cvPixelBuffer: small ?? pb)
+            let s = small == nil ? CGFloat(outW) / src.extent.width : 1
+            let scaled = small == nil ? src.transformed(by: CGAffineTransform(scaleX: s, y: s)) : src
             let space = CGColorSpaceCreateDeviceRGB()
             guard let jpeg = self.ci.jpegRepresentation(of: scaled, colorSpace: space,
                                                          options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): q]) else {
@@ -165,7 +213,7 @@ final class PCStreamer {
             be32(n)
             be32(UInt32(bitPattern: Int32(recordedFrame ?? -1)))
             bef64(ts)
-            bef64(Date().timeIntervalSince1970 * 1000)
+            bef64(captureMs)
             be16(UInt16(clamping: Int((src.extent.width * s).rounded())))
             be16(UInt16(clamping: Int((src.extent.height * s).rounded())))
             let flags: UInt8 = (recordedFrame != nil ? 1 : 0) | (ok ? 2 : 0)

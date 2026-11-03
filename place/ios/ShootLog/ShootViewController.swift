@@ -528,6 +528,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             lock.unlock()
             lastDir = dir
             logEvent("thermal:\(UELinkController.thermalName(ProcessInfo.processInfo.thermalState))")   // 録画を始めたときの熱(最初の状態)
+            if let free = try? docs.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage {
+                logEvent("storage-free-bytes:\(free)")   // 録画を始めたときの端末の空き(本番の録画が入るかの確認用)
+            }
             exposureAtStart = currentExposureInfo()
             notice = nil
             logEvent("record:start")

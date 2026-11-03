@@ -9,6 +9,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -23,6 +24,25 @@ proc = subprocess.Popen([sys.executable, str(HERE / "pc_stream_receiver.py"), "-
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 time.sleep(1.5)
 s = socket.create_connection(("127.0.0.1", port))
+OFFSET = 5000.0   # 端末の時計は PC より 5 秒進んでいる、という想定
+
+
+def pong_thread():
+    while True:
+        try:
+            b = b""
+            while len(b) < 16:
+                c = s.recv(16 - len(b))
+                if not c:
+                    return
+                b += c
+        except OSError:
+            return
+        _, echo, idx = struct.unpack(">4sdI", b)
+        s.sendall(struct.pack(">4sddI", b"PON1", echo, time.time() * 1000 + OFFSET, idx))
+
+
+threading.Thread(target=pong_thread, daemon=True).start()
 N = 60
 skip = {17, 18}   # わざと欠けさせる
 for i in range(N):
@@ -36,7 +56,7 @@ for i in range(N):
     T[12] = i * 0.01
     K = [2800.0, 2800.0, 1920.0, 1080.0]
     rec_frame = i - 20 if i >= 20 else -1
-    pkt = HEADER.pack(b"PCF1", len(jpeg), i + 1, rec_frame, 1000.0 + i / 15, time.time() * 1000, 960, 540, (1 if rec_frame >= 0 else 0) | 2)
+    pkt = HEADER.pack(b"PCF1", len(jpeg), i + 1, rec_frame, 1000.0 + i / 15, time.time() * 1000 + OFFSET - 20, 960, 540, (1 if rec_frame >= 0 else 0) | 2)
     pkt += struct.pack(">20f", *T, *K) + jpeg
     s.sendall(pkt)
     time.sleep(1 / 15)
@@ -52,5 +72,9 @@ frames = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_str
 print(json.dumps(summ, ensure_ascii=False))
 print("ffmpeg の動画のコマ数:", frames)
 ok = ok and frames == str(N - len(skip))
+clock = summ.get("clock") or {}
+corr = summ.get("latency_corrected_ms") or {}
+print("時計のずれ(想定 5000):", clock.get("offset_ms"), "補正した遅れの中央(想定 20 ms 前後):", corr.get("median"))
+ok = ok and abs((clock.get("offset_ms") or 0) - OFFSET) < 50 and abs((corr.get("median") or 999) - 20) < 40
 print("合格" if ok else "不合格")
 sys.exit(0 if ok else 1)
