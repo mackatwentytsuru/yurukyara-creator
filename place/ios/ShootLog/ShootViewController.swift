@@ -527,6 +527,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             events = events.filter { $0.kind.hasPrefix("floor") || $0.kind.hasPrefix("corner") || $0.kind.hasPrefix("session") }
             lock.unlock()
             lastDir = dir
+            logEvent("thermal:\(UELinkController.thermalName(ProcessInfo.processInfo.thermalState))")   // 録画を始めたときの熱(最初の状態)
             exposureAtStart = currentExposureInfo()
             notice = nil
             logEvent("record:start")
@@ -600,6 +601,16 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
         if a.contains("--pc-on") {
             pcStream.setEnabled(true, host: value("--pc-host") ?? ueLink.config.host, port: Int(value("--pc-port") ?? "") ?? 9100)
+        }
+        // 同時の試験用: --auto-record 秒(校正なしで、5 秒後に録画を始め、その秒数で止める。画面は点けたまま立てておく)
+        if let sec = Double(value("--auto-record") ?? ""), sec > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self, !self.isRecording else { return }
+                self.startRecording()
+                DispatchQueue.main.asyncAfter(deadline: .now() + sec) { [weak self] in
+                    if let self, self.isRecording { self.stopRecording() }
+                }
+            }
         }
         guard a.contains("--ue-on") else { return }
         ueLink.update(config: UELinkConfig(host: value("--ue-host") ?? ueLink.config.host,
