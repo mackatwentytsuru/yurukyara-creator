@@ -101,3 +101,9 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - 会場の 3 面: `make_led_dots_video.py`(33 点、1 周 11.4 秒、緑の明るさを 100/60/35% に変えて 3 周 34.2 秒)。ページは `dots=led3&dot_rms=4`。**面 A だけだと舞台の中央の誤差 10 cm、3 面で 2 cm**(13 m・手持ち、`dot_calib_sim.py` の合成データ)。B・C と床の位置は `show/ue/stage_layout.py` の図面の数字で、面ごとの残差(除く前の全部のレイの中央値)で図面との差が見える(面 B が 20 cm 奥で B 3.2 cm)。試験は `dots_page_selftest.py`(本物のページを Chrome で動かす。`window.__arShow.host` から呼ぶ)。
 - 点の映像の緑の合図は、ショーのフラッシュと取り違える(輝度だけで見ているので)。ページは、点のレイが届いたらフラッシュで始めた時刻を取り消す。手で始めた時刻は残す。
 - 起動の引数の URL は保存しない(前は UserDefaults に残り、試験の URL が本番に残る危険があった)。ページのボタンは WKWebView がタッチを受けないので iPad では押せない → アプリの「AR 開始」のボタン。
+
+## multi_calib を実写で(11-04 未明、iPad 手持ち、モニターに 3 面の盤)
+- 手順: `rehearsal/make_monitor_boards.py`(LED の盤の絵をモニターの寸法に。faces_monitor.json)→ 全画面で出す → `--auto-stream 36 --lock-exposure --iso 50` で 36 秒、手持ちでゆっくり動く → `pc_to_frames.py --rx … --out …` → `multi_calib.py --faces … --shoot … --every 6`。
+- 結果: 95 視点、再投影 中央値 0.74 px・rms 1.51 px、取り置いた視点 1.50 px(フル HD)。面ごと A 0.37・B 2.00・C 0.74 px。ARKit の姿勢との差 中央値 0.50 cm・0.36°。fx 1545.6(ARKit 1530.0、差 1.0%)。縮尺 0.984。
+- 形も合う: 面 B の原点は A から 0.271 m(絵の位置からの計算 0.2705 m)、面の向きは B -8.2°・C -18.3° と曲面のとおりに順に回る(カタログの曲率は未確かめ)。B の残差が大きいのは、幅広の面が曲面で平らでないためと見ている(本物の LED の面は平ら)。
+- **`multi_calib.py` は `meta.json` の `intrinsics_scale` を使う**(前は PC に送った記録に 4K の K を当てていた)。
