@@ -26,6 +26,8 @@ struct PCStreamSummary: Codable {
     var encodeMsAvg: Double
     var encodeMsMax: Double
     var thermalMax: String
+    var codec: String? = nil
+    var kbps: Int? = nil
 }
 
 final class PCStreamer {
@@ -49,6 +51,11 @@ final class PCStreamer {
     var width = 960
     var targetFps = 15.0
     var quality = 0.5
+    var codec = "jpeg"          // "jpeg"(確認用)か "hevc"(ハードウェア符号化。録画の代わりに PC で受ける本命)
+    var kbps = 18000             // hevc の目標ビットレート(kbps)
+    private var hevc: HEVCEncoder?
+    private var destFormat: OSType = kCVPixelFormatType_32BGRA
+    private(set) var hevcKeyFrames = 0
 
     private var framesSent = 0, skippedBusy = 0, skippedNotReady = 0, sendFailed = 0, bytesSent = 0
     private var encodeSum = 0.0, encodeMax = 0.0
@@ -122,12 +129,13 @@ final class PCStreamer {
     }
 
     /// 縮小は VideoToolbox(専用の回路)で。CPU で 4K を縮める時間を避ける。
-    private func scaled(_ pb: CVPixelBuffer, width: Int) -> CVPixelBuffer? {
+    private func scaled(_ pb: CVPixelBuffer, width: Int, format: OSType = kCVPixelFormatType_32BGRA) -> CVPixelBuffer? {
         let srcW = CVPixelBufferGetWidth(pb), srcH = CVPixelBufferGetHeight(pb)
         let dw = width, dh = Int((Double(width) * Double(srcH) / Double(srcW)).rounded())
         if transfer == nil { VTPixelTransferSessionCreate(allocator: kCFAllocatorDefault, pixelTransferSessionOut: &transfer) }
-        if destPool == nil || destPoolSize != CGSize(width: dw, height: dh) {
-            let attrs: [String: Any] = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        if destPool == nil || destPoolSize != CGSize(width: dw, height: dh) || destFormat != format {
+            destFormat = format
+            let attrs: [String: Any] = [kCVPixelBufferPixelFormatTypeKey as String: format,
                                         kCVPixelBufferWidthKey as String: dw, kCVPixelBufferHeightKey as String: dh,
                                         kCVPixelBufferIOSurfacePropertiesKey as String: [:]]
             var pool: CVPixelBufferPool?
@@ -173,6 +181,7 @@ final class PCStreamer {
         guard enabled else { lock.unlock(); return }
         if lastSentTs >= 0 && frame.timestamp - lastSentTs < 1.0 / targetFps - 0.004 { lock.unlock(); return }
         if !ready { skippedNotReady += 1; lock.unlock(); return }
+        if codec == "hevc", (hevc?.inFlight ?? 0) >= 3 { skippedBusy += 1; lock.unlock(); return }
         if busy { skippedBusy += 1; lock.unlock(); return }
         busy = true
         lastSentTs = frame.timestamp
@@ -191,6 +200,10 @@ final class PCStreamer {
         let (_, ok) = Pack.tracking(cam.trackingState)
         queue.async { [weak self] in
             guard let self else { return }
+            if self.codec == "hevc" {
+                self.encodeHEVC(pb: pb, n: n, recordedFrame: recordedFrame, ts: ts, captureMs: captureMs, T: T, K: K, ok: ok)
+                return
+            }
             let t0 = CACurrentMediaTime()
             let small = self.scaled(pb, width: outW)
             let src = CIImage(cvPixelBuffer: small ?? pb)
@@ -237,13 +250,64 @@ final class PCStreamer {
         }
     }
 
+    /// HEVC の道(queue の中で呼ぶ)。符号化は非同期。できた Annex B を、JPEG と同じ頭(PCF1 の代わりに HEV1、flags の bit2 = キーフレーム)で送る。
+    private func encodeHEVC(pb: CVPixelBuffer, n: UInt32, recordedFrame: Int?, ts: Double, captureMs: Double, T: [Float], K: [Float], ok: Bool) {
+        let outW = width
+        let outH = Int((Double(outW) * Double(CVPixelBufferGetHeight(pb)) / Double(CVPixelBufferGetWidth(pb))).rounded()) & ~1
+        if hevc == nil || hevc?.width != outW {
+            hevc = HEVCEncoder(width: outW, height: outH, fps: Int(targetFps), kbps: kbps)
+            hevc?.onEncoded = { [weak self] data, key, ctx, encMs in self?.sendHEVC(data, key: key, ctx: ctx, encMs: encMs) }
+        }
+        guard let enc = hevc, let small = scaled(pb, width: outW, format: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange) else {
+            lock.lock(); busy = false; sendFailed += 1; lock.unlock()
+            return
+        }
+        let ctx = HEVCEncoder.Context(seq: n, recFrame: Int32(recordedFrame ?? -1), arTimestamp: ts, captureMs: captureMs, T: T, K: K, trackingOk: ok, recording: recordedFrame != nil)
+        enc.encode(small, pts: CMTime(seconds: ts, preferredTimescale: 90000), context: ctx)
+        lock.lock(); busy = false; lock.unlock()   // 符号化は非同期。詰まりは inFlight(3 コマまで)で止める
+    }
+
+    private func sendHEVC(_ payload: Data, key: Bool, ctx: HEVCEncoder.Context, encMs: Double) {
+        var d = Data()
+        func be32(_ v: UInt32) { var x = v.bigEndian; d.append(Data(bytes: &x, count: 4)) }
+        func be16(_ v: UInt16) { var x = v.bigEndian; d.append(Data(bytes: &x, count: 2)) }
+        func bef64(_ v: Double) { var x = v.bitPattern.bigEndian; d.append(Data(bytes: &x, count: 8)) }
+        func bef32(_ v: Float) { var x = v.bitPattern.bigEndian; d.append(Data(bytes: &x, count: 4)) }
+        d.append(contentsOf: [0x48, 0x45, 0x56, 0x31])
+        be32(UInt32(payload.count))
+        be32(ctx.seq)
+        be32(UInt32(bitPattern: ctx.recFrame))
+        bef64(ctx.arTimestamp)
+        bef64(ctx.captureMs)
+        be16(UInt16(clamping: width))
+        be16(UInt16(clamping: hevc?.height ?? 0))
+        let flags: UInt8 = (ctx.recording ? 1 : 0) | (ctx.trackingOk ? 2 : 0) | (key ? 4 : 0)
+        d.append(flags)
+        for v in ctx.T { bef32(v) }
+        for v in ctx.K { bef32(v) }
+        d.append(payload)
+        lock.lock()
+        let c = conn
+        encodeSum += encMs
+        encodeMax = max(encodeMax, encMs)
+        if key { hevcKeyFrames += 1 }
+        lock.unlock()
+        guard let c else { return }
+        c.send(content: d, completion: .contentProcessed { [weak self] err in
+            guard let self else { return }
+            self.lock.lock()
+            if err == nil { self.framesSent += 1; self.bytesSent += d.count } else { self.sendFailed += 1 }
+            self.lock.unlock()
+        })
+    }
+
     func summary() -> PCStreamSummary {
         lock.lock(); defer { lock.unlock() }
         let n = max(framesSent + sendFailed, 1)
         return PCStreamSummary(enabled: enabled, host: host, port: port, width: width, targetFps: targetFps, quality: quality,
                                framesSent: framesSent, skippedBusy: skippedBusy, skippedNotReady: skippedNotReady, sendFailed: sendFailed,
                                bytesSent: bytesSent, encodeMsAvg: (encodeSum / Double(n) * 10).rounded() / 10, encodeMsMax: (encodeMax * 10).rounded() / 10,
-                               thermalMax: UELinkController.thermalNameFromRank(thermalMaxRank))
+                               thermalMax: UELinkController.thermalNameFromRank(thermalMaxRank), codec: codec, kbps: codec == "hevc" ? kbps : nil)
     }
 
     var statusText: String {

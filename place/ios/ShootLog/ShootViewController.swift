@@ -640,6 +640,10 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
         if a.contains("--probe-multicam") { runMultiCamProbe(); return }
         if a.contains("--pc-on") {
+            pcStream.codec = value("--pc-codec") ?? "jpeg"
+            if let w = Int(value("--pc-width") ?? "") { pcStream.width = w }
+            if let k = Int(value("--pc-kbps") ?? "") { pcStream.kbps = k }
+            if let f = Double(value("--pc-fps") ?? "") { pcStream.targetFps = f }
             pcStream.setEnabled(true, host: value("--pc-host") ?? ueLink.config.host, port: Int(value("--pc-port") ?? "") ?? 9100)
         }
         // 同時の試験用: --auto-record 秒(校正なしで、5 秒後に録画を始め、その秒数で止める。画面は点けたまま立てておく)

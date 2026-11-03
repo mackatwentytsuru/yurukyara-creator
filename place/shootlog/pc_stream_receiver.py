@@ -26,6 +26,9 @@ class Recorder:
         out.mkdir(parents=True, exist_ok=True)
         self.out = out
         self.mjpg = open(out / "stream.mjpg", "wb")
+        self.hevc_file = None
+        self.out_dir = out
+        self.hevc_off = 0
         self.index = open(out / "index.jsonl", "w", encoding="utf-8")
         self.offset = 0
         self.rows: list[dict] = []
@@ -34,11 +37,18 @@ class Recorder:
         self.connections = 0
         self.clock_samples: list[tuple[float, float]] = []   # (rtt_ms, offset_ms = 端末の時計 - PC の時計)
 
-    def add(self, row: dict, jpeg: bytes):
-        row["offset"], row["length"] = self.offset, len(jpeg)
-        self.mjpg.write(jpeg)
+    def add(self, row: dict, jpeg: bytes, hevc: bool = False):
+        if hevc:
+            if self.hevc_file is None:
+                self.hevc_file = open(self.out_dir / "stream.hevc", "wb")
+            row["offset"], row["length"], row["codec"] = self.hevc_off, len(jpeg), "hevc"
+            self.hevc_file.write(jpeg)
+            self.hevc_off += len(jpeg)
+        else:
+            row["offset"], row["length"] = self.offset, len(jpeg)
+            self.mjpg.write(jpeg)
+            self.offset += len(jpeg)
         self.index.write(json.dumps(row) + "\n")
-        self.offset += len(jpeg)
         self.bytes += len(jpeg)
         self.rows.append(row)
 
@@ -68,12 +78,15 @@ class Recorder:
                                     "note": "端末の時計と PC の時計のずれ・縮小と符号化・送りを含む。ずれ自体は引けていない"},
             "interval_ms": {"median": round(gaps[len(gaps) // 2], 1) if gaps else None, "p95": round(gaps[int(len(gaps) * 0.95)], 1) if gaps else None, "max": round(gaps[-1], 1) if gaps else None},
             "latency_corrected_ms": corrected, "clock": clock,
+            "keyframes": sum(1 for r in rows if r["flags"] & 4), "codec": rows[0].get("codec", "jpeg"),
             "recording_frames_in_stream": len(rec_rows), "connections": self.connections,
             "size": [rows[0]["w"], rows[0]["h"]],
         }
 
     def close(self):
         self.mjpg.close()
+        if self.hevc_file:
+            self.hevc_file.close()
         self.index.close()
         (self.out / "summary.json").write_text(json.dumps(self.summary(), ensure_ascii=False, indent=1), encoding="utf-8")
 
@@ -111,7 +124,7 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec
                 rtt = now - echo
                 rec.clock_samples.append((rtt, phone_ms - (echo + rtt / 2)))
                 continue
-            if magic != b"PCF1":
+            if magic not in (b"PCF1", b"HEV1"):
                 print("形が違う。切る")
                 break
             rest = await reader.readexactly(HEADER.size - 4)
@@ -122,7 +135,7 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec
             floats = FLOATS.unpack(await reader.readexactly(FLOATS.size))
             jpeg = await reader.readexactly(jlen)
             rec.add({"seq": seq, "rec_frame": recf, "ar_ts": ar_ts, "sent_ms": sent_ms, "recv_ms": time.time() * 1000, "w": w, "h": h,
-                     "flags": flags, "T": list(floats[:16]), "K": list(floats[16:])}, jpeg)
+                     "flags": flags, "T": list(floats[:16]), "K": list(floats[16:])}, jpeg, hevc=(magic == b"HEV1"))
     except asyncio.IncompleteReadError:
         pass
     finally:

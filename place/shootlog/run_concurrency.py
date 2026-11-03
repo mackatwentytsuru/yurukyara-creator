@@ -47,26 +47,30 @@ def main():
     ap.add_argument("--ue-url", default="")
     ap.add_argument("--pc-port", type=int, default=9100)
     ap.add_argument("--ue-port", type=int, default=9000)
+    ap.add_argument("--hevc-width", type=int, default=1920)
+    ap.add_argument("--hevc-kbps", type=int, default=18000)
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     dev = device_id()
-    labels = {"A": "A 録画のみ", "B": "B 録画+UE", "C": "C 録画+作業用 PC へ映像", "D": "D 録画+UE+作業用 PC へ映像"}
+    labels = {"A": "A 録画のみ", "B": "B 録画+UE", "C": "C 録画+作業用 PC へ映像(JPEG)", "D": "D 録画+UE+作業用 PC へ映像(JPEG)", "H": "H 録画+HEVC フル HD を作業用 PC へ", "I": "I 録画+UE+HEVC フル HD"}
     report_items = []
     for t in a.tests:
         d = out / t
         d.mkdir(exist_ok=True)
         before = set(list_shoots(dev))
         recv = None
-        if t in ("C", "D"):
+        if t in ("C", "D", "H", "I"):
             recv = subprocess.Popen([sys.executable, str(HERE / "pc_stream_receiver.py"), "--out", str(d / "recv"), "--port", str(a.pc_port), "--seconds", str(a.seconds + 40)],
                                     stdout=open(d / "recv.log", "w"), stderr=subprocess.STDOUT)
             time.sleep(1.5)
         args = ["--auto-record", str(a.seconds), "--exit-after-record"]
-        if t in ("B", "D"):
+        if t in ("B", "D", "I"):
             args += ["--ue-on", "--ue-host", a.host, "--ue-port", str(a.ue_port), "--ue-url", a.ue_url]
         if t in ("C", "D"):
             args += ["--pc-on", "--pc-host", a.host, "--pc-port", str(a.pc_port)]
+        if t in ("H", "I"):
+            args += ["--pc-on", "--pc-host", a.host, "--pc-port", str(a.pc_port), "--pc-codec", "hevc", "--pc-width", str(a.hevc_width), "--pc-kbps", str(a.hevc_kbps), "--pc-fps", "30"]
         launch = ssh(f"xcrun devicectl device process launch --device {dev} --terminate-existing {BUNDLE} " + " ".join(f"'{x}'" for x in args) + " 2>&1 | tail -3")
         print(f"[{t}] 起動:", launch.strip().replace("\n", " | "))
         time.sleep(5 + a.seconds + 15)

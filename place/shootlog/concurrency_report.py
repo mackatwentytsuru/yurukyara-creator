@@ -46,6 +46,12 @@ def row(label: str, shoot: Path, recv: Path | None) -> dict:
         r["映像の遅れ(時計補正) 中央/p95/最大(ms)"] = f"{lat.get('median')}/{lat.get('p95')}/{lat.get('max')}" if lat else "-"
         clk = s.get("clock") or {}
         r["往復 RTT 中央(ms)"] = clk.get("rtt_median_ms", "-")
+        if (recv / "stream.hevc").exists():
+            import subprocess
+            mp4 = recv / "stream_check.mp4"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "hevc", "-r", "30", "-i", str(recv / "stream.hevc"), "-c", "copy", str(mp4)], capture_output=True)
+            cnt = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames,width,height", "-of", "csv=p=0", str(mp4)], capture_output=True, text=True).stdout.strip()
+            r["PC の HEVC(ffmpeg で読めたコマ/キー/大きさ)"] = f"{cnt} / キー {s.get('keyframes')}"
     return r
 
 
