@@ -1,0 +1,118 @@
+{
+  "label": "shop",
+  "character": "sample_vrm",
+  "frames": 1042,
+  "seconds": 101,
+  "fps": 10,
+  "turns": [
+    {
+      "q": "入場料はいくらですか",
+      "answer": "入場料は 2,000 円です。ドリンクは別にかかりますよ。",
+      "totalMs": 1578,
+      "fillerMs": 22,
+      "ttsFirstByteMs": 281,
+      "sendToFirstSayMs": 1267,
+      "valid": true
+    },
+    {
+      "q": "席は空いていますか",
+      "answer": "18 時 10 分の時点で、全 60 席のうち空きは 22 席です。今は変わっているかもしれませんので、確かめたい時はスタッフにお聞きくださいね。",
+      "totalMs": 1375,
+      "fillerMs": 22,
+      "ttsFirstByteMs": 292,
+      "sendToFirstSayMs": 1051,
+      "valid": true
+    },
+    {
+      "q": "応援ってどうやってするんですか",
+      "answer": "応援は、曲の間の拍手と、サビでの名前のコールでできますよ。受付のタブレットで 20 字までのメッセージを送ると、次の曲の間に壁に映りますよ。",
+      "totalMs": 1407,
+      "fillerMs": 24,
+      "ttsFirstByteMs": 302,
+      "sendToFirstSayMs": 1073,
+      "valid": true
+    },
+    {
+      "q": "来月の出演者は誰ですか",
+      "answer": "すみません、来月の出演者はわたしでは分かりません。スタッフにつなぎますね。",
+      "totalMs": 1417,
+      "fillerMs": 22,
+      "ttsFirstByteMs": 266,
+      "sendToFirstSayMs": 1119,
+      "valid": true
+    }
+  ],
+  "mouth": {
+    "bestLagMs": 0,
+    "bestR": 0.738,
+    "rAtZeroLag": 0.738,
+    "openWhileSilentRate": 0.004,
+    "closedWhileSpeakingRate": 0.004,
+    "aaMax": 0.93
+  },
+  "blink": {
+    "max": 0.37,
+    "count": 23,
+    "perMinute": 13.7
+  },
+  "head": {
+    "pitchRangeRad": 0.277,
+    "yawRangeRad": 0.785,
+    "eyeLookMax": 1
+  },
+  "springMaxDeg": [
+    {
+      "name": "SKIRT_R165_01",
+      "maxDeg": 0.2
+    },
+    {
+      "name": "HAIR_R155_01",
+      "maxDeg": 21.9
+    },
+    {
+      "name": "FEATHER_A_01",
+      "maxDeg": 15.8
+    }
+  ],
+  "gaze": [
+    {
+      "mouseX": 60,
+      "headYawDeg": -9.1,
+      "headPitchDeg": -0.5,
+      "lookLeft": 0.01,
+      "lookRight": 0,
+      "people": 1
+    },
+    {
+      "mouseX": 240,
+      "headYawDeg": 0,
+      "headPitchDeg": -0.5,
+      "lookLeft": 0.01,
+      "lookRight": 0,
+      "people": 1
+    },
+    {
+      "mouseX": 420,
+      "headYawDeg": 9,
+      "headPitchDeg": -0.5,
+      "lookLeft": 0.02,
+      "lookRight": 0,
+      "people": 1
+    }
+  ],
+  "interrupts": [
+    {
+      "sourcesAfter": 0,
+      "pending": 0,
+      "speaking": false,
+      "mouthClosedMs": 41
+    },
+    {
+      "sourcesAfter": 0,
+      "pending": 0,
+      "speaking": false,
+      "mouthClosedMs": 75
+    }
+  ],
+  "consoleProblems": []
+}
