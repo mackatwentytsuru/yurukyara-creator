@@ -1,0 +1,38 @@
+{
+  "name": "cc5-mcp-server",
+  "version": "1.2.0",
+  "description": "MCP Server for Reallusion Character Creator 5 - AI-powered character creation via natural language",
+  "type": "module",
+  "main": "./build/index.js",
+  "bin": {
+    "cc5-mcp-server": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:py": "python -m unittest discover -s tests/python -v"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.1.2",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.2"
+  },
+  "keywords": [
+    "mcp",
+    "character-creator",
+    "reallusion",
+    "cc5",
+    "ai",
+    "3d-character"
+  ],
+  "license": "MIT"
+}
