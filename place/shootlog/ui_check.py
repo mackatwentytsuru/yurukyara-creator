@@ -18,8 +18,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 DEV = "00008103-001959392279001E"
 BUNDLE = "dev.hackathon.shootlog"
-NAMES = ["1_prepare", "1_prepare_ng", "2_calib_ok", "2_calib_running", "2_calib_held", "3_cut", "4_shoot_idle", "4_shoot_rec", "4_shoot_rec_lost", "4_shoot_alarm", "4_shoot_saved", "5_takes"]
-PANEL_OK = {"hostField", "micSwitch", "cutField", "lensControl", "exposureSwitch", "isoSlider", "guideSwitch"}
+NAMES = ["1_prepare", "1_prepare_ng", "2_calib_ok", "2_calib_running", "2_calib_held", "3_cut", "4_shoot_zoom", "4_shoot_idle", "4_shoot_rec", "4_shoot_rec_lost", "4_shoot_alarm", "4_shoot_saved", "5_takes"]
+PANEL_OK = {"hostField", "micSwitch", "cutField", "lensControl", "exposureSwitch", "isoSlider", "guideSwitch", "zoomSwitch"}
 
 
 def ssh(cmd, timeout=200):

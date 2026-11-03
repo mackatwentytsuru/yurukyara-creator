@@ -75,6 +75,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private var ledVizOn = false
     private var connectStart = 0.0
     private var noteBad = false
+    private var zoomOn = false
     private var ultraCut: UltraWideCut?
     private var ultraElapsedFrames = 0
     private var ultraWide: UltraWideCut?
@@ -801,6 +802,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             if let w = Int(value("--pc-width") ?? "") { pcStream.width = w }
             if let k = Int(value("--pc-kbps") ?? "") { pcStream.kbps = k }
             if let f = Double(value("--pc-fps") ?? "") { pcStream.targetFps = f }
+            pcStream.zoom2x = a.contains("--pc-zoom")
             pcStream.setEnabled(true, host: value("--pc-host") ?? ueLink.config.host, port: Int(value("--pc-port") ?? "") ?? 9100)
         }
         // 録画なしの送りの試験用: --auto-stream 秒(録画せず、その秒数だけ AR モニター・マイク・PC への送りを動かし、概要を Documents/stream_summary.json に書く。--exit-after-record で閉じる)
@@ -959,6 +961,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         act.setCutName = { [weak self] n in self?.cutName = n }
         act.setGuides = { [weak self] on in self?.guidesOn = on }
         act.setLens = { [weak self] i in self?.switchLens(i) }
+        act.setZoom = { [weak self] on in self?.zoomOn = on; self?.refreshUI() }
         act.toggleLedViz = { [weak self] in
             guard let self else { return }
             self.ledVizOn.toggle()
@@ -1099,6 +1102,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         pcStream.width = 1920
         pcStream.targetFps = 30
         pcStream.kbps = 18000
+        pcStream.zoom2x = zoomOn
         pcStream.setEnabled(true, host: macHost, port: macPort)
         phase = .connecting
         connectStart = ProcessInfo.processInfo.systemUptime
@@ -1132,7 +1136,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         pcStream.setEnabled(false, host: macHost, port: macPort)
         let lost = st.skippedBusy + st.sendFailed
         let thermal = Self.thermalJP(ProcessInfo.processInfo.thermalState)
-        takes.append(TakeInfo(number: takeNumber, cut: cutName, seconds: takeElapsed, sent: st.sent, macFrames: st.macFrames, lost: lost, thermal: thermal, saved: saved, gaps: ackGaps))
+        takes.append(TakeInfo(number: takeNumber, cut: cutName, lens: zoomOn ? "広角 2倍" : "広角", seconds: takeElapsed, sent: st.sent, macFrames: st.macFrames, lost: lost, thermal: thermal, saved: saved, gaps: ackGaps))
         Self.saveTakes(takes)
         saveNote = saved ? "保存済み \(st.macFrames) コマ(テイク \(takeNumber))" : "保存を確かめられません(送った \(st.sent)・Mac \(st.macFrames))"
         noteBad = !saved
@@ -1218,6 +1222,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         if lens == 1 { macLamp = .off; macText = "使わない" }
         s.lens = lens
         s.ledViz = ledVizOn
+        s.zoom = zoomOn && lens == 0
         if lens == 1, let cut = ultraCut { s.macFramesOverride = phase == .recording ? cut.writtenFrames : nil }
         let trackLamp: Lamp = lens == 1 ? .off : (trackOK ? .green : .yellow)
         s.lamps = [
@@ -1320,6 +1325,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             ("2_calib_running", with { $0.step = .calibrate; $0.calib = CalibInfo(n: 12, total: 33, syncs: 1, rms: 6.2, faces: [("A", 3.1), ("B", 7.5)], faceDots: ["A": 4, "B": 8], good: false, held: false); $0.lamps[4] = LampInfo(name: "校正", lamp: .off, text: "まだ") }),
             ("2_calib_held", with { $0.step = .calibrate; $0.calib.good = false; $0.calib.held = true; $0.lamps[4] = LampInfo(name: "校正", lamp: .yellow, text: "28/33") }),
             ("3_cut", with { $0.step = .cut }),
+            ("4_shoot_zoom", with { $0.step = .shoot; $0.zoom = true }),
             ("4_shoot_idle", with { $0.step = .shoot }),
             ("4_shoot_rec", with { $0.step = .shoot; $0.phase = .recording; $0.elapsed = 754; $0.macFrames = 22610; $0.lost = 0; $0.sentFps = 30 }),
             ("4_shoot_rec_lost", with { $0.step = .shoot; $0.phase = .recording; $0.elapsed = 754; $0.macFrames = 22610; $0.lost = 7; $0.sentFps = 29 }),

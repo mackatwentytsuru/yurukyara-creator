@@ -75,6 +75,7 @@ struct ShootStatus {
     var guides = true
     var lens = 0                 // 0 広角、1 超広角
     var ledViz = true            // 解いた LED の枠を AR に重ねる
+    var zoom = false             // 寄り 2 倍(4K の中央を送る)
     var takes: [TakeInfo] = []
 }
 
@@ -94,6 +95,7 @@ struct ShootActions {
     var setGuides: (Bool) -> Void = { _ in }
     var setLens: (Int) -> Void = { _ in }
     var toggleLedViz: () -> Void = {}
+    var setZoom: (Bool) -> Void = { _ in }
     var nextCut: () -> Void = {}
     var markTake: (Int, String) -> Void = { _, _ in }
     var details: () -> Void = {}
@@ -188,6 +190,7 @@ final class HUDButton: UIControl {
 
 /// 映像に重ねる枠の線(セーフエリア 90%・80%、中心の十字)。タッチは受けない。
 final class FrameGuideView: UIView {
+    var zoomBox = false { didSet { if zoomBox != oldValue { setNeedsDisplay() } } }
     override init(frame: CGRect) {
         super.init(frame: frame)
         isOpaque = false
@@ -207,6 +210,11 @@ final class FrameGuideView: UIView {
         c.move(to: CGPoint(x: cx - 18, y: cy)); c.addLine(to: CGPoint(x: cx + 18, y: cy))
         c.move(to: CGPoint(x: cx, y: cy - 18)); c.addLine(to: CGPoint(x: cx, y: cy + 18))
         c.strokePath()
+        if zoomBox {     // 寄りのときに録れる範囲(中央の半分)
+            c.setStrokeColor(UIColor(red: 1, green: 0.75, blue: 0.2, alpha: 0.9).cgColor)
+            c.setLineWidth(3)
+            c.stroke(CGRect(x: bounds.width / 4, y: bounds.height / 4, width: bounds.width / 2, height: bounds.height / 2))
+        }
     }
 }
 
@@ -234,6 +242,8 @@ final class ShootHUD: UIView, UITextFieldDelegate {
     private let micSwitch = UISwitch()
     private let micLabel = UILabel()
     private let guideLabel = UILabel()
+    private let zoomSwitch = UISwitch()
+    private let zoomLabel = UILabel()
     // ③カット
     private let cutPanel = UIView()
     private let cutField = UITextField()
@@ -400,6 +410,12 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         exposureSwitch.addTarget(self, action: #selector(exposureChanged), for: .valueChanged)
         isoSlider.addTarget(self, action: #selector(isoChanged), for: .valueChanged)
         guideSwitch.addTarget(self, action: #selector(guideChanged), for: .valueChanged)
+        zoomSwitch.addTarget(self, action: #selector(zoomChanged), for: .valueChanged)
+        zoomLabel.text = "寄り 2 倍(4K の中央を録る。橙の枠の中)"
+        zoomLabel.font = .systemFont(ofSize: 20)
+        zoomLabel.textColor = ShootHUD.primary
+        cutPanel.addSubview(zoomSwitch)
+        cutPanel.addSubview(zoomLabel)
         isoLabel.font = .systemFont(ofSize: 20)
         isoLabel.textColor = ShootHUD.primary
         guideLabel.text = "枠線(セーフエリア)"
@@ -441,6 +457,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
     @objc private func exposureChanged() { actions.setExposure(exposureSwitch.isOn) }
     @objc private func isoChanged() { actions.setISO(isoSlider.value) }
     @objc private func guideChanged() { actions.setGuides(guideSwitch.isOn) }
+    @objc private func zoomChanged() { actions.setZoom(zoomSwitch.isOn) }
     func textFieldShouldReturn(_ textField: UITextField) -> Bool { textField.resignFirstResponder(); return true }
 
     override func layoutSubviews() {
@@ -491,6 +508,8 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         isoSlider.frame = CGRect(x: 24, y: 240, width: pan.width - 48, height: 48)
         guideSwitch.frame.origin = CGPoint(x: pan.width - 24 - guideSwitch.bounds.width, y: 310)
         guideLabel.frame = CGRect(x: 24, y: 306, width: pan.width - 150, height: 40)
+        zoomSwitch.frame.origin = CGPoint(x: pan.width - 24 - zoomSwitch.bounds.width, y: 366)
+        zoomLabel.frame = CGRect(x: 24, y: 362, width: pan.width - 150, height: 40)
         // ⑤
         takesLabel.frame = CGRect(x: 24, y: 14, width: pan.width - 48, height: 36)
         let rowH: CGFloat = 70
@@ -525,7 +544,8 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         alarmLabel.text = s.alarm
         alarmLabel.isHidden = s.alarm == nil
         topBar.bringSubviewToFront(alarmLabel)
-        guide.isHidden = !s.guides || s.step != .shoot
+        guide.isHidden = !(s.guides || s.zoom) || s.step != .shoot
+        guide.zoomBox = s.zoom
         recBorder.isHidden = s.phase != .recording
         recBorder.layer.borderColor = (s.alarm != nil ? Lamp.red.color : ShootHUD.recRed).cgColor
 
@@ -594,6 +614,8 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         if !isoSlider.isTracking { isoSlider.value = s.isoFraction }
         isoLabel.text = s.exposureLocked ? "露出固定 \(s.isoText) 1/60" : "露出は自動 \(s.isoText)(右のスイッチで固定)"
         guideSwitch.isOn = s.guides
+        zoomSwitch.isOn = s.zoom
+        zoomSwitch.isEnabled = s.lens == 0
         leftButton.setTitle("校正へ"); leftButton.onFire = { [weak self] in self?.actions.setStep(.calibrate) }
         rightButton.setTitle("次へ 撮影"); rightButton.onFire = { [weak self] in self?.actions.setStep(.shoot) }
         bigLabel.text = "\(s.cutName) テイク \(s.takeNumber)"; bigLabel.textColor = ShootHUD.primary
@@ -679,7 +701,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         }
         for b in stepButtons + [gear, leftButton, left2Button, rightButton] + markButtons { add(b, b.id) }
         add(hostField, "hostField"); add(micSwitch, "micSwitch"); add(cutField, "cutField"); add(lensControl, "lensControl")
-        add(exposureSwitch, "exposureSwitch"); add(isoSlider, "isoSlider"); add(guideSwitch, "guideSwitch")
+        add(exposureSwitch, "exposureSwitch"); add(isoSlider, "isoSlider"); add(guideSwitch, "guideSwitch"); add(zoomSwitch, "zoomSwitch")
         return out
     }
 

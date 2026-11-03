@@ -3,7 +3,7 @@
   python place/shootlog/run_stream_test.py --mac-ip 100.x.x.x --seconds 127 --runs 3 --out work/_stream
 前提: Mac で ~/sample_work/start_site.command(AR ページの配信 8480=http、8481=https(自己署名。iPhone の ATS が 100.x の http を拒むので https を使う))が動いている。Mac の ssh は pc3。iPhone は Mac から見えてロック解除。
 1 回ごとに: Mac で受け手(pc_stream_receiver.py、ポート 9100)を起動 → iPhone のアプリを起動引数つきで起動(--auto-stream 秒)→ 終わったら iPhone の Documents/stream_summary.json と
-Mac の受け手の summary.json・index.jsonl の要約を作業用 PC へ。熱(iPhone の最大)、受け手の fps・Mbps・欠け・遅れ、ARKit のコマ数、AR の姿勢の送りを 1 行ずつ出す。
+Mac の受け手の summary.json・index.jsonl の要約をメイン PC へ。熱(iPhone の最大)、受け手の fps・Mbps・欠け・遅れ、ARKit のコマ数、AR の姿勢の送りを 1 行ずつ出す。
 """
 from __future__ import annotations
 
@@ -38,6 +38,7 @@ def main():
     ap.add_argument("--no-ar", action="store_true")
     ap.add_argument("--no-mic", action="store_true")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--zoom", action="store_true", help="寄り 2 倍(4K の中央を送る)")
     ap.add_argument("--device", default="", help="機器の UDID(省略すると Mac の device_id.txt の iPhone)")
     a = ap.parse_args()
     out = Path(a.out)
@@ -59,6 +60,8 @@ def main():
             args += ["--ar-on", "--ar-url", url]
         if not a.no_mic:
             args += ["--mic-on"]
+        if a.zoom:
+            args += ["--pc-zoom"]
         if a.lock_exposure:
             args += ["--lock-exposure"]
         launch = ssh(f"xcrun devicectl device process launch --device {dev} --terminate-existing {BUNDLE} " + " ".join(f"'{x}'" for x in args) + " 2>&1 | tail -2")

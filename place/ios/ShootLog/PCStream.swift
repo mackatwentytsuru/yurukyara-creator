@@ -5,7 +5,7 @@ import Network
 import UIKit
 import VideoToolbox
 
-/// 「作業用 PC へ映像」(確認用): ARKit のカメラ映像を縮小した JPEG にして、姿勢・画角・時刻と一緒に TCP で PC へ送る。
+/// 「PC へ映像」(確認用): ARKit のカメラ映像を縮小した JPEG にして、姿勢・画角・時刻と一緒に TCP で PC へ送る。
 /// 本番の録画(4K の video.mov)は端末の中に残り、これは別の確認用。ネットワークが遅い・切れても録画には影響しない:
 /// 送り中は新しいコマを捨てる(待たせない)、切れたら 2 秒おきにつなぎ直す。
 /// 1 コマの形(大きい順に、すべてビッグエンディアン): "PCF1" / jpegLen u32 / seq u32 / recFrame i32(録画中なら録画のコマ番号、でなければ -1) /
@@ -53,6 +53,7 @@ final class PCStreamer {
     var quality = 0.5
     var codec = "hevc"          // "hevc"(ハードウェア符号化。録画の代わりに PC で受ける本命。既定)か "jpeg"(確認用)
     var kbps = 18000             // hevc の目標ビットレート(kbps)
+    var zoom2x = false           // 寄り: 4K の中央 1920×1080 をそのまま送る(縮めない)。内部パラメータも直して送る
     private var hevc: HEVCEncoder?
     private var destFormat: OSType = kCVPixelFormatType_32BGRA
     private(set) var hevcKeyFrames = 0
@@ -60,6 +61,8 @@ final class PCStreamer {
     private var framesSent = 0, skippedBusy = 0, skippedNotReady = 0, sendFailed = 0, bytesSent = 0
     private var macFrames = 0, macMB = 0, macFreeGB = 0, lastAck = 0.0
     private var sendingPaused = false
+    private var cropPool: CVPixelBufferPool?
+    private var cropPoolSize = CGSize.zero
     private var encodeSum = 0.0, encodeMax = 0.0
     private var thermalMaxRank = 0
 
@@ -318,13 +321,52 @@ final class PCStreamer {
             hevc = HEVCEncoder(width: outW, height: outH, fps: Int(targetFps), kbps: kbps)
             hevc?.onEncoded = { [weak self] data, key, ctx, encMs in self?.sendHEVC(data, key: key, ctx: ctx, encMs: encMs) }
         }
-        guard let enc = hevc, let small = scaled(pb, width: outW, format: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange) else {
+        // 寄り: 中央を切り出す。受け手は K を「元の 4K の画素」として 0.5 倍するので、切り出しの後の K が同じ計算で合うように、2 倍して送る
+        var sendK = K
+        var picture: CVPixelBuffer?
+        if zoom2x, let c = croppedCentre(pb, width: outW, height: outH) {
+            picture = c
+            let x0 = Float((CVPixelBufferGetWidth(pb) - outW) / 2), y0 = Float((CVPixelBufferGetHeight(pb) - outH) / 2)
+            sendK = [K[0] * 2, K[1] * 2, (K[2] - x0) * 2, (K[3] - y0) * 2]
+        } else {
+            picture = scaled(pb, width: outW, format: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
+        }
+        guard let enc = hevc, let small = picture else {
             lock.lock(); busy = false; sendFailed += 1; lock.unlock()
             return
         }
-        let ctx = HEVCEncoder.Context(seq: n, recFrame: Int32(recordedFrame ?? -1), arTimestamp: ts, captureMs: captureMs, T: T, K: K, trackingOk: ok, recording: recordedFrame != nil)
+        let ctx = HEVCEncoder.Context(seq: n, recFrame: Int32(recordedFrame ?? -1), arTimestamp: ts, captureMs: captureMs, T: T, K: sendK, trackingOk: ok, recording: recordedFrame != nil)
         enc.encode(small, pts: CMTime(seconds: ts, preferredTimescale: 90000), context: ctx)
         lock.lock(); busy = false; lock.unlock()   // 符号化は非同期。詰まりは inFlight(3 コマまで)で止める
+    }
+
+    /// 4K(YUV 8 ビット)の中央を、そのまま写す。形式が違うときや 4K でないときは nil(呼ぶ側で全体を縮める)。
+    private func croppedCentre(_ pb: CVPixelBuffer, width dw: Int, height dh: Int) -> CVPixelBuffer? {
+        let sw = CVPixelBufferGetWidth(pb), sh = CVPixelBufferGetHeight(pb)
+        guard CVPixelBufferGetPixelFormatType(pb) == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, sw >= dw * 2 - 1, sh >= dh * 2 - 1 else { return nil }
+        if cropPool == nil || cropPoolSize != CGSize(width: dw, height: dh) {
+            let attrs: [String: Any] = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                                        kCVPixelBufferWidthKey as String: dw, kCVPixelBufferHeightKey as String: dh, kCVPixelBufferIOSurfacePropertiesKey as String: [:]]
+            var pool: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary, &pool)
+            cropPool = pool
+            cropPoolSize = CGSize(width: dw, height: dh)
+        }
+        var dst: CVPixelBuffer?
+        guard let pool = cropPool, CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &dst) == kCVReturnSuccess, let out = dst else { return nil }
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        CVPixelBufferLockBaseAddress(out, [])
+        defer { CVPixelBufferUnlockBaseAddress(out, []); CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        let x0 = ((sw - dw) / 2) & ~1, y0 = ((sh - dh) / 2) & ~1
+        // 輝度
+        guard let s0 = CVPixelBufferGetBaseAddressOfPlane(pb, 0), let d0 = CVPixelBufferGetBaseAddressOfPlane(out, 0),
+              let s1 = CVPixelBufferGetBaseAddressOfPlane(pb, 1), let d1 = CVPixelBufferGetBaseAddressOfPlane(out, 1) else { return nil }
+        let sb0 = CVPixelBufferGetBytesPerRowOfPlane(pb, 0), db0 = CVPixelBufferGetBytesPerRowOfPlane(out, 0)
+        for y in 0..<dh { memcpy(d0 + y * db0, s0 + (y0 + y) * sb0 + x0, dw) }
+        // 色(縦横半分、Cb Cr の並び)
+        let sb1 = CVPixelBufferGetBytesPerRowOfPlane(pb, 1), db1 = CVPixelBufferGetBytesPerRowOfPlane(out, 1)
+        for y in 0..<(dh / 2) { memcpy(d1 + y * db1, s1 + (y0 / 2 + y) * sb1 + x0, dw) }
+        return out
     }
 
     private func sendHEVC(_ payload: Data, key: Bool, ctx: HEVCEncoder.Context, encMs: Double) {

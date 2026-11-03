@@ -111,7 +111,7 @@ def main():
     # ③受け手が無いときに録画を押す: 録り始めず、待ちつづけず、あとで受け手が起動しても勝手に録らない
     clear_takes()
     ssh("pkill -f 'pc_stream_receiver.py --out' ; true")
-    launch(6)
+    launch(60)     # 2 回目の押下(止める)が諦めの 6 秒と重ならないよう、試しの外へ置く
     time.sleep(3 + 2 + 9)
     pull("ui_log.jsonl", out)
     log = [json.loads(x) for x in (out / "ui_log.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
