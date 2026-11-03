@@ -71,3 +71,10 @@ window.webkit = { messageHandlers: { arhost: { postMessage: (m) => window.__post
 - 場所は `test_room` を借り、画面の中で `app.place.name`・`info`・目印の `note` を書き換える。目印の `note` を直し忘れると、返事が元の説明(木の机など)を読み上げる。
 - 実測のログを汚さない: ページの `fetch` を包んで `/api/metrics` を握りつぶす。サーバー側の `logs/latency_server.jsonl` は、写しを取って戻す。
 - 本物の返事を 1 回だけ記録する: `scripts/once-reply.mjs`(最初の返事をそのまま JSON に書く。選び直さない)。動画に「実際の返事」と書く物の証拠。
+
+## 8. 声の向き(ステレオのマイク)を、実機なしで通す(2026-11-03)
+`scripts/audio-e2e.mjs`: 向きの分かる偽のステレオ録音(`scripts/lib/stereoSim.mjs` で計算)を WAV にして、`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<wav>` の偽のマイクとして流し、ページの `window.__app.startStereo()` → `__app.stereoMic.estimate()` の向きを読む。角度ごとに Chrome を起動し直す(偽の録音は起動の引数)。
+- **偽のマイクは 2ch で届く**(ステレオの WAV はそのまま 2 チャンネル。サンプリングは 44.1kHz に変換される)。録音は繰り返し流れる。
+- パスは Windows の形(`C:/…`)。`/c/…` は読まれない(偽のカメラと同じ)。
+- 詳しい仕組みと数字は `audio-speaker-direction` のスキル。
+

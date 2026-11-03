@@ -5,6 +5,9 @@
 // 追跡: 入力が id をくれればそれで、無ければ前のフレームでいちばん近い人を同じ人とみなす。
 // 選び方: 話している人(口の動きが大きく、2 番目より目立つ。入力が speaking を教えてくれればそれ)を見る。
 //         分からなければ、いちばん近い人。
+// 音(ステレオのマイクの向き)があれば、口の動きと合わせて「誰が話しているか」を出す(speakerFusion.js)。音だけ・映像だけでも動く。
+
+import { bearingOf, fuseSpeaker } from './speakerFusion.js';
 
 export const DEFAULTS = {
   maxJump: 0.5, // 同じ人とみなす最大の移動(m)。奥行き(z)は推定が粗いので、重みを小さくして測る
@@ -16,6 +19,8 @@ export const DEFAULTS = {
   speakRatio: 1.5, // 2 番目の人よりこの倍率以上、口が動いていたら話している人とする
   speakingBoost: 0.05, // 入力が「話している」と教えてくれたときの、口の動きの扱い
   switchHoldS: 0.5, // 見る人を替えるのに、新しい人が続けて有利である時間
+  speakerHoldS: 0.8, // 音で決めた話し手が、声の切れ目で一瞬わからなくなっても、この間は同じ人とする
+  mic: { x: 0, z: 0, yawDeg: 0 }, // マイクの位置と向き(キャラの座標)。音の向きと人の向きを合わせるのに使う
 };
 
 let nextId = 1;
@@ -30,12 +35,14 @@ export class AttentionPicker {
     this.challenger = null; // { id, since }
     this.now = 0;
     this.speakerId = null;
+    this.speaker = { id: null, confidence: 0, source: 'none', audioBearingDeg: null, unseenBearingDeg: null };
+    this.lastAudioSpeaker = null; // { id, at }
   }
 
   /**
    * @param {Array<{id?:string|number, position:number[], gaze?:number[], mouth?:number, speaking?:boolean}>} people
    * @param {number} now 秒
-   * @param {{voiceActive?:boolean}} ctx
+   * @param {{voiceActive?:boolean, audio?:{voiced:boolean, measurements:object[]}|null}} ctx audio: ステレオのマイクの見立て(stereoBearing.js の estimate())
    */
   update(people, now, ctx = {}) {
     const dt = this.now ? Math.max(0, now - this.now) : 0;
@@ -43,7 +50,7 @@ export class AttentionPicker {
     this._match(people, now, dt);
     const alive = this.tracks.filter((t) => t.seenNow);
     const primary = this._choose(alive, now, ctx);
-    return { tracks: alive.map((t) => this._view(t)), primaryId: primary?.id ?? null, speakerId: this.speakerId };
+    return { tracks: alive.map((t) => this._view(t)), primaryId: primary?.id ?? null, speakerId: this.speakerId, speaker: this.speaker };
   }
 
   _view(t) {
@@ -119,15 +126,34 @@ export class AttentionPicker {
 
   _choose(tracks, now, ctx) {
     this.speakerId = null;
+    // 音と映像を合わせた見立て(音があるときだけ)。人が映っていなくても、音の向きは返す
+    const fused = ctx.audio
+      ? fuseSpeaker(tracks.map((t) => ({ id: t.id, bearingDeg: bearingOf(t.position, this.o.mic), activity: t.activity })), ctx.audio, { mic: this.o.mic })
+      : null;
+    this.speaker = fused
+      ? { id: fused.speakerId, confidence: fused.confidence, source: fused.source, audioBearingDeg: fused.audioBearingDeg, unseenBearingDeg: fused.unseenBearingDeg }
+      : { id: null, confidence: 0, source: 'none', audioBearingDeg: null, unseenBearingDeg: null };
     if (!tracks.length) {
       this.currentId = null;
       return null;
     }
     const byActivity = [...tracks].sort((a, b) => b.activity - a.activity);
     const min = ctx.voiceActive ? this.o.speakMinWithVoice : this.o.speakMin;
-    const top = byActivity[0];
+    let top = byActivity[0];
     const second = byActivity[1];
-    const clearSpeaker = top.activity >= min && (!second || top.activity >= second.activity * this.o.speakRatio);
+    let clearSpeaker = top.activity >= min && (!second || top.activity >= second.activity * this.o.speakRatio);
+    if (fused?.speakerId != null) {
+      // 音(と映像)が決めた話し手を優先する
+      top = tracks.find((t) => t.id === fused.speakerId);
+      clearSpeaker = true;
+      this.lastAudioSpeaker = { id: top.id, at: now };
+    } else if (!clearSpeaker && this.lastAudioSpeaker && now - this.lastAudioSpeaker.at < this.o.speakerHoldS) {
+      const held = tracks.find((t) => t.id === this.lastAudioSpeaker.id);
+      if (held) {
+        top = held;
+        clearSpeaker = true;
+      }
+    }
     if (clearSpeaker) this.speakerId = top.id;
 
     const near = (t) => Math.hypot(t.position[0], t.position[2]);

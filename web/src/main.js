@@ -8,6 +8,7 @@ import { describeScene } from './tracking/geometry.js';
 import { Speaker } from './conversation/speaker.js';
 import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
+import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
 import { createUi } from './ui/panel.js';
 import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
@@ -112,6 +113,23 @@ function sceneText() {
 
 /* ---------- 声 ---------- */
 let listener = null;
+// 声の向き(ステレオのマイク)。機材に依存しない: マイクの間隔などは URL で渡せる(?micspacing=0.06 ?mic=DVR ?micswap=1 ?ild=5)
+let stereoMic = null;
+function startStereoMic() {
+  if (stereoMic && ['starting', 'stereo', 'mono'].includes(stereoMic.status)) return Promise.resolve(stereoMic.status);
+  stereoMic = new StereoMic({
+    deviceHint: params.get('mic') ?? undefined,
+    micSpacingM: Number(params.get('micspacing')) || 0.06,
+    swapLeftRight: params.get('micswap') === '1',
+    ildDegPerDb: Number(params.get('ild')) || 0,
+  });
+  app.stereoMic = stereoMic;
+  return stereoMic.start().then((st) => {
+    updatePrivacy();
+    return st;
+  });
+}
+app.startStereo = startStereoMic;
 let lastInterimAt = 0; // 聞き取りの途中の文字が最後に届いた時刻(何か話した、の目印)
 let lastTextAt = 0; // 途中でも確定でも、文字が最後に届いた時刻
 const misheard = new MisheardTracker();
@@ -147,6 +165,7 @@ async function toggleMic() {
   if (listener?.listening) {
     listener.stop();
     listener = null;
+    stereoMic?.stop();
     btn.setAttribute('aria-pressed', 'false');
     btn.classList.remove('hearing');
     updatePrivacy();
@@ -183,6 +202,7 @@ async function toggleMic() {
       onError: (msg) => ui.error(msg),
     });
     await listener.start();
+    void startStereoMic(); // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く
     btn.setAttribute('aria-pressed', 'true');
     updatePrivacy();
   } catch (err) {
@@ -199,6 +219,7 @@ function updatePrivacy() {
   };
   let text = texts[app.mode] ?? texts.sim;
   if (listener?.listening) text += ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
+  if (stereoMic?.status === 'stereo') text += ' 声のする向きは、この端末の中で左右の音の差を調べるだけです(音は保存も、この仕組みからの送信もしません)。';
   ui.privacy(text, app.mode !== 'camera');
 }
 
@@ -221,6 +242,15 @@ function updateChips() {
   chips.push([app.mode === 'pose' ? '位置' : 'カメラ', info.label, info.ok ? 'ok' : 'warn']);
   chips.push(['人', String(app.lastAttention.tracks.length), '']);
   if (listener?.listening) chips.push(['聞き取り', 'ブラウザ', 'ok']);
+  if (stereoMic) {
+    const sp = app.lastAttention?.speaker;
+    const est = stereoMic.estimate();
+    const m = est?.measurements?.[0];
+    const label = stereoMic.status === 'stereo'
+      ? (m ? `${m.bearingDeg >= 0 ? '右' : '左'} ${Math.abs(Math.round(m.bearingDeg))}°(確かさ ${m.confidence.toFixed(2)})${sp?.source && sp.source !== 'none' ? `・話し手 ${sp.source === 'audio+video' ? '音+映像' : sp.source === 'audio' ? '音' : '映像'}` : ''}` : 'ステレオ・待機')
+      : stereoMic.status === 'mono' ? 'モノ(向きは出せない)' : stereoMic.status === 'error' ? 'マイクなし' : '準備中';
+    chips.push(['声の向き', label, stereoMic.status === 'stereo' ? 'ok' : 'warn']);
+  }
   if (speaker.fillers.length) chips.push(['あいづち', `${speaker.fillers.length} 種類`, 'ok']);
   ui.chips(chips);
 }
@@ -247,7 +277,9 @@ function frame(nowMs) {
   }));
 
   // 2. 誰を見るか
-  const att = picker.update(people, nowS, { voiceActive: Boolean(listener?.voiceActive) });
+  // 声の向き(ステレオのマイク)。キャラ自身が話している間は、自分の声を拾うので使わない
+  const audio = speaker.speaking ? null : (stereoMic?.estimate() ?? null);
+  const att = picker.update(people, nowS, { voiceActive: Boolean(listener?.voiceActive), audio });
   app.lastAttention = att;
   const primary = att.tracks.find((t) => t.id === att.primaryId);
 
@@ -256,6 +288,10 @@ function frame(nowMs) {
     c.lookAt(gazeOverride.pos);
   } else if (primary) {
     c.lookAt(toWorld(primary.gaze ?? primary.position));
+  } else if (att.speaker.unseenBearingDeg !== null) {
+    // 誰も映っていないが、声はする: 声のする向きへ顔を向ける(マイクから見て右が正 → キャラの座標では x が負)
+    const b = (att.speaker.unseenBearingDeg * Math.PI) / 180;
+    c.lookAt(toWorld([-1.8 * Math.sin(b), stage.state.headY, 1.8 * Math.cos(b)]));
   } else {
     c.lookAt(null);
   }

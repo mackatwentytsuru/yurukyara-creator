@@ -1,0 +1,62 @@
+{
+  "spacingM": 0.06,
+  "snrDb": 25,
+  "note": "計算で作った偽のステレオ録音を、偽のマイクとして Chrome(画面なし)に流した。実機のマイクではない",
+  "rows": [
+    {
+      "trueDeg": -60,
+      "status": "stereo",
+      "channels": 2,
+      "sampleRate": 44100,
+      "n": 40,
+      "meanDeg": -60.07380830877402,
+      "sdDeg": 0.9927162888078676,
+      "errorDeg": -0.07380830877401934,
+      "problems": []
+    },
+    {
+      "trueDeg": -30,
+      "status": "stereo",
+      "channels": 2,
+      "sampleRate": 44100,
+      "n": 40,
+      "meanDeg": -30.178366632204302,
+      "sdDeg": 0.6813790116027961,
+      "errorDeg": -0.17836663220430182,
+      "problems": []
+    },
+    {
+      "trueDeg": 0,
+      "status": "stereo",
+      "channels": 2,
+      "sampleRate": 44100,
+      "n": 40,
+      "meanDeg": -0.061444713635920786,
+      "sdDeg": 0.6332772087397968,
+      "errorDeg": -0.061444713635920786,
+      "problems": []
+    },
+    {
+      "trueDeg": 30,
+      "status": "stereo",
+      "channels": 2,
+      "sampleRate": 44100,
+      "n": 40,
+      "meanDeg": 30.327444742548675,
+      "sdDeg": 0.7738215954962838,
+      "errorDeg": 0.32744474254867484,
+      "problems": []
+    },
+    {
+      "trueDeg": 60,
+      "status": "stereo",
+      "channels": 2,
+      "sampleRate": 44100,
+      "n": 40,
+      "meanDeg": 60.26596082987378,
+      "sdDeg": 1.1564353021543512,
+      "errorDeg": 0.26596082987377656,
+      "problems": []
+    }
+  ]
+}

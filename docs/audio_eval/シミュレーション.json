@@ -1,0 +1,511 @@
+{
+  "note": "計算で作ったステレオの声(白い雑音・反響なし)。実機のマイクの測定ではない",
+  "errTable": [
+    {
+      "spacingM": 0.03,
+      "snrDb": 25,
+      "frameErrMedianDeg": 2.116047667433431,
+      "frameErrP90Deg": 9.705274564977607,
+      "confidentFrameRate": 0.9977324263038548,
+      "finalErrMaxDeg": 2.3795095130944333,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.03,
+      "snrDb": 10,
+      "frameErrMedianDeg": 8.15345075035782,
+      "frameErrP90Deg": 20.756116241031762,
+      "confidentFrameRate": 0.9569160997732427,
+      "finalErrMaxDeg": 14.760630590596762,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.03,
+      "snrDb": 5,
+      "frameErrMedianDeg": 12.299137985313564,
+      "frameErrP90Deg": 29.143327409351556,
+      "confidentFrameRate": 0.7482993197278912,
+      "finalErrMaxDeg": 9.222083822769571,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.03,
+      "snrDb": 0,
+      "frameErrMedianDeg": 15.684815557345306,
+      "frameErrP90Deg": 35.8577607030217,
+      "confidentFrameRate": 0.4376417233560091,
+      "finalErrMaxDeg": 19.87191737499861,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.03,
+      "snrDb": -5,
+      "frameErrMedianDeg": 17.434358197535445,
+      "frameErrP90Deg": 45,
+      "confidentFrameRate": 0.07936507936507936,
+      "finalErrMaxDeg": 45,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.06,
+      "snrDb": 25,
+      "frameErrMedianDeg": 1.0056813346980107,
+      "frameErrP90Deg": 3.9824377378665474,
+      "confidentFrameRate": 1,
+      "finalErrMaxDeg": 2.3251388076874377,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.06,
+      "snrDb": 10,
+      "frameErrMedianDeg": 3.8581403925251045,
+      "frameErrP90Deg": 15.417698168469038,
+      "confidentFrameRate": 0.9931972789115646,
+      "finalErrMaxDeg": 5.339722042612749,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.06,
+      "snrDb": 5,
+      "frameErrMedianDeg": 5.6814835434549344,
+      "frameErrP90Deg": 20,
+      "confidentFrameRate": 0.891156462585034,
+      "finalErrMaxDeg": 9.231791890267047,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.06,
+      "snrDb": 0,
+      "frameErrMedianDeg": 7.350071191884467,
+      "frameErrP90Deg": 20,
+      "confidentFrameRate": 0.655328798185941,
+      "finalErrMaxDeg": 6.5199256179158915,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.06,
+      "snrDb": -5,
+      "frameErrMedianDeg": 11.383853080278655,
+      "frameErrP90Deg": 25.693281730053172,
+      "confidentFrameRate": 0.2675736961451247,
+      "finalErrMaxDeg": 6.518826187680338,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.1,
+      "snrDb": 25,
+      "frameErrMedianDeg": 1.1986841482134594,
+      "frameErrP90Deg": 4.491871813812345,
+      "confidentFrameRate": 1,
+      "finalErrMaxDeg": 1.9089789353432138,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.1,
+      "snrDb": 10,
+      "frameErrMedianDeg": 4.0415829839986515,
+      "frameErrP90Deg": 15.719172688634686,
+      "confidentFrameRate": 0.9977324263038548,
+      "finalErrMaxDeg": 3.533205783399623,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.1,
+      "snrDb": 5,
+      "frameErrMedianDeg": 6.042954435346381,
+      "frameErrP90Deg": 20,
+      "confidentFrameRate": 0.9319727891156463,
+      "finalErrMaxDeg": 15.5357272938556,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.1,
+      "snrDb": 0,
+      "frameErrMedianDeg": 9.061272226796298,
+      "frameErrP90Deg": 21.157151743446164,
+      "confidentFrameRate": 0.7687074829931972,
+      "finalErrMaxDeg": 13.524779287197845,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.1,
+      "snrDb": -5,
+      "frameErrMedianDeg": 12.099781173323784,
+      "frameErrP90Deg": 31.622189641193387,
+      "confidentFrameRate": 0.5056689342403629,
+      "finalErrMaxDeg": 11.860263314815342,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.2,
+      "snrDb": 25,
+      "frameErrMedianDeg": 1.4712780582653764,
+      "frameErrP90Deg": 5.279464457315868,
+      "confidentFrameRate": 1,
+      "finalErrMaxDeg": 5.318102572850563,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.2,
+      "snrDb": 10,
+      "frameErrMedianDeg": 5.009995794433964,
+      "frameErrP90Deg": 16.253949580103445,
+      "confidentFrameRate": 0.981859410430839,
+      "finalErrMaxDeg": 8.489631740775351,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.2,
+      "snrDb": 5,
+      "frameErrMedianDeg": 6.843737643491814,
+      "frameErrP90Deg": 20,
+      "confidentFrameRate": 0.9387755102040817,
+      "finalErrMaxDeg": 5.5709019849201775,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.2,
+      "snrDb": 0,
+      "frameErrMedianDeg": 9.833280678183716,
+      "frameErrP90Deg": 20.189917655491502,
+      "confidentFrameRate": 0.8253968253968254,
+      "finalErrMaxDeg": 20,
+      "finalMissing": 0
+    },
+    {
+      "spacingM": 0.2,
+      "snrDb": -5,
+      "frameErrMedianDeg": 11.924139801814075,
+      "frameErrP90Deg": 27.439144817497578,
+      "confidentFrameRate": 0.6984126984126984,
+      "finalErrMaxDeg": 20,
+      "finalMissing": 0
+    }
+  ],
+  "idTable": [
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 5,
+      "right": 9,
+      "wrong": 0,
+      "undecided": 7,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 10,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 15,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 20,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 30,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 45,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 5,
+      "right": 2,
+      "wrong": 0,
+      "undecided": 14,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 10,
+      "right": 10,
+      "wrong": 0,
+      "undecided": 6,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 15,
+      "right": 15,
+      "wrong": 0,
+      "undecided": 1,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 20,
+      "right": 15,
+      "wrong": 0,
+      "undecided": 1,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 30,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 45,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 5,
+      "right": 0,
+      "wrong": 0,
+      "undecided": 16,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 10,
+      "right": 13,
+      "wrong": 0,
+      "undecided": 3,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 15,
+      "right": 15,
+      "wrong": 0,
+      "undecided": 1,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 20,
+      "right": 15,
+      "wrong": 0,
+      "undecided": 1,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 30,
+      "right": 14,
+      "wrong": 0,
+      "undecided": 2,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.06,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 45,
+      "right": 14,
+      "wrong": 0,
+      "undecided": 2,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 5,
+      "right": 10,
+      "wrong": 0,
+      "undecided": 6,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 10,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 15,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 20,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 30,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 20dB)",
+      "separationDeg": 45,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 5,
+      "right": 3,
+      "wrong": 1,
+      "undecided": 12,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 10,
+      "right": 11,
+      "wrong": 0,
+      "undecided": 5,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 15,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 20,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 30,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "片方だけが話す(雑音 5dB)",
+      "separationDeg": 45,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 5,
+      "right": 0,
+      "wrong": 0,
+      "undecided": 16,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 10,
+      "right": 13,
+      "wrong": 0,
+      "undecided": 3,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 15,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 20,
+      "right": 16,
+      "wrong": 0,
+      "undecided": 0,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 30,
+      "right": 14,
+      "wrong": 0,
+      "undecided": 2,
+      "trials": 16
+    },
+    {
+      "spacingM": 0.1,
+      "condition": "同時に話す(相手は半分の音量、雑音 20dB)",
+      "separationDeg": 45,
+      "right": 11,
+      "wrong": 0,
+      "undecided": 5,
+      "trials": 16
+    }
+  ]
+}

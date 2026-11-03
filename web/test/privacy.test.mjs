@@ -95,3 +95,22 @@ test('サーバーに届くのは「言葉」と「見えている様子の言�
   }
   assert.ok(!/image|frame|video|photo|jpeg|png/i.test(body), '送る内容に画像らしい名前があります');
 });
+
+// ---- 声の向き(ステレオのマイク): 音も、端末の中で数字にするだけ ----
+const AUDIO_FILES = [...files.filter((p) => p.includes(join('tracking', 'audio'))), join(SRC, '..', 'public', 'stereo-tap.worklet.js')];
+const AUDIO_FORBIDDEN = ['fetch', 'XMLHttpRequest', 'WebSocket', 'sendBeacon', 'EventSource', 'MediaRecorder', 'localStorage', 'sessionStorage', 'indexedDB', 'importScripts', 'toBlob', 'createObjectURL', 'Blob(', 'FileReader', 'showSaveFilePicker', 'caches.'];
+
+test('声の向き(tracking/audio と stereo-tap.worklet.js)は、通信・保存・録音の道具を使わない', () => {
+  assert.ok(AUDIO_FILES.length >= 4);
+  for (const f of AUDIO_FILES) {
+    const text = code(f);
+    for (const word of AUDIO_FORBIDDEN) assert.ok(!text.includes(word), `${relative(join(SRC, '..'), f)} に ${word} があります`);
+  }
+});
+
+test('声の向きの部品は、音を受け取って数字を返すだけ: 受け取った配列を、どこにも貯めない(枠の分だけ)', () => {
+  const t = code(join(SRC, 'tracking', 'audio', 'stereoBearing.js'));
+  // 長い録音を持てるような、追記する配列(push の先が history 以外)を作っていない
+  assert.ok(!/\.(push|concat)\(\s*(l|r)\b/.test(t));
+  assert.ok(!/new Float32Array\(\s*(fs|this\.o\.fs)\s*\*/.test(t), '秒単位の長さの配列を作っています');
+});
