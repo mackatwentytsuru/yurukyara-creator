@@ -119,6 +119,20 @@ def test_measured_bulbs_keep_their_flow_and_position():
     assert renderer.s_x.tolist() == [100.0]  # 2 つに 1 つ。ずらさない
 
 
+def test_landing_is_the_first_beat_after_the_out():
+    plan = make_plan(out_t=10.0)
+    assert plan.land_times[0] > 10.0 + fx_plan.LAND_MIN_AFTER - 1e-6
+    assert plan.land_times[0] in plan.timeline["beats"]
+
+
+def test_led_character_stays_behind_and_fades_late():
+    plan = make_plan(out_t=10.0)
+    assert plan.led_character_fade(9.5) == 1.0
+    assert 0.0 < plan.led_character_fade(10.0) < 1.0
+    assert plan.led_character_fade(10.0 + fx_plan.LED_FADE_AFTER) == 0.0
+    assert plan.held_frame(int(10.1 * FPS)) == 10 * FPS - 1
+
+
 if __name__ == "__main__":
     tests = [value for name, value in sorted(globals().items()) if name.startswith("test_")]
     for test in tests:

@@ -38,9 +38,10 @@ FRAME_THICK = 4.0
 FRAME_GLOW = 20.0
 FRAME_MARGIN = 72
 READ_AHEAD = 4
-EXIT_FADE_FROM = 0.45
-EXIT_TOP_MARGIN = 40.0  # 頭の上まで抜けるための余り
-EXIT_GLOW = (0.20, 0.85, 0.80)  # 移る境目の光(直線)
+EXIT_TOP_MARGIN = 20.0  # 頭の上まで抜けるための余り
+EXIT_LINE_SIGMA = 6.0  # 移る境目の光の線の太さ(半値幅で約 10 px。身長の 2.5%)
+EXIT_LINE = (0.42, 0.60, 0.60)  # 境目の光(直線)
+EDGE_CHOKE = 0.10  # キャラの縁の透明の、これより薄い所を捨てる(明るい縁を減らす)
 
 
 def to_linear(x):
@@ -182,8 +183,15 @@ def character_layer(image, size, mode, tint, device):
     else:
         linear = to_linear(rgb) * alpha
     stack = torch.cat([linear, alpha.unsqueeze(0)], dim=0).unsqueeze(0)
-    stack = F.interpolate(stack, size=(size[1], size[0]), mode="bicubic", align_corners=False)[0].clamp(0.0, 1.0)
-    return stack[:3], stack[3]
+    # bicubic は縁で行き過ぎて明るい線を作る。横 1.48 倍は直線の補間にする
+    stack = F.interpolate(stack, size=(size[1], size[0]), mode="bilinear", align_corners=False)[0].clamp(0.0, 1.0)
+    return choke_edge(stack[:3], stack[3])
+
+
+def choke_edge(color, alpha):
+    """縁の薄い所を削る。色はかぶせ済みなので、同じ割合で下げる。"""
+    choked = ((alpha - EDGE_CHOKE) / (1.0 - EDGE_CHOKE)).clamp(0.0, 1.0)
+    return color * (choked / alpha.clamp(min=1e-3)).clamp(max=1.0), choked
 
 
 def monitor_state(stage, start, end, fps):
@@ -355,43 +363,47 @@ class Composer:
         image = sequence.get(frame)
         return None if image is None else character_layer(image, self.size, self.args.char_key, self.tint, self.device)
 
-    def _exit_keep(self, t):
-        """足から順に消す割合と、移る境目の光。出る前は None。"""
+    def _exit_line(self, t):
+        """足から頭へ上がる細い光の線。舞台のキャラが現れる境目と同じ秒。出ていない間は None。"""
         progress = self.plan.exit_progress(t)
-        if progress <= 0.0:
-            return None, None
+        if progress <= 0.0 or progress >= 1.0:
+            return None
         if self.y_grid is None:
             ys = (torch.arange(self.size[1], device=self.device, dtype=torch.float32) + 0.5) * CANVAS[1] / self.size[1]
             xs = (torch.arange(self.size[0], device=self.device, dtype=torch.float32) + 0.5) * CANVAS[0] / self.size[0]
             self.y_grid, self.x_grid = torch.meshgrid(ys, xs, indexing="ij")
         foot, tall = self.plan.foot_y, float(self.plan.stage["life_size"]["height_px"])
-        front_y = foot + 12.0 - (tall + EXIT_TOP_MARGIN + 12.0) * progress ** 1.25
-        front = front_y + 9.0 * torch.sin(self.x_grid / 23.0 + t * 19.0)
-        keep = smooth((front - self.y_grid) / 26.0 + 0.5)
-        # 上半身は後半で薄くする(頭だけが宙に残って見えないように。舞台のキャラは逆に濃くなる)
-        keep = keep * (1.0 - smooth(torch.tensor((progress - EXIT_FADE_FROM) / (1.0 - EXIT_FADE_FROM))))
-        glow = torch.exp(-(((self.y_grid - front) / 20.0) ** 2))
-        return keep, glow
+        front_y = foot + 8.0 - (tall + EXIT_TOP_MARGIN + 8.0) * progress
+        front = front_y + 2.5 * torch.sin(self.x_grid / 23.0 + t * 19.0)
+        return torch.exp(-(((self.y_grid - front) / EXIT_LINE_SIGMA) ** 2))
 
     def _draw_character(self, final, frame):
+        """LED のキャラは奥に残り、遅れて薄れる。体は隠さず、細い光の線だけが足から頭へ上がる。"""
         t = frame / self.fps
-        keep, glow = self._exit_keep(t)
-        for layer in (self._layer(self.shadow, frame), self._layer(self.reflect, frame)):
+        self.exit_band_pct = None
+        fade = self.plan.led_character_fade(t)
+        if fade <= 0.0:
+            return final, None
+        shown = self.plan.held_frame(frame)
+        for layer in (self._layer(self.shadow, shown), self._layer(self.reflect, shown)):
             if layer is None:
                 continue
             color, alpha = layer
-            fade = 1.0 - self.plan.exit_progress(t)
             final = final * (1.0 - alpha * fade) + color * fade
-        char = self._layer(self.character, frame)
+        char = self._layer(self.character, shown)
         if char is None:
             return final, None
         color, alpha = char
-        if keep is None:
-            return final * (1.0 - alpha) + color, alpha
-        kept = alpha * keep
-        final = final * (1.0 - kept) + color * keep
-        light = torch.tensor(EXIT_GLOW, device=self.device).view(3, 1, 1)
-        return final + light * glow * alpha * 0.55, kept
+        alpha, color = alpha * fade, color * fade
+        final = final * (1.0 - alpha) + color
+        line = self._exit_line(t)
+        if line is None:
+            return final, alpha
+        body = alpha > 0.5
+        if bool(body.any()):
+            self.exit_band_pct = round(float((body & (line > 0.5)).float().sum() / body.float().sum()) * 100.0, 2)
+        light = torch.tensor(EXIT_LINE, device=self.device).view(3, 1, 1)
+        return final + light * line * alpha, alpha
 
     def draw(self, frame):
         """このコマの絵(直線、3 × 高さ × 幅)と、キャラの透明。"""
@@ -441,6 +453,7 @@ class Composer:
             if stats:
                 row = frame_stats(frame, final, alpha, time.perf_counter() - t0)
                 row["limit"] = round(scale, 3)
+                row["exit_band_pct"] = self.exit_band_pct
                 stats.write(json.dumps(row) + "\n")
             if (frame - first) % 120 == 0:
                 print(f"{frame} / {last}  {(time.time() - began) / max(1, frame - first + 1):.3f} 秒/コマ", flush=True)

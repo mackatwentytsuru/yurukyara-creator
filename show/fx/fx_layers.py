@@ -28,6 +28,8 @@ PILLARS = [  # 上の x・下へ向かう傾き・広がり・色(0 青緑 1 ピ
 SEED = 20261103
 DUST_COUNT = 70
 BOKEH_COUNT = 18
+FALL_LEVEL = 0.095  # 本物の電球から流れ落ちる光の強さ
+FALL_TAPER = 0.8  # 下の端で幅がこの割合だけ細くなる
 
 
 def smooth(x):
@@ -194,19 +196,32 @@ class FxRenderer:
             shape = torch.where(ahead > 0, torch.exp(-ahead * ahead), torch.exp(-behind.clamp(min=0.0)))
             shape = shape * smooth((self.y_line.view(1, -1) - self.s_y.view(-1, 1)) / 160.0 + 0.3)
             active = smooth(progress / 0.08) * (1.0 - smooth((t - at) / 0.35)) * self.s_level
-            across = torch.exp(-((self.x_line.view(1, -1) - self.s_x.view(-1, 1)) / self.s_width.view(-1, 1)) ** 2)
-            field = (shape * active.view(-1, 1)).t() @ across
+            if self.plan.measured_bulbs:
+                field = self._tapered_fall(shape, active)
+                level = FALL_LEVEL
+            else:
+                across = torch.exp(-((self.x_line.view(1, -1) - self.s_x.view(-1, 1)) / self.s_width.view(-1, 1)) ** 2)
+                field = (shape * active.view(-1, 1)).t() @ across
+                level = 0.14
             haze = (1.0 + 0.16 * self._haze_at(t, 2.2, 0.7, 0.0, -0.25)).clamp(min=0.5)
-            out = out + self.colors["fall"] * field * haze * (0.21 if self.plan.measured_bulbs else 0.14) * self.flash_mask
+            out = out + self.colors["fall"] * field * haze * level * self.flash_mask
         return out
 
+    def _tapered_fall(self, shape, active):
+        """電球から下へ細くなり、薄れる光。幕に貼った帯に見えないように。"""
+        drop = ((self.y_line.view(1, -1) - self.s_y.view(-1, 1)) / (CANVAS[1] - self.s_y.view(-1, 1))).clamp(0.0, 1.0)
+        width = self.s_width.view(-1, 1) * (1.0 - FALL_TAPER * drop)
+        fade = (shape * active.view(-1, 1) * (1.0 - 0.7 * drop)).unsqueeze(2)
+        across = torch.exp(-(((self.x_line.view(1, 1, -1) - self.s_x.view(-1, 1, 1)) / width.unsqueeze(2)) ** 2))
+        return (fade * across).sum(dim=0)
+
     def _floor_wave(self, t):
-        """流れ落ちた光が下の縁を両側へ広がる。出る秒から。"""
+        """着地の拍で、足元から床の光が 1 回だけ両側へ広がる。"""
         plan = self.plan
-        age = plan.last_flash_age(t, plan.out_times)
+        age = plan.last_flash_age(t, plan.land_times)
         if age is None or age > 4.5:
             return None
-        legs = torch.minimum((self.x - plan.center_x + ARCH["half_w"]).abs(), (self.x - plan.center_x - ARCH["half_w"]).abs())
+        legs = (self.x - plan.center_x).abs()
         reach = age * 3400.0
         filled = smooth((reach - legs) / 700.0 + 0.5)
         crest = torch.exp(-((reach - legs) / 340.0) ** 2)
@@ -227,10 +242,10 @@ class FxRenderer:
         distance = torch.sqrt(((self.x - self.plan.center_x) / 1.48) ** 2 + (self.y - self.plan.foot_y) ** 2)
         band = torch.exp(-((distance - radius) / (width * 3.0 + 110.0)) ** 2)
         wash = smooth((self.y - 200.0) / 1040.0) ** 2
-        field = self.colors[tint] * (band * ring * 0.16 + wash * light * 0.05)
+        field = self.colors[tint] * (band * ring * 0.09 + wash * light * 0.03)
         if core > 0.0:
             mixed = self.colors["pink"] * 0.7 + self.colors["warm"] * 0.3  # 薄い暖色は灰色に濁る
-            field = field + mixed * torch.exp(-(distance / 330.0) ** 2) * core * 0.26
+            field = field + mixed * torch.exp(-(distance / 330.0) ** 2) * core * 0.14
         return field * self.flash_mask
 
     def _exit_floor(self, t):
@@ -239,7 +254,7 @@ class FxRenderer:
         if age is None:
             return None
         rise = float(smooth(torch.tensor(age / EXIT_SEC)))
-        fade = 1.0 if age < EXIT_SEC else math.exp(-(age - EXIT_SEC) / 0.55)
+        fade = 1.0 if age < EXIT_SEC else math.exp(-(age - EXIT_SEC) / 0.16)  # 着地の前に弱める
         center = self.plan.center_x
         foot = self.plan.foot_y
         halfway = 90.0 + 760.0 * rise + 1500.0 * max(0.0, age - EXIT_SEC)
@@ -248,7 +263,7 @@ class FxRenderer:
         below = smooth((self.y - (foot - 40.0)) / 60.0)
         # 足からまっすぐ前(絵の下)へ伸びる帯。本物の床の反射につなげる
         beam = torch.exp(-((self.x - center) / (70.0 + 170.0 * rise)) ** 2) * below
-        return (self.colors["teal"] * along * depth * 0.42 + self.colors["warm"] * beam * 0.55) * rise * fade
+        return (self.colors["teal"] * along * depth * 0.22 + self.colors["warm"] * beam * 0.28) * rise * fade
 
     def _crash(self, frame, t):
         crash, finale = float(self.plan.track["crash"][frame]), float(self.plan.finale[frame])

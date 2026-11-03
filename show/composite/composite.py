@@ -14,6 +14,7 @@
 使い方: python composite.py <連番の親フォルダ> <実写の動画> <出力の連番フォルダ> [--first コマ] [--last コマ] [--stmap stmap.npy] [--exit 始 終]
 """
 import argparse
+import json
 import subprocess
 from pathlib import Path
 
@@ -26,13 +27,18 @@ SHADOW_BLUR_SIGMA = 1.2
 SHADOW_STRENGTH = 0.85
 REFLECTION_STRENGTH = 0.65  # キャラの床の映り込み。本物の床が光らないなら下げる
 REFLECTION_FADE = 0.16  # 足から離れると消える長さ(キャラの身長に対する割合)
-RIM_GAIN = 0.9  # LED の光がキャラの縁に回る強さ(直線)
-CONTACT_SHADOW = 0.62  # 足が床に着く所の影の濃さ
+RIM_GAIN = 0.32  # LED の光がキャラの縁に回る強さ(直線)
+CONTACT_SHADOW = 0.84  # 足が床に着く所の影の濃さ(直線。sRGB で約 40% 暗い)
+LAND_IMPACT = 0.1
+GRADE_GAIN = 0.76  # キャラを背景になじませる明るさ(直線)
+GRADE_SATURATION = 0.88  # 同じ、彩度
+SOFT_SIGMA = 0.7  # 色と透明を少しぼかす画素(ギザつきを減らす。実写の甘さに近づける)
+EDGE_CHOKE = 0.12  # 透明の、これより薄い所を捨てる(明るい縁を減らす)
+LINE_WIDTH = 0.012  # 現れる境目の光の線(身長に対する、ガウスの幅)
 RIM_BLUR = 0.018  # 縁の幅(絵の高さに対する割合)
 AMBIENT = 0.35  # LED の色がキャラ全体に乗る割合
 LED_PROBE = (64, 14)
-EXIT_FADE_FROM = 0.45  # compose_led.py と同じ値
-EXIT_GLOW_BGR = (0.40, 0.42, 0.16)  # 現れる境目の光
+EXIT_GLOW_BGR = (0.55, 0.55, 0.30)  # 現れる境目の光
 PASSES = {"with": "Comp_BeautyWith", "without": "Comp_BeautyWithout", "matte": "Comp_MatteChar",
           "shadow_with": "Comp_ShadowWith", "shadow_without": "Comp_ShadowWithout"}
 
@@ -65,16 +71,13 @@ def exit_mask(alpha, progress):
     rows = np.where(alpha.max(axis=1) > 0.5)[0]
     if progress >= 1.0 or rows.size == 0:
         return np.ones_like(alpha), np.zeros_like(alpha)
-    top, bottom = rows[0] - 4.0, rows[-1] + 4.0
-    front = bottom - (bottom - top) * progress ** 1.25
+    top, bottom = rows[0] - 2.0, rows[-1] + 2.0
+    front = bottom - (bottom - top) * progress
     ys = np.arange(alpha.shape[0], dtype=np.float32)[:, None, None]
-    feather = max(2.0, (bottom - top) * 0.05)
-    keep = np.clip((ys - front) / feather + 0.5, 0.0, 1.0)
+    width = max(1.0, (bottom - top) * LINE_WIDTH)
+    keep = np.clip((ys - front) / width + 0.5, 0.0, 1.0)
     keep = keep * keep * (3.0 - 2.0 * keep)
-    fade = float(np.clip((progress - EXIT_FADE_FROM) / (1.0 - EXIT_FADE_FROM), 0.0, 1.0))  # LED のキャラが薄くなる分、上半身も現れる
-    fade = fade * fade * (3.0 - 2.0 * fade)
-    keep = 1.0 - (1.0 - keep) * (1.0 - fade)
-    return keep, np.exp(-((ys - front) / (feather * 1.2)) ** 2)
+    return keep, np.exp(-((ys - front) / width) ** 2)
 
 
 class LedLight:
@@ -118,20 +121,22 @@ def rim_light(character, alpha, colors):
     return np.clip(linear, 0.0, 1.0) ** (1.0 / GAMMA)
 
 
-def contact_shadow(alpha):
-    """足元の接地の影。キャラの一番下の幅から決める。戻りは床の明るさに掛ける割合。"""
+def contact_shadow(alpha, air=0.0):
+    """靴の真下の短く濃い影。キャラの一番下の幅から決める。戻りは床の明るさに掛ける割合。
+    air: 宙にいる割合(0 着地、1 いちばん高い)。高いほど薄く広い。"""
     rows = np.where(alpha.max(axis=1) > 0.5)[0]
     if rows.size == 0:
         return np.ones_like(alpha)
     bottom, tall = rows[-1], max(1.0, float(np.ptp(rows)))
-    near_foot = int(max(rows[0], bottom - tall * 0.05))
+    near_foot = int(max(rows[0], bottom - tall * 0.03))
     cols = np.where(alpha[near_foot:bottom + 1].max(axis=0) > 0.5)[0]
     if cols.size == 0:
         return np.ones_like(alpha)
-    middle, half = (cols[0] + cols[-1]) / 2.0, max(4.0, np.ptp(cols) * 0.75)
+    middle, half = (cols[0] + cols[-1]) / 2.0, max(8.0, np.ptp(cols) * (0.8 + 0.6 * air) + 3.0)
     ys, xs = np.mgrid[0:alpha.shape[0], 0:alpha.shape[1]].astype(np.float32)
-    spot = np.exp(-(((xs - middle) / half) ** 2 + ((ys - bottom - tall * 0.004) / (tall * 0.02)) ** 2))
-    return (1.0 - CONTACT_SHADOW * spot)[..., None]
+    spread = max(5.0, tall * (0.022 + 0.02 * air))
+    spot = np.exp(-(((xs - middle) / half) ** 4 + ((ys - bottom - tall * 0.008 - 1.0) / spread) ** 2))
+    return (1.0 - CONTACT_SHADOW * (1.0 - 0.75 * air) * spot)[..., None]
 
 
 def reflection_fade(alpha):
@@ -139,8 +144,11 @@ def reflection_fade(alpha):
     rows = np.where(alpha.max(axis=1) > 0.5)[0]
     if rows.size == 0:
         return 1.0
-    distance = np.arange(alpha.shape[0], dtype=np.float32) - rows[-1]
-    return np.exp(-np.maximum(distance, 0.0) / (max(1.0, float(np.ptp(rows))) * REFLECTION_FADE))[:, None, None]
+    tall = max(1.0, float(np.ptp(rows)))
+    distance = np.maximum(np.arange(alpha.shape[0], dtype=np.float32) - rows[-1], 0.0)
+    # 靴のすぐ下は影の中なので、映り込みは少し下から始める
+    start = 1.0 - np.exp(-((distance / max(3.0, tall * 0.03)) ** 2))
+    return (start * np.exp(-distance / (tall * REFLECTION_FADE)))[:, None, None]
 
 
 def lift_up(image, pixels):
@@ -149,26 +157,47 @@ def lift_up(image, pixels):
     return cv2.warpAffine(image, matrix, (image.shape[1], image.shape[0]), flags=cv2.INTER_LINEAR)
 
 
-def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0):
-    """lift: キャラを上へずらす画素。LED の足は床より少し高いので、出る間は合わせ、着地で 0 にする。"""
-    alpha = frames["matte"].mean(axis=2, keepdims=True)
+def grade(character):
+    """舞台のキャラを背景になじませる。かぶせ済みの色のまま直線で下げる。"""
+    linear = np.clip(character, 0.0, 1.0) ** GAMMA
+    gray = linear.mean(axis=2, keepdims=True)
+    linear = (gray + (linear - gray) * GRADE_SATURATION) * GRADE_GAIN
+    return np.clip(linear, 0.0, 1.0) ** (1.0 / GAMMA)
+
+
+def soften_edge(character, alpha):
+    """色と透明を少しぼかし、縁の薄い所を削る(ギザつきと明るい縁を減らす)。"""
+    color = cv2.GaussianBlur(character, (0, 0), SOFT_SIGMA)
+    soft = cv2.GaussianBlur(alpha[..., 0], (0, 0), SOFT_SIGMA)[..., None]
+    choked = np.clip((soft - EDGE_CHOKE) / (1.0 - EDGE_CHOKE), 0.0, 1.0)
+    return color * np.minimum(choked / np.maximum(soft, 1e-3), 1.0), choked
+
+
+def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0):
+    """lift: キャラを上へずらす画素。air: 宙にいる割合(0 で着地)。"""
+    raw_alpha = frames["matte"].mean(axis=2, keepdims=True)
+    character = np.clip(frames["with"] - (1.0 - raw_alpha) * frames["without"], 0.0, 1.0) * np.clip(raw_alpha * 8.0, 0.0, 1.0)
+    character, alpha = soften_edge(character, raw_alpha)
     lifted = lift_up(alpha, lift)[..., None] if lift > 0.0 else alpha
     keep, glow = exit_mask(lifted, progress)
     shadow = shadow_ratio(frames["shadow_with"], frames["shadow_without"])[..., None]
-    shadow = 1.0 - (1.0 - shadow * contact_shadow(alpha)) * progress
+    shadow = 1.0 - (1.0 - shadow) * progress
+    contact = 1.0 - (1.0 - contact_shadow(raw_alpha, air)) * progress
     # キャラの外の差は床の映り込みなので、色には入れない(下の reflection で足す)
-    character = np.clip(frames["with"] - (1.0 - alpha) * frames["without"], 0.0, 1.0) * np.clip(alpha * 8.0, 0.0, 1.0)
+    character = grade(character)
     if led_colors is not None:
         character = rim_light(character, alpha, led_colors)
     if lift > 0.0:
         character = lift_up(character, lift)
     character = character * keep
-    glow = glow * lifted
     alpha = lifted * keep
     shaded_plate = (plate ** GAMMA * shadow) ** (1.0 / GAMMA)
-    reflection = REFLECTION_STRENGTH * (frames["with"] - frames["without"]) * progress * reflection_fade(alpha)
-    light = glow * np.array(EXIT_GLOW_BGR, dtype=np.float32)
-    return np.clip(character + (1.0 - alpha) * (shaded_plate + reflection) + light, 0.0, 1.0)
+    reflection = REFLECTION_STRENGTH * np.clip(frames["with"] - frames["without"], -1.0, 1.0) * progress * reflection_fade(raw_alpha)
+    reflection = reflection * (1.0 - raw_alpha)  # キャラの内側の差は色なので除く
+    floor = np.clip(shaded_plate + reflection, 0.0, 1.0)
+    floor = (floor ** GAMMA * contact) ** (1.0 / GAMMA)  # 靴の真下は映り込みごと暗くする
+    light = glow * lifted * np.array(EXIT_GLOW_BGR, dtype=np.float32)
+    return np.clip(character + (1.0 - alpha) * floor + light, 0.0, 1.0)
 
 
 def plate_reader(path, width, height, first):
@@ -191,6 +220,8 @@ def main():
     parser.add_argument("--led-start", type=int, default=0, help="--first のコマに当たる、LED の映像のコマ(30p)")
     parser.add_argument("--exit-lift", type=float, default=0.0, help="出る間、キャラを上へずらす画素(LED の足と合わせる)")
     parser.add_argument("--exit-land", type=int, help="ずらしが 0 になるコマ(着地)")
+    parser.add_argument("--exit-hop", type=float, default=0.0, help="飛び出す弧の高さ(画素)")
+    parser.add_argument("--stats", type=Path, help="コマごとの足の位置など(jsonl)")
     parser.add_argument("--exit", nargs=2, type=int, metavar=("FIRST", "LAST"), help="足から順に現れるコマの範囲")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -199,6 +230,7 @@ def main():
     height, width = sample.shape[:2]
     reader = plate_reader(args.plate, width, height, args.first)
     led = LedLight(args.led_video, args.led_start) if args.led_video else None
+    stats = open(args.stats, "w", encoding="utf-8") if args.stats else None
     for index in range(args.first, args.last):
         raw = reader.stdout.read(width * height * 3)
         if len(raw) < width * height * 3:
@@ -208,11 +240,25 @@ def main():
         progress = 1.0
         if args.exit:
             progress = float(np.clip((index - args.exit[0]) / max(1, args.exit[1] - args.exit[0]), 0.0, 1.0))
-        lift = 0.0
+        lift, air = 0.0, 0.0
         if args.exit and args.exit_lift > 0.0:
-            fall = np.clip((index - args.exit[0]) / max(1, args.exit_land - args.exit[0]), 0.0, 1.0)
-            lift = float(args.exit_lift * (1.0 - fall * fall))  # だんだん速く落ちて、着地で 0
-        image = compose(plate, frames, progress, led.next() if led else None, lift)
+            u = float(np.clip((index - args.exit[0]) / max(1, args.exit_land - args.exit[0]), 0.0, 1.0))
+            arc = 4.0 * u * (1.0 - u)  # 放物線。始めは LED の足の高さ、着地で 0
+            lift = float(args.exit_lift * (1.0 - u) + args.exit_hop * arc)
+            air = float(lift / max(args.exit_lift + args.exit_hop, 1.0))
+            if index >= args.exit_land:  # 着いた直後は影が一段濃い(重さ)
+                air = -LAND_IMPACT * float(np.exp(-(index - args.exit_land) / 5.0))
+        image = compose(plate, frames, progress, led.next() if led else None, lift, air)
+        if stats:
+            raw = frames["matte"].mean(axis=2)
+            rows = np.where(raw.max(axis=1) > 0.5)[0]
+            row = {"frame": index, "lift": round(lift, 2), "progress": round(progress, 3)}
+            if rows.size:
+                near = int(max(rows[0], rows[-1] - np.ptp(rows) * 0.03))
+                cols = np.where(raw[near:rows[-1] + 1].max(axis=0) > 0.5)[0]
+                row.update(foot_y=round(float(rows[-1]) - lift, 2), foot_x=round(float((cols[0] + cols[-1]) / 2.0), 2),
+                           tall=int(np.ptp(rows)), foot_half=round(float(np.ptp(cols)) / 2.0, 1))
+            stats.write(json.dumps(row) + "\n")
         cv2.imwrite(str(args.out / f"f.{index:04d}.png"), (image * 255.0 + 0.5).astype(np.uint8))
     reader.kill()
     print("wrote", args.out)
