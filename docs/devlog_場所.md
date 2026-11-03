@@ -159,3 +159,8 @@
 - Tailscale: iPhone(iphone-12-pro)と Mac が同じ tailnet。`tailscale ping` は直接(IPv6 20 ms、LAN 114 ms)の回と DERP 経由の回があった。
 - ショーの踊り(`show/data/ar/dance_track.json/.bin`、fps 60・first 1920・4826 コマ。json の直下に fps・first・frames・bones)と yaw(前 = (−sin yaw, cos yaw))に合わせた。`start_at` は校正の頭のフラッシュ=ファイルの 21.0 秒。
 - 校正の映像 30 秒版(`make_led_calib_video.py --bare --seconds 30 --name calib_5680x1240_60p`)を、ショーの依頼で作った(1800 コマちょうど、フラッシュなし)。
+
+## 2026-11-03 夜 その 3: 数え方の訂正と、iPad が Mac から見えなかった切り分け
+- **訂正**: AR 15 fps+フル HD 30 fps の「100/99/100%」は、受け手のコマ数(つながってから切れるまで 129.5〜129.8 秒)を、端末の窓(127.0 秒)の ARKit 数で割った値で、窓の長さが違う数同士だった(3 回目は 3893 > 3884)。**端末が ARKit のコマに対して送れた割合は 97.4%/96.8%/97.9%**(送れた 3783/3760/3802、捨てた 27/49/7、受け手の連番の欠けは 3 回とも 0)。
+- **iPad が見えなかった原因**: Mac の USB アクセサリの許可待ち。Mac の画面がロック・スリープしていて(`CGSSessionScreenIsLocked=1`、画面写真が真っ黒)、許可の表示が出ていても気づけなかった。IOKit では device は見えるが `!matched`、usbmuxd は空。本人が Mac を開錠して許可し、iPad 側の「信頼」も許可したら、見張りが iPad を拾った(`idevice_id -l` に出た)。続けて `devicectl` が paired でないと言ったので `devicectl manage pair` で張り直し、撮影記録を入れた(iPad13,4・iOS 26.5.2・電池 100%・空き 93/116 GB)。詳しい手順はスキル shootlog の「機器が Mac から見えないとき」。
+- 撮影記録を iPad でも入れられる設定にした(project.yml)。測定スクリプトに `--device` を足した。

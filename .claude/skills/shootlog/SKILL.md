@@ -67,5 +67,12 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 
 ## 録画を PC(Mac)に送る形の熱と欠け(11-03 深夜の実測、iPhone 12 Pro、127 秒×3 回続けて)
 - HEVC フル HD 18 Mbps+音だけ(AR なし): 3 回とも ARKit のコマの 100% が PC に届く(30.0 fps・17.7 Mbps・遅れ 87〜99 ms)。熱は serious のまま。
-- AR モニターを 30 fps で描く: 100% → 89% → 78%、critical。**AR を 15 fps・解像度半分(`fps=15&pr=0.5`)にして PC への送りは 30 fps のまま**: 100%/99%/100%(3 回目は critical で始まっても欠けず。ただし critical ではビットレートが 17.6 → 8.6 Mbps に下がる)。熱の主因は「描画する画面」。
+- AR モニターを 30 fps で描く: 100% → 89% → 78%、critical。**AR を 15 fps・解像度半分(`fps=15&pr=0.5`)にして PC への送りは 30 fps のまま**: 端末が ARKit のコマに対して送れた割合は 97.4%/96.8%/97.9%(捨てたのは最大 1.3%、受け手の連番の欠けは 0。3 回目は critical で始まっても落ちず。ただし critical ではビットレートが 17.6 → 8.6 Mbps に下がる)。**率は「端末が送ったコマ ÷ 同じ窓の ARKit コマ」で出す**。受け手のコマ数(つながってから切れるまで、約 2.5 秒長い)を端末の窓の ARKit 数で割ると 100% を超える(3893/3884)ので、受け手の数は欠け(連番の抜け)の確認にだけ使う。熱の主因は「描画する画面」。
 - iPhone→Mac は Tailscale で直接つながる(IPv6/LAN)。TCP の 17.6 Mbps に問題なし。WKWebView は Tailscale の IP の http を ATS が拒み、自己署名 https は TLS エラーだったので、ページはアプリに同梱(`ARSiteScheme.swift`)。
+
+## 機器が Mac から見えないとき(11-03 夜、iPad で実測した切り分け)
+- 症状: USB には見える(`system_profiler SPUSBHostDataType`、IOKit に device がある)のに、`idevice_id -l` が空・`devicectl` が unavailable・`ideviceinfo` が not found。IOKit では `!registered, !matched`(ドライバが付かず configuration が選ばれない)。
+- **原因は 2 つ重なっていた**: ① Mac が画面ロック・画面スリープ(`ioreg -n Root -d1 -a | grep CGSSessionScreenIsLocked` が 1、`screencapture` が真っ黒)。② **Mac に「このアクセサリの接続を許可しますか」の表示が出て、許可待ちだった**。**画面が消えた(ロックされた)Mac では、この許可の表示が出ていても誰も気づけない**。Mac を開錠すると表示が見え、許可すると iPad 側にも「このコンピュータを信頼」が出る → 許可で通る。ssh からは直せない(パスワード・許可の操作は私には出来ない)。
+- 先に Mac 側でやること: `ioreg -n Root -d1 -a | grep -c CGSSessionScreenIsLocked`、GUI セッション(`open x.command`)から `screencapture -x` で画面を撮る(真っ黒ならロック/スリープ)、`caffeinate -dis -t 14400` を GUI セッションで起動して画面スリープを防ぐ(自分で起動した PID)。zsh では `log` が組み込みなので `/usr/bin/log show …` と書く。
+- 通ったあと: `devicectl` が「The device must be paired」と言う場合は、`idevicepair validate` が SUCCESS でも **CoreDevice 側のペアが外れている**ので `xcrun devicectl manage pair --device <UDID>` で張り直す(iPad の操作は不要だった)。最初の自動インストールは、通った直後に走ると失敗する(接続が整っていない)ので、見張りは「出た → 20 秒待つ → 入れる」にするとよい。
+- iPad(M1 iPad Pro、iPad13,4)で動かすための設定: `TARGETED_DEVICE_FAMILY: '1,2'`、横向きは `UISupportedInterfaceOrientations_iPad`、`UIRequiresFullScreen: YES`(project.yml の ShootLog)。iPad は Tailscale に入っていないと LAN(Mac は 192.168.x.x)で受ける。
