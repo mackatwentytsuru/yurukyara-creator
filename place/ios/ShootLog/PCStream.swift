@@ -51,7 +51,7 @@ final class PCStreamer {
     var width = 960
     var targetFps = 15.0
     var quality = 0.5
-    var codec = "jpeg"          // "jpeg"(確認用)か "hevc"(ハードウェア符号化。録画の代わりに PC で受ける本命)
+    var codec = "hevc"          // "hevc"(ハードウェア符号化。録画の代わりに PC で受ける本命。既定)か "jpeg"(確認用)
     var kbps = 18000             // hevc の目標ビットレート(kbps)
     private var hevc: HEVCEncoder?
     private var destFormat: OSType = kCVPixelFormatType_32BGRA

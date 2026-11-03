@@ -101,6 +101,13 @@ class Recorder:
                 "missing_buffers": (seqs[-1] - seqs[0] + 1) - len(set(seqs)), "buffers": len(rows),
                 "note": "audio.raw は int16 のリトルエンディアン。ffmpeg -f s16le -ar 48000 -ac 1 -i audio.raw audio.wav で wav にできる。pts は frames.jsonl の t と同じ時計"}
 
+    def checkpoint(self):
+        """途中で止められても記録が読めるように、ファイルを書き出し、summary.json も途中の値で書く。"""
+        for f in (self.mjpg, self.index, self.hevc_file, self.audio_file, self.audio_index):
+            if f:
+                f.flush()
+        (self.out_dir / "summary.json").write_text(json.dumps(self.summary(), ensure_ascii=False, indent=1), encoding="utf-8")
+
     def close(self):
         self.mjpg.close()
         if self.audio_file:
@@ -196,6 +203,10 @@ async def main_async(a):
                 lag = f"  遅れ {rec.rows[-1]['recv_ms'] - (rec.rows[-1]['sent_ms'] - off):.0f} ms"
             print(f"[受信中] コマ {n}(毎秒 {fps:.1f})  欠け(直近 300 コマ){lost}  {rec.bytes / 1e6:.0f} MB  音 {len(rec.audio_rows)} 塊{lag}", flush=True)
             last = (n, now)
+            try:
+                rec.checkpoint()
+            except Exception:
+                pass
     status_task = asyncio.create_task(status_loop())
     print(f"待ち受け {a.bind}:{a.port}、記録 {a.out}" + (f"、{a.seconds} 秒で終わる" if a.seconds else "(Ctrl+C で終わる)"))
     try:

@@ -714,7 +714,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             }
         }
         if a.contains("--pc-on") {
-            pcStream.codec = value("--pc-codec") ?? "jpeg"
+            if let c = value("--pc-codec") { pcStream.codec = c }
             if let w = Int(value("--pc-width") ?? "") { pcStream.width = w }
             if let k = Int(value("--pc-kbps") ?? "") { pcStream.kbps = k }
             if let f = Double(value("--pc-fps") ?? "") { pcStream.targetFps = f }
