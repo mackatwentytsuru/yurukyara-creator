@@ -36,7 +36,9 @@ FOG_DENSITY = 0.02
 SCREEN_RT_SCALE = 1  # スクリーンの絵の大きさ = monitor_rects × これ
 FLASH_PLANE_PX = 6400.0  # 光の板の 1 辺(正方形の画素)
 FIRE_SEC = 3.0
+FIRE_PLACES = {"center": [(0.0, 120.0, 40.0)], "sides": [(-430.0, -200.0, 60.0), (430.0, -200.0, 60.0)]}
 WARMUP = 45
+FPS_FOR_TICKS = 60  # main で config の fps に置き換える
 mel = unreal.MaterialEditingLibrary
 
 
@@ -419,10 +421,11 @@ def key_intensity(sequence, actor, component, keys, peak, total, fps, prop="Inte
 
 
 def add_scalar(section, name, frame, value):
-    """材質のパラメータに 1 つキーを打つ。5.8 の材質トラックは名前でなく MaterialParameterInfo で受ける。"""
+    """材質のパラメータに 1 つキーを打つ。5.8 の材質トラックは名前でなく MaterialParameterInfo で受ける。
+    時刻はコマではなく tick(チャンネルの add_key と違う)。コマのまま渡すと全部のキーが頭に固まる。"""
     info = unreal.MaterialParameterInfo()
     info.set_editor_property("name", name)
-    section.add_scalar_parameter_key(info, unreal.FrameNumber(int(frame)), float(value), "", "",
+    section.add_scalar_parameter_key(info, unreal.FrameNumber(int(frame) * TICKS // FPS_FOR_TICKS), float(value), "", "",
                                      unreal.MovieSceneKeyInterpolation.LINEAR)
 
 
@@ -443,17 +446,15 @@ def key_flash(sequence, plane, rows, tint, total, light=None):
     return binding
 
 
-def add_fires(sequence, actor, times, fps, total):
+def add_fire(sequence, actor, t, fps):
     sequence.add_possessable(actor)
     binding = sequence.add_possessable(actor.niagara_component)
-    track = binding.add_track(unreal.MovieSceneNiagaraSystemTrack)
-    for t in times:
-        section = track.add_section()
-        first = int(round(t * fps))
-        section.set_range(first, first + int(FIRE_SEC * fps))
-        section.set_editor_property("section_start_behavior", unreal.NiagaraSystemSpawnSectionStartBehavior.ACTIVATE)
-        section.set_editor_property("section_end_behavior", unreal.NiagaraSystemSpawnSectionEndBehavior.DEACTIVATE)
-        section.set_editor_property("age_update_mode", unreal.NiagaraAgeUpdateMode.TICK_DELTA_TIME)
+    section = binding.add_track(unreal.MovieSceneNiagaraSystemTrack).add_section()
+    first = int(round(t * fps))
+    section.set_range(first, first + int(FIRE_SEC * fps))
+    section.set_editor_property("section_start_behavior", unreal.NiagaraSystemSpawnSectionStartBehavior.ACTIVATE)
+    section.set_editor_property("section_end_behavior", unreal.NiagaraSystemSpawnSectionEndBehavior.DEACTIVATE)
+    section.set_editor_property("age_update_mode", unreal.NiagaraAgeUpdateMode.TICK_DELTA_TIME)
 
 
 def head_positions(anim, rows, fps):
@@ -534,9 +535,6 @@ def build_main(config, cam, report):
         comp.set_editor_property("cast_shadows", False)
         flash_lights[kind] = light
     system = load_required(config["niagara_system"])
-    fires = {"center": [place_niagara(builder, "FireCenter", (0.0, 120.0, 40.0), system, config["niagara_scale"])],
-             "sides": [place_niagara(builder, "FireL", (-430.0, -200.0, 60.0), system, config["niagara_scale"]),
-                       place_niagara(builder, "FireR", (430.0, -200.0, 60.0), system, config["niagara_scale"])]}
     screens = build_screens(builder, cam, config["stage"], venue)
     studio = build_studio(builder, mesh, materials)
 
@@ -559,10 +557,11 @@ def build_main(config, cam, report):
     key_intensity(sequence, fog, fog.component, keys["haze"], FOG_DENSITY * 2.0, total, fps, prop="FogDensity")
     for kind, plane in planes.items():
         key_flash(sequence, plane, plan["flashes"][kind], None, total, flash_lights[kind])
-    for where, actors in fires.items():
-        times = [f["t"] for f in plan["fires"] if f["where"] == where]
-        for actor in actors:
-            add_fires(sequence, actor, times, fps, total)
+    # 1 回の発火に 1 体ずつ。同じ部品のトラックに区間を並べると、最初の区間しか発火しない(測定)
+    for number, fire in enumerate(plan["fires"]):
+        for side, location in enumerate(FIRE_PLACES[fire["where"]]):
+            actor = place_niagara(builder, f"Fire{number:02d}_{side}", location, system, config["niagara_scale"])
+            add_fire(sequence, actor, fire["t"], fps)
     key_screens(sequence, screens, plan["monitors"], anim, total, fps)
     save(sequence)
     report.append(f"Seq_LedMain tracks={len(sequence.get_bindings())} fires={len(plan['fires'])} monitors={len(plan['monitors'])}")
@@ -621,6 +620,8 @@ def render_config(config, cam, job):
 def main():
     with open(os.environ["LED_CONFIG"], encoding="utf-8") as f:
         config = json.load(f)
+    global FPS_FOR_TICKS
+    FPS_FOR_TICKS = config["fps"]
     mesh, _ = character_assets(config["character"])
     body_height = mesh.get_bounds().box_extent.z * 2.0
     cam = led_plan.Camera(config["stage"], body_height, stretch=config["stretch"])

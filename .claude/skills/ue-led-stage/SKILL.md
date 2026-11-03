@@ -251,3 +251,19 @@ description: Unreal Engine 5.8 で、複数の面の LED ウォールがある�
 - Git Bash から環境変数で `/Game/...` を渡すとパスに書き換えられる。名前だけ渡して中で組み立てる。
 - シーケンスで全編と同じ時刻に動かすには、スケルタルアニメーションのセクションの `first_loop_start_frame_offset` に `(全編の秒 − LEAD_FRAMES / FPS) × 24000` を入れる。
 - リアルタイムは、LED の映像の時刻に 1 秒ごとに動きをそろえる(差 0.15 秒を超えたら `set_position`)。最小の UE でも動いた(720p、中央値 59 fps、送ってから絵まで中央値 84 ms)。
+
+## LED の絵そのものを UE で描く(11-03。`show/ue/build_led_theatre.py`、`led_plan.py`、`led_venue.py`、`show/run/render_led_ue.py`、確かめは `show/check/check_led_ue.py`)
+- **カメラ:** 正方形の画素の 3838×1240 で描き、ffmpeg で 5680 に伸ばす。CineCamera の filmback の `sensor_horizontal_offset` / `sensor_vertical_offset` は 5.8 の Python で触れて、`-game` の MRQ でも効いた(大きく描いて切る必要なし)。式: ずらし mm = (描く幅/2 − 中心 x)/(描く幅/2) × センサー幅/2。縦は (中心 y − 高さ/2)/(高さ/2) × センサー高/2。どちらも正で消失点が左・下へ動く。
+- ブラウザ版(fov 14 の射影行列)と同じ写りにする値: f_px = 1/tan(7°) × (397/500) × 620 = 4009.3、距離 = 1/tan(7°) × 身長 × 1.24 = 1761.8 cm(身長 174.45 cm)、カメラの高さ = 身長/2、水平に見る。測定: 足 1 px、身長 2 px、中心 x 1.41 px 以内(547 コマ)。
+- **glTF の親 `MI_Unlit_Opaque_DS` はモーフのフラグが無い。** `-game` で顔だけ既定の材質に戻る(灰・白・黒)。ログ `missing usage flag MorphTargets`。自前の親(無照明、両面、`used_with_morph_targets`、`used_with_skeletal_mesh`)を作り、枠ごとに色とテクスチャを写した MI に替える。L_Comp と合成のキャラも同じ問題を持っている(灰色の顔)。
+- **材質トラック:** `MovieSceneComponentMaterialTrack` → `set_material_index(0)` → `add_section()` → `add_scalar_parameter_key(MaterialParameterInfo, FrameNumber, 値, "", "", 補間)`。**時刻は tick**(コマ × 24000 / fps)。チャンネルの `add_key` はコマなのに、こちらは違う。コマのまま渡すと全部のキーが頭に固まり、エラーも出ない。
+- 光のキーは、最初のキーの 1 コマ前に必ず 0 を置く。無いと最初のキーの値が手前へ伸びて全編光りっぱなしになる。
+- **シーンキャプチャは `-game` の MRQ でそのまま撮れる。** `capture_every_frame`、RT は RGBA16F、`SCS_FINAL_COLOR_HDR`、材質は `SAMPLERTYPE_LINEAR_COLOR`。露出は capture の `post_process_settings` に手で入れる(blend weight 1)。Fog・VolumetricFog・Lumen の show flag を切ると軽い。
+- キャラが舞台の外にいる間もアップを撮るので、視野から遠い所(x=-30000)に複製のキャラを置く「撮影所」にする。複製は `ALWAYS_TICK_POSE_AND_REFRESH_BONES`。頭の位置はシーケンスより先に `AnimPoseExtensions.get_anim_pose_at_time` + `get_bone_pose(..., WORLD)` で取り、カメラはコマごとのキーにする。
+- **Niagara:** `MovieSceneNiagaraSystemTrack`(部品の結びつきに足す)→ `add_section()`、`section_start_behavior` ACTIVATE。エンジンの `/Niagara/DefaultAssets/Templates/Systems/RadialBurst` が `-game` の MRQ で撮れた。**同じトラックに区間を並べると最初の区間しか発火しなかった**(測定: 2 番目以降の 73.4 秒、左右の 55.2 秒は粒が 0)。発火ごとに 1 体ずつ置く形に直したが、この直しの撮影は未確かめ(札の順番待ちで止まった)。
+- 枠に合わせたスクリーン: カメラの式で「絵の矩形 → その奥行きの世界の矩形」を計算し、カメラに平行な板を置く。測定: 目標 x 40〜940、y 190〜696 に対して x 38〜941、y 189〜697。
+- 待ちの間に前の撮影の連番が残っていると、コマ数の確認が落ちる。範囲の番号のファイルだけを数える。ファイル名は `f.{frame_number}` で全編のコマ番号にすると、ブラウザ版の枠と直接比べられる。
+- 速さ: 3838×1240、spatial 4、Lumen、影ありライト 8 灯、キャプチャ 2 本で 1 コマ 0.125〜0.156 秒(CC5 と重なると遅い方)。起動は 15 秒ほど。組み立て 7〜12 秒。png は 1 コマ約 4 MB。
+- ヘイズの強さ: 密度 0.02(キーで最大 0.04)、ビーム 1100 cd、`volumetric_scattering_intensity` 30。密度 0.1・1800 cd・散乱 45 は全体が白く霞んで絵が消えた。
+- UE に入った動きは 24 fps に間引かれている(`get_num_frames` 3058 / 127.42 秒)。LED と見比べて口や速い動きが気になるときは、取り込みの設定から疑う(未確かめ)。
+- ブラウザ版のキャラは `enter` で下から上がり、`outro` の終わりで消える(`characterVisible`)。`led_character` だけを見ると 107.43〜112 秒に余分に出る。

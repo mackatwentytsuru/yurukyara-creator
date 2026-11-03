@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image
 
 CANVAS_W = 5680
+CANVAS_H = 1240
 THRESHOLD = 128  # 白いキャラの半分の明るさ。縁の中間調の真ん中で切る
 
 
@@ -36,13 +37,16 @@ def main():
     args = parser.parse_args()
     boxes = {row["frame"]: row for row in json.loads(args.boxes.read_text(encoding="utf-8"))["frames"]}
     files = sorted(args.frames.glob("f.*.png"), key=lambda p: int(re.search(r"f\.(\d+)", p.name).group(1)))[::args.every]
-    rows, skipped = [], 0
+    rows, skipped, clipped = [], 0, 0
     for path in files:
         frame = int(re.search(r"f\.(\d+)", path.name).group(1))
         ours = measure(path)
         theirs = boxes.get(frame, {}).get("box")
         if frame not in boxes:
             skipped += 1
+            continue
+        if theirs is not None and theirs[3] >= CANVAS_H:
+            clipped += 1  # 登場の途中で枠が絵の下で切れているコマは、足と身長を比べられない
             continue
         if theirs is not None:
             theirs = [theirs[0], theirs[1] + args.foot_shift, theirs[2], theirs[3] + args.foot_shift]
@@ -54,7 +58,7 @@ def main():
                      "width": (ours[2] - ours[0]) - (theirs[2] - theirs[0]), "ue": [round(v, 1) for v in ours], "browser": theirs})
     both = [r for r in rows if "foot" in r]
     disagree = [r for r in rows if "foot" not in r and r["ue_seen"] != r["browser_seen"]]
-    summary = {"frames": len(rows), "both_seen": len(both), "not_in_browser_box": skipped, "seen_disagree_count": len(disagree), "seen_disagree": [r["frame"] for r in disagree][:20]}
+    summary = {"frames": len(rows), "both_seen": len(both), "not_in_browser_box": skipped, "clipped_by_frame": clipped, "seen_disagree_count": len(disagree), "seen_disagree": [r["frame"] for r in disagree][:20]}
     for key in ("foot", "height", "center_x", "top", "width"):
         if both:
             values = np.array([r[key] for r in both])

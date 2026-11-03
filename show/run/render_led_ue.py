@@ -39,10 +39,10 @@ def read_json(path):
 def make_plan(timeline, stage):
     """UE に渡すキーの全部。ここから先に秒の直書きは無い。"""
     fps = timeline["fps"]
-    start, end = led_plan.show_range(stage)
+    start, end = led_plan.show_range(timeline, stage)
     return {
         "first_frame": round(start * fps), "last_frame": round(end * fps),
-        "visibility": led_plan.visibility_changes(stage, fps),
+        "visibility": led_plan.visibility_changes(timeline, stage, fps),
         "lights": led_plan.light_keys(timeline, stage, max(0.0, start - 2.0), end),
         "flashes": led_plan.flash_keys(stage, start, end, fps),
         "fires": led_plan.niagara_fires(timeline, stage, start, end),
@@ -79,9 +79,15 @@ def render(job, matte):
     return round(time.time() - started, 1)
 
 
-def frame_seconds(folder):
+def frames_in_job(folder, job):
+    """この撮影のコマのファイル。前の撮影の残りが同じフォルダにあっても数えない。"""
+    paths = (folder / f"f.{frame:04d}.png" for frame in range(job["first_frame"], job["last_frame"]))
+    return [p for p in paths if p.exists()]
+
+
+def frame_seconds(paths):
     """書き出された時刻の間隔から、1 コマの秒を測る。起動と準備のコマを含まない。"""
-    stamps = sorted(p.stat().st_mtime for p in folder.glob("f.*.png"))
+    stamps = sorted(p.stat().st_mtime for p in paths)
     return round((stamps[-1] - stamps[0]) / (len(stamps) - 1), 3) if len(stamps) > 1 else None
 
 
@@ -91,7 +97,8 @@ def encode(folder, first_frame, fps, audio, start_sec, seconds, out_path):
     sound = ["-ss", f"{start_sec:.3f}", "-t", f"{seconds:.3f}", "-i", str(audio), "-map", "0:v", "-map", "1:a",
              "-c:a", "aac", "-b:a", "256k"] if audio else []
     scale = f"scale={CANVAS[0]}:{CANVAS[1]}:flags=lanczos,scale={PREVIEW_WIDTH}:-2:flags=lanczos,format=yuv420p"
-    subprocess.run(["ffmpeg", "-v", "error", "-y", *video, *sound, "-vf", scale, "-c:v", "libx264", "-crf", "18",
+    frames = str(round(seconds * fps))
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *video, *sound, "-frames:v", frames, "-vf", scale, "-c:v", "libx264", "-crf", "18",
                     "-map_metadata", "-1", str(out_path)], check=True, stdin=subprocess.DEVNULL)
 
 
@@ -118,7 +125,7 @@ def main():
     args = parse_args()
     timeline, stage = read_json(args.timeline), read_json(args.stage)
     fps = timeline["fps"]
-    start, end = led_plan.show_range(stage)
+    start, end = led_plan.show_range(timeline, stage)
     specs = [(name, float(a), float(b)) for name, a, b in args.job] or [("full", start, end)]
     jobs = [{"name": n, "first_frame": round(a * fps), "last_frame": round(b * fps),
              "spatial": MATTE_SPATIAL if n in args.matte else SPATIAL, "matte": n in args.matte} for n, a, b in specs]
@@ -143,9 +150,10 @@ def main():
             continue
         seconds = render(job["name"], job["matte"])
         folder = frames_dir / job["name"]
-        count = len(list(folder.glob("f.*.png")))
+        paths = frames_in_job(folder, job)
+        count = len(paths)
         expected = job["last_frame"] - job["first_frame"]
-        timing[job["name"]] = {"total_sec": seconds, "frames": count, "expected": expected, "sec_per_frame": frame_seconds(folder)}
+        timing[job["name"]] = {"total_sec": seconds, "frames": count, "expected": expected, "sec_per_frame": frame_seconds(paths)}
         print(job["name"], timing[job["name"]], flush=True)
         if count != expected:
             raise RuntimeError(f"{job['name']}: コマ数が {count}(見込み {expected})")

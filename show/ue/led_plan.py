@@ -72,10 +72,19 @@ def smoothstep(x):
     return x * x * (3.0 - 2.0 * x)
 
 
-def show_range(stage):
+def character_spans(timeline, stage):
+    """LED にキャラがいる秒。ブラウザ版の characterOnLed かつ characterVisible(enter の頭から outro の終わりまで)。"""
+    by_id = {s["id"]: s for s in timeline["sections"]}
+    low = by_id["enter"]["start"] if "enter" in by_id else 0.0
+    high = by_id["outro"]["end"] if "outro" in by_id else timeline["frames"] / timeline["fps"]
+    spans = [(max(float(a), low), min(float(b), high)) for a, b in stage["led_character"]]
+    return [(a, b) for a, b in spans if a < b]
+
+
+def show_range(timeline, stage):
     """描く範囲(秒)。LED にキャラがいる最初から最後まで。待ちと同期の区間は入らない。"""
-    spans = stage["led_character"]
-    return float(spans[0][0]), float(spans[-1][1])
+    spans = character_spans(timeline, stage)
+    return spans[0][0], spans[-1][1]
 
 
 def sections_at(timeline, t):
@@ -170,10 +179,10 @@ def flash_keys(stage, start, end, fps):
     return rows
 
 
-def visibility_changes(stage, fps):
+def visibility_changes(timeline, stage, fps):
     """LED にキャラがいるかの切り替わり [(コマ, いる), ...]。ブラウザ版と同じ t >= a かつ t < b。"""
     changes = []
-    for a, b in stage["led_character"]:
+    for a, b in character_spans(timeline, stage):
         changes.append((int(math.ceil(a * fps - 1e-6)), True))
         changes.append((int(math.ceil(b * fps - 1e-6)), False))
     return changes

@@ -3,8 +3,6 @@
 決まり: 舞台の床の上面が z=0(キャラの足)。キャラは原点に立ち、カメラは +y から -y を見る。
 関数の返り値の screen_y は、左右のスクリーンを置く奥行き(絵の上の位置と大きさはカメラの式で決める)。
 """
-from ue_helpers import vec
-
 WINE = (0.13, 0.008, 0.02)
 DARK = (0.012, 0.012, 0.016)
 GOLD = (0.55, 0.36, 0.13)
@@ -82,10 +80,5 @@ VENUES = {"placeholder": placeholder_theatre}
 def build_venue(b, name):
     if name not in VENUES:
         raise RuntimeError(f"会場の名前が違う: {name}。ある物: {sorted(VENUES)}")
-    if "Sphere" not in b.meshes:
-        import unreal
-        b.meshes["Sphere"] = unreal.load_asset("/Engine/BasicShapes/Sphere")
     return VENUES[name](b)
 
-
-__all__ = ["build_venue", "VENUES", "vec"]
