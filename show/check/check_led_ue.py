@@ -15,11 +15,14 @@ from PIL import Image
 CANVAS_W = 5680
 CANVAS_H = 1240
 THRESHOLD = 128  # 白いキャラの半分の明るさ。縁の中間調の真ん中で切る
+USE_ALPHA = False
 
 
 def measure(path):
     """白いキャラの枠 [x0, y0, x1, y1](ブラウザ版と同じく右と下は外側の端)。横は 5680 の座標。"""
-    picture = np.asarray(Image.open(path).convert("L"))
+    image = Image.open(path)
+    # 透明つきの層は透明で測る(明るさは光の案で変わる)。黒地の白いキャラは今までどおり明るさで測る
+    picture = np.asarray(image.getchannel("A") if USE_ALPHA else image.convert("L"))
     mask = picture >= THRESHOLD
     if not mask.any():
         return None
@@ -34,7 +37,10 @@ def main():
     parser.add_argument("boxes", type=Path)
     parser.add_argument("--every", type=int, default=1)
     parser.add_argument("--foot-shift", type=float, default=0.0, help="比べる元の足の高さとの差(古い版の 1212 と今の 1198 なら -14)")
+    parser.add_argument("--alpha", action="store_true", help="透明つきの層を透明の値で測る")
     args = parser.parse_args()
+    global USE_ALPHA
+    USE_ALPHA = args.alpha
     boxes = {row["frame"]: row for row in json.loads(args.boxes.read_text(encoding="utf-8"))["frames"]}
     files = sorted(args.frames.glob("f.*.png"), key=lambda p: int(re.search(r"f\.(\d+)", p.name).group(1)))[::args.every]
     rows, skipped, clipped = [], 0, 0

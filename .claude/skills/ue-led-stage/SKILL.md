@@ -288,3 +288,20 @@ description: Unreal Engine 5.8 で、複数の面の LED ウォールがある�
 - 左右のアップの透明の絵を測るとき、A・C 面の平均には左右のスクリーンが入る。隠れない所(x 945〜1279、4290〜5680)だけを測る。
 - 背景の仮の絵(中心が絵の真ん中)は `--bg-center-src 0.5` で中心だけを x=2159 へ寄せられる。左右で伸びが変わるので試し用。
 - GPU の札は順番待ちが続くことがある。CPU でも 1/4 の絵なら 1 コマ 0.03〜0.12 秒で、測定の数字は原寸とほぼ同じだった(強い音 86.4%・平均の最大 59.42、原寸 59.44)。絵と秒の詰めは CPU で進められる。
+
+## キャラとアップだけを透明つきの層で撮る(11-04。`show/ue/led_layers.py`、`show/run/render_led_ue.py --look --layer`、後始末 `show/run/led_layers_post.py`、確かめ `show/check/check_led_layers.py`)
+- **本物の透明は設定ファイルを変えずに出せる。** 起動の引数 `-ini:Engine:[/Script/Engine.RendererSettings]:r.PostProcessing.PropagateAlpha=True`(ログに `Set CVar [[r.PostProcessing.PropagateAlpha:1]]`)+ `MoviePipelineDeferredPassBase` の `accumulator_includes_alpha` True + レベルに空と霧を置かない。無照明も DefaultLit も被写界深度も崩れない。
+- **MRQ の透明つき PNG は、直線の値に透明が掛かった形で sRGB になっている**(不透明 223 のとき透明 0.5 で 173)。そのまま重ねると縁が黒い。直線に戻して透明で割り、sRGB に戻す(`led_layers_post.py straight`)。透明の値は直線の割合。
+- 測定: キャラの足・身長・中心 x は透明の 128 で測って 1 / 2 / 1.89 px(240 コマ)。黒地の白キャラの測定と同じ範囲。`check_led_ue.py --alpha`。
+- このキャラの材質は全部 OPAQUE(glb の alphaMode)。髪の縁の半透明は面の縁の spatial 8 の被覆だけで、髪の板自体に透明は無い。
+- **60 fps の取り込み:** glb は 7,646 コマあるのに自動だと 24 fps(3058 コマ)に間引かれる。`DefaultGLTFAssetsPipeline` を `duplicate_loaded_asset` で /Game に写し(コマンドレットでは /Interchange は登録に載らないので `duplicate_asset` は失敗する。`load_asset` は通る)、`animation_pipeline` の `custom_bone_animation_sample_rate`=60、`frame_alignment`=`InterchangeFrameAlignment.SNAP_TO_CLOSEST`(無いと「長さ 127.417 は 60 fps と互換性がない」で動きが作られない)。`ImportAssetParameters.override_pipelines` に渡し、`InterchangeManager.get_interchange_manager_scripted().import_asset`。結果 7,645 コマ。資産は入れる glb の名前のフォルダに入るので、glb を `sample_show60.glb` に写してから入れる。
+- ただし 54.8〜58.8 秒の頭の動きの 2 階差は、前後で差が出なかった(RMS 0.081 と 0.083 px。ゆっくりした区間では 24 fps の直線補間と見分けられない)。速い動きでの差は未確かめ。
+- **光のキーは Material Parameter Collection が楽。** `MovieSceneMaterialParameterCollectionTrack` に `mpc` を入れ、`add_section()`、`section.add_scalar_parameter_key(名前, FrameNumber(tick), 値, 補間)`(部品の材質トラックと違い名前で受ける。4 引数)。材質は `MaterialExpressionCollectionParameter`。`-game` の MRQ で効いた。
+- `-run=pythonscript -script=` では `__main__` がそのファイルにならない。`sys.modules[__name__]` は使えない。`types.SimpleNamespace(**globals())` で渡す。
+- **見た目の比べ:** 無照明 + 計算の陰と輪郭(案 A)はテクスチャの色がきれいに出るが、体は平ら。本物のライト(案 B: emissive 0.75、主 170 cd、輪郭 620 cd)はスカートに奥行きが出るが、顔の寄りでは鼻がテカり肌が飛ぶ。**全身は B、アップは A に分けた**(`led_plan.CLOSE_LOOK`)。最初の B(主 1400 cd、輪郭 5200 cd、emissive 0.55)は全体が白く飛んだ。tone_curve 0 で色はテクスチャのまま、光は足すとすぐ飽和する。
+- 暖かい光でテクスチャを割ると、青緑の髪が緑に転ぶ。主の光の暖色は (1.03, 0.97, 0.88) まで弱める。金は輪郭の光に持たせる。
+- 瞳は頭のテクスチャの (0.2258, 0.857) と (0.952, 0.669)(後者は上下逆)。UV で足すハイライトはまばたきのまぶたに隠れる。
+- 被写界深度: f/1.2 と f/0.7 はアップ全体が眠く見えた。顔 f/2.8、バスト f/1.6 にした。焦点の距離は `FocusSettings.ManualFocusDistance` の float トラックで毎コマ打つ。
+- **影の層:** キャラに `render_in_main_pass` False と `cast_hidden_shadow` True、灰色の床だけを撮り、キャラのいないコマとの直線の比で透明にする。カメラの高さ 87 cm は床すれすれなので影は細い線になる。そのままだと黒く硬い線に見えるので、薄め 0.6・ぼかし 5 px を足した(y 1137〜1200)。
+- **映り込みの層:** 複製を scale z=-1 で撮るだけ(トラックの既定値にも -1 を入れる)。足の線 y=1198 より下だけ残して薄める。**絵の下の端まで 42 px しかなく、B 面は y 1218 までなので見えるのは 20 px。** 本物の床の反射のほうが主役。
+- 速さ: 3838×1240、spatial 8。本番の 552 コマで キャラ 0.204 秒、映り込み 0.221 秒、影 0.213 秒(別の UE が札なしで同時に動いていたので、遅めに出ている)。短い試しは 0.03〜0.05 秒。アップ 900×506 は 0.027〜0.061 秒。起動は 12〜15 秒。後始末は 552 コマ × 3 層 + 204 × 2 と確かめで約 6 分。

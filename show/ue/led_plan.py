@@ -231,3 +231,103 @@ def niagara_fires(timeline, stage, start, end):
                 fires.append({"t": float(t), "where": "sides"})
             count += 1
     return sorted(fires, key=lambda f: f["t"])
+
+
+# ---- 層だけを撮る形(キャラとアップ。背景は別の流れで作る) ----
+RIM_LEAD_SEC = 3.2  # 飛び出す 2 小節前から、暖かい光を青緑とピンクへ変えていく
+COOL_OUT_SEC = 1.5
+RIM_BEAT = 0.12  # ふだんの拍は光を少し動かすだけ
+RIM_FLARE_SEC = 0.35
+RIM_FLARE_GAIN = 0.8
+CUT_MARGIN_SEC = 0.8  # 開いた直後と閉じる直前は切り替えない
+CLOSE_APERTURE = {"face": 2.8, "bust": 1.6}
+EYE_FRONT_CM = (8.0, 6.0)  # 頭の骨から目までの前、上
+
+# 見た目の案。shading: unlit = 計算の陰だけ、lit = 本物のライトの影も足す。tone_curve 0 はテクスチャの色をそのまま出す
+LOOKS = {
+    "A_crisp": {"shading": "unlit", "tone_curve": 0.0, "shade_edge": 0.42, "shade_soft": 0.05, "rim_power": 3.2, "rim_gain": 1.6,
+                "bounce": 0.6, "eye_gain": 1.0},
+    "B_lit": {"shading": "lit", "tone_curve": 0.0, "shade_edge": 0.40, "shade_soft": 0.18, "rim_power": 4.0, "rim_gain": 0.8,
+              "bounce": 0.4, "eye_gain": 1.0, "emissive": 0.75, "key_candela": 170.0, "rim_candela": 620.0},
+    "C_stage": {"shading": "unlit", "tone_curve": 0.0, "shade_edge": 0.50, "shade_soft": 0.10, "rim_power": 2.2, "rim_gain": 2.0,
+                "bounce": 1.0, "eye_gain": 1.3},
+}
+
+
+CLOSE_LOOK = {"B_lit": "A_crisp"}  # キャラの案ごとの、アップに使う案。無ければ同じ案
+
+
+def cool_amount(stage, t):
+    """0 = 暖かい金(歌い出し)、1 = 青緑とピンク(サビ)。最初に飛び出す少し前から、最後に戻るまでをサビの色にする。"""
+    outs = [float(c["t"]) for c in stage["flashes"] if c["kind"] == "out"]
+    backs = [float(c["t"]) for c in stage["flashes"] if c["kind"] == "back"]
+    if not outs or not backs:
+        return 0.0
+    rise = smoothstep((t - (min(outs) - RIM_LEAD_SEC)) / RIM_LEAD_SEC)
+    return min(rise, 1.0 - smoothstep((t - max(backs)) / COOL_OUT_SEC))
+
+
+def rim_flare(stage, t):
+    """出る・戻るの瞬間に輪郭の光を強める。1 コマの点滅にしない(実写で写らない)。"""
+    amount = 0.0
+    for cue in stage["flashes"]:
+        age = t - float(cue["t"])
+        amount = max(amount, math.exp(-((age / RIM_FLARE_SEC) ** 2)))
+    return amount * RIM_FLARE_GAIN
+
+
+def look_keys(timeline, stage, start, end):
+    """キャラの光のキー [{t, Cool, KeyGain, RimTeal, RimPink}]。拍で青緑とピンクを少しだけ入れ替える。"""
+    beats = timeline.get("beats", [])
+    times = {round(start + i / LIGHT_KEYS_PER_SEC, 4) for i in range(int((end - start) * LIGHT_KEYS_PER_SEC) + 1)}
+    times |= {round(b, 4) for b in beats if start <= b < end}
+    rows = []
+    for t in sorted(times):
+        index, pulse = beat_pulse(beats, t)
+        flare = rim_flare(stage, t)
+        rows.append({"t": t, "Cool": cool_amount(stage, t), "KeyGain": 0.8 + 0.2 * song_amount(timeline, t),
+                     "RimTeal": 1.0 + RIM_BEAT * (pulse if index % 2 == 0 else -pulse) + flare,
+                     "RimPink": 1.0 + RIM_BEAT * (pulse if index % 2 == 1 else -pulse) + flare})
+    return rows
+
+
+def cue_cuts(cue, downbeats, fps):
+    """アップの切り替えの秒。開いた直後と閉じる直前を除く小節の頭。"""
+    on, off = float(cue["on"]), float(cue["off"])
+    return [d for d in downbeats if on + CUT_MARGIN_SEC <= d <= off - CUT_MARGIN_SEC]
+
+
+def close_rows(timeline, stage, fps):
+    """左右のアップのコマごとの状態。左と右は同じ小節の頭で、逆の絵(顔とバスト)へ切り替わる。
+    open は枠を描く計算の層のために残す(この層には枠を描かない)。"""
+    rows = {0: [], 1: []}
+    other = {"face": "bust", "bust": "face"}
+    for number, cue in enumerate(stage["monitors"]):
+        on, off = float(cue["on"]), float(cue["off"])
+        cuts = cue_cuts(cue, timeline.get("downbeats", []), fps)
+        for side in rows:
+            shot = cue["shots"][0][1] if side == 0 else other[cue["shots"][0][1]]
+            for frame in range(int(math.ceil(on * fps)), int(math.ceil(off * fps))):
+                t = frame / fps
+                passed = [c for c in cuts if c <= t]
+                name = other[shot] if len(passed) % 2 else shot
+                amount = max(0.0, min(1.0, (t - on) / OPEN_SEC, (off - t) / CLOSE_SEC))
+                rows[side].append({"frame": frame, "cue": number, "shot": name, "shot_age": t - (passed[-1] if passed else on),
+                                   "open": round(amount * amount * (3 - 2 * amount), 4), "cut": bool(passed) and int(math.ceil(passed[-1] * fps)) == frame})
+    return rows
+
+
+def close_ranges(rows, first, last):
+    """[first, last) に入るアップのコマを、続いた範囲の [(始め, 終わり, cue)] にする。"""
+    spans = {}
+    for row in rows:
+        if first <= row["frame"] < last:
+            low, high = spans.get(row["cue"], (row["frame"], row["frame"]))
+            spans[row["cue"]] = (min(low, row["frame"]), max(high, row["frame"]))
+    return [(low, high + 1, cue) for cue, (low, high) in sorted(spans.items())]
+
+
+def close_focus(at, follow):
+    """カメラから目の面までの距離。"""
+    eye = (follow[0], follow[1] + EYE_FRONT_CM[0], follow[2] + EYE_FRONT_CM[1])
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(at, eye)))

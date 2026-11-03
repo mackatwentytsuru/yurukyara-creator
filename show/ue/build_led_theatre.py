@@ -10,6 +10,7 @@ import math
 import os
 import sys
 import traceback
+import types
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -19,6 +20,7 @@ import led_plan  # noqa: E402
 from build_level import StageBuilder, clear_level, to_color  # noqa: E402
 from build_materials import scalar  # noqa: E402
 from build_sequences import add_camera_cut, reset_sequence  # noqa: E402
+from character_materials import character_slots  # noqa: E402
 from led_venue import build_venue  # noqa: E402
 from ue_helpers import MATERIAL_DIR, RENDER_CONFIG_DIR, SHOW_ROOT, assets, get_or_create, save, vec, write_report  # noqa: E402
 
@@ -156,51 +158,6 @@ def material_instance(name, parent, vectors=None, texture=None):
     mel.update_material_instance(instance)
     save(instance)
     return instance
-
-
-def character_material():
-    """取り込んだ glTF の材質と同じ見た目で、顔の形(モーフ)が使える親。
-
-    glTF の親 MI_Unlit_Opaque_DS は used_with_morph_targets が無く、-game では顔だけ既定の材質に戻る
-    (ログ: missing usage flag MorphTargets)。エンジンの資産は変えず、こちらの親に替える。
-    """
-    material, _ = get_or_create("M_LT_CharUnlit", MATERIAL_DIR, unreal.Material, unreal.MaterialFactoryNew())
-    clear_graph(material)
-    material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
-    material.set_editor_property("two_sided", True)
-    material.set_editor_property("used_with_skeletal_mesh", True)
-    material.set_editor_property("used_with_morph_targets", True)
-    sample = mel.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -700, 0)
-    sample.set_editor_property("parameter_name", "BaseColorTexture")
-    sample.set_editor_property("texture", load_required("/Engine/EngineResources/WhiteSquareTexture"))
-    factor = mel.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -700, 300)
-    factor.set_editor_property("parameter_name", "BaseColorFactor")
-    multiply = mel.create_material_expression(material, unreal.MaterialExpressionMultiply, -300, 100)
-    attach(material, sample, multiply, "A")
-    attach(material, factor, multiply, "B")
-    if not mel.connect_material_property(multiply, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR):
-        raise RuntimeError("キャラの材質をつなげない")
-    mel.recompile_material(material)
-    save(material)
-    return material
-
-
-def character_slots(mesh):
-    """枠ごとに、元の色とテクスチャを写した材質を返す。"""
-    parent, made = character_material(), []
-    for index, slot in enumerate(mesh.get_editor_property("materials")):
-        source = slot.get_editor_property("material_interface")
-        instance, _ = get_or_create(f"MI_LT_Char{index:02d}", MATERIAL_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
-        mel.set_material_instance_parent(instance, parent)
-        mel.set_material_instance_vector_parameter_value(instance, "BaseColorFactor", mel.get_material_instance_vector_parameter_value(source, "BaseColorFactor"))
-        if "BaseColorTexture" in [str(n) for n in mel.get_texture_parameter_names(source)]:
-            texture = mel.get_material_instance_texture_parameter_value(source, "BaseColorTexture")
-            if texture is not None:
-                mel.set_material_instance_texture_parameter_value(instance, "BaseColorTexture", texture)
-        mel.update_material_instance(instance)
-        save(instance)
-        made.append(instance)
-    return made
 
 
 def render_target(name, width, height):
@@ -598,13 +555,14 @@ def render_config(config, cam, job):
     asset, _ = get_or_create(name, RENDER_CONFIG_DIR, unreal.MoviePipelinePrimaryConfig, unreal.MoviePipelinePrimaryConfigFactory())
     output = asset.find_or_add_setting_by_class(unreal.MoviePipelineOutputSetting)
     output.set_editor_property("output_directory", unreal.DirectoryPath(f"{config['frames_dir']}/{job['name']}"))
-    output.set_editor_property("output_resolution", unreal.IntPoint(cam.w, cam.h))
+    output.set_editor_property("output_resolution", unreal.IntPoint(*job.get("resolution", (cam.w, cam.h))))
     output.set_editor_property("file_name_format", "f.{frame_number}")
     output.set_editor_property("override_existing_output", True)
     output.set_editor_property("use_custom_playback_range", True)
     output.set_editor_property("custom_start_frame", job["first_frame"])
     output.set_editor_property("custom_end_frame", job["last_frame"])
-    asset.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
+    deferred = asset.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
+    deferred.set_editor_property("accumulator_includes_alpha", bool(job.get("alpha")))
     asset.find_or_add_setting_by_class(unreal.MoviePipelineImageSequenceOutput_PNG)
     samples = asset.find_or_add_setting_by_class(unreal.MoviePipelineAntiAliasingSetting)
     samples.set_editor_property("temporal_sample_count", 1)
@@ -626,8 +584,12 @@ def main():
     body_height = mesh.get_bounds().box_extent.z * 2.0
     cam = led_plan.Camera(config["stage"], body_height, stretch=config["stretch"])
     report = [f"camera {cam.summary()}", f"body_height_cm {body_height:.2f}"]
-    build_main(config, cam, report)
-    build_matte(config, cam, report)
+    if config.get("layers"):
+        import led_layers
+        led_layers.build_layers(config, cam, report, types.SimpleNamespace(**globals()))  # -script では __main__ がこのファイルにならない
+    else:
+        build_main(config, cam, report)
+        build_matte(config, cam, report)
     for job in config["jobs"]:
         render_config(config, cam, job)
     report.append("BUILD_OK")

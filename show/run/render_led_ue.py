@@ -5,6 +5,10 @@
       --audio <show_mix.wav> --job 名前 始め秒 終わり秒 [--job ...] [--matte 名前 ...] [--no-build] [--build-only]
 --job を付けなければショーの全部を「full」として描く。--matte に書いた名前は、キャラだけの通しで撮る。
 会場は --venue(show/ue/led_venue.py の VENUES の名前)。
+層だけを撮る形: --look 案 --layer 種類 名前 始め秒 終わり秒 [--layer ...]。種類は char reflect shadow close。
+  会場は組まない。透明は本物(--look のとき PropagateAlpha を起動の引数で入れる。プロジェクトの設定は変えない)。
+  close は範囲に重なる cue の全部を、左右別に撮る。shadow は、キャラのいないコマの基準も撮る。
+  後の始末は show/run/led_layers_post.py。
 描くのは正方形の画素の 3838x1240。mp4 にするときに横 1.48 倍(5680x1240)にする。
 """
 import argparse
@@ -30,6 +34,8 @@ MATTE_SPATIAL = 4
 PREVIEW_WIDTH = 1920
 CANVAS = (5680, 1240)
 NIAGARA_SYSTEM = "/Niagara/DefaultAssets/Templates/Systems/RadialBurst.RadialBurst"
+LAYER_SPATIAL = 8
+ALPHA_ARGS = ["-ini:Engine:[/Script/Engine.RendererSettings]:r.PostProcessing.PropagateAlpha=True"]
 
 
 def read_json(path):
@@ -47,6 +53,9 @@ def make_plan(timeline, stage):
         "flashes": led_plan.flash_keys(stage, start, end, fps),
         "fires": led_plan.niagara_fires(timeline, stage, start, end),
         "monitors": led_plan.monitor_frames(stage, start, end, fps),
+        "fps": fps,
+        "look": led_plan.look_keys(timeline, stage, max(0.0, start - 2.0), end),
+        "close": {str(side): rows for side, rows in led_plan.close_rows(timeline, stage, fps).items()},
     }
 
 
@@ -64,15 +73,39 @@ def build(config):
         raise RuntimeError("組み立てに失敗")
 
 
-def render(job, matte):
-    """1 本撮り、起動から終わりまでの秒を返す。"""
+def layer_jobs(specs, plan, stage):
+    """--layer の指定を、撮る job の並びにする。close は左右と cue ごとに分かれる。"""
+    jobs = []
+    monitor = [int(v) for v in stage["monitor_rects"][0][2:]]
+    for kind, name, a, b in specs:
+        first, last = round(float(a) * plan["fps"]), round(float(b) * plan["fps"])
+        base = {"spatial": LAYER_SPATIAL, "matte": False, "alpha": True}
+        if kind == "close":
+            for side, rows in plan["close"].items():
+                for low, high, cue in led_plan.close_ranges(rows, first, last):
+                    jobs.append({**base, "name": f"{name}_s{side}_c{cue}", "first_frame": low, "last_frame": high, "resolution": monitor,
+                                 "level": "L_LedLayerClose", "sequence": f"Seq_LedLayerClose{side}"})
+            continue
+        title = kind.capitalize()
+        place = {"level": f"L_LedLayer{title}", "sequence": f"Seq_LedLayer{title}"}
+        jobs.append({**base, **place, "name": name, "first_frame": first, "last_frame": last})
+        if kind == "shadow":
+            empty = next(frame for frame, shown in plan["visibility"] if not shown)
+            jobs.append({**base, **place, "name": f"{name}_ref", "first_frame": empty, "last_frame": empty + 1})
+    return jobs
+
+
+def render(job, matte, spec=None):
+    """1 本撮り、起動から終わりまでの秒を返す。spec があれば層の job(レベルとシーケンスはそこから)。"""
+    spec = spec or {}
     level, sequence = ("L_LedMatte", "Seq_LedMatte") if matte else ("L_LedTheatre", "Seq_LedMain")
+    level, sequence = spec.get("level", level), spec.get("sequence", sequence)
     config = f"Cfg_Led_{job}"
     started = time.time()
     code = subprocess.run(
         [UE_CMD, PROJECT, f"/Game/Show/LedTheatre/{level}", "-game", f"-LevelSequence=/Game/Show/LedTheatre/{sequence}.{sequence}",
          f"-MoviePipelineConfig=/Game/Show/RenderConfig/{config}.{config}", "-windowed", "-resx=640", "-resy=360",
-         "-log", "-Unattended", "-nosound", *UE_COMMON, f"-abslog={LOGS / ('render_led_' + job + '.log')}"],
+         "-log", "-Unattended", "-nosound", *(ALPHA_ARGS if spec.get("alpha") else []), *UE_COMMON, f"-abslog={LOGS / ('render_led_' + job + '.log')}"],
         timeout=RENDER_TIMEOUT_SEC, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL).returncode
     if code != 0:
         raise RuntimeError(f"{job} の撮影が終了コード {code} で止まった")
@@ -118,6 +151,8 @@ def parse_args():
     parser.add_argument("--niagara-scale", type=float, default=2.0)
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--build-only", action="store_true")
+    parser.add_argument("--look", choices=sorted(led_plan.LOOKS), help="層だけを撮る。見た目の案の名前")
+    parser.add_argument("--layer", nargs=4, action="append", metavar=("KIND", "NAME", "START", "END"), default=[])
     return parser.parse_args()
 
 
@@ -129,9 +164,16 @@ def main():
     specs = [(name, float(a), float(b)) for name, a, b in args.job] or [("full", start, end)]
     jobs = [{"name": n, "first_frame": round(a * fps), "last_frame": round(b * fps),
              "spatial": MATTE_SPATIAL if n in args.matte else SPATIAL, "matte": n in args.matte} for n, a, b in specs]
+    plan = make_plan(timeline, stage)
+    layers = None
+    if args.look:
+        if not args.layer:
+            raise SystemExit("--look には --layer が要る")
+        jobs = layer_jobs(args.layer, plan, stage)
+        layers = {"look": led_plan.LOOKS[args.look], "parts": sorted({spec[0] for spec in args.layer}),
+                  "close_look": led_plan.LOOKS[led_plan.CLOSE_LOOK.get(args.look, args.look)]}
     args.out.mkdir(parents=True, exist_ok=True)
     frames_dir = (args.out / "frames").resolve()
-    plan = make_plan(timeline, stage)
     (args.out / "plan_summary.json").write_text(json.dumps(
         {"range_sec": [start, end], "visibility": plan["visibility"], "fires": plan["fires"],
          "flash_frames": {k: len(v) for k, v in plan["flashes"].items()}, "monitor_frames": len(plan["monitors"]),
@@ -140,7 +182,7 @@ def main():
         began = time.time()
         build({"stage": stage, "plan": plan, "fps": fps, "total_frames": timeline["frames"], "stretch": args.stretch,
                "venue": args.venue, "character": args.character, "niagara_system": args.niagara,
-               "niagara_scale": args.niagara_scale, "frames_dir": frames_dir.as_posix(), "jobs": jobs})
+               "niagara_scale": args.niagara_scale, "frames_dir": frames_dir.as_posix(), "jobs": jobs, **({"layers": layers} if layers else {})})
         print("組み立ての秒", round(time.time() - began, 1), flush=True)
     if args.build_only:
         return
@@ -148,7 +190,7 @@ def main():
     for job in jobs:
         if args.render is not None and job["name"] not in args.render:
             continue
-        seconds = render(job["name"], job["matte"])
+        seconds = render(job["name"], job["matte"], job if layers else None)
         folder = frames_dir / job["name"]
         paths = frames_in_job(folder, job)
         count = len(paths)
@@ -157,9 +199,11 @@ def main():
         print(job["name"], timing[job["name"]], flush=True)
         if count != expected:
             raise RuntimeError(f"{job['name']}: コマ数が {count}(見込み {expected})")
-        if count > 1 and not job["matte"]:
+        if count > 1 and not job["matte"] and not layers:
             encode(folder, job["first_frame"], fps, args.audio, job["first_frame"] / fps, count / fps,
                    args.out / f"{job['name']}_1920.mp4")
+    if layers:
+        (args.out / "close_plan.json").write_text(json.dumps(plan["close"], ensure_ascii=False), encoding="utf-8")
     (args.out / "timing.json").write_text(json.dumps(timing, indent=1), encoding="utf-8")
 
 
