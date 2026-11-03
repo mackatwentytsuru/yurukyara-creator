@@ -20,6 +20,7 @@ import build_level  # noqa: E402
 from build_level import StageBuilder  # noqa: E402
 from build_materials import scalar  # noqa: E402
 from build_sequences import add_camera_cut, reset_sequence, smooth  # noqa: E402
+from character_materials import character_slots  # noqa: E402
 from comp_keys import key_camera, make_camera  # noqa: E402
 from sim_layout import FPS, LEAD_FRAMES, MEDIA_LATENCY_FRAMES  # noqa: E402
 from stage_path import ar_at, on_led  # noqa: E402
@@ -56,10 +57,10 @@ def place_character(builder, config, report):
     face = load_required(f"{MATERIAL_DIR}/M_FaceCell")
     character = build_level.place_character(builder, [mesh], face, report)[0]
     if config.get("character"):
-        # 取り込んだ材質をそのまま使う(試しのキャラの顔の材質を当てない)
+        # 取り込んだ材質と同じ見た目の、顔の形が使える材質にする(試しのキャラの顔の材質を当てない)
         component = character.skeletal_mesh_component
-        for index, slot in enumerate(mesh.get_editor_property("materials")):
-            component.set_material(index, slot.get_editor_property("material_interface"))
+        for index, material in enumerate(character_slots(mesh)):
+            component.set_material(index, material)
         scale = float(config.get("character_scale", 1.0))
         character.set_actor_scale3d(vec(scale, scale, scale))
     return character
