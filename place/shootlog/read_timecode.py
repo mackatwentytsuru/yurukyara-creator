@@ -39,7 +39,7 @@ def face_homography(gray, board: Board):
     c, ids = r
     xyz = board.corner_led_m(ids)
     W, H = board.face_px
-    face_px = np.stack([xyz[:, 0] / board.pitch_m, H - xyz[:, 1] / board.pitch_m], axis=1).astype(np.float32)
+    face_px = np.stack([xyz[:, 0] / board.pitch_m, H - xyz[:, 1] / (board.pitch_y_m or board.pitch_m)], axis=1).astype(np.float32)
     Hm, mask = cv2.findHomography(face_px, c.astype(np.float32), cv2.RANSAC, 3.0)
     return Hm, int(mask.sum()) if mask is not None else 0
 

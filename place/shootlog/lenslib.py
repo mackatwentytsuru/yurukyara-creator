@@ -25,16 +25,18 @@ class Board:
     pitch_m: float      # LED の 1 画素の大きさ(m)
     dictionary: str
     id_offset: int = 0  # マーカー ID の始まり(複数の面の盤で ID が重ならないように面ごとにずらす)
+    pitch_y_m: float = 0.0   # 縦の 1 画素の大きさ(m)。0 なら pitch_m と同じ。横と縦で画素の大きさが違う面(LED の中央の面)用
+    square_py: int = 0       # 四角の縦の画素数。0 なら square_px と同じ
 
     @staticmethod
     def load(path) -> "Board":
         d = json.loads(Path(path).read_text(encoding="utf-8"))
-        return Board(d["cols"], d["rows"], d["square_px"], d["marker_px"], tuple(d["offset_px"]), tuple(d["face_px"]), d["pitch_m"], d["dictionary"], d.get("id_offset", 0))
+        return Board(d["cols"], d["rows"], d["square_px"], d["marker_px"], tuple(d["offset_px"]), tuple(d["face_px"]), d["pitch_m"], d["dictionary"], d.get("id_offset", 0), d.get("pitch_y_m", 0.0), d.get("square_py", 0))
 
     def to_json(self) -> dict:
         return {"cols": self.cols, "rows": self.rows, "square_px": self.square_px, "marker_px": self.marker_px,
                 "offset_px": list(self.offset_px), "face_px": list(self.face_px), "pitch_m": self.pitch_m, "dictionary": self.dictionary,
-                "id_offset": self.id_offset}
+                "id_offset": self.id_offset, "pitch_y_m": self.pitch_y_m, "square_py": self.square_py}
 
     def cv_board(self):
         aruco = cv2.aruco
@@ -51,17 +53,23 @@ class Board:
         c = ids % (self.cols - 1)
         r = ids // (self.cols - 1)
         px = self.offset_px[0] + (c + 1) * self.square_px
-        py = self.offset_px[1] + (r + 1) * self.square_px
+        py = self.offset_px[1] + (r + 1) * (self.square_py or self.square_px)
         X = px * self.pitch_m
-        Y = (self.face_px[1] - py) * self.pitch_m
+        Y = (self.face_px[1] - py) * (self.pitch_y_m or self.pitch_m)
         return np.stack([X, Y, np.zeros_like(X)], axis=1).astype(np.float32)
 
     def render(self) -> np.ndarray:
         """面の画像(face_px の大きさ)。黒地に盤。"""
         img = np.zeros((self.face_px[1], self.face_px[0]), np.uint8)
         w = self.cols * self.square_px
-        h = self.rows * self.square_px
-        board_img = self.cv_board().generateImage((w, h), marginSize=0, borderBits=1)
+        h = self.rows * (self.square_py or self.square_px)
+        sqy = self.square_py or self.square_px
+        if sqy == self.square_px:
+            board_img = self.cv_board().generateImage((w, h), marginSize=0, borderBits=1)
+        else:
+            # 縦と横で四角の画素数が違う面: 正方形の盤を作って、縦だけ縮める(画素の大きさが縦横で違う LED で、物理の四角をそろえるため)
+            sq_img = self.cv_board().generateImage((self.cols * self.square_px, self.rows * self.square_px), marginSize=0, borderBits=1)
+            board_img = cv2.resize(sq_img, (w, h), interpolation=cv2.INTER_AREA)
         ox, oy = self.offset_px
         img[oy:oy + h, ox:ox + w] = board_img
         return img
