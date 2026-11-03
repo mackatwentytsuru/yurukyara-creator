@@ -150,3 +150,12 @@
 - **LED の映像の頭に入れる校正の映像**(`make_led_calib_video.py`): 5680×1240・60p・23 秒(黒 1 秒 → 全面の白 0.5 秒=フラッシュ → 黒 → 盤+コマ番号 20 秒 → 黒)。面 A(x 0〜955)・B(x 1280〜3038、y 85〜1217、画素が横 2.948 mm・縦 4.378 mm)・C の平らな部分(x 3346〜4288)。**重なって映る絵の 957〜1279 と 3039〜3345 は使わない**。書き出した映像から 10.0 秒・16.5 秒のコマを取り、3 面とも盤の角が全部(130・195・130 点)見つかり、コマ番号が正しく読めた(.mov/.mp4・フル/半分)。**見つけた不具合**: 縦横で画素の大きさが違う面の盤を OpenCV の `generateImage` に非正方形の大きさで頼むと、正方形のまま中央に小さく描かれ、角の数は合うのに位置が違う(検出数だけ見て気づかなかった。ホモグラフィーの対角が 0.676 で気づいた)→ 正方形で作ってから縦だけ縮める。
 - **実カメラの映像で**: 校正の映像を中央のウルトラワイドに出し、iPhone で撮った 1 コマ(フル HD に縮小)で、面 B の盤 135/195 点・面 C 108/130 点を検出、**コマ番号は B と C の帯が 1101.463 と 1101.488(差 0.4 ms)**で一致(1/60 の露出で混ざった明るさから小数まで読めた)。
 - 部屋の撮影の手順 1 枚: `work\キャラクターショー\本番_1103\持ち物\撮影の手順_iPhone_1103.md`。
+
+## 2026-11-03 深夜 その 2: 録画を PC(Mac)に、AR ページの同梱
+- 決定(本人): iPhone 1 台・広角+ARKit+AR モニター、録画は Wi-Fi で送った先(現地は Mac、外付け SSD)。iPad・3 レンズ録画は止めた。
+- **録画なし+AR+音+HEVC フル HD 18 Mbps を Mac に(Tailscale 経由、直接)127 秒×3 回続けて**: 1 回目(開始 serious)は ARKit の 3885 コマのうち 3885(100%)・29.9 fps・17.6 Mbps・遅れ 中央 104 ms、2 回目(serious → critical)は 89%・遅れ 2252 ms(送りの待ち行列)、3 回目(critical 開始)は 78%。**欠けの原因は熱**(critical で符号化が遅れ、3 コマ詰まりで捨てる)。音は 3 回とも欠けなし。→ 冷えた状態から 1 テイク、間に休む。AR を 15 fps、HEVC+音のみ、の比べは実測中(`run_stream_test.py`、`work/_stream/`)。
+- **AR ページをアプリに同梱**(`ARSiteScheme.swift` の独自スキーム `app://app/…`、`make_arsite.py` が 19 ファイル 62 MB を `place/ios/ARSite/` に集める。Documents/ARSite/ が優先)。理由: iPhone の WKWebView は、Tailscale の IP(100.x)の http を ATS が拒み、https(自己署名)は TLS エラーになった(LAN の IP の https は読めた)。会場のネットワークに依存しないので、同梱が確実。
+- **`pc_to_frames.py`**: 受け手の `index.jsonl`・`stream.hevc`・`audio.raw` → 撮影記録と同じ形(frames.jsonl の t=ARFrame の時計、pts=t−最初の t、K は元の 4K の画素で meta の `intrinsics_scale` 0.5 を掛ける、video.mp4 は再符号化なし)。`rec_frame` は使わない。
+- Tailscale: iPhone(iphone-12-pro)と Mac が同じ tailnet。`tailscale ping` は直接(IPv6 20 ms、LAN 114 ms)の回と DERP 経由の回があった。
+- ショーの踊り(`show/data/ar/dance_track.json/.bin`、fps 60・first 1920・4826 コマ。json の直下に fps・first・frames・bones)と yaw(前 = (−sin yaw, cos yaw))に合わせた。`start_at` は校正の頭のフラッシュ=ファイルの 21.0 秒。
+- 校正の映像 30 秒版(`make_led_calib_video.py --bare --seconds 30 --name calib_5680x1240_60p`)を、ショーの依頼で作った(1800 コマちょうど、フラッシュなし)。
