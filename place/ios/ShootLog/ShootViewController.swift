@@ -598,10 +598,47 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         logEvent("thermal:\(UELinkController.thermalName(ProcessInfo.processInfo.thermalState))")
     }
 
+    /// 実機の調べ(--probe-multicam): (1) ARKit が動いたまま、超広角・望遠を別の仕組み(AVCaptureMultiCamSession)で動かすと、ARKit のコマが続くか。
+    /// (2) ARKit を止めて、背面カメラの複数同時の組み合わせを全部測る。結果は Documents/multicam_probe.json。終わったらアプリを閉じる。
+    private func runMultiCamProbe() {
+        let probe = Probe()
+        let devs = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInUltraWideCamera, .builtInTelephotoCamera], mediaType: .video, position: .back).devices
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            var out: [String: Any] = ["model": Probe.modelName(), "system": UIDevice.current.systemVersion, "mode": "arkit-then-multicam"]
+            var concurrent: [[String: Any]] = []
+            for d in devs {
+                self.lock.lock(); let ev0 = self.events.filter { $0.kind.hasPrefix("session:interrupted") }.count; self.lock.unlock()
+                let f0 = self.frameTick
+                let t0 = Date()
+                var r = probe.runSet([d], tier: 1)
+                let dt = Date().timeIntervalSince(t0)
+                let f1 = self.frameTick
+                self.lock.lock(); let ev1 = self.events.filter { $0.kind.hasPrefix("session:interrupted") }.count; self.lock.unlock()
+                r["arkitFramesDuring"] = f1 - f0
+                r["arkitFpsDuring"] = Double(f1 - f0) / max(dt, 0.1)
+                r["arkitInterruptedDuring"] = ev1 - ev0
+                r["camera"] = probe.name(d)
+                concurrent.append(r)
+                Thread.sleep(forTimeInterval: 3)
+            }
+            out["arkitRunningThenSecondSession"] = concurrent
+            DispatchQueue.main.sync { self.sceneView.session.pause() }
+            Thread.sleep(forTimeInterval: 1)
+            out["multicam"] = probe.run { _ in }
+            if let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true),
+               let data = try? JSONSerialization.data(withJSONObject: out, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: docs.appendingPathComponent("multicam_probe.json"))
+            }
+            exit(0)
+        }
+    }
+
     /// テスト用: 起動の引数で UE モニターを入れる(--ue-host H --ue-port P --ue-url U --ue-on --ue-latency --ue-test60)。
     private func applyLaunchArguments() {
         let a = ProcessInfo.processInfo.arguments
         func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
+        if a.contains("--probe-multicam") { runMultiCamProbe(); return }
         if a.contains("--pc-on") {
             pcStream.setEnabled(true, host: value("--pc-host") ?? ueLink.config.host, port: Int(value("--pc-port") ?? "") ?? 9100)
         }

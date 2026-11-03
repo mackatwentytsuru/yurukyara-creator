@@ -51,6 +51,7 @@ targets:
     platform: iOS
     sources:
       - ShootLog
+      - Shared
       - path: ue_link_defaults.json
         optional: true
     settings:
@@ -69,7 +70,7 @@ targets:
   CamProbe:
     type: application
     platform: iOS
-    sources: [CamProbe]
+    sources: [CamProbe, Shared]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.hackathon.camprobe
