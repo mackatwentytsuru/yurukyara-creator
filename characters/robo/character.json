@@ -1,0 +1,55 @@
+{
+  "id": "robo",
+  "name": "ロボくん",
+  "model": "model.glb",
+  "type": "rig",
+  "height_m": 1.0,
+  "expressions": [
+    "neutral",
+    "happy",
+    "surprised",
+    "sad",
+    "think"
+  ],
+  "motions": {
+    "idle": "motions/idle.glb",
+    "talk": "motions/talk.glb",
+    "nod": "motions/nod.glb",
+    "bow": "motions/bow.glb",
+    "wave": "motions/wave.glb"
+  },
+  "look": {
+    "bone": "head",
+    "max_deg": [
+      22,
+      14
+    ],
+    "eyes": [
+      "eye_L",
+      "eye_R"
+    ]
+  },
+  "mouth": {
+    "kind": "morph",
+    "morph": "mouth_open",
+    "gain": 1.2
+  },
+  "blink": {
+    "morph": "eye_blink"
+  },
+  "morphs": {
+    "happy": {
+      "mouth_wide": 0.9
+    },
+    "surprised": {
+      "mouth_o": 1.0
+    },
+    "sad": {
+      "eye_blink": 0.3
+    },
+    "think": {
+      "mouth_o": 0.3
+    }
+  },
+  "persona": "persona.md"
+}
