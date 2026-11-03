@@ -34,11 +34,14 @@ FLAT_GRAY = (128, 128, 128)
 FONT_CANDIDATES = [r"C:\Windows\Fonts\YuGothM.ttc", r"C:\Windows\Fonts\meiryo.ttc", r"C:\Windows\Fonts\msgothic.ttc"]
 
 # 測る領域(絵の中の位置。測るときも同じ式を使う)
-EDGE_BOX = (2100, 700, 2300, 900)        # 斜めの縁の四角(その中の縁)
-FLAT_BOX = (800, 1000, 1100, 1200)       # 平らな灰色
-PATCH0 = (300, 150)                      # 色の見本の左上
-PATCH_SIZE = 150
-BOARD_ORIGIN = (3800, 180)               # 盤の左上
+OX = 1280                                # 中央の 2560 幅にまとめる(近くから撮っても全部入る。モニターの左右は黒)
+EDGE_BOX = (OX + 1150, 800, OX + 1350, 1000)   # 斜めの縁の四角(その中の縁)
+FLAT_BOX = (OX + 60, 840, OX + 360, 1040)      # 平らな灰色
+PATCH0 = (OX + 60, 120)                  # 色の見本の左上
+PATCH_SIZE = 120
+BOARD_ORIGIN = (OX + 1620, 480)          # 盤の左上(900 画素四方)
+STAR = (OX + 1300, 420, 260)             # 放射状の星の中心と半径
+GAP = 10
 
 
 def font(size: int):
@@ -61,17 +64,17 @@ def make() -> np.ndarray:
     # 色の見本 6×4
     for i, c in enumerate(PATCHES):
         r, k = divmod(i, 6)
-        x, y = PATCH0[0] + k * (PATCH_SIZE + 10), PATCH0[1] + r * (PATCH_SIZE + 10)
+        x, y = PATCH0[0] + k * (PATCH_SIZE + GAP), PATCH0[1] + r * (PATCH_SIZE + GAP)
         dr.rectangle([x, y, x + PATCH_SIZE, y + PATCH_SIZE], fill=c)
     # 灰色の段階(0〜255 を 11 段)
     for i in range(11):
         v = round(255 * i / 10)
-        x = PATCH0[0] + i * 80
-        dr.rectangle([x, 880, x + 76, 960], fill=(v, v, v))
+        x = PATCH0[0] + i * 70
+        dr.rectangle([x, 700, x + 66, 760], fill=(v, v, v))
     dr.rectangle(FLAT_BOX, fill=FLAT_GRAY)
     dr.text((FLAT_BOX[0], FLAT_BOX[1] - 36), "平らな灰色(雑音を測る)", fill=(230, 230, 230), font=font(28))
     # 放射状の星(中央)
-    cx, cy, R = 1800, 520, 330
+    cx, cy, R = STAR
     yy, xx = np.mgrid[0:2 * R, 0:2 * R]
     ang = np.arctan2(yy - R, xx - R)
     rad = np.hypot(yy - R, xx - R)
@@ -93,8 +96,8 @@ def make() -> np.ndarray:
     dr = ImageDraw.Draw(im)
     # 文字(大きさ違い)
     y = 80
-    for sz in (56, 40, 30, 24, 20, 16):
-        dr.text((2500, y), f"サンプル AaBb 0123456789 ({sz}px)", fill=(240, 240, 240), font=font(sz))
+    for sz in (44, 34, 26, 20, 16, 12):
+        dr.text((OX + 1620, y), f"サンプル AaBb 0123456789 ({sz}px)", fill=(240, 240, 240), font=font(sz))
         y += sz + 24
     # 盤
     arr = np.array(im)
@@ -160,6 +163,72 @@ def edge_width(gray: np.ndarray, Hm):
     return float(np.median(widths)) if widths else None
 
 
+def _pred(Hm, x, y):
+    return cv2.perspectiveTransform(np.array([[[x, y]]], np.float32), Hm).reshape(2)
+
+
+def edge_width_local(gray: np.ndarray, centre, radius=130):
+    """斜めの縁の四角を、予測の位置のまわり(±radius 画素)で直接探し、右の縁の 10〜90% の立ち上がりの幅を返す。"""
+    cx, cy = int(centre[0]), int(centre[1])
+    x0, y0 = max(0, cx - radius), max(0, cy - radius)
+    roi = gray[y0:cy + radius, x0:cx + radius].astype(np.float32)
+    if roi.size == 0:
+        return None, None
+    thr = 0.6 * float(np.percentile(roi, 99.5))
+    mask = (roi > thr).astype(np.uint8)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(mask)
+    if n < 2:
+        return None, None
+    k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    bx, by, bw, bh = stats[k, 0], stats[k, 1], stats[k, 2], stats[k, 3]
+    if bw < 20 or bh < 20:
+        return None, None
+    widths = []
+    for r in range(by + bh // 4, by + 3 * bh // 4):
+        row = roi[r, bx + bw // 2: min(roi.shape[1], bx + bw + 30)]
+        if row.size < 12:
+            continue
+        hi, lo = float(np.median(row[:max(3, bw // 6)])), float(np.median(row[-6:]))
+        if hi - lo < 40:
+            continue
+        nrm = (row - lo) / (hi - lo)
+        a, b = np.where(nrm < 0.9)[0], np.where(nrm < 0.1)[0]
+        if not len(a) or not len(b) or a[0] == 0 or b[0] == 0:
+            continue
+        x90 = a[0] - 1 + (nrm[a[0] - 1] - 0.9) / (nrm[a[0] - 1] - nrm[a[0]])
+        x10 = b[0] - 1 + (nrm[b[0] - 1] - 0.1) / (nrm[b[0] - 1] - nrm[b[0]])
+        widths.append(x10 - x90)
+    return (float(np.median(widths)), (x0 + bx + bw // 2, y0 + by + bh // 2)) if len(widths) >= 8 else (None, None)
+
+
+def flat_noise_local(gray: np.ndarray, centre, scale):
+    """平らな灰色の四角を、予測の位置のまわりで直接探し、中の明るさの標準偏差(雑音)を返す。"""
+    cx, cy = int(centre[0]), int(centre[1])
+    r = int(160 * scale / 0.5)
+    x0, y0 = max(0, cx - r), max(0, cy - r)
+    roi = gray[y0:cy + r, x0:cx + r].astype(np.float32)
+    if roi.size == 0:
+        return None, None
+    # 最も明るい広い一様な領域(灰色 128 は背景 40 より明るい)
+    blur = cv2.GaussianBlur(roi, (0, 0), 3)
+    thr = float(np.percentile(blur, 70))
+    mask = (blur > thr * 0.9).astype(np.uint8)
+    n, lab, stats, cen = cv2.connectedComponentsWithStats(mask)
+    if n < 2:
+        return None, None
+    k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    bx, by, bw, bh = stats[k, :4]
+    inner = roi[by + bh // 5: by + 4 * bh // 5, bx + bw // 5: bx + 4 * bw // 5]
+    if inner.size < 400:
+        return None, None
+    # 緩い傾き(照明のむら)を引いてから標準偏差
+    yy, xx = np.mgrid[0:inner.shape[0], 0:inner.shape[1]]
+    A = np.stack([xx.ravel(), yy.ravel(), np.ones(inner.size)], 1)
+    coef, *_ = np.linalg.lstsq(A, inner.ravel(), rcond=None)
+    resid = inner.ravel() - A @ coef
+    return float(resid.std()), float(inner.mean())
+
+
 def measure(frame_path: Path, name: str, out_json: Path):
     bgr = cv2.imdecode(np.fromfile(str(frame_path), np.uint8), cv2.IMREAD_COLOR)
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
@@ -189,9 +258,9 @@ def measure(frame_path: Path, name: str, out_json: Path):
     mean_rgb = []
     for i in range(24):
         r, k = divmod(i, 6)
-        x, y = PATCH0[0] + k * (PATCH_SIZE + 10) + PATCH_SIZE // 2, PATCH0[1] + r * (PATCH_SIZE + 10) + PATCH_SIZE // 2
+        x, y = PATCH0[0] + k * (PATCH_SIZE + GAP) + PATCH_SIZE // 2, PATCH0[1] + r * (PATCH_SIZE + GAP) + PATCH_SIZE // 2
         c = cv2.perspectiveTransform(np.array([[[x, y]]], np.float32), Hm).reshape(2)
-        s = max(4, int(res["frame_px_per_chart_px"] * 30))
+        s = max(4, int(res["frame_px_per_chart_px"] * 25))
         cx, cy = int(c[0]), int(c[1])
         patch = bgr[cy - s:cy + s, cx - s:cx + s].reshape(-1, 3).mean(0)[::-1]
         mean_rgb.append([round(float(v), 1) for v in patch])
@@ -201,9 +270,15 @@ def measure(frame_path: Path, name: str, out_json: Path):
     gain = (got.mean(0) / ref.mean(0))
     res["patch_mean_gain_rgb"] = [round(float(v), 3) for v in gain]
     res["patch_rms_err_after_gain"] = round(float(np.sqrt((((got / gain) - ref) ** 2).mean())), 2)
-    ew = edge_width(gray, Hm)
+    # 盤から遠い所は、曲がったモニターで平面の変換がずれるので、予測の位置のまわりで直接探す
+    ec = _pred(Hm, (EDGE_BOX[0] + EDGE_BOX[2]) / 2, (EDGE_BOX[1] + EDGE_BOX[3]) / 2)
+    ew, epos = edge_width_local(gray, ec)
     res["edge_10_90_px"] = None if ew is None else round(ew, 2)
     res["edge_10_90_chart_px"] = None if ew is None else round(ew / res["frame_px_per_chart_px"], 2)
+    fc = _pred(Hm, (FLAT_BOX[0] + FLAT_BOX[2]) / 2, (FLAT_BOX[1] + FLAT_BOX[3]) / 2)
+    fstd, fmean = flat_noise_local(gray, fc, res["frame_px_per_chart_px"])
+    res["flat_gray_std"] = None if fstd is None else round(fstd, 2)
+    res["flat_gray_mean"] = None if fmean is None else round(fmean, 1)
     out_json.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     return res
 
@@ -238,7 +313,7 @@ def sheet(a_json: Path, b_json: Path, out: Path):
 
     top = np.hstack([label(ra, f"{ja['name']}(全体)"), label(rb, f"{jb['name']}(全体)")])
     rows = [top]
-    for title, box in (("星(解像)", (1470, 190, 2130, 850)), ("縁と色の見本", (2000, 600, 2400, 1000)), ("文字", (2500, 80, 3300, 330))):
+    for title, box in (("星(解像)", (OX + 1040, 160, OX + 1560, 680)), ("縁と色の見本", (OX + 1050, 700, OX + 1450, 1100)), ("文字", (OX + 1620, 80, OX + 2420, 330))):
         ca, cb = crop_chart(Path(ja["frame"]), ja, box), crop_chart(Path(jb["frame"]), jb, box)
         pad = np.zeros((300, 960, 3), np.uint8)
         la, lb = pad.copy(), pad.copy()

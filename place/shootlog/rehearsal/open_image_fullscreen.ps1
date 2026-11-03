@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $stage = Join-Path $env:TEMP "img_fullscreen_$Port"
 New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item $Image (Join-Path $stage 'chart.png') -Force
-$html = '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000;overflow:hidden}img{display:block;width:100vw;height:100vh;image-rendering:pixelated}</style><img src="chart.png">'
+$html = '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000;overflow:hidden;cursor:none}img{display:block;width:100vw;height:100vh;image-rendering:pixelated}</style><img src="chart.png">'
 Set-Content -Path (Join-Path $stage 'index.html') -Value $html -Encoding ASCII
 $profile = Join-Path $env:TEMP "img_profile_$Port"
 $chrome = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe", "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
