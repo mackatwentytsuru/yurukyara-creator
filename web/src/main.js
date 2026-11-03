@@ -8,6 +8,7 @@ import { describeScene } from './tracking/geometry.js';
 import { Speaker } from './conversation/speaker.js';
 import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
+import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
 import { createUi } from './ui/panel.js';
 import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
 import { createArPlacement } from './arPlacement.js';
@@ -112,6 +113,35 @@ function sceneText() {
 /* ---------- 声 ---------- */
 let listener = null;
 let lastInterimAt = 0; // 聞き取りの途中の文字が最後に届いた時刻(何か話した、の目印)
+let lastTextAt = 0; // 途中でも確定でも、文字が最後に届いた時刻
+const misheard = new MisheardTracker();
+
+/** よくある質問のボタン。押した言葉は、そのまま質問になる。店のデータがあるときだけ出す */
+function showShopChoices(emphasis = false) {
+  ui.choices(
+    SHOP_CHOICES,
+    (q) => {
+      misheard.heard();
+      speaker.unlock();
+      ui.choices(SHOP_CHOICES, pickChoice); // 目立たせるのは、聞き取れなかった直後だけ
+      dialogue.send({ text: q, mode: 'text' });
+    },
+    emphasis,
+  );
+}
+const pickChoice = (q) => {
+  speaker.unlock();
+  dialogue.send({ text: q, mode: 'text' });
+};
+
+/** 声は出たのに文字にならなかった: 1 回目は聞き返し、2 回続けたら選択式 */
+function onMisheard() {
+  const step = misheard.miss();
+  const line = step === 'choices' ? CHOICES_LINE : RETRY_LINE;
+  ui.caption(line, 5000);
+  speaker.enqueue(line, {}).catch(() => {});
+  if (step === 'choices' && app.status?.shop?.available) showShopChoices(true);
+}
 async function toggleMic() {
   const btn = $('micBtn');
   if (listener?.listening) {
@@ -127,9 +157,12 @@ async function toggleMic() {
     listener = new Listener({
       onInterim: (t) => {
         lastInterimAt = performance.now();
+        lastTextAt = lastInterimAt;
         ui.caption(t, 0, 'user');
       },
       onFinal: (text, info) => {
+        lastTextAt = performance.now();
+        misheard.heard();
         const t0 = info.lastVoicedAt || performance.now();
         dialogue.send({ text, t0, mode: 'voice' });
       },
@@ -139,6 +172,13 @@ async function toggleMic() {
         if (active && speaker.speaking) dialogue.cancel();
         // 声が止まった(話し終わりらしい)ら、確定した文字を待たずに、あいづちの声を先に出す
         if (!active && performance.now() - lastInterimAt < 2500) dialogue.preFiller(listener.lastVoicedAt);
+        // 声は出たのに、しばらく待っても文字が 1 つも来ない: 聞き取れなかった(自分が話している間や返事の準備中は数えない)
+        if (!active && !speaker.speaking && !dialogue.busy) {
+          const endedAt = performance.now();
+          setTimeout(() => {
+            if (lastTextAt < endedAt && !speaker.speaking && !dialogue.busy && listener?.listening) onMisheard();
+          }, 2600);
+        }
       },
       onError: (msg) => ui.error(msg),
     });
@@ -411,6 +451,7 @@ async function boot() {
   await setupPresentation().catch((e) => console.warn('見せ方の切りかえを用意できませんでした:', e.message));
   await refreshStatus();
   setInterval(refreshStatus, 15000);
+  if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
   buttons.forEach((b) => (b.disabled = false));

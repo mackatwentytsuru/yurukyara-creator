@@ -57,6 +57,21 @@ body {
 }
 .caption.user { color: var(--lav); font-size: clamp(16px, 2.4vw, 26px); font-weight: 500; }
 
+/* 字幕の上: Claude が店のデータを見て答えている札(どの情報を、いつの更新として使ったか) */
+.shop-badge {
+  position: fixed; left: 50%; bottom: calc(112px + var(--safe-b) + clamp(70px, 9vw, 130px)); transform: translateX(-50%);
+  width: min(86vw, 880px); margin: 0; text-align: center; font-size: clamp(13px, 1.7vw, 20px); line-height: 1.45;
+  padding: 6px 14px; border-radius: 999px; background: rgba(12, 10, 22, 0.72); border: 1px solid var(--mint); color: var(--mint);
+}
+.shop-badge[hidden] { display: none; }
+
+/* よくある質問のボタン(押すとそのまま質問になる。聞き取れなかったときは目立たせる) */
+.choices { width: min(100%, 880px); display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.choices[hidden] { display: none; }
+.choices button { font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.choices button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.choices.emphasis button { font-size: 16px; padding: 12px 16px; border-color: var(--lav); background: rgba(125, 98, 255, 0.28); }
+
 /* AR の位置合わせの案内(部屋を現実に重ねる、床のタップ) */
 .align {
   position: fixed; left: 50%; top: calc(max(12px, env(safe-area-inset-top)) + 96px); transform: translateX(-50%);
@@ -84,6 +99,10 @@ body {
 .thought-body dd { margin: 0; font-size: 13px; line-height: 1.5; word-break: break-word; }
 .thought.collapsed .thought-body, .thought.collapsed .thought-foot { display: none; }
 .thought-foot { padding: 8px 14px 10px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.thought-body .src { display: inline-flex; flex-direction: column; margin: 0 8px 4px 0; padding: 3px 8px; border-radius: 10px; background: rgba(123, 224, 195, 0.14); color: var(--mint); font-size: 12px; line-height: 1.3; }
+.thought-body .src small, .thought-body .src-label { font-size: 10px; color: var(--muted); }
+.thought-body .src.stale { background: rgba(255, 211, 122, 0.16); color: var(--warn); }
+.thought-body .src-label { display: block; }
 .stage-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: rgba(183, 168, 255, 0.18); color: var(--lav); margin-right: 6px; }
 .stage-tag.handoff { background: rgba(255, 211, 122, 0.2); color: var(--warn); }
 

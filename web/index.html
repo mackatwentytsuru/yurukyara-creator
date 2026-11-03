@@ -18,6 +18,7 @@
   <p id="align" class="align" role="status" hidden></p>
 
   <section id="caption" class="caption" aria-live="polite" hidden></section>
+  <p id="shopBadge" class="shop-badge" role="status" hidden></p>
 
   <aside id="thought" class="thought" aria-label="Claude の考え">
     <button class="thought-head" id="thoughtToggle" type="button" aria-expanded="true">
@@ -26,6 +27,7 @@
     <dl class="thought-body" id="thoughtBody">
       <div class="row"><dt>見えた様子</dt><dd id="tSeen">—</dd></div>
       <div class="row"><dt>用件</dt><dd id="tIntent">—</dd></div>
+      <div class="row"><dt>店のデータ</dt><dd id="tShop">—</dd></div>
       <div class="row"><dt>返事</dt><dd id="tReply">—</dd></div>
       <div class="row"><dt>表情と動き</dt><dd id="tAct">—</dd></div>
     </dl>
@@ -37,6 +39,7 @@
       <span class="rec"></span>
       <span id="privacyText">カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。</span>
     </p>
+    <div id="choices" class="choices" role="group" aria-label="よくある質問" hidden></div>
     <form id="composer" class="composer" autocomplete="off">
       <button type="button" id="micBtn" class="mic" aria-pressed="false" title="声で話す">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>

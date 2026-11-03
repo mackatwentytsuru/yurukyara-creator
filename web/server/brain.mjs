@@ -3,6 +3,11 @@
 import { config } from './env.mjs';
 import { buildSystemPrompt, buildUserTurn, MOTIONS } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
+import { createShop, renderShopData, renderShopNow, resolveSources } from './shop/index.mjs';
+import { loadRules } from './shop/rules.mjs';
+
+export const HANDOFF_REASONS = ['complaint', 'payment', 'emergency', 'age', 'booking', 'unknown'];
+let defaultShop = null;
 
 /** 1 行の JSON を直す。コードブロックや前後の文字が付いていても、できるだけ拾う */
 export function parseLine(line) {
@@ -37,6 +42,9 @@ export function normalizeEvent(obj, { expressions, motions = MOTIONS }) {
       intent: String(obj.intent ?? ''),
       stage: String(obj.stage ?? 'chat'),
       handoff: Boolean(obj.handoff),
+      // 店のデータを使った回: 使ったデータの名前(サーバーが、更新時刻つきの参照に直して画面へ渡す)と、人につなぐ理由
+      cite: Array.isArray(obj.cite) ? obj.cite.filter((k) => typeof k === 'string').slice(0, 6) : [],
+      reason: HANDOFF_REASONS.includes(obj.reason) ? obj.reason : '',
     };
   }
   if (obj.type === 'say') {
@@ -171,16 +179,59 @@ export async function callHaikuHedged({ system, messages, signal, onText, hedgeM
   return { hedged: b !== null, winner, usage };
 }
 
+const MOCK_HANDOFFS = [
+  [/二重|返金|引き落と|支払い|決済|カード/, 'payment', '支払いのことですね。すぐスタッフにつなぎますね。'],
+  [/倒れ|救急|けが|怪我|具合が悪|火事/, 'emergency', 'すぐスタッフを呼びます。'],
+  [/未成年|高校生|中学生|年齢|お酒/, 'age', '年齢のことは、スタッフに確認しますね。'],
+  [/クレーム|苦情|態度が悪/, 'complaint', 'ご不便をおかけしました。スタッフにつなぎますね。'],
+  [/予約|キャンセル/, 'booking', '予約のことは、スタッフにつなぎますね。'],
+];
+
+/** 仮の頭脳の、店のデータを読んだ返事。鍵なしでも画面と参照の表示を確かめられる(固定の言い回し。中身はデータから) */
+function* mockShopReply(text, snap) {
+  const s = snap.sections;
+  const think = (intent, cite) => ({ type: 'say', intent, stage: 'guide', handoff: false, cite });
+  const say = (t, extra = {}) => ({ type: 'say', text: t, expression: 'happy', motion: 'nod', gaze: 'person', ...extra });
+  for (const [re, reason, line] of MOCK_HANDOFFS) {
+    if (!re.test(text)) continue;
+    yield say(line, { motion: 'bow', intent: '人へつなぐ', stage: 'handoff', handoff: true, cite: [], reason });
+    return;
+  }
+  if (s.performers && /出演|誰が出|演者|だれが/.test(text)) {
+    yield say(`今日は ${s.performers.items.map((x) => x.name).join('さん、')}さんが出ます。`, think('今日の出演者', ['performers']));
+  } else if (s.shows && /ショー|何時|時間|開演|見どころ/.test(text)) {
+    yield say(`今日は ${s.shows.items.map((x) => x.start).join('、')} からです。`, think('ショーの時間', ['shows']));
+  } else if (s.seats && /空席|空い|席/.test(text)) {
+    yield say(`${s.seats.updatedHm} の時点で、空きは ${s.seats.available} 席です。`, think('空席の様子', ['seats']));
+  } else if (s.pricing && /料金|いくら|値段|入場料|ドリンク/.test(text)) {
+    const p = s.pricing.items[0];
+    yield say(`${p.item}は ${p.amount}です。`, think('料金', ['pricing']));
+  } else if (s.support && /応援|コール|ペンライト|メッセージ/.test(text)) {
+    yield say(`${s.support.items[0].name}ができますよ。`, think('応援の仕方', ['support']));
+  } else if (s.tips && /楽しみ|初めて|はじめて/.test(text)) {
+    yield say(`${s.tips.items[0]}。`, think('楽しみ方', ['tips']));
+  } else {
+    return;
+  }
+}
+
 /**
  * 仮の頭脳。鍵が無いときと、画面だけ確かめたいときに使う。
  * 目印の名前が話に出たら案内し、出なければ用件を聞く。分からない話は人につなぐ。
  */
-export function* mockReply({ text, trigger, landmarks = [], seen }) {
+export function* mockReply({ text, trigger, landmarks = [], seen, snap = null }) {
   if (trigger === 'approach') {
     yield { type: 'thought', seen: seen || '人が近づいてきた', intent: '未確認', stage: 'greet', handoff: false };
     yield { type: 'say', text: 'いらっしゃいませ。', expression: 'happy', motion: 'bow', gaze: 'person' };
     yield { type: 'say', text: 'どんなご用件でしょうか。', expression: 'happy', motion: 'tilt', gaze: 'person' };
     return;
+  }
+  if (snap) {
+    const shopReply = [...mockShopReply(text, snap)];
+    if (shopReply.length) {
+      yield* shopReply;
+      return;
+    }
   }
   const hit = landmarks.find((l) => text.includes(l.name));
   if (hit) {
@@ -201,29 +252,40 @@ export function* mockReply({ text, trigger, landmarks = [], seen }) {
 }
 
 /** 会話 1 ターンを実行する。onEvent には thought / say が順に渡る */
-export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false } }) {
+export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, shop = null }) {
   const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
   const expressions = body.expressions?.length ? body.expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
   // そのキャラが実際に使える動き(rig は、動きのファイルがある物だけ)
   const motions = Array.isArray(body.motions) && body.motions.length ? body.motions.filter((m) => typeof m === 'string').slice(0, 24) : MOTIONS;
   const limitCustom = oneCustomPerReply(expressions); // 特別な表情は、1 回の返事で 1 つまで
+  // 店のデータ(読むだけ)。取れなければ null のまま動き、店のことはスタッフへ回す
+  const useShop = body.useShop !== false;
+  const shopSource = shop ?? (defaultShop ??= createShop());
+  const nowMs = shopSource.now();
+  const snap = useShop ? await shopSource.snapshot() : null;
+  // 考えの知らせ。使ったデータを、ラベル・更新時刻・古いかどうかに直して画面へ(使っていない名前や、無いデータは落とす)
+  const sendThought = (thought) => {
+    const { cite, ...rest } = thought;
+    onEvent({ ...rest, sources: resolveSources(snap, cite, nowMs), shopLabel: snap?.source.label ?? '' });
+  };
   const emit = (obj) => {
     // 最初の say に用件・段階が付いているときは、画面の「考え」にも先に渡す
     if (obj.type === 'say' && (obj.intent !== undefined || obj.stage !== undefined)) {
-      const thought = normalizeEvent({ type: 'thought', intent: obj.intent, stage: obj.stage, handoff: obj.handoff }, { expressions, motions });
-      if (thought) onEvent(thought);
+      const thought = normalizeEvent({ type: 'thought', intent: obj.intent, stage: obj.stage, handoff: obj.handoff, cite: obj.cite, reason: obj.reason }, { expressions, motions });
+      if (thought) sendThought(thought);
     }
     const ev = normalizeEvent(obj, { expressions, motions });
     if (ev) {
       if (ev.type === 'say') ev.expression = limitCustom(ev.expression);
-      onEvent(ev);
+      if (ev.type === 'thought') sendThought(ev);
+      else onEvent(ev);
     }
   };
 
   if (!config.anthropicKey) {
     onEvent({ type: 'meta', brain: 'mock' });
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
-    for (const obj of mockReply({ text, trigger, landmarks, seen: scene })) {
+    for (const obj of mockReply({ text, trigger, landmarks, seen: scene, snap })) {
       await new Promise((r) => setTimeout(r, 120));
       emit(obj);
     }
@@ -231,10 +293,11 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   }
 
   onEvent({ type: 'meta', brain: 'haiku', model: config.model });
-  const system = buildSystemPrompt({ character, place, expressions, expressionHints: body.expressionHints, motions });
+  const shopPrompt = useShop ? { rules: loadRules(), data: renderShopData(snap) } : null;
+  const system = buildSystemPrompt({ character, place, expressions, expressionHints: body.expressionHints, motions, shop: shopPrompt });
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
-    { role: 'user', content: buildUserTurn({ text, scene, trigger }) },
+    { role: 'user', content: buildUserTurn({ text, scene, trigger, shopNow: useShop ? renderShopNow(snap, nowMs) : '' }) },
   ];
   let raw = '';
   let said = 0;

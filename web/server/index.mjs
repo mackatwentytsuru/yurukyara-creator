@@ -6,6 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createRe
 import { extname, join, normalize, sep } from 'node:path';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
+import { createShop, SHOP_KEYS, SHOP_LABELS } from './shop/index.mjs';
 import { streamSpeech, ttsStatus } from './tts.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
@@ -34,6 +35,8 @@ const claudeLimiter = createLimiter({
   dailyCap: config.claudeDailyCallCap,
   perMinute: config.claudePerMinute,
 });
+
+const shop = createShop();
 
 const json = (res, status, obj) => res.writeHead(status, { 'content-type': MIME['.json'] }).end(JSON.stringify(obj));
 
@@ -122,6 +125,7 @@ async function handleChat(req, res) {
     const afterMs = config.hedgeExperiment && Number.isFinite(body.hedgeMs) ? body.hedgeMs : config.hedgeMs;
     await runTurn(body, {
       signal: ac.signal,
+      shop,
       onEvent: (ev) => send({ ...ev, serverMs: Date.now() - t0 }),
       // 2 本目も 1 回として、1 日・1 分の上限に数える。足りなければ送らない
       hedge: { afterMs: paid ? afterMs : 0, take: () => claudeLimiter.take(client).ok },
@@ -142,7 +146,11 @@ const handler = async (req, res) => {
   const path = decodeURIComponent(url.pathname);
   try {
     if (req.method === 'GET' && path === '/api/status') {
+      const snap = await shop.snapshot();
       return json(res, 200, {
+        shop: snap
+          ? { available: true, label: snap.source.label, sections: SHOP_KEYS.filter((k) => snap.sections[k]).map((k) => ({ key: k, label: SHOP_LABELS[k], updatedAt: snap.sections[k].updatedHm })) }
+          : { available: false },
         brain: config.anthropicKey ? 'haiku' : 'mock',
         model: config.model,
         tts: ttsStatus(),

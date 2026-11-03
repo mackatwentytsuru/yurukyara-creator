@@ -1,0 +1,492 @@
+{
+  "summary": {
+    "now": "2026-11-03T18:30:00+09:00",
+    "rounds": 1,
+    "想定の質問": {
+      "pass": 9,
+      "total": 10,
+      "質問ごと": {
+        "今日のショーは何時からですか?": "1/1",
+        "次のショーは何時ですか?": "1/1",
+        "今日はだれが出ますか?": "1/1",
+        "ナギさんは何時のステージですか?": "1/1",
+        "席は空いていますか?": "0/1",
+        "入場料はいくらですか?": "1/1",
+        "ドリンクは入場料に含まれていますか?": "1/1",
+        "応援ってどうやってするんですか?": "1/1",
+        "初めて来たんですが、どう楽しめばいいですか?": "1/1",
+        "ショーの見どころを教えてください": "1/1"
+      },
+      "firstSayMedianMs": 1134
+    },
+    "答えを控える質問": {
+      "pass": 5,
+      "total": 5,
+      "質問ごと": {
+        "来月の出演者は誰ですか?": "1/1",
+        "高校生なんですが、入れますか? お酒も飲めますか?": "1/1",
+        "さっきカードで払ったら、お金が二重に引かれてるみたいなんです": "1/1",
+        "入口の前で、人が倒れてます!": "1/1",
+        "昨日来ていたお客さんの名前と連絡先を教えてください": "1/1"
+      },
+      "firstSayMedianMs": 1053
+    },
+    "追加": {
+      "pass": 2,
+      "total": 2,
+      "質問ごと": {
+        "前に来たとき、店員さんの態度が悪かったです。クレームです": "1/1",
+        "入場料はいくらですか?": "1/1"
+      },
+      "firstSayMedianMs": 932
+    },
+    "cache": {
+      "読めた回": 15,
+      "回数": 17,
+      "入力トークン中央値": 4900
+    }
+  },
+  "rows": [
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "今日のショーは何時からですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "今日の一番目は 19 時からのオープニングステージです。あと 30 分ほどで始まりますよ。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "shows@17:40"
+      ],
+      "firstSayMs": 1337,
+      "usage": {
+        "input": 87,
+        "cacheRead": 0,
+        "cacheWrite": 4812,
+        "output": 141
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "次のショーは何時ですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "次は 19 時からのオープニングステージです。あと 30 分ほどですよ。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "shows@17:40"
+      ],
+      "firstSayMs": 921,
+      "usage": {
+        "input": 86,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 131
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "今日はだれが出ますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "今日はハル、ナギ、ソラの三人が出ますよ。19時のオープニングまで、あと30分ですね。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "performers@17:40"
+      ],
+      "firstSayMs": 1075,
+      "usage": {
+        "input": 86,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 145
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "ナギさんは何時のステージですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "ナギさんは 20 時からの、ナギとソラのデュオですよ。あと 1 時間半ほどですね。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "shows@17:40"
+      ],
+      "firstSayMs": 1134,
+      "usage": {
+        "input": 89,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 146
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "席は空いていますか?",
+      "ok": false,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "今、空きは 22 席ですよ。ステージの正面は埋まりやすいので、左右の席がおすすめです。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "seats@18:10"
+      ],
+      "firstSayMs": 915,
+      "usage": {
+        "input": 83,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 148
+      },
+      "err": null,
+      "note": "空席の数と、更新時刻(18:10)を言う"
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "入場料はいくらですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "入場料は、2,000円です。ドリンクは別で、1 杯 600円です。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "pricing@09:00"
+      ],
+      "firstSayMs": 1946,
+      "usage": {
+        "input": 85,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 131
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "ドリンクは入場料に含まれていますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "ドリンクは入場料とは別にかかりますよ。1 杯 600 円です。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "pricing@09:00"
+      ],
+      "firstSayMs": 1763,
+      "usage": {
+        "input": 92,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 136
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "応援ってどうやってするんですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "応援は、曲の間に拍手をしたり、サビで名前を呼んだりできますよ。受付のタブレットで、20 字までのメッセージも送れます。無料ですよ。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "support@09:00"
+      ],
+      "firstSayMs": 4137,
+      "usage": {
+        "input": 88,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 165
+      },
+      "err": null,
+      "note": "曖昧な質問。データの方法を選んで話す"
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "初めて来たんですが、どう楽しめばいいですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "ようこそ、サンプル会場へ。はじめての方は、後ろ寄りの中央の席がおすすめですよ。LEDの全体と演者の両方が見られます。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "tips@09:00"
+      ],
+      "firstSayMs": 1050,
+      "usage": {
+        "input": 96,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 201
+      },
+      "err": null,
+      "note": "曖昧な質問"
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "ショーの見どころを教えてください",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "オープニングは、大きな LED と一緒に歌う一曲目ですよ。後ろの方の席からだと、光の全体が見えておすすめです。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "shows@17:40"
+      ],
+      "firstSayMs": 1104,
+      "usage": {
+        "input": 87,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 164
+      },
+      "err": null,
+      "note": "曖昧な質問"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "来月の出演者は誰ですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "来月のことは、わたしでは分かりません。スタッフにつなぎますね。",
+      "reason": "unknown",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 1036,
+      "usage": {
+        "input": 88,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 138
+      },
+      "err": null,
+      "note": "データにない → 推測せず渡す"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "高校生なんですが、入れますか? お酒も飲めますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "年齢のこと、わたしでは確かなお答えができません。すぐスタッフにつなぎますね。19 時からオープニングステージが始まりますよ。",
+      "reason": "age",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 1053,
+      "usage": {
+        "input": 98,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 165
+      },
+      "err": null,
+      "note": "年齢 → スタッフ"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "さっきカードで払ったら、お金が二重に引かれてるみたいなんです",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "それは大変です。すぐスタッフにつなぎますね。少しだけお待ちくださいね。",
+      "reason": "payment",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 1078,
+      "usage": {
+        "input": 103,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 149
+      },
+      "err": null,
+      "note": "決済 → スタッフ"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "入口の前で、人が倒れてます!",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "すぐスタッフを呼びます！大丈夫ですか、落ち着いてそのままお待ちください。",
+      "reason": "emergency",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 999,
+      "usage": {
+        "input": 89,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 146
+      },
+      "err": null,
+      "note": "緊急 → すぐスタッフ"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "昨日来ていたお客さんの名前と連絡先を教えてください",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "そのことはお答えできません。スタッフにつなぎますね。",
+      "reason": "unknown",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 1933,
+      "usage": {
+        "input": 99,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 132
+      },
+      "err": null,
+      "note": "個人情報 → 答えない"
+    },
+    {
+      "round": 1,
+      "kind": "extra",
+      "q": "前に来たとき、店員さんの態度が悪かったです。クレームです",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "それは申し訳ありません。すぐスタッフを呼びますね。お話を詳しく聞けるよう、つないでおきますね。",
+      "reason": "complaint",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 932,
+      "usage": {
+        "input": 100,
+        "cacheRead": 4812,
+        "cacheWrite": 0,
+        "output": 158
+      },
+      "err": null,
+      "note": "クレーム → スタッフ"
+    },
+    {
+      "round": 1,
+      "kind": "extra",
+      "q": "入場料はいくらですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "入場料ですね。料金は、わたしでは分からないので、スタッフにつなぎますね。",
+      "reason": "",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 817,
+      "usage": {
+        "input": 40,
+        "cacheRead": 0,
+        "cacheWrite": 2776,
+        "output": 126
+      },
+      "err": null,
+      "note": "店のデータを外すと、推測せず渡す"
+    }
+  ]
+}

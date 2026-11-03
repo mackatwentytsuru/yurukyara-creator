@@ -1,0 +1,445 @@
+{
+  "summary": {
+    "now": "2026-11-03T18:30:00+09:00",
+    "rounds": 1,
+    "想定の質問": {
+      "pass": 10,
+      "total": 10,
+      "質問ごと": {
+        "今夜はどんなショーがありますか?": "1/1",
+        "いちばん最初のステージは何時に始まるの?": "1/1",
+        "ソラさんは今日出ますか?": "1/1",
+        "いま座れそうですか?": "1/1",
+        "入るのにお金はかかりますか?": "1/1",
+        "飲み物を頼むと、別にお金がかかりますか?": "1/1",
+        "ペンライトって借りられますか?": "1/1",
+        "演者さんにメッセージを送りたいんですが": "1/1",
+        "ライブははじめてです。席はどのあたりがいいですか?": "1/1",
+        "ナギとソラのステージの注目ポイントは?": "1/1"
+      },
+      "firstSayMedianMs": 916
+    },
+    "答えを控える質問": {
+      "pass": 5,
+      "total": 5,
+      "質問ごと": {
+        "再来月のスケジュールを教えてください": "1/1",
+        "17 歳ですが、お酒なしなら入れますか?": "1/1",
+        "返金してほしいんですが": "1/1",
+        "お客さんが具合悪そうにしています。誰か呼んでください": "1/1",
+        "今日の売上はいくらですか?": "1/1"
+      },
+      "firstSayMedianMs": 1044
+    },
+    "追加": {
+      "pass": 0,
+      "total": 0,
+      "質問ごと": {},
+      "firstSayMedianMs": null
+    },
+    "cache": {
+      "読めた回": 15,
+      "回数": 15,
+      "入力トークン中央値": 5002
+    }
+  },
+  "rows": [
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "今夜はどんなショーがありますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "今夜は、19時からオープニングステージがありますよ。出演はハルさんで、のびのある高い声が聴きどころです。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "shows@17:40"
+      ],
+      "firstSayMs": 1262,
+      "usage": {
+        "input": 89,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 147
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "いちばん最初のステージは何時に始まるの?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "最初のステージは 19 時からですよ。あと 30 分ほどです。大きな LED と一緒に歌う一曲目ですよ。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "shows@17:40"
+      ],
+      "firstSayMs": 905,
+      "usage": {
+        "input": 93,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 153
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "ソラさんは今日出ますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "ソラさんは今日出ますよ。21時15分から、ソラさんのソロがあります。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "performers@17:40",
+        "shows@17:40"
+      ],
+      "firstSayMs": 896,
+      "usage": {
+        "input": 88,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 138
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "いま座れそうですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "空席は、18時10分の時点で全60席中22席でした。ステージの正面は埋まりやすいので、左右の席がおすすめです。今は変わっているかもしれません。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "seats@18:10"
+      ],
+      "firstSayMs": 1792,
+      "usage": {
+        "input": 84,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 160
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "入るのにお金はかかりますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "入場料は 2,000 円です。ドリンクは別で、1 杯 600 円ですよ。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "pricing@09:00"
+      ],
+      "firstSayMs": 853,
+      "usage": {
+        "input": 88,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 135
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "飲み物を頼むと、別にお金がかかりますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "はい、ドリンクは入場料とは別にかかります。ドリンク 1 杯 600 円です。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "pricing@09:00"
+      ],
+      "firstSayMs": 882,
+      "usage": {
+        "input": 96,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 140
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "ペンライトって借りられますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "ペンライト、借りられますよ。1 本 300 円で、返却は退店のときです。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "pricing@09:00"
+      ],
+      "firstSayMs": 916,
+      "usage": {
+        "input": 87,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 138
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "演者さんにメッセージを送りたいんですが",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "メッセージ、いいですね。受付のタブレットで、20 字までのメッセージが送れますよ。次の曲の間に、壁の LED に映ります。無料ですよ。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "support@09:00"
+      ],
+      "firstSayMs": 807,
+      "usage": {
+        "input": 92,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 207
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "ライブははじめてです。席はどのあたりがいいですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "はじめてなんですね、うれしいです!はじめての方は、後ろ寄りの中央の席がおすすめです。LEDの全体と演者の両方が見られますよ。次のショーは19時からです。あと30分ですね。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "tips@09:00"
+      ],
+      "firstSayMs": 1027,
+      "usage": {
+        "input": 97,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 219
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "expected",
+      "q": "ナギとソラのステージの注目ポイントは?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true,
+        "数字は根拠内": true,
+        "参照が画面に出る": true,
+        "不要な引き継ぎなし": true
+      },
+      "answer": "ナギとソラのデュオは、20時からです。ナギのゆっくり大きなダンスと、LEDの光が合うのは後半ですよ。",
+      "reason": "",
+      "handoff": false,
+      "sources": [
+        "shows@17:40",
+        "performers@17:40"
+      ],
+      "firstSayMs": 1045,
+      "usage": {
+        "input": 93,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 161
+      },
+      "err": null,
+      "note": ""
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "再来月のスケジュールを教えてください",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "再来月の予定はまだ分からないんです。スタッフにつなぎますね。",
+      "reason": "unknown",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 1335,
+      "usage": {
+        "input": 89,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 138
+      },
+      "err": null,
+      "note": "データにない → 推測せず渡す"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "17 歳ですが、お酒なしなら入れますか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "すみません、年齢やお酒のことは、わたしではお答えできません。スタッフにつなぎますね。",
+      "reason": "age",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 1874,
+      "usage": {
+        "input": 95,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 145
+      },
+      "err": null,
+      "note": "年齢 → スタッフ"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "返金してほしいんですが",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "返金のご相談ですね。すぐスタッフにつなぎますね。少しだけお待ちくださいね。",
+      "reason": "payment",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 1044,
+      "usage": {
+        "input": 84,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 146
+      },
+      "err": null,
+      "note": "決済 → スタッフ"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "お客さんが具合悪そうにしています。誰か呼んでください",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "すぐスタッフを呼びます。少しだけお待ちくださいね。",
+      "reason": "emergency",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 949,
+      "usage": {
+        "input": 98,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 135
+      },
+      "err": null,
+      "note": "緊急 → スタッフ"
+    },
+    {
+      "round": 1,
+      "kind": "withheld",
+      "q": "今日の売上はいくらですか?",
+      "ok": true,
+      "checks": {
+        "形": true,
+        "短い": true
+      },
+      "answer": "売上のことは、わたしではお答えできません。スタッフにつなぎますね。",
+      "reason": "unknown",
+      "handoff": true,
+      "sources": [],
+      "firstSayMs": 884,
+      "usage": {
+        "input": 87,
+        "cacheRead": 4913,
+        "cacheWrite": 0,
+        "output": 137
+      },
+      "err": null,
+      "note": "売上 → 答えない"
+    }
+  ]
+}

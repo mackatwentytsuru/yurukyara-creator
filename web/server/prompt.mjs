@@ -20,7 +20,20 @@ export function describeExpressions(expressions = [], hints = {}) {
 ${described.join(String.fromCharCode(10))}` : '' };
 }
 
-export function buildSystemPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS } = {}) {
+/** 店のデータを使うときの、出力の形の足し(cite と reason)と例 */
+const SHOP_FORMAT = `
+- 店のデータを使う回は、1 行目に cite(答えに使ったデータの名前の配列。shows performers seats pricing support tips のうち。使わなければ [])を足す。handoff が true のときは reason(complaint payment emergency age booking unknown のどれか 1 つ)も足す。`;
+
+const SHOP_EXAMPLES = `
+
+お客さんの言葉「次のショーはいつですか」(【店のいま】に「次のショー: 20:00 ◯◯(あと 90 分)」とある)
+{"type":"say","text":"次は 20 時からの◯◯です。","expression":"happy","motion":"nod","gaze":"person","intent":"次のショーの時間","stage":"guide","handoff":false,"cite":["shows"]}
+{"type":"say","text":"あと 90 分ほどですよ。","expression":"happy","motion":"none","gaze":"person"}
+
+お客さんの言葉「さっき払ったお金が二重に引かれてるんですが」
+{"type":"say","text":"それは大変です。すぐスタッフにつなぎますね。","expression":"troubled","motion":"bow","gaze":"person","intent":"支払いの問題","stage":"handoff","handoff":true,"cite":[],"reason":"payment"}`;
+
+export function buildSystemPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS, shop = null } = {}) {
   const name = character.name ?? '受付のキャラ';
   const persona = (character.persona ?? '').trim();
   const expr = describeExpressions(expressions, expressionHints);
@@ -36,17 +49,21 @@ ${persona}
 greet(声かけ)→ need(用件を聞く)→ guide(案内する)→ handoff(分からないことは人につなぐ)。雑談は chat。
 - お客さんの言葉に、場所の目印の名前や、はっきりした用件が入っているときは、聞き返さずに、すぐ案内する(stage は guide)。
 - 用件がまだ分からないときだけ、案内を始めず、まず 1 つだけ聞く(stage は need)。
-- 場所の情報にないこと(営業時間・料金・場所など)は作らない。分からなければ handoff を true にして、スタッフを呼ぶと伝える。
+- 場所の情報${shop ? 'と店のデータ' : ''}にないこと(営業時間・料金・場所など)は作らない。分からなければ handoff を true にして、スタッフを呼ぶと伝える。
 
 # 場所の情報
 ${place.info ? place.info + '\n' : ''}目印(キャラの向きから見た方向と距離):
 ${describeLandmarks(place.landmarks)}
 - 案内するときは、方向を言葉でも伝える(例「右前の方に」)。gaze に landmark:<名前> を入れる。motion に point があれば point を使う。
+${shop ? `
+${shop.rules}
 
+${shop.data}
+` : ''}
 # 出力の形
 1 行に 1 つの JSON だけを書く。説明文・コードブロックは書かない。すぐ話し始められるよう、最初の行から、読み上げる 1 文を書く。
 - 1 行目(最初の 1 文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先","intent":"お客さんの用件(12 字以内。まだ不明なら 未確認)","stage":"greet|need|guide|handoff|chat","handoff":false}
-- 2 行目以降(続きの文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先"}(intent・stage・handoff は 1 行目だけ)
+${shop ? SHOP_FORMAT.trim() + String.fromCharCode(10) : ''}- 2 行目以降(続きの文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先"}(intent・stage・handoff は 1 行目だけ)
 - expression は次から選ぶ: ${expr.names}${expr.described}
 - motion は次から選ぶ: ${motions.join(' ')}(動きが要らなければ none)
 - gaze は person(お客さんを見る)/ away(少し視線を外す。考えるとき)/ landmark:<目印の名前>(その場所を見る)
@@ -61,12 +78,13 @@ ${describeLandmarks(place.landmarks)}
 
 お客さんの言葉「ここの営業時間を教えてください」(場所の情報に営業時間が無い)
 {"type":"say","text":"すみません、わたしでは分かりません。","expression":"sad","motion":"shake","gaze":"person","intent":"営業時間の質問","stage":"handoff","handoff":true}
-{"type":"say","text":"スタッフにつなぎますね。","expression":"happy","motion":"bow","gaze":"person"}`;
+{"type":"say","text":"スタッフにつなぎますね。","expression":"happy","motion":"bow","gaze":"person"}${shop ? SHOP_EXAMPLES : ''}`;
 }
 
 /** お客さんの発話と、見えている様子を 1 つのメッセージにする */
-export function buildUserTurn({ text, scene, trigger }) {
+export function buildUserTurn({ text, scene, trigger, shopNow = '' }) {
   const lines = [`【見えている様子】${scene || '人は見えていない'}`];
+  if (shopNow) lines.push(shopNow);
   if (trigger === 'approach') lines.push('【きっかけ】お客さんが近づいてきた。こちらから声をかける。');
   else lines.push(`【お客さんの言葉】${text}`);
   return lines.join('\n');
