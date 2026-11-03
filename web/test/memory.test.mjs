@@ -89,3 +89,13 @@ test('事実のある分類の中の「見つからなかった」は、その�
   assert.match(renderMemory(m), /【調べたが見つからなかった】駐車場の情報は見つからなかった/);
   assert.match(renderMemory(m), /貸切・イベント利用\(調べたが見つからなかった\)/);
 });
+
+test('cite が付かなかった答えに、重なった言葉・数字から根拠を後付けする(2 語に満たなければ付けない・最大 2 つ)', async () => {
+  const shop = createShop({ source: { load: async () => ({ sections: {} }) }, memoryFile: SAMPLE, now: () => Date.parse('2026-11-04T18:00:00+09:00') });
+  const snap = await shop.snapshot();
+  const { inferCite } = await import('../server/shop/index.mjs');
+  assert.deepEqual(inferCite(snap, '営業時間は 18 時から 23 時までです。定休日は毎週月曜日ですよ。'), ['m_hours']);
+  assert.ok(inferCite(snap, '最寄りは、あおぞら駅の北口です。歩いて約 4 分です。').includes('m_access'));
+  assert.deepEqual(inferCite(snap, 'ありがとうございます。またお話ししましょう。'), []);
+  assert.deepEqual(inferCite(null, '営業時間は 18 時です'), []);
+});

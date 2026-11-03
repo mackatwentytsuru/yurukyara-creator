@@ -109,3 +109,18 @@ test('「スタッフにつなぎます」と言ったのに handoff が false �
     assert.equal(events.filter((e) => e.type === 'handoff').length, 0);
   });
 });
+
+test('2 行目以降の say に付いた handoff(intent なし)も、引き継ぎの印として届く。reason もそのまま', async () => {
+  const lines = [
+    '{"type":"say","text":"ロッカーのことですね。","expression":"thinking","motion":"none","gaze":"away","intent":"ロッカー","stage":"need","handoff":false,"cite":[]}\n',
+    '{"type":"say","text":"分かりません。","expression":"sad","motion":"none","gaze":"person"}\n',
+    '{"type":"say","text":"お待ちくださいね。","expression":"happy","motion":"bow","gaze":"person","handoff":true,"reason":"booking"}\n',
+  ];
+  await withFakeApi(lines, async (runTurn) => {
+    const events = [];
+    await runTurn({ text: 'ロッカーは', place: { name: '試し' } }, { onEvent: (e) => events.push(e), signal: new AbortController().signal });
+    const h = events.filter((e) => e.type === 'handoff');
+    assert.equal(h.length, 1);
+    assert.equal(h[0].reason, 'booking');
+  });
+});

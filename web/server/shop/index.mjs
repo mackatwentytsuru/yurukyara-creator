@@ -226,6 +226,30 @@ export function renderShopNow(snap, nowMs) {
   return `【店のいま】${L.join('。')}`;
 }
 
+const TOKEN = /\d[\d,]*|[一-龠ァ-ヶー]{2,}|[一-龠][ぁ-ん][一-龠]/g;
+const TOKEN_STOP = new Set(['スタッフ', 'お客', '案内', 'ご案内', 'お店', '今日', '時間', 'ショー', '場合', '可能', '確認', 'お願い', '大丈夫']);
+const tokensOf = (t) => new Set((String(t).match(TOKEN) ?? []).map((x) => x.replace(/,/g, '')).filter((x) => !TOKEN_STOP.has(x)));
+
+/**
+ * モデルが cite を付けなかった答えに、根拠を後から付ける(答えの言葉・数字が重なった分類・部を、重なりの多い順に最大 2 つ)。
+ * 画面の「参照した情報」を、答えの根拠に近づけるための保険。重なりが 2 語に満たない物は付けない(当てずっぽうを避ける)。
+ * @returns {string[]} cite の名前の配列(m_ つきの記憶の分類か、今日のデータの部)
+ */
+export function inferCite(snap, answer) {
+  if (!snap) return [];
+  const a = tokensOf(answer);
+  const scored = [];
+  const score = (key, text) => {
+    const t = tokensOf(text);
+    let n = 0;
+    for (const x of a) if (t.has(x)) n += /^\d/.test(x) ? 2 : 1;
+    if (n >= 2) scored.push([key, n]);
+  };
+  for (const [k, sec] of Object.entries(snap.sections ?? {})) score(k, JSON.stringify(sec).replace(/updated\w+":[^,}]*/g, ''));
+  for (const [k, c] of Object.entries(snap.memory?.categories ?? {})) score(`m_${k}`, c.items.map((x) => x.text).join(' '));
+  return scored.sort((x, y) => y[1] - x[1]).slice(0, 2).map(([k]) => k);
+}
+
 /** 画面に出す「参照した情報」。cite の名前を、ラベル・更新時刻・古いかどうかにする */
 export function resolveSources(snap, cite, nowMs) {
   if (!snap) return [];

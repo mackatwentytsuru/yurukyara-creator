@@ -93,7 +93,7 @@
     { "id": "Y05", "group": "daily", "check": "daily", "needsDaily": true, "q": "今日のショーは何本ありますか?" },
 
     { "id": "T01", "group": "multi", "category": "hours", "q": "定休日もありますか?", "history": [{ "role": "user", "content": "営業時間を教えてください" }, { "role": "assistant", "content": "営業時間をご案内しますね。" }] },
-    { "id": "T02", "topic": "ドリンク", "group": "multi", "category": "pricing", "q": "それは、ドリンク代も入っていますか?", "history": [{ "role": "user", "content": "入場料はいくらですか?" }, { "role": "assistant", "content": "入場料をお伝えしますね。" }] },
+    { "id": "T02", "allowHandoff": true, "topic": "ドリンク", "group": "multi", "category": "pricing", "q": "それは、ドリンク代も入っていますか?", "history": [{ "role": "user", "content": "入場料はいくらですか?" }, { "role": "assistant", "content": "入場料をお伝えしますね。" }] },
     { "id": "T03", "group": "multi", "category": "access", "q": "そこから歩くと、どのくらいですか?", "history": [{ "role": "user", "content": "最寄りの駅はどこですか?" }, { "role": "assistant", "content": "最寄りの駅をご案内しますね。" }] },
 
     { "id": "P01", "group": "persona", "check": "name", "q": "あなたの名前は?" },

@@ -3,7 +3,7 @@
 import { config } from './env.mjs';
 import { buildSystemPrompt, buildUserTurn, MOTIONS } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
-import { createShop, renderShopData, renderShopNow, resolveSources } from './shop/index.mjs';
+import { createShop, inferCite, renderShopData, renderShopNow, resolveSources } from './shop/index.mjs';
 import { loadRules } from './shop/rules.mjs';
 
 export const HANDOFF_REASONS = ['complaint', 'payment', 'emergency', 'age', 'booking', 'unknown'];
@@ -270,12 +270,18 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   };
   // 「スタッフにつなぎます」と言ったのに、引き継ぎの印(handoff)が立っていないとき、あとから印を足す(言葉と画面・通知をずらさない)
   let handoffFlagged = false;
+  let citeSeen = false; // モデルが cite を付けたか(付けなければ、終わりに答えから根拠を後付けする)
+  let spoken = '';
   const STAFF_PROMISE = /スタッフ(に|を|へ|の方に).{0,6}(つな|呼|お呼び|おつな)/;
   const emit = (obj) => {
-    if (obj.handoff === true) handoffFlagged = true;
-    if (obj.type === 'say' && !handoffFlagged && STAFF_PROMISE.test(String(obj.text ?? ''))) {
+    if (Array.isArray(obj.cite) && obj.cite.length) citeSeen = true;
+    if (obj.type === 'say') spoken += String(obj.text ?? '');
+    // 引き継ぎの印: 1 行目(用件つき)の物は「考え」として届く。2 行目以降の say に付いた handoff や、言葉だけの約束は届かないので、ここで別に知らせる
+    const carriesThought = obj.type === 'say' && (obj.intent !== undefined || obj.stage !== undefined);
+    if (obj.type === 'thought' && obj.handoff === true) handoffFlagged = true;
+    if (obj.type === 'say' && !handoffFlagged && (obj.handoff === true || STAFF_PROMISE.test(String(obj.text ?? '')))) {
       handoffFlagged = true;
-      onEvent({ type: 'handoff', reason: 'unknown' });
+      if (!(carriesThought && obj.handoff === true)) onEvent({ type: 'handoff', reason: HANDOFF_REASONS.includes(obj.reason) ? obj.reason : 'unknown' });
     }
     // 最初の say に用件・段階が付いているときは、画面の「考え」にも先に渡す
     if (obj.type === 'say' && (obj.intent !== undefined || obj.stage !== undefined)) {
@@ -337,6 +343,10 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     for (const [i, text] of sentences.entries()) {
       emit(i === 0 ? { type: 'say', text, expression: 'neutral', motion: 'none', gaze: 'person', intent: '未確認', stage: 'chat', handoff: false } : { type: 'say', text, expression: 'neutral', motion: 'none', gaze: 'person' });
     }
+  }
+  if (snap && !citeSeen) {
+    const inferred = inferCite(snap, spoken);
+    if (inferred.length) onEvent({ type: 'sources', inferred: true, sources: resolveSources(snap, inferred, nowMs) });
   }
   // 2 本目を送ったか・どちらが勝ったか・キャッシュを読めたか(記録と測定のため。画面は使わない)
   onEvent({

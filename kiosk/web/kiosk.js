@@ -103,7 +103,11 @@ async function ask(text) {
           state.io.tts?.speak(ev.text);
           toBottom();
         } else if (ev.type === 'thought') thought = ev;
-        else if (ev.type === 'handoff') thought = { ...(thought ?? {}), handoff: true, reason: thought?.reason || ev.reason };
+        else if (ev.type === 'sources') {
+          // 答えのあとから、言葉の重なりで付けた根拠(モデルが cite を付けなかった回)
+          const seen = new Set((thought?.sources ?? []).map((x) => x.key));
+          thought = { ...(thought ?? {}), sources: [...(thought?.sources ?? []), ...ev.sources.filter((x) => !seen.has(x.key))] };
+        } else if (ev.type === 'handoff') thought = { ...(thought ?? {}), handoff: true, reason: thought?.reason || ev.reason };
         else if (ev.type === 'error') throw new Error(ev.message || '返事を作れませんでした');
       }
     }
