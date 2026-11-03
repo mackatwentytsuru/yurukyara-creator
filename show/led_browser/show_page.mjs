@@ -212,8 +212,9 @@ function applyCustomExpressions() {
 if (IS_VRM) {
   let dance = null;
   let danceInputOf = null;
-  if (!MEASURE_NO_DANCE && (await fetch('./show_vrm_dance.mjs', { method: 'HEAD' })).ok) {
-    const module = await import('./show_vrm_dance.mjs');
+  const danceFile = q.get('dancetrack') === '1' ? './show_vrm_track.mjs' : './show_vrm_dance.mjs';
+  if (!MEASURE_NO_DANCE && (await fetch(danceFile, { method: 'HEAD' })).ok) {
+    const module = await import(danceFile);
     dance = module.createDance(character.vrm, timeline);
     danceInputOf = module.danceInput;
     dancing = true;
@@ -418,7 +419,7 @@ window.showMeasure = () => {
     const b = measureBox(MEASURE_SCALE);
     if (!b) continue;
     if (thigh === null) thigh = thighRefY();
-    grow(IS_VRM && timing.zoomAmount(f / FPS) > 0.01 ? zoomed : full, b);
+    grow(IS_VRM && q.get('nozoom') !== '1' && timing.zoomAmount(f / FPS) > 0.01 ? zoomed : full, b);
   }
   return { box: full, zoomedBox: Number.isFinite(zoomed[0]) ? zoomed : null, thighRefY: thigh, refCenterX: W / 2, refCenterY: H / 2, isVrm: IS_VRM };
 };

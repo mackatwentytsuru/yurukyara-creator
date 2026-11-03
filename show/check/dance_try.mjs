@@ -4,6 +4,7 @@
 //   --range 40,43        この秒の間を 60 コマ毎秒ぜんぶ撮る(mp4 の材料。seq_00000.png)
 //   --view side          --range を斜めから撮る(既定は正面)
 //   --lead 3             撮る前に揺れ物をならす秒
+//   --dance-track <頭>   assemble_track.py の出力(<頭>.bin と <頭>.json)を /show-data/dance_track で渡す
 //   --dance-file <.mjs>  踊りを別の写しに差しかえて試す(本体を書きかえずに済む)
 const NOT_BODY = /arm|hand|thumb|index|middle|ring|little|hair|shoulder/i;
 
@@ -64,6 +65,7 @@ async function runNode() {
       if (path === '/try/job.json') return res.writeHead(200, { 'content-type': TYPES['.json'] }).end(JSON.stringify(job));
       if (path === '/try/timeline.json') return res.writeHead(200, { 'content-type': TYPES['.json'] }).end(fs.readFileSync(args.timeline));
       if (path === '/try/character.vrm') return res.writeHead(200).end(fs.readFileSync(args.vrm));
+      if (args['dance-track'] && path.startsWith('/show-data/dance_track')) return res.writeHead(200, { 'cache-control': 'no-store' }).end(fs.readFileSync(args['dance-track'] + path.slice('/show-data/dance_track'.length)));
       if (args['dance-file'] && path === '/show/led_browser/show_vrm_dance.mjs') return res.writeHead(200, { 'content-type': TYPES['.mjs'], 'cache-control': 'no-store' }).end(fs.readFileSync(args['dance-file']));
       if (!ALLOW.some((p) => path.startsWith(p)) || path.includes('..')) return res.writeHead(404).end();
       const file = normalize(join(ROOT, path));

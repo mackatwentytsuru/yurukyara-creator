@@ -5,6 +5,8 @@
 //   --sync-only      preroll の同期の区間(2 秒)だけを描く試し
 //   --mouth-gain <値>  VRM の口の強さを台本の値の代わりに使う  --no-dance  踊りの部品を使わない
 //   --raw-expressions  台本の表情を読みかえずに VRM へ渡す
+//   --dance-track <頭>   既存の動きを並べた 1 本(assemble_track.py の <頭>.bin / <頭>.json)で踊らせる
+//   --no-zoom        サビで寄らない(足のステップも見せる踊りのとき)
 //   --no-character   キャラだけ描かない版(同じコマ数・同じ背景)
 //   --character-file <.vrm のパス>   リポジトリの外の .vrm を、キャラとして描く(既定の動きは変わらない)
 //   --at <秒> --seconds 3   timeline の絶対の秒から決まった秒だけ描く(--section より優先)
@@ -66,6 +68,10 @@ function startServer(state) {
       }
       if (path === '/show-data/character.vrm' && state.characterFile) {
         res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' }).end(await readFile(state.characterFile));
+        return;
+      }
+      if (state.danceTrack && path.startsWith('/show-data/dance_track')) {
+        res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' }).end(await readFile(state.danceTrack + path.slice('/show-data/dance_track'.length)));
         return;
       }
       if (!ALLOW.some((p) => path.startsWith(p)) || path.includes('..') || /(^|\/)\.env/.test(path)) {
@@ -384,11 +390,11 @@ async function main() {
     rmSync(statsPath, { force: true });
   }
 
-  const state = { fileCache: new Map(), timelineBody, nextFrame: from, endFrame: end, done: 0, startedAt: 0, lastFrameAt: 0, chunks: 0, restarts: 0, ffmpeg: null, stats: null, characterFile };
+  const state = { fileCache: new Map(), timelineBody, nextFrame: from, endFrame: end, done: 0, startedAt: 0, lastFrameAt: 0, chunks: 0, restarts: 0, ffmpeg: null, stats: null, characterFile, danceTrack: args['dance-track'] ? resolve(args['dance-track']) : null };
   const server = await startServer(state);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try {
-    const base = { character, stretch, cx };
+    const base = { character, stretch, cx, ...(args['dance-track'] ? { dancetrack: 1 } : {}), ...(args['no-zoom'] ? { nozoom: 1 } : {}) };
     const fitPath = join(outDir, 'fit.json');
     let fit;
     const t0 = performance.now();
@@ -396,7 +402,7 @@ async function main() {
       fit = JSON.parse(readFileSync(fitPath, 'utf8'));
     } else {
       const result = await runPage(state, baseUrl, { ...base, measure: 1, run: 'measure' }, (info) => console.log('GPU:', info.gpuName, '動き:', (info.motions ?? []).join(','), '踊り:', info.dance));
-      fit = computeFit(result.measured, stretch, cx, motion.vrm?.zoom);
+      fit = computeFit(result.measured, stretch, cx, args['no-zoom'] ? null : motion.vrm?.zoom);
       writeFileSync(fitPath, JSON.stringify(fit, null, 1));
     }
     const measureSec = (performance.now() - t0) / 1000;
