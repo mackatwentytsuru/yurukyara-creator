@@ -119,3 +119,11 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - 本人が握って確かめる物(未): 暗い所で親指が届くか、押し間違えないか、眩しくないか。
 - ARKit の形式は全部広角(iPad13,4)。超広角の 4K 30 fps は単独で 107.4°。ARKit と同時は不可(割り込みで 0.58 fps)。固定の 1 視点ではレンズを解けない。
 - 寄り: 4K からの切り出しは、フル HD の拡大より細かさ 3.4 倍(1 シーンの実測)。今の送りには切り出しの経路が無い。
+
+## 寄り 2 倍と、離れた所からの更新(11-04)
+- 寄り: `PCStream.zoom2x`。4K の中央をそのまま送る。K は「元の 4K の画素」の約束を保つため `fx·2, fy·2, (cx−960)·2, (cy−540)·2` で送る。受け手の `intrinsics_scale 0.5` はそのまま使える。実機で細かさ 2.69 倍、127 秒 ×3 で熱は平常。試しは `run_stream_test.py --zoom`。
+- 更新: `python place/ios/tools/update_remote.py --check`(状態だけ)→ `--device ipad`(差分を送り、組み立て、入れる)→ 合格したら `--keep`、だめなら `--rollback`。組み立てに失敗すると入れない。Mac の画面がロック中でも署名は通る。USB の許可だけは本人がロックを解いて押す。
+- `devicectl` は同じ Wi-Fi でも入れられる(`transportType: localNetwork`)。USB が無くても動いているように見えるので、店の Wi-Fi が端末どうしを通さない時に初めて USB が要る。
+- `devicectl device install app` の最後の数行に「App installed」は出ない。`tail` で切らずに全体で確かめる。
+- Mac のバイナリの中の日本語は、ssh の引数の grep では合わない。Python でバイト列を数える(`b.count('文字'.encode())`)。
+- `ui_roundtrip` の押下の間隔は、確かめる時間(諦めの 6 秒など)と重ねない。
