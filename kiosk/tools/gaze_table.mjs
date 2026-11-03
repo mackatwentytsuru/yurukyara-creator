@@ -24,7 +24,7 @@ function row(z, ey, ex = 0, hfov = 100, wpx = 1920) {
   return { 距離m: z, 目の高さm: ey, 横m: ex, カメラから見た仰角: +elev.toFixed(0), 方位: +az.toFixed(0), IPD画素_1080p: +ipdPx.toFixed(0), 顔幅画素_1080p: +(f * FW / dz).toFixed(0), キャラの視線_横: +gx.toFixed(1), キャラの視線_上下: +gy.toFixed(1), カメラとキャラ視線の角度差: +ang.toFixed(0), IPD個人差による視線誤差角: +gazeErr.toFixed(1) };
 }
 const rows = [];
-for (const z of [1, 1.5, 2, 3]) for (const ey of [1.2, 1.6, 1.8]) rows.push(row(z, ey));
+for (const z of [1, 1.5, 2, 3]) for (const ey of [1.4, 1.6, 1.8]) rows.push(row(z, ey));
 rows.push(row(2, 1.6, 1.0), row(2, 1.6, -1.0));
 console.table(rows);
 console.log('4K なら画素は 2 倍');
