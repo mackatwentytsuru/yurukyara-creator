@@ -13,7 +13,7 @@ from scipy.signal import resample_poly
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import show_beats, show_mouth, show_tts  # noqa: E402
+import line_match, show_beats, show_mouth, show_tts  # noqa: E402
 
 SR = 48000
 FPS = 60
@@ -263,11 +263,25 @@ def main():
         starts["line"] = starts["song"] + line_at
         assert line_at + line_n <= song_n, "せりふが曲より長い"
         plan_n["line"] = line_n
+    # せりふと返事を歌と同じ空間に置く(音量を歌声にそろえ、高域を落とし、リバーブを足す)
+    line_cfg = script["song"].get("line_match")
+    placed = {}
+    if line_cfg is not None:
+        sung = slice(int(float(line_cfg.get("sung_from_sec", 8.5)) * SR), None)
+        sung_vocal = line_match.lufs(voc[sung])
+        sung_backing = line_match.lufs(kar[sung])
+        report["line_match"] = {"sung_vocal_lufs": round(sung_vocal, 1), "sung_backing_lufs": round(sung_backing, 1)}
+        for sid in ("line", "answer"):
+            placed[sid], report["line_match"][sid] = line_match.process(voices[sid], sung_vocal, line_cfg)
     for sid in ("line", "answer"):
         s0 = starts[sid] + pad_n(LEAD)
         x = voices[sid]
-        mix[s0:s0 + len(x), 0] += x
-        mix[s0:s0 + len(x), 1] += x
+        if sid in placed:
+            room = min(len(placed[sid]), total - s0)
+            mix[s0:s0 + room] += placed[sid][:room]
+        else:
+            mix[s0:s0 + len(x), 0] += x
+            mix[s0:s0 + len(x), 1] += x
         n = plan_n[sid]
         seg_x = np.zeros(n)
         seg_x[pad_n(LEAD):pad_n(LEAD) + len(x)] = x
@@ -296,6 +310,9 @@ def main():
             "line_minus_song_db": round(20 * np.log10(rms(voices["line"]) / rms(song_mix[w])), 1)}
     energy_src = mix.mean(axis=1)  # 背景用の energy は、曲を下げる前の音で測る
     duck_db = float(script["song"].get("line_duck_db", 0) or 0)
+    if over and line_cfg is not None:
+        # 伴奏の下げ方は、歌の部分の歌声と伴奏の差から決める
+        duck_db = line_match.duck_for(line_match.lufs(placed["line"]), line_match.lufs(song_mix[w]), sung_vocal, sung_backing)
     if over and duck_db > 0:  # せりふの間だけ曲(伴奏と全体)を下げる。前後 DUCK_RAMP 秒はなだらかに
         l1, ramp = l0 + len(voices["line"]), int(DUCK_RAMP * SR)
         low = 10 ** (-duck_db / 20)

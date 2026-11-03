@@ -23,7 +23,10 @@
     "len_sec": 43.4,
     "line_over_intro": true,
     "line_at_sec": 2.0,
-    "line_duck_db": 9
+    "line_duck_db": 9,
+    "line_match": {
+      "sung_from_sec": 8.5
+    }
   },
   "sync": {
     "flash_starts": [
