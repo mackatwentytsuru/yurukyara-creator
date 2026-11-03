@@ -181,6 +181,22 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec
 async def main_async(a):
     rec = Recorder(Path(a.out))
     server = await asyncio.start_server(lambda r, w: handle(r, w, rec), a.bind, a.port)
+    async def status_loop():
+        last = (0, time.time())
+        while True:
+            await asyncio.sleep(5)
+            n, now = len(rec.rows), time.time()
+            fps = (n - last[0]) / (now - last[1]) if now > last[1] else 0
+            seqs = [r["seq"] for r in rec.rows[-300:]]
+            lost = (seqs[-1] - seqs[0] + 1) - len(set(seqs)) if seqs else 0
+            lag = ""
+            if rec.clock_samples and rec.rows:
+                best = sorted(rec.clock_samples)[: max(3, len(rec.clock_samples) // 4)]
+                off = sorted(o for _, o in best)[len(best) // 2]
+                lag = f"  遅れ {rec.rows[-1]['recv_ms'] - (rec.rows[-1]['sent_ms'] - off):.0f} ms"
+            print(f"[受信中] コマ {n}(毎秒 {fps:.1f})  欠け(直近 300 コマ){lost}  {rec.bytes / 1e6:.0f} MB  音 {len(rec.audio_rows)} 塊{lag}", flush=True)
+            last = (n, now)
+    status_task = asyncio.create_task(status_loop())
     print(f"待ち受け {a.bind}:{a.port}、記録 {a.out}" + (f"、{a.seconds} 秒で終わる" if a.seconds else "(Ctrl+C で終わる)"))
     try:
         if a.seconds:
