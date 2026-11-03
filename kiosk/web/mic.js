@@ -35,7 +35,8 @@ async function start() {
     const t = mic.tracker;
     if (!t) return;
     const e = mic.estimate();
-    const f = t.current;
+    const f = mic.lastFrame;
+    $('lr').textContent = `左 ${(mic.levels?.l ?? 0).toFixed(4)} / 右 ${(mic.levels?.r ?? 0).toFixed(4)}(実効値 0〜1)`;
     $('level').style.width = `${Math.min(100, Math.round((e?.level ?? f?.level ?? 0) * 400))}%`;
     if (f) {
       $('ild').textContent = Number.isFinite(f.ildDb) ? `${f.ildDb.toFixed(1)} dB` : '―';

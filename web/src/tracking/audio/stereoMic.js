@@ -15,6 +15,8 @@ export class StereoMic {
     this.status = 'idle'; // idle | starting | stereo | mono | error
     this.info = { label: '', channels: 0, sampleRate: 0 };
     this.error = '';
+    this.levels = { l: 0, r: 0 };
+    this.lastFrame = null;
   }
 
   async start() {
@@ -54,7 +56,10 @@ export class StereoMic {
           return;
         }
         if (this.status !== 'mono') this.status = 'stereo';
-        this.tracker.push(e.data.l, e.data.r);
+        // 左右それぞれの大きさ(確認の画面の表示用)と、最後の分析の結果(音量差・時間差・一致度)を残す
+        const rms = (x) => Math.sqrt(x.reduce((acc, v) => acc + v * v, 0) / x.length);
+        this.levels = { l: rms(e.data.l), r: rms(e.data.r) };
+        this.lastFrame = this.tracker.push(e.data.l, e.data.r) ?? this.lastFrame;
       };
       this.status = settings.channelCount === 1 ? 'mono' : 'stereo';
       return this.status;
