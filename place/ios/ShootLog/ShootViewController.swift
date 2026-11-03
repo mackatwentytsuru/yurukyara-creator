@@ -3,6 +3,7 @@ import AVFoundation
 import SceneKit
 import SwiftUI
 import UIKit
+import WebKit
 
 struct ShootLogRepresentable: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> ShootViewController { ShootViewController() }
@@ -701,7 +702,19 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         if a.contains("--mic-on") { setMic(true) { _ in } }
         if a.contains("--ar-on") {
             if let thr = Double(value("--flash-thr") ?? "") { arMonitor.flashThreshold = thr }
+            arMonitor.dotCalibEnabled = a.contains("--dot-calib")
             arMonitor.setEnabled(true, url: value("--ar-url"))
+        }
+        // AR の見え方の確認(試験用): --ar-snapshot 秒。その秒に、カメラの映像(ar_snap_cam.jpg)・AR のページの絵(ar_snap_web.png)・向きなど(ar_snap_meta.json)を Documents に書く
+        if let sec = Double(value("--ar-snapshot") ?? "") {
+            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first, let names = try? FileManager.default.contentsOfDirectory(atPath: docs.path) {
+                for n in names where n.hasPrefix("ar_snap_") || n == "dot_rays.json" { try? FileManager.default.removeItem(at: docs.appendingPathComponent(n)) }
+            }
+            let every = Double(value("--ar-snapshot-every") ?? "") ?? 0
+            let count = every > 0 ? max(1, Int(value("--ar-snapshot-count") ?? "") ?? 1) : 1
+            for k in 0..<count {
+                DispatchQueue.main.asyncAfter(deadline: .now() + sec + Double(k) * every) { [weak self] in self?.saveARSnapshot(tag: count > 1 ? "\(k)_" : "") }
+            }
         }
         // 露出の固定(スクリプトの試験用): --lock-exposure [--iso 値]。シャッター 1/60、ISO は値(省略は今の値)、ホワイトバランスとピントは固定した時点の値
         if a.contains("--lock-exposure") {
@@ -777,6 +790,29 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                 vc.popoverPresentationController?.sourceView = self.shareButton
                 self.present(vc, animated: true)
             }
+        }
+    }
+
+    /// AR モニターが「実際に画面にどう見えているか」を、あとで PC で重ねて確かめられる形で書き出す。
+    private func saveARSnapshot(tag: String = "") {
+        lock.lock(); let frame = latestFrame; lock.unlock()
+        guard let frame, let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let ci = CIImage(cvPixelBuffer: frame.capturedImage)
+        if let cs = CGColorSpace(name: CGColorSpace.sRGB), let jpg = CIContext().jpegRepresentation(of: ci, colorSpace: cs, options: [:]) {
+            try? jpg.write(to: docs.appendingPathComponent("ar_snap_\(tag)cam.jpg"))
+        }
+        let orientation = view.window?.windowScene?.interfaceOrientation.rawValue ?? -1
+        let e = frame.camera.eulerAngles
+        let meta: [String: Any] = [
+            "viewW": view.bounds.width, "viewH": view.bounds.height,
+            "interfaceOrientation": orientation,                         // 1 縦, 3 横(右)=landscapeRight, 4 横(左)
+            "imageW": frame.camera.imageResolution.width, "imageH": frame.camera.imageResolution.height,
+            "euler": [e.x, e.y, e.z], "model": UIDevice.current.model,
+            "pageStatus": arMonitor.summary().pageStatus ?? "",
+        ]
+        if let d = try? JSONSerialization.data(withJSONObject: meta, options: [.prettyPrinted]) { try? d.write(to: docs.appendingPathComponent("ar_snap_\(tag)meta.json")) }
+        arMonitor.webView.takeSnapshot(with: WKSnapshotConfiguration()) { img, _ in
+            if let d = img?.pngData() { try? d.write(to: docs.appendingPathComponent("ar_snap_\(tag)web.png")) }
         }
     }
 

@@ -41,6 +41,8 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var poseEvery = 1
     private var poseCounter = 0
     var flashThreshold = 25.0
+    var dotCalibEnabled = false     // --dot-calib: LED の点の自動校正を使う(手の 4 隅の代わり)
+    private let dots = DotCalibrator()
     private static let urlKey = "armonitor.url"
     static let defaultURL = "app://app/place/web/ar_show.html?track=/show/data/ar/dance_track&start_at=21&fps=15&pr=0.5"   // アプリに同梱のページ(ネットワーク不要)
 
@@ -98,6 +100,11 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func handle(frame: ARFrame) {
         guard enabled else { return }
         detectFlash(frame)
+        if dotCalibEnabled, dots.process(frame), let json = dots.json() {
+            lock.lock(); lastCalibrationJSON = json; let ready = pageReady; lock.unlock()
+            if ready { pushCalibration() }
+            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { try? json.write(to: docs.appendingPathComponent("dot_rays.json"), atomically: true, encoding: .utf8) }
+        }
         lock.lock()
         guard pageReady else { lock.unlock(); return }
         poseCounter += 1
@@ -216,6 +223,6 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var statusText: String {
         lock.lock(); defer { lock.unlock() }
         guard enabled else { return "" }
-        return "AR: \(pageReady ? "ページ接続" : "ページ待ち") 姿勢 \(posesSent)(捨て \(posesSkipped)) フラッシュ \(flashes)" + (messages.last.map { $0.hasPrefix("fail") ? " \($0)" : "" } ?? "")
+        return "AR: \(pageReady ? "ページ接続" : "ページ待ち") 姿勢 \(posesSent)(捨て \(posesSkipped)) フラッシュ \(flashes)" + (dotCalibEnabled ? " 点 \(dots.dotCount)/15(拾った \(dots.eventCount)、合図 \(dots.syncCount))" : "") + (messages.last.map { $0.hasPrefix("fail") ? " \($0)" : "" } ?? "")
     }
 }

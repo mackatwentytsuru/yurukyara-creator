@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>点の校正</title>
+<style>html,body{margin:0;background:#000;overflow:hidden;cursor:none}canvas{display:block;width:100vw;height:100vh}</style>
+<canvas id="c" width="5120" height="1440"></canvas>
+<script>
+// 5120×1440 のモニターの中央 2560 幅(x 1280〜3840、y 120〜1320)を LED の面 A に見立てる。緑で光らせる(白い物と色で見分ける)。
+// 1 周(約 6 秒): 面の全体を 0.4 秒緑に光らせる(合図)→ 0.4 秒消す → 点を 5×3 の格子で順に 0.2 秒ずつ(0.3 秒おき)→ 0.7 秒あける。
+// 点の番号はアプリが「合図が消えてからの時間」で決める: k = (t - 合図の終わり - 0.4) / 0.3。一部の点が画面の外でも番号がずれない。
+// 番号 = 行 * 5 + 列。位置は ar_show.js の dotFrac と同じ: x = 0.1 + 0.8 * 列 / 4、y = 0.15 + 0.7 * 行 / 2(面の中の割合、y は上から)。
+const COLS = 5, ROWS = 3, X0 = 1280, X1 = 3840, Y0 = 120, Y1 = 1320, R = 50;
+const SYNC = 400, GAP = 400, STEP = 300, ON = 200, TAIL = 700;
+const CYCLE = SYNC + GAP + COLS * ROWS * STEP + TAIL;
+const g = document.getElementById('c').getContext('2d');
+function frac(k) { const c = k % COLS, r = Math.floor(k / COLS); return [0.1 + 0.8 * c / (COLS - 1), 0.15 + 0.7 * r / (ROWS - 1)]; }
+function clear() {
+  g.fillStyle = '#000'; g.fillRect(0, 0, 5120, 1440);
+  g.strokeStyle = '#333'; g.lineWidth = 3; g.strokeRect(X0, Y0, X1 - X0, Y1 - Y0);
+}
+let last = '';
+function frame() {
+  const t = performance.now() % CYCLE;
+  let key = 'off', k = -1;
+  if (t < SYNC) key = 'sync';
+  else if (t >= SYNC + GAP) {
+    const q = t - SYNC - GAP, i = Math.floor(q / STEP);
+    if (i < COLS * ROWS && q - i * STEP < ON) { key = 'dot' + i; k = i; }
+  }
+  if (key !== last) {
+    last = key;
+    clear();
+    g.fillStyle = '#00ff00';
+    if (key === 'sync') g.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+    else if (k >= 0) { const [fx, fy] = frac(k); g.beginPath(); g.arc(X0 + fx * (X1 - X0), Y0 + fy * (Y1 - Y0), R, 0, 2 * Math.PI); g.fill(); }
+  }
+  requestAnimationFrame(frame);
+}
+clear();
+requestAnimationFrame(frame);
+</script>
