@@ -16,6 +16,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+import timecode
 from lenslib import Board, imwrite
 
 
@@ -24,20 +25,26 @@ def main():
     ap.add_argument("--face", nargs=5, action="append", required=True, metavar=("NAME", "W", "H", "PITCH_M", "SQUARE_PX"))
     ap.add_argument("--out", required=True)
     ap.add_argument("--dictionary", default="DICT_5X5_1000")
-    ap.add_argument("--margin-px", type=int, default=0)
+    ap.add_argument("--tc-height", type=int, default=0, help="コマ番号の帯のセルの一辺(画素)。0 なら帯なし。上端と下端に置き、盤はその間に収める")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     faces, offset, lines = [], 0, []
     for name, w, h, pitch, sq in a.face:
         W, H, pitch, sq = int(w), int(h), float(pitch), int(sq)
-        cols, rows = W // sq, H // sq
-        ox, oy = (W - cols * sq) // 2, (H - rows * sq) // 2
+        tc = a.tc_height
+        cols, rows = W // sq, (H - 2 * tc) // sq
+        ox, oy = (W - cols * sq) // 2, tc + ((H - 2 * tc) - rows * sq) // 2
         board = Board(cols, rows, sq, int(sq * 0.75), (ox, oy), (W, H), pitch, a.dictionary, offset)
         n_markers = len(board.cv_board().getIds())
         img = board.render()
+        entry_tc = None
+        if tc:
+            strips = timecode.make_strips(W, H, tc)
+            img = timecode.draw(img, 0, strips)
+            entry_tc = {"strips": strips, "bits": timecode.BITS, "cells": timecode.CELLS}
         imwrite(out / f"pattern_{name}.png", img)
-        faces.append({"name": name, "board": board.to_json()})
+        faces.append({"name": name, "board": board.to_json(), **({"timecode": entry_tc} if entry_tc else {})})
         lines.append(f"- 面 {name}: {W}×{H} 画素、1 画素 {pitch * 1000:.3f} mm → {W * pitch * 100:.1f}×{H * pitch * 100:.1f} cm。盤 {cols}×{rows} 四角(一辺 {sq * pitch * 100:.1f} cm)、角 {(cols - 1) * (rows - 1)} 点、マーカー ID {offset}〜{offset + n_markers - 1}")
         offset += n_markers
     (out / "faces.json").write_text(json.dumps({"faces": faces}, indent=2, ensure_ascii=False), encoding="utf-8")
