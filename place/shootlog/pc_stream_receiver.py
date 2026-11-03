@@ -17,6 +17,7 @@ from pathlib import Path
 
 HEADER = struct.Struct(">4sIIiddHHB")   # magic, jpegLen, seq, recFrame, arTs, sentMs, w, h, flags
 FLOATS = struct.Struct(">20f")           # T 16 + K 4
+AUDH = struct.Struct(">4sIIIHHdd")      # AUD1, pcmLen, seq, sampleRate, channels, bits, ptsHostSeconds, captureEpochMs
 PING = struct.Struct(">4sdI")            # PNG1, サーバー時刻 ms, 通し番号(端末へ)
 PONG = struct.Struct(">4sddI")           # PON1, 同じサーバー時刻, 端末の時刻 ms, 通し番号(端末から)
 
@@ -27,6 +28,10 @@ class Recorder:
         self.out = out
         self.mjpg = open(out / "stream.mjpg", "wb")
         self.hevc_file = None
+        self.audio_file = None
+        self.audio_index = None
+        self.audio_rows = []
+        self.audio_off = 0
         self.out_dir = out
         self.hevc_off = 0
         self.index = open(out / "index.jsonl", "w", encoding="utf-8")
@@ -78,13 +83,29 @@ class Recorder:
                                     "note": "端末の時計と PC の時計のずれ・縮小と符号化・送りを含む。ずれ自体は引けていない"},
             "interval_ms": {"median": round(gaps[len(gaps) // 2], 1) if gaps else None, "p95": round(gaps[int(len(gaps) * 0.95)], 1) if gaps else None, "max": round(gaps[-1], 1) if gaps else None},
             "latency_corrected_ms": corrected, "clock": clock,
+            "audio": self.audio_summary(),
             "keyframes": sum(1 for r in rows if r["flags"] & 4), "codec": rows[0].get("codec", "jpeg"),
             "recording_frames_in_stream": len(rec_rows), "connections": self.connections,
             "size": [rows[0]["w"], rows[0]["h"]],
         }
 
+    def audio_summary(self):
+        rows = self.audio_rows
+        if not rows:
+            return None
+        rate, ch = rows[0]["rate"], rows[0]["channels"]
+        total = sum(r["bytes"] for r in rows) / 2 / ch
+        span = rows[-1]["pts"] - rows[0]["pts"] + rows[-1]["bytes"] / 2 / ch / rate
+        seqs = [r["seq"] for r in rows]
+        return {"sample_rate": rate, "channels": ch, "seconds": round(total / rate, 2), "span_seconds": round(span, 2),
+                "missing_buffers": (seqs[-1] - seqs[0] + 1) - len(set(seqs)), "buffers": len(rows),
+                "note": "audio.raw は int16 のリトルエンディアン。ffmpeg -f s16le -ar 48000 -ac 1 -i audio.raw audio.wav で wav にできる。pts は frames.jsonl の t と同じ時計"}
+
     def close(self):
         self.mjpg.close()
+        if self.audio_file:
+            self.audio_file.close()
+            self.audio_index.close()
         if self.hevc_file:
             self.hevc_file.close()
         self.index.close()
@@ -118,6 +139,18 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec
     try:
         while True:
             magic = await reader.readexactly(4)
+            if magic == b"AUD1":
+                _, plen, aseq, rate, ch, bits, pts, cap_ms = AUDH.unpack(magic + await reader.readexactly(AUDH.size - 4))
+                pcm = await reader.readexactly(plen)
+                if rec.audio_file is None:
+                    rec.audio_file = open(rec.out_dir / "audio.raw", "wb")
+                    rec.audio_index = open(rec.out_dir / "audio_index.jsonl", "w", encoding="utf-8")
+                rec.audio_file.write(pcm)
+                row = {"seq": aseq, "rate": rate, "channels": ch, "bits": bits, "pts": pts, "sent_ms": cap_ms, "recv_ms": time.time() * 1000, "bytes": plen, "offset": rec.audio_off}
+                rec.audio_index.write(json.dumps(row) + "\n")
+                rec.audio_off += plen
+                rec.audio_rows.append(row)
+                continue
             if magic == b"PON1":
                 _, echo, phone_ms, idx = PONG.unpack(magic + await reader.readexactly(PONG.size - 4))
                 now = time.time() * 1000

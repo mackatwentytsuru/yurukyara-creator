@@ -301,6 +301,52 @@ final class PCStreamer {
         })
     }
 
+    /// 音を PC へ(AUD1)。形(ビッグエンディアン): "AUD1" / pcmLen u32 / seq u32 / sampleRate u32 / channels u16 / bits u16(16) / ptsHostSeconds f64 / captureEpochMs f64 / int16 リトルエンディアンの PCM。
+    /// 映像と同じ時計(ホスト時間)の時刻つき。映像の待ち状態(busy)とは別に、送れなければ捨てる(音は小さい)。
+    private var audioSeq: UInt32 = 0
+    func handleAudio(_ sample: CMSampleBuffer) {
+        lock.lock()
+        let on = enabled && ready
+        let c = conn
+        lock.unlock()
+        guard on, let c, let fd = CMSampleBufferGetFormatDescription(sample), let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)?.pointee else { return }
+        var blockBuffer: CMBlockBuffer?
+        var abl = AudioBufferList()
+        guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sample, bufferListSizeNeededOut: nil, bufferListOut: &abl, bufferListSize: MemoryLayout<AudioBufferList>.size,
+                                                                      blockBufferAllocator: nil, blockBufferMemoryAllocator: nil, flags: 0, blockBufferOut: &blockBuffer) == noErr,
+              let data = abl.mBuffers.mData else { return }
+        let bytes = Int(abl.mBuffers.mDataByteSize)
+        var pcm = Data()
+        if asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0 {
+            let cnt = bytes / 4
+            let ptr = data.assumingMemoryBound(to: Float.self)
+            var out = [Int16](repeating: 0, count: cnt)
+            for i in 0..<cnt { out[i] = Int16(max(-1, min(1, ptr[i])) * 32767) }
+            pcm = out.withUnsafeBufferPointer { Data(buffer: $0) }
+        } else if asbd.mBitsPerChannel == 16 {
+            pcm = Data(bytes: data, count: bytes)
+        } else {
+            return
+        }
+        let pts = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+        let captureMs = Date().timeIntervalSince1970 * 1000 - (ProcessInfo.processInfo.systemUptime - pts) * 1000
+        lock.lock(); audioSeq &+= 1; let n = audioSeq; lock.unlock()
+        var d = Data()
+        func be32(_ v: UInt32) { var x = v.bigEndian; d.append(Data(bytes: &x, count: 4)) }
+        func be16(_ v: UInt16) { var x = v.bigEndian; d.append(Data(bytes: &x, count: 2)) }
+        func bef64(_ v: Double) { var x = v.bitPattern.bigEndian; d.append(Data(bytes: &x, count: 8)) }
+        d.append(contentsOf: [0x41, 0x55, 0x44, 0x31])
+        be32(UInt32(pcm.count))
+        be32(n)
+        be32(UInt32(asbd.mSampleRate))
+        be16(UInt16(asbd.mChannelsPerFrame))
+        be16(16)
+        bef64(pts)
+        bef64(captureMs)
+        d.append(pcm)
+        c.send(content: d, completion: .contentProcessed { _ in })
+    }
+
     func summary() -> PCStreamSummary {
         lock.lock(); defer { lock.unlock() }
         let n = max(framesSent + sendFailed, 1)

@@ -4,6 +4,9 @@ import UIKit
 final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
     private let link: UELinkController
     private let pc: PCStreamer
+    private let audio: AudioCapture
+    private let setMic: (Bool, @escaping (String?) -> Void) -> Void
+    private let micSwitch = UISwitch()
     private let pcSwitch = UISwitch()
     private let pcPortField = UITextField()
     private let onChange: () -> Void
@@ -14,9 +17,11 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
     private let logView = UITextView()
     private var timer: Timer?
 
-    init(link: UELinkController, pc: PCStreamer, onChange: @escaping () -> Void) {
+    init(link: UELinkController, pc: PCStreamer, audio: AudioCapture, setMic: @escaping (Bool, @escaping (String?) -> Void) -> Void, onChange: @escaping () -> Void) {
         self.link = link
         self.pc = pc
+        self.audio = audio
+        self.setMic = setMic
         self.onChange = onChange
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
@@ -94,11 +99,16 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
         pcRow.spacing = 10
         pcPortField.widthAnchor.constraint(equalToConstant: 90).isActive = true
 
+        micSwitch.isOn = audio.running
+        micSwitch.addTarget(self, action: #selector(micSwitchChanged), for: .valueChanged)
+        let micRow = UIStackView(arrangedSubviews: [label("マイク(音を録画と作業用 PC へ送りに入れる。自動の音量調整は切る)"), micSwitch])
+        micRow.spacing = 10
+
         let hostRow = UIStackView(arrangedSubviews: [hostField, portField])
         hostRow.spacing = 8
         portField.widthAnchor.constraint(equalToConstant: 90).isActive = true
 
-        let stack = UIStackView(arrangedSubviews: [switchRow, hostRow, urlField, pcRow, buttons, logView])
+        let stack = UIStackView(arrangedSubviews: [switchRow, hostRow, urlField, pcRow, micRow, buttons, logView])
         stack.axis = .vertical
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -129,6 +139,13 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
         textField.resignFirstResponder()
         saveFields()
         return true
+    }
+
+    @objc private func micSwitchChanged() {
+        setMic(micSwitch.isOn) { [weak self] err in
+            DispatchQueue.main.async { if err != nil { self?.micSwitch.isOn = false } }
+        }
+        onChange()
     }
 
     @objc private func pcSwitchChanged() {

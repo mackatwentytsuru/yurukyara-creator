@@ -60,6 +60,15 @@ for i in range(N):
     pkt += struct.pack(">20f", *T, *K) + jpeg
     s.sendall(pkt)
     time.sleep(1 / 15)
+# 音(AUD1): 480 サンプル(10 ms)× 30 塊、3 番目の塊を欠けさせる
+AUDH = struct.Struct(">4sIIIHHdd")
+for j in range(30):
+    if j == 3:
+        continue
+    pcm = (np.sin(2 * np.pi * 440 * (np.arange(480) + 480 * j) / 48000) * 12000).astype("<i2").tobytes()
+    s.sendall(AUDH.pack(b"AUD1", len(pcm), j + 1, 48000, 1, 16, 5000.0 + 0.01 * j, time.time() * 1000) + pcm)
+    time.sleep(0.002)
+time.sleep(0.3)
 s.close()
 text = proc.communicate(timeout=30)[0]
 summ = json.loads((out / "summary.json").read_text(encoding="utf-8"))
@@ -76,5 +85,8 @@ clock = summ.get("clock") or {}
 corr = summ.get("latency_corrected_ms") or {}
 print("時計のずれ(想定 5000):", clock.get("offset_ms"), "補正した遅れの中央(想定 20 ms 前後):", corr.get("median"))
 ok = ok and abs((clock.get("offset_ms") or 0) - OFFSET) < 50 and abs((corr.get("median") or 999) - 20) < 40
+aud = summ.get("audio") or {}
+print("音:", aud)
+ok = ok and aud.get("buffers") == 29 and aud.get("missing_buffers") == 1 and abs(aud.get("seconds", 0) - 0.29) < 0.01
 print("合格" if ok else "不合格")
 sys.exit(0 if ok else 1)

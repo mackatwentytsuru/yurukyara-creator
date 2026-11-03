@@ -41,6 +41,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let formatControl = UISegmentedControl()
     private let ueLink = UELinkController()
     private let pcStream = PCStreamer()
+    private let audio = AudioCapture()
     private let ueButton = UIButton(type: .system)
     private var crosshair: UIView?
     private let faceControl = UISegmentedControl(items: ["LED 1面", "LED 3面(A・B・C)"])
@@ -521,6 +522,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             let docs = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let dir = docs.appendingPathComponent("shoots/\(stamp.string(from: Date()))", isDirectory: true)
             let rec = try ShootRecorder(dir: dir, nominalFps: chosenFormat?.framesPerSecond ?? 30)
+            rec.withAudio = audio.running
             lock.lock()
             recorder = rec
             recordStartDate = Date()
@@ -558,6 +560,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let expEnd = currentExposureInfo()
         let ueSummary: UELinkSummary? = ueLink.enabled ? ueLink.summary() : nil
         let pcSummary: PCStreamSummary? = pcStream.enabled ? pcStream.summary() : nil
+        let audioSummary: AudioSummary? = audio.running ? audio.summary(note: "録画に入れた塊 \(rec.audioBuffersWritten)、捨てた塊 \(rec.audioBuffersDropped)、最初の音は映像の \(rec.audioFirstRelative.map { String(format: "%.3f", $0) } ?? "-") 秒") : nil
         frameQueue.async { [weak self] in
             rec.finish { stats in
                 guard let self else { return }
@@ -571,6 +574,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                     calibration: cal, events: evs, stats: stats, conventions: ShootMeta.conventionText
                 )
                 meta.pcStream = pcSummary
+                meta.audio = audioSummary
                 let enc = JSONEncoder()
                 enc.outputFormatting = [.prettyPrinted, .sortedKeys]
                 try? enc.encode(meta).write(to: rec.dir.appendingPathComponent("meta.json"))
@@ -586,7 +590,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     // MARK: - UE モニター・熱
 
     @objc private func ueTapped() {
-        let panel = UELinkPanelViewController(link: ueLink, pc: pcStream) { [weak self] in
+        let panel = UELinkPanelViewController(link: ueLink, pc: pcStream, audio: audio, setMic: { [weak self] on, done in self?.setMic(on, done) }) { [weak self] in
             guard let self else { return }
             self.crosshair?.isHidden = self.ueLink.enabled
             self.refreshUI()
@@ -596,6 +600,32 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
 
     @objc private func thermalChanged() {
         logEvent("thermal:\(UELinkController.thermalName(ProcessInfo.processInfo.thermalState))")
+    }
+
+    /// マイクの入り切り。入れると、録画の音声トラックと PC への音(AUD1)に同じ時計の時刻つきで入る(録画の途中で入れても、次の録画から)。
+    private func setMic(_ on: Bool, _ done: @escaping (String?) -> Void) {
+        if !on {
+            audio.stop()
+            audio.onSample = nil
+            DispatchQueue.main.async { self.refreshUI() }
+            done(nil)
+            return
+        }
+        audio.onSample = { [weak self] sample in
+            guard let self else { return }
+            self.pcStream.handleAudio(sample)
+            self.frameQueue.async {
+                self.lock.lock(); let r = self.recorder; self.lock.unlock()
+                r?.appendAudio(sample)
+            }
+        }
+        audio.start { [weak self] err in
+            DispatchQueue.main.async {
+                if let err { self?.notice = err }
+                self?.refreshUI()
+            }
+            done(err)
+        }
     }
 
     /// 実機の調べ(--probe-multicam): (1) ARKit が動いたまま、超広角・望遠を別の仕組み(AVCaptureMultiCamSession)で動かすと、ARKit のコマが続くか。
@@ -639,6 +669,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let a = ProcessInfo.processInfo.arguments
         func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
         if a.contains("--probe-multicam") { runMultiCamProbe(); return }
+        if a.contains("--mic-on") { setMic(true) { _ in } }
         if a.contains("--pc-on") {
             pcStream.codec = value("--pc-codec") ?? "jpeg"
             if let w = Int(value("--pc-width") ?? "") { pcStream.width = w }
@@ -803,7 +834,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             let pcs = pcStream.statusText
             statusLabel.text = String(format: " %02d:%02d  コマ %d  追跡 %@  白飛び %.1f%% ", sec / 60, sec % 60, rec.currentFrameCount, tracking, clip) + (pcs.isEmpty ? "" : "\n \(pcs) ")
         } else {
-            let ue = [ueLink.statusText, pcStream.statusText].filter { !$0.isEmpty }.joined(separator: "\n ")
+            let ue = [ueLink.statusText, pcStream.statusText, audio.statusText].filter { !$0.isEmpty }.joined(separator: "\n ")
             statusLabel.text = " \(notice ?? String(format: "追跡 %@  映像 %d コマ  白飛び %.1f%%", tracking, previewN, clip))" + (ue.isEmpty ? " " : "\n \(ue) ")
         }
     }

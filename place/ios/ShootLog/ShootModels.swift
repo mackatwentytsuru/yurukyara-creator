@@ -149,6 +149,7 @@ struct ShootMeta: Codable {
     var events: [ShootEvent]
     var stats: ShootStats
     var conventions: [String: String]
+    var audio: AudioSummary? = nil         // マイクを入れた撮影なら、音の形・最大の音量・最初の音の時刻
     var pcStream: PCStreamSummary? = nil   // 「作業用 PC へ映像」を使った撮影なら、送った数・捨てた数・符号化の時間・熱
 
     static let conventionText: [String: String] = [

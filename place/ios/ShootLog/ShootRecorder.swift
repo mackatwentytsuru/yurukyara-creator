@@ -11,6 +11,11 @@ final class ShootRecorder {
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
+    private var audioInput: AVAssetWriterInput?
+    private(set) var audioBuffersWritten = 0
+    private(set) var audioBuffersDropped = 0
+    private(set) var audioFirstRelative: Double?
+    var withAudio = false
     private let framesHandle: FileHandle
     private var buffer = ""
     private var t0: Double?
@@ -58,6 +63,16 @@ final class ShootRecorder {
                 return
             }
             w.add(inp)
+            if withAudio {
+                // 音は 24 bit のリニア PCM(足りなければ 16 bit)。映像と同じ時計(t0 からの相対)で書く
+                for bits in [24, 16] {
+                    let aset: [String: Any] = [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: bits,
+                                               AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false]
+                    let ain = AVAssetWriterInput(mediaType: .audio, outputSettings: aset)
+                    ain.expectsMediaDataInRealTime = true
+                    if w.canAdd(ain) { w.add(ain); audioInput = ain; break }
+                }
+            }
             adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: inp, sourcePixelBufferAttributes: nil)
             guard w.startWriting() else {
                 writerError = w.error?.localizedDescription ?? "書き始められない"
@@ -102,6 +117,25 @@ final class ShootRecorder {
         if buffer.utf8.count > 64_000 { flush() }
     }
 
+    /// マイクの音(ホスト時間の時刻つき)を、映像の最初のコマの時刻 t0 からの相対の時刻にして書く。最初のコマより前の音は捨てる。
+    func appendAudio(_ sample: CMSampleBuffer) {
+        guard !finished, let t0, let writer, let ain = audioInput, writer.status == .writing else { return }
+        var info = CMSampleTimingInfo()
+        guard CMSampleBufferGetSampleTimingInfo(sample, at: 0, timingInfoOut: &info) == noErr else { return }
+        let rel = info.presentationTimeStamp.seconds - t0
+        guard rel >= 0 else { audioBuffersDropped += 1; return }
+        guard ain.isReadyForMoreMediaData else { audioBuffersDropped += 1; return }
+        var timing = CMSampleTimingInfo(duration: info.duration, presentationTimeStamp: CMTime(seconds: rel, preferredTimescale: 48000), decodeTimeStamp: .invalid)
+        var copy: CMSampleBuffer?
+        guard CMSampleBufferCreateCopyWithNewTiming(allocator: kCFAllocatorDefault, sampleBuffer: sample, sampleTimingEntryCount: 1, sampleTimingArray: &timing, sampleBufferOut: &copy) == noErr, let copy else { return }
+        if ain.append(copy) {
+            audioBuffersWritten += 1
+            if audioFirstRelative == nil { audioFirstRelative = rel }
+        } else {
+            audioBuffersDropped += 1
+        }
+    }
+
     private func flush() {
         guard !buffer.isEmpty else { return }
         framesHandle.write(Data(buffer.utf8))
@@ -132,6 +166,7 @@ final class ShootRecorder {
             return
         }
         input.markAsFinished()
+        audioInput?.markAsFinished()
         writer.finishWriting {
             if writer.status != .completed, self.writerError == nil {
                 self.writerError = writer.error?.localizedDescription ?? "書き終わりに失敗"
