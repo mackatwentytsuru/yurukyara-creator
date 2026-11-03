@@ -15,6 +15,8 @@ description: 絵 1 枚から、ブラウザで話すキャラを作る入口の�
 
 できないことをできると言わない。測った数字と、確かめていないことを、最後に分けて報告する。
 
+途中のひとことも報告も、使う人の言葉で書く(日本語で頼まれたら日本語)。
+
 ## 1. 聞くことは 1 回にまとめる
 
 最初に次の 3 つだけを聞く。答えがなければ、( )の既定で進めて、報告に書く。
@@ -67,7 +69,7 @@ python creator/pipeline/j01_judge.py <元の絵> <作業フォルダ>/check/brow
 ```bash
 python creator/pipeline/pk04_install.py <pack> <id> --name <表示の名前> --persona <性格の文.md>
 cd web && npm run build
-PORT=8799 npm run server
+PORT=8799 SHOP_DATA_FILE=../creator/setup/shop_empty.json npm run server
 node creator/pipeline/web_talk_check.mjs --port 8799 --character <id> --out <作業フォルダ>/web
 ```
 
@@ -76,6 +78,8 @@ node creator/pipeline/web_talk_check.mjs --port 8799 --character <id> --out <作
 サーバーは、自分で起動した番号(PID)だけを止める。`claude` や `node` を名前で止めない(ほかの仕事まで止まる)。
 
 性格の文(`persona.md`)には、キャラの話し方と、分からないことはスタッフに渡すことを書く。お店の情報を推測で書かない。
+
+**お店のデータ**: `SHOP_DATA_FILE` を付けないと、見本の店(LED のあるショーの店)のデータで答えてしまう(試験で、パンのキャラが席の話をした)。データをもらっていないときは、上のように `creator/setup/shop_empty.json` を使う。知らないことを聞かれると、スタッフに渡す。データをもらったら、`web/server/shop/sample.json` と同じ形の JSON を作り、`SHOP_DATA_FILE` で渡す(手順は `shop-guide` スキル)。もらっていない営業時間や料金を作らない。
 
 動画に残すなら `node creator/pipeline/web_talk_record.mjs --port 8799 --character <id> --out <出力.webm>`(字幕ごとの画面と声。話す言葉はその場の返事)。作る様子の早回しは `python creator/skilltest/timelapse.py <作業フォルダ> <元の絵> <出力.mp4>`。
 
