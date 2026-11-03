@@ -54,6 +54,9 @@ targets:
       - Shared
       - path: ue_link_defaults.json
         optional: true
+      - path: ARSite
+        type: folder
+        optional: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.hackathon.shootlog
