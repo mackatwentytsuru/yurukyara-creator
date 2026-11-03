@@ -154,6 +154,10 @@ final class DotCalibrator {
         return best.map { ($0.x, $0.y) }
     }
 
+    func reset() {
+        rays.removeAll(); syncEnd = nil; inSync = false; inEvent = false; frames = []; eventCount = 0; syncCount = 0
+    }
+
     /// ページの onCalibration に渡す形。
     func json() -> String? {
         let now = lastTs

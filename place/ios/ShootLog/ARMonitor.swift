@@ -43,6 +43,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var flashThreshold = 25.0
     var dotCalibEnabled = true      // LED の点の自動校正(手の 4 隅の代わり)。点の映像が流れなければ何もしない
     private let dots = DotCalibrator()
+    private var frameQueueSafeReset = false   // やり直しは ARSession の列で行う
     private static let urlKey = "armonitor.url.v2"
     private var launchURL: String?      // 起動の引数(試験用)の URL。保存しない
     /// アプリに同梱のページ(ネットワーク不要)。iPad は熱に余裕があるので 30 fps・解像度そのまま(実測で nominal)、iPhone は 15 fps・半分。dots=led3 は会場の 3 面の点の校正。
@@ -108,6 +109,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func handle(frame: ARFrame) {
         guard enabled else { return }
         detectFlash(frame)
+        if frameQueueSafeReset { frameQueueSafeReset = false; dots.reset() }
         if dotCalibEnabled, dots.process(frame), let json = dots.json() {
             lock.lock(); lastCalibrationJSON = json; let ready = pageReady; lock.unlock()
             if ready { pushCalibration() }
@@ -160,6 +162,22 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         if !above { baseline = baseline * 0.9 + mean * 0.1 }
         wasAbove = above
     }
+
+    /// 点の校正をやり直す
+    func resetDots() {
+        lock.lock(); lastCalibrationJSON = nil; lock.unlock()
+        frameQueueSafeReset = true
+        webView.evaluateJavaScript("window.__arhost&&window.__arhost.onCalibReset&&window.__arhost.onCalibReset()", completionHandler: nil)
+    }
+
+    /// ページの status の中身(校正の値など)
+    var pageState: [String: Any]? {
+        lock.lock(); defer { lock.unlock() }
+        guard let s = pageStatus, let d = s.data(using: .utf8) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
+    }
+
+    var dotCounts: (dots: Int, total: Int, syncs: Int) { (dots.dotCount, dots.total, dots.syncCount) }
 
     /// 手で開始(ページのボタンは iPad のボタンに隠れるうえ、タッチを受けないので、アプリのボタンから呼ぶ)
     func startNow() {

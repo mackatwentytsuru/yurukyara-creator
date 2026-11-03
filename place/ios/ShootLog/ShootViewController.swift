@@ -718,6 +718,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let a = ProcessInfo.processInfo.arguments
         func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
         if a.contains("--probe-multicam") { runMultiCamProbe(); return }
+        if a.contains("--probe-lenses") { runLensProbe(); return }
         if a.contains("--mic-on") { setMic(true) { _ in } }
         if a.contains("--ar-on") {
             if let thr = Double(value("--flash-thr") ?? "") { arMonitor.flashThreshold = thr }
@@ -831,6 +832,21 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         if let d = try? JSONSerialization.data(withJSONObject: meta, options: [.prettyPrinted]) { try? d.write(to: docs.appendingPathComponent("ar_snap_\(tag)meta.json")) }
         arMonitor.webView.takeSnapshot(with: WKSnapshotConfiguration()) { img, _ in
             if let d = img?.pngData() { try? d.write(to: docs.appendingPathComponent("ar_snap_\(tag)web.png")) }
+        }
+    }
+
+    private func runLensProbe() {
+        let probe = LensProbe(session: sceneView.session, latestFrame: { [weak self] in
+            guard let self else { return nil }
+            self.lock.lock(); defer { self.lock.unlock() }
+            return self.latestFrame
+        }, frameCount: { [weak self] in self?.frameTick ?? 0 })
+        DispatchQueue.global(qos: .userInitiated).async {
+            probe.run { result in
+                guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+                      let d = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted]) else { return }
+                try? d.write(to: docs.appendingPathComponent("lens_probe.json"))
+            }
         }
     }
 

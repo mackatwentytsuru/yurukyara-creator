@@ -164,6 +164,7 @@ function simpleMotion(t, walking) {         // 踊りが無いとき: 歩く・�
 let T_world_from_led = null, alignInfo = '未校正';
 // 点の校正: 外れたレイを除きながら解く。良い解(10 点以上・残差 1.5 cm 以下)だけを採り、悪い解で上書きしない(動かしている間に崩れないように)
 let lastGoodDots = null;
+let dotState = null;     // 点の校正の今の値(殻の画面へ渡す)
 function solveDots(corners) {
   let use = corners.slice(), r = null;
   for (let it = 0; it < 4; it++) {
@@ -328,6 +329,7 @@ host.onCalibration = (json) => {
     if (anchorByFlash) { anchorTs = null; anchorByFlash = false; info(''); }   // 点の映像の緑の合図で始まってしまった分を取り消す(本物のフラッシュは点のあと)
     const r = solveDots(corners);
     const all = new Set(corners.map((c) => c.dot)).size, total = dotTotal;
+    dotState = { n: r ? r.nDots : all, total, rms: r ? r.rms_cm : null, faces: r?.faces ?? null, good: Boolean(r && r.nDots >= 10 && r.rms_cm <= dotRms), held: false };
     if (r && r.nDots >= 10 && r.rms_cm <= dotRms) {
       lastGoodDots = r;
       T_world_from_led = r.T;
@@ -336,6 +338,7 @@ host.onCalibration = (json) => {
       updateLedViz();
       if (testCenter && anchorTs === null) anchorTs = lastTs;   // 自宅のテスト: 校正ができたらすぐ出す
     } else if (lastGoodDots) {
+      dotState.held = true;
       alignInfo = `前の校正を保持(点 ${lastGoodDots.nDots}/${total} 残差 ${lastGoodDots.rms_cm.toFixed(1)} cm)。今は 点 ${r ? r.nDots : all} 残差 ${r ? r.rms_cm.toFixed(1) : '-'} cm`;
     } else {
       alignInfo = `校正中(点 ${all}/${total}${r ? ` 残差 ${r.rms_cm.toFixed(1)} cm` : ''})`;
@@ -346,6 +349,7 @@ host.onCalibration = (json) => {
   if (r) { T_world_from_led = r.T; alignInfo = `面 A ${r.n} 隅 残差 ${r.rms_cm.toFixed(1)} cm yaw ${r.yaw_deg.toFixed(1)}°`; updateLedViz(); }
   else alignInfo = `校正が足りない(面 A の隅 ${corners.filter((c) => c.face === 'A').length}/4)`;
 };
+host.onCalibReset = () => { lastGoodDots = null; dotState = null; T_world_from_led = null; ledViz.visible = false; alignInfo = '未校正'; };
 host.onManualStart = () => { anchorTs = lastTs; info('手で開始'); };
 host.onFlash = (ts) => {
   if (anchorTs === null) { anchorTs = ts; anchorByFlash = true; info('フラッシュで開始'); }   // 最初の 1 回だけ(同期用の後のフラッシュでずらさない。やり直しは「やり直し」ボタン)
@@ -370,7 +374,7 @@ function update() {
     }
   }
   holder.visible = shown;
-  if (frames % 60 === 0 && window.webkit?.messageHandlers?.arhost) window.webkit.messageHandlers.arhost.postMessage({ type: 'status', frames, visible: shown, showT: t, align: alignInfo, dance: Boolean(dance), vrm: Boolean(vrm), pos: holder.position.toArray().map((v) => Math.round(v * 100) / 100) });
+  if (frames % 15 === 0 && window.webkit?.messageHandlers?.arhost) window.webkit.messageHandlers.arhost.postMessage({ type: 'status', frames, visible: shown, showT: t, align: alignInfo, dots: dotState, dance: Boolean(dance), vrm: Boolean(vrm), pos: holder.position.toArray().map((v) => Math.round(v * 100) / 100) });
   if (frames % 15 === 0) {
     hud.textContent = `${alignInfo}  ${t === null ? '合図待ち(フラッシュか「いま開始」)' : `ショー ${t.toFixed(1)} 秒 ${shown ? 'キャラ表示' : '(舞台の出番の外)'}`}  ${infoText}`;
   }

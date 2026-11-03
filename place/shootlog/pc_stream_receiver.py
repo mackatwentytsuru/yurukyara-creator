@@ -26,6 +26,7 @@ class Recorder:
     def __init__(self, out: Path):
         out.mkdir(parents=True, exist_ok=True)
         self.out = out
+        self.closed = False
         self.mjpg = open(out / "stream.mjpg", "wb")
         self.hevc_file = None
         self.audio_file = None
@@ -109,6 +110,9 @@ class Recorder:
         (self.out_dir / "summary.json").write_text(json.dumps(self.summary(), ensure_ascii=False, indent=1), encoding="utf-8")
 
     def close(self):
+        if self.closed:
+            return
+        self.closed = True
         self.mjpg.close()
         if self.audio_file:
             self.audio_file.close()
@@ -186,12 +190,35 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec
 
 
 async def main_async(a):
-    rec = Recorder(Path(a.out))
-    server = await asyncio.start_server(lambda r, w: handle(r, w, rec), a.bind, a.port)
+    # --split-takes: つなぐごとに take_001、take_002 … に分ける(アプリの録画ボタンが送りの開始・終了になる)
+    state = {"rec": Recorder(Path(a.out) / "take_001") if a.split_takes else Recorder(Path(a.out)), "n": 1, "used": False}
+
+    async def on_connect(r, w):
+        if a.split_takes:
+            if state["used"]:
+                state["rec"].close()
+                state["n"] += 1
+                state["rec"] = Recorder(Path(a.out) / f"take_{state['n']:03d}")
+            state["used"] = True
+            print("テイク:", state["rec"].out, flush=True)
+        rec = state["rec"]
+        try:
+            await handle(r, w, rec)
+        finally:
+            if a.split_takes:
+                rec.checkpoint()
+
+    server = await asyncio.start_server(on_connect, a.bind, a.port)
+
     async def status_loop():
         last = (0, time.time())
         while True:
             await asyncio.sleep(5)
+            rec = state["rec"]
+            if rec.closed:
+                continue
+            if last[0] > len(rec.rows):
+                last = (0, time.time())
             n, now = len(rec.rows), time.time()
             fps = (n - last[0]) / (now - last[1]) if now > last[1] else 0
             seqs = [r["seq"] for r in rec.rows[-300:]]
@@ -216,8 +243,8 @@ async def main_async(a):
             await asyncio.Event().wait()
     finally:
         server.close()
-        rec.close()
-        print(json.dumps(rec.summary(), ensure_ascii=False))
+        state["rec"].close()
+        print(json.dumps(state["rec"].summary(), ensure_ascii=False))
 
 
 def main():
@@ -226,6 +253,7 @@ def main():
     ap.add_argument("--port", type=int, default=9100)
     ap.add_argument("--bind", default="0.0.0.0")
     ap.add_argument("--seconds", type=float, default=0)
+    ap.add_argument("--split-takes", action="store_true", help="つなぐごとに take_001… に分ける")
     a = ap.parse_args()
     try:
         asyncio.run(main_async(a))
