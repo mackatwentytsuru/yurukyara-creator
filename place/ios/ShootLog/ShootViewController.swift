@@ -71,6 +71,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private var sentFps = 0.0
     private var uiDemo = false
     private var uiLog: FileHandle?
+    private var lens = 0                 // 0 広角(ARKit)、1 超広角(ARKit なし)
+    private var ultraCut: UltraWideCut?
+    private var ultraElapsedFrames = 0
     private var ultraWide: UltraWideCut?
     private let backdropLayer = CALayer()    // 映像の外の帯(黒)
     private let ueButton = UIButton(type: .system)
@@ -755,6 +758,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         // 本番(引数なし): AR モニターを最初から入れる
         if !a.contains(where: { $0.hasPrefix("--") }) { arMonitor.setEnabled(true) }
         if a.contains("--ui-sweep") { runUISweep(); return }
+        if a.contains("--ui-lens-test") { runLensSwitchTest(); return }
         if let sec = Double(value("--ui-roundtrip") ?? "") { runRoundTrip(host: value("--ui-host") ?? macHost, seconds: sec, arOn: a.contains("--ar-on"), url: value("--ar-url")); return }
         if a.contains("--probe-multicam") { runMultiCamProbe(); return }
         if a.contains("--probe-lenses") { runLensProbe(); return }
@@ -951,6 +955,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         }
         act.setCutName = { [weak self] n in self?.cutName = n }
         act.setGuides = { [weak self] on in self?.guidesOn = on }
+        act.setLens = { [weak self] i in self?.switchLens(i) }
         act.nextCut = { [weak self] in
             guard let self else { return }
             self.cutNumber += 1
@@ -1002,7 +1007,74 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         refreshUI()
     }
 
+    /// レンズの切り替え(カットごと)。ARKit は超広角と同時に動かないので止める。戻すときはやり直しなしで動かす(校正の世界を保つ)。
+    private func switchLens(_ i: Int) {
+        guard phase == .idle, i != lens else { return }
+        lens = i
+        if i == 1 {
+            arMonitor.webView.isHidden = true
+            sceneView.session.pause()
+            let cut = UltraWideCut()
+            cut.onSample = { [weak self] sb in self?.previewLayer.enqueue(sb) }
+            do {
+                try cut.startPreview(correction: true, iso: 0)
+                ultraCut = cut
+                logEvent("lens:ultrawide")
+            } catch {
+                logEvent("lens:error:\(error.localizedDescription)")
+                saveNote = "超広角を動かせません"
+                lens = 0
+                runSession(reset: false)
+            }
+        } else {
+            ultraCut?.stopPreview()
+            ultraCut = nil
+            runSession(reset: false)
+            arMonitor.webView.isHidden = arHidden || !arMonitor.enabled
+            logEvent("lens:wide")
+        }
+        refreshUI()
+    }
+
+    private func startUltraTake() {
+        guard let cut = ultraCut else { return }
+        saveNote = nil
+        do {
+            try cut.startWriting(name: "take\(takeNumber)_\(cutName.replacingOccurrences(of: "/", with: "_"))")
+            takeStart = Date()
+            takeElapsed = 0
+            phase = .recording
+            logEvent("take:start:\(takeNumber):ultrawide")
+        } catch {
+            saveNote = "超広角の録画を始められません"
+        }
+        refreshUI()
+    }
+
+    private func stopUltraTake() {
+        guard phase == .recording, let cut = ultraCut else { return }
+        phase = .stopping
+        takeElapsed = takeStart.map { Date().timeIntervalSince($0) } ?? 0
+        refreshUI()
+        cut.stopWriting { [weak self] info in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let frames = info["frames"] as? Int ?? 0
+                let dropped = info["dropped"] as? Int ?? 0
+                let saved = (info["writer_status"] as? Int) == AVAssetWriter.Status.completed.rawValue && frames > 0
+                self.takes.append(TakeInfo(number: self.takeNumber, cut: self.cutName, lens: "超広角", seconds: self.takeElapsed, sent: frames, macFrames: frames, lost: dropped,
+                                           thermal: UELinkController.thermalName(ProcessInfo.processInfo.thermalState), saved: saved))
+                Self.saveTakes(self.takes)
+                self.saveNote = saved ? "iPad に保存済み \(frames) コマ(テイク \(self.takeNumber))" : "保存できませんでした"
+                self.takeNumber += 1
+                self.phase = .idle
+                self.refreshUI()
+            }
+        }
+    }
+
     private func startTake() {
+        if lens == 1 { startUltraTake(); return }
         guard phase == .idle, !macHost.isEmpty else {
             if macHost.isEmpty { step = .prepare; refreshUI() }
             return
@@ -1024,6 +1096,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     }
 
     private func stopTake() {
+        if lens == 1 { stopUltraTake(); return }
         guard phase == .recording else { return }
         phase = .stopping
         takeElapsed = takeStart.map { Date().timeIntervalSince($0) } ?? 0
@@ -1068,7 +1141,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                 sentFps = Double(st.sent - lastSent.n) / (now - lastSent.t)
                 lastSent = (st.sent, now)
             }
-            let late = (st.ackAge ?? 0) > 5 || !st.connected
+            let sinceStart = takeStart.map { Date().timeIntervalSince($0) } ?? 0
+            let late = (st.ackAge ?? sinceStart) > 5 || !st.connected
             if phase == .recording {
                 if late && !inGap { ackGaps += 1 }
                 inGap = late
@@ -1116,27 +1190,32 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         var macText = probeOK ? "OK" : "未確認"
         if phase == .connecting { macLamp = .yellow; macText = "接続中" }
         if recording {
-            let age = st.ackAge ?? 99
+            let sinceStart = takeStart.map { Date().timeIntervalSince($0) } ?? 0
+            let age = st.ackAge ?? sinceStart       // 最初の応答が届くまでは、始めてからの秒で見る
             macLamp = !st.connected || age > 5 ? .red : (age > 2.5 ? .yellow : .green)
             macText = macLamp == .red ? "停止" : "保存中"
         }
+        if lens == 1 { macLamp = .off; macText = "使わない" }
+        s.lens = lens
+        if lens == 1, let cut = ultraCut { s.macFramesOverride = phase == .recording ? cut.writtenFrames : nil }
+        let trackLamp: Lamp = lens == 1 ? .off : (trackOK ? .green : .yellow)
         s.lamps = [
-            LampInfo(name: "追跡", lamp: trackOK ? .green : .yellow, text: trackOK ? "OK" : "乱れ"),
+            LampInfo(name: "追跡", lamp: trackLamp, text: lens == 1 ? "なし" : (trackOK ? "OK" : "乱れ")),
             LampInfo(name: "Mac", lamp: macLamp, text: macText),
             LampInfo(name: "熱", lamp: thLamp, text: thermalName),
             LampInfo(name: "電池", lamp: batLamp, text: "\(batPct)%\(charging ? "+" : "")"),
             LampInfo(name: "校正", lamp: c.good ? .green : (c.held ? .yellow : .off), text: c.good || c.held ? "\(c.n)/\(c.total)" : "まだ"),
         ]
         // 悪い知らせ(録画中は保存を最優先)
-        if recording && macLamp == .red { s.alarm = "Mac に保存できていません" }
-        else if recording && !trackOK { s.alarm = "位置の追跡が乱れています" }
+        if recording && lens == 0 && macLamp == .red { s.alarm = "Mac に保存できていません" }
+        else if recording && lens == 0 && !trackOK { s.alarm = "位置の追跡が乱れています" }
         else if thermalState == .critical { s.alarm = "本体が熱すぎます。休ませる" }
         else if recording, let gb = macFreeGB, gb < 5 { s.alarm = "Mac の空きが少ない(\(gb) GB)" }
         else if !charging && batPct <= 10 { s.alarm = "電池が少ない(\(batPct)%)" }
 
         s.elapsed = takeStart.map { recording ? Date().timeIntervalSince($0) : takeElapsed } ?? 0
-        s.macFrames = st.macFrames
-        s.lost = st.skippedBusy + st.sendFailed
+        s.macFrames = s.macFramesOverride ?? st.macFrames
+        s.lost = lens == 1 ? 0 : st.skippedBusy + st.sendFailed
         s.sentFps = sentFps
         s.note = saveNote
         s.host = macHost
@@ -1245,6 +1324,50 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let f = hud.pictureFrame
         let info: [String: Any] = ["name": name, "bounds": [view.bounds.width, view.bounds.height], "picture": [f.minX, f.minY, f.width, f.height], "targets": hud.targets()]
         if let u = docsFile("ui_\(name).json"), let d = try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted]) { try? d.write(to: u) }
+    }
+
+    /// レンズの切り替えの試験: 広角 → 超広角(録画 5 秒)→ 広角。位置の飛びと時間を ui_lens.json へ。
+    private func runLensSwitchTest() {
+        var out: [String: Any] = [:]
+        func pose() -> [Double]? { currentFrame().map { let t = $0.camera.transform.columns.3; return [Double(t.x), Double(t.y), Double(t.z)] } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            guard let self else { return }
+            out["pose_before"] = pose() ?? []
+            let t0 = Date()
+            self.switchLens(1)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard let self else { return }
+                self.step = .shoot
+                self.refreshUI()
+                out["record_pressed"] = self.hud.fire("right")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                    guard let self else { return }
+                    self.refreshUI()
+                    out["stop_pressed"] = self.hud.fire("right")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                        guard let self else { return }
+                        out["note"] = self.saveNote ?? ""
+                        let t1 = Date()
+                        self.switchLens(0)
+                        func waitNormal(_ tries: Int) {
+                            self.lock.lock(); let tr = self.lastTracking; self.lock.unlock()
+                            if tr == "normal" && (self.currentFrame()?.timestamp ?? 0) > 0 && tries > 2 || tries > 80 {
+                                out["back_normal_s"] = Date().timeIntervalSince(t1)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                    out["pose_after"] = pose() ?? []
+                                    out["total_s"] = Date().timeIntervalSince(t0)
+                                    out["takes"] = self.takes.suffix(1).map { ["lens": $0.lens, "frames": $0.macFrames, "seconds": $0.seconds, "saved": $0.saved, "lost": $0.lost] }
+                                    if let u = self.docsFile("ui_lens.json"), let d = try? JSONSerialization.data(withJSONObject: out, options: [.prettyPrinted]) { try? d.write(to: u) }
+                                }
+                                return
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { waitNormal(tries + 1) }
+                        }
+                        waitNormal(0)
+                    }
+                }
+            }
+        }
     }
 
     /// 録画の往復の試験: 本物の経路(HUD のボタン)で、つなぎの試し → 録画 → 決めた秒 → 停止。状態を毎回 ui_log.jsonl へ。

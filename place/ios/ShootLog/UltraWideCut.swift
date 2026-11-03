@@ -17,6 +17,10 @@ final class UltraWideCut: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     private var info: [String: Any] = [:]
     private var url: URL?
     private(set) var running = false
+    private var writing = false
+    var onSample: ((CMSampleBuffer) -> Void)?    // 画面に映す
+    private var name = ""
+    private var kbps = 50000
 
     /// 超広角の 4K 30 fps の形式(16:9 で画角が最大)を選ぶ
     private static func bestFormat(_ d: AVCaptureDevice) -> AVCaptureDevice.Format? {
@@ -26,16 +30,17 @@ final class UltraWideCut: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         }.max { $0.videoFieldOfView < $1.videoFieldOfView }
     }
 
-    /// 始める。correction は歪みの補正(既定 true = iOS が直してから出す)。iso が 0 なら露出は自動。
+    /// 始めて、すぐ録画する(試験用)
     func start(name: String, correction: Bool, iso: Float, kbps: Int = 50000) throws {
+        try startPreview(correction: correction, iso: iso)
+        try startWriting(name: name, kbps: kbps)
+    }
+
+    /// カメラを動かす(録画はまだ)。correction は歪みの補正(既定 true = iOS が直してから出す)。iso が 0 なら露出は自動。
+    func startPreview(correction: Bool, iso: Float) throws {
         guard let d = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back), let format = Self.bestFormat(d) else {
             throw NSError(domain: "UltraWideCut", code: 1, userInfo: [NSLocalizedDescriptionKey: "超広角の 4K 30 fps が無い"])
         }
-        let docs = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("ultrawide", isDirectory: true)
-        try FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
-        let url = docs.appendingPathComponent("\(name).mov")
-        try? FileManager.default.removeItem(at: url)
-        self.url = url
         session.beginConfiguration()
         session.sessionPreset = .inputPriority
         let camInput = try AVCaptureDeviceInput(device: d)
@@ -62,23 +67,44 @@ final class UltraWideCut: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             if c.isVideoOrientationSupported { c.videoOrientation = .landscapeRight }
         }
         session.commitConfiguration()
-        let w = try AVAssetWriter(outputURL: url, fileType: .mov)
-        let settings: [String: Any] = [AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: 3840, AVVideoHeightKey: 2160,
-                                       AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: kbps * 1000]]
-        let vi = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
-        vi.expectsMediaDataInRealTime = true
-        w.add(vi)
-        writer = w
-        input = vi
-        info = ["name": name, "fov_deg": Double(format.videoFieldOfView), "correction_requested": correction,
+        info = ["fov_deg": Double(format.videoFieldOfView), "correction_requested": correction,
                 "correction_supported": d.isGeometricDistortionCorrectionSupported, "correction_enabled": d.isGeometricDistortionCorrectionEnabled,
                 "iso": Double(iso), "k_delivery": kDelivery, "size": [3840, 2160]]
         running = true
         session.startRunning()
     }
 
+    /// 録画を始める
+    func startWriting(name: String, kbps: Int = 50000) throws {
+        let docs = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("ultrawide", isDirectory: true)
+        try FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+        let url = docs.appendingPathComponent("\(name).mov")
+        try? FileManager.default.removeItem(at: url)
+        let w = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let settings: [String: Any] = [AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: 3840, AVVideoHeightKey: 2160,
+                                       AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: kbps * 1000]]
+        let vi = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
+        vi.expectsMediaDataInRealTime = true
+        w.add(vi)
+        queue.sync {
+            self.url = url
+            self.name = name
+            self.writer = w
+            self.input = vi
+            self.started = false
+            self.frames = 0
+            self.dropped = 0
+            self.firstK = nil
+            self.firstPts = nil
+            self.lastPts = nil
+            self.info["name"] = name
+            self.writing = true
+        }
+    }
+
     func captureOutput(_ output: AVCaptureOutput, didOutput sb: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard running, let w = writer, let vi = input else { return }
+        onSample?(sb)
+        guard running, writing, let w = writer, let vi = input else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(sb)
         if !started {
             guard w.startWriting() else { return }
@@ -95,11 +121,27 @@ final class UltraWideCut: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
 
     func captureOutput(_ output: AVCaptureOutput, didDrop sb: CMSampleBuffer, from connection: AVCaptureConnection) { dropped += 1 }
 
-    /// 止めて、ファイルを閉じ、情報を書く
-    func stop(done: @escaping ([String: Any]) -> Void) {
+    var writtenFrames: Int { queue.sync { frames } }
+
+    /// カメラを止める
+    func stopPreview() {
         running = false
+        onSample = nil
         session.stopRunning()
+    }
+
+    /// 止めて、ファイルを閉じ、情報を書く(試験用)
+    func stop(done: @escaping ([String: Any]) -> Void) {
+        stopWriting { [self] i in
+            stopPreview()
+            done(i)
+        }
+    }
+
+    /// 録画だけを止める(カメラは動いたまま)。done は主スレッドとは限らない。
+    func stopWriting(done: @escaping ([String: Any]) -> Void) {
         queue.async { [self] in
+            writing = false
             input?.markAsFinished()
             writer?.finishWriting { [self] in
                 info["frames"] = frames

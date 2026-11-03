@@ -38,6 +38,7 @@ struct CalibInfo {
 struct TakeInfo: Codable {
     var number: Int
     var cut: String
+    var lens: String = "広角"
     var seconds: Double
     var sent: Int
     var macFrames: Int
@@ -55,6 +56,7 @@ struct ShootStatus {
     var phase: RecPhase = .idle
     var elapsed: Double = 0
     var macFrames = 0, lost = 0
+    var macFramesOverride: Int?  // 超広角のとき、iPad に書いたコマ
     var sentFps: Double = 0
     var note: String?            // 例「保存済み 3603 コマ」
     var calib = CalibInfo()
@@ -69,6 +71,7 @@ struct ShootStatus {
     var arOn = false, arHidden = false, arShowing = false
     var arText = ""
     var guides = true
+    var lens = 0                 // 0 広角、1 超広角
     var takes: [TakeInfo] = []
 }
 
@@ -86,6 +89,7 @@ struct ShootActions {
     var setISO: (Float) -> Void = { _ in }
     var setCutName: (String) -> Void = { _ in }
     var setGuides: (Bool) -> Void = { _ in }
+    var setLens: (Int) -> Void = { _ in }
     var nextCut: () -> Void = {}
     var markTake: (Int, String) -> Void = { _, _ in }
     var details: () -> Void = {}
@@ -222,7 +226,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
     // ③カット
     private let cutPanel = UIView()
     private let cutField = UITextField()
-    private let lensControl = UISegmentedControl(items: ["広角(AR・位置あり)", "超広角(次の版)"])
+    private let lensControl = UISegmentedControl(items: ["広角(AR・位置あり)", "超広角(AR・位置なし)"])
     private let exposureSwitch = UISwitch()
     private let isoSlider = UISlider()
     private let isoLabel = UILabel()
@@ -376,7 +380,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         styleField(cutField, placeholder: "カットの名前")
         cutField.addTarget(self, action: #selector(cutEdited), for: .editingChanged)
         lensControl.selectedSegmentIndex = 0
-        lensControl.setEnabled(false, forSegmentAt: 1)
+        lensControl.addTarget(self, action: #selector(lensChanged), for: .valueChanged)
         lensControl.setTitleTextAttributes([.font: UIFont.systemFont(ofSize: 18, weight: .semibold)], for: .normal)
         lensControl.selectedSegmentTintColor = ShootHUD.accent
         lensControl.setTitleTextAttributes([.foregroundColor: ShootHUD.primary], for: .selected)
@@ -418,6 +422,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         }
     }
 
+    @objc private func lensChanged() { actions.setLens(lensControl.selectedSegmentIndex) }
     @objc private func hostEdited() { actions.setHost(hostField.text ?? "") }
     @objc private func cutEdited() { actions.setCutName(cutField.text ?? "") }
     @objc private func micChanged() { actions.setMic(micSwitch.isOn) }
@@ -561,6 +566,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
 
     private func applyCut(_ s: ShootStatus) {
         if !cutField.isFirstResponder { cutField.text = s.cutName }
+        lensControl.selectedSegmentIndex = s.lens
         exposureSwitch.isOn = s.exposureLocked
         isoSlider.isEnabled = s.exposureLocked
         if !isoSlider.isTracking { isoSlider.value = s.isoFraction }
@@ -569,13 +575,14 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         leftButton.setTitle("校正へ"); leftButton.onFire = { [weak self] in self?.actions.setStep(.calibrate) }
         rightButton.setTitle("次へ 撮影"); rightButton.onFire = { [weak self] in self?.actions.setStep(.shoot) }
         bigLabel.text = "\(s.cutName) テイク \(s.takeNumber)"; bigLabel.textColor = ShootHUD.primary
-        smallLabel.text = "広角はキャラの確認と位置の記録あり"
+        smallLabel.text = s.lens == 0 ? "広角: キャラの確認と位置の記録あり。Mac に保存" : "超広角: キャラの確認と位置の記録なし。iPad の中に保存(4K)。広角へ戻すと追跡が戻るまで数秒"
     }
 
     private func applyShoot(_ s: ShootStatus) {
         leftButton.setTitle("AR 開始"); leftButton.onFire = { [weak self] in self?.actions.arStart() }
-        leftButton.isEnabled = s.arOn
+        leftButton.isEnabled = s.arOn && s.lens == 0
         left2Button.isHidden = false
+        left2Button.isEnabled = s.lens == 0
         left2Button.setTitle(s.arHidden ? "AR 出す" : "AR 消す")
         left2Button.onFire = { [weak self] in self?.actions.arHide() }
         rightButton.round = true
@@ -590,7 +597,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
             rightButton.setTitle("録画"); rightButton.fill = ShootHUD.recRed
             bigLabel.text = s.note ?? "\(s.cutName) テイク \(s.takeNumber)"
             bigLabel.textColor = s.note != nil ? Lamp.green.color : ShootHUD.primary
-            smallLabel.text = s.arText
+            smallLabel.text = s.lens == 0 ? s.arText : "超広角: AR と位置の記録なし"
         case .connecting:
             rightButton.setTitle("…"); rightButton.fill = UIColor(white: 0.25, alpha: 1); rightButton.isEnabled = false
             bigLabel.text = "Mac につないでいます"; bigLabel.textColor = Lamp.yellow.color
@@ -598,7 +605,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         case .recording:
             rightButton.setTitle("停止\n長押し"); rightButton.fill = UIColor(white: 0.25, alpha: 1); rightButton.hold = 1.2
             bigLabel.text = "● REC \(time)"; bigLabel.textColor = Lamp.red.color
-            smallLabel.text = "Mac 保存 \(s.macFrames) コマ  切れた \(s.lost)  \(String(format: "%.0f", s.sentFps)) fps"
+            smallLabel.text = s.lens == 0 ? "Mac 保存 \(s.macFrames) コマ  切れた \(s.lost)  \(String(format: "%.0f", s.sentFps)) fps" : "超広角 iPad に保存 \(s.macFrames) コマ  切れた \(s.lost)"
             smallLabel.textColor = s.alarm != nil ? Lamp.red.color : ShootHUD.secondary
         case .stopping:
             rightButton.setTitle("保存中"); rightButton.fill = UIColor(white: 0.25, alpha: 1); rightButton.isEnabled = false
@@ -619,7 +626,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
             let t = list[i]
             let sec = Int(t.seconds)
             let warn = t.saved ? "" : " 保存未確認"
-            markRows[i].text = String(format: "%2d  %@  %d:%02d  %d コマ  切れた %d  %@%@", t.number, t.cut, sec / 60, sec % 60, t.macFrames, t.lost, t.thermal, warn)
+            markRows[i].text = String(format: "%2d  %@ %@  %d:%02d  %d コマ  切れた %d  %@%@", t.number, t.cut, t.lens, sec / 60, sec % 60, t.macFrames, t.lost, t.thermal, warn)
             markRows[i].textColor = t.saved ? ShootHUD.primary : Lamp.red.color
             markButtons[i * 2].fill = t.mark == "OK" ? Lamp.green.color : UIColor(white: 0.2, alpha: 1)
             markButtons[i * 2 + 1].fill = t.mark == "NG" ? Lamp.red.color : UIColor(white: 0.2, alpha: 1)

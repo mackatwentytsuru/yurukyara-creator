@@ -96,7 +96,9 @@ def main():
     log = [json.loads(x) for x in (out / "ui_log.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
     alarms = [r for r in log if r["alarm"].startswith("Mac")]
     first = log[0]["t"] if log else 0
-    check("受け手を止めると「Mac に保存できていません」が出る", bool(alarms), f"{len(alarms)} 回(最初は {alarms[0]['t'] - first:.1f} 秒)" if alarms else "")
+    rec_start = next((r["t"] for r in log if r["phase"] == "recording"), first)
+    delay = alarms[0]["t"] - rec_start if alarms else None
+    check("受け手を止めると「Mac に保存できていません」が出る", bool(alarms) and delay > a.seconds / 2 - 3, f"{len(alarms)} 回(録画の開始から {delay:.1f} 秒。止めたのは約 {a.seconds / 2:.0f} 秒)" if alarms else "")
     check("そのテイクは保存未確認になる", t.get("saved") is False, f"送った {t.get('sent')}・応答 {t.get('macFrames')}")
     print("全部合格" if ok else "不合格あり")
     sys.exit(0 if ok else 1)
