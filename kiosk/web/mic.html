@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>マイクの確認</title>
+  <link rel="stylesheet" href="/kiosk/kiosk.css" />
+  <style>
+    .panel { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+    select, button { font: inherit; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: var(--ink-2); color: var(--text); }
+    button.go { background: var(--teal); color: var(--ink); font-weight: 700; border: 0; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .meter { height: 14px; border-radius: 7px; background: var(--ink-2); overflow: hidden; }
+    .meter > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--teal), var(--pink)); transition: width .08s linear; }
+    table { border-collapse: collapse; width: 100%; }
+    td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
+    td:first-child { color: var(--muted); width: 12em; }
+    .note { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .bearing { position: relative; height: 56px; border-radius: 12px; background: var(--ink-2); }
+    .bearing b { position: absolute; top: 8px; width: 4px; height: 40px; border-radius: 2px; background: var(--amber); left: 50%; transition: left .1s linear; }
+    .bearing span { position: absolute; bottom: 2px; font-size: 11px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>マイクの確認(録音機など)</h1>
+    <p class="note">ブラウザでマイクを選び、2 チャンネルで取れるか・声の向きが出るか・文字になるかを確かめます。音は、この画面の中で数字にするだけで、保存も送信もしません。</p>
+    <div class="row">
+      <select id="dev" aria-label="マイク"></select>
+      <button class="go" id="start" type="button">この入力で始める</button>
+      <button id="stt" type="button">文字起こしを試す</button>
+    </div>
+    <table>
+      <tr><td>入力</td><td id="label">―</td></tr>
+      <tr><td>チャンネル / サンプルレート</td><td id="fmt">―</td></tr>
+      <tr><td>状態</td><td id="status">―</td></tr>
+      <tr><td>声の大きさ</td><td><div class="meter"><i id="level"></i></div></td></tr>
+      <tr><td>左右の音量差(右が大きい=正)</td><td id="ild">―</td></tr>
+      <tr><td>左右の時間差 / 一致度</td><td id="itd">―</td></tr>
+      <tr><td>声の向き(正面 0・右が正)</td><td id="bearing">―</td></tr>
+      <tr><td>文字起こし</td><td id="text">―</td></tr>
+    </table>
+    <div class="bearing" aria-hidden="true"><b id="needle"></b><span style="left:6px">左 −90°</span><span style="left:calc(50% - 10px)">0°</span><span style="right:6px">右 +90°</span></div>
+    <p class="note" id="sttnote">文字起こし(ブラウザ内蔵)は、Windows の「既定の入力」のマイクを使います。ここで選んだマイクとは別です。録音機で文字起こしするには、Windows の設定で録音機を既定の入力にしてください。</p>
+  </main>
+  <script type="module" src="/kiosk/mic.js"></script>
+</body>
+</html>

@@ -190,6 +190,8 @@ const handler = async (req, res) => {
       // キオスクの画面(kiosk/web)。設定(kiosk/config.json)も同じ道で渡す
       if (path === '/kiosk' || path === '/kiosk/') return sendFile(res, join(REPO_ROOT, 'kiosk', 'web'), 'index.html') || json(res, 404, { error: '見つかりません' });
       if (path === '/kiosk/config.json') return sendFile(res, join(REPO_ROOT, 'kiosk'), 'config.json') || json(res, 404, { error: '見つかりません' });
+      // 声の向きの部品(web/src/tracking/audio)を、マイクの確認の画面へ渡す(同じ物を 2 か所に写さない)
+      if (path.startsWith('/kiosk/lib/')) return sendFile(res, join(WEB_ROOT, 'src', 'tracking', 'audio'), path.slice('/kiosk/lib/'.length)) || json(res, 404, { error: '見つかりません' });
       if (path.startsWith('/kiosk/')) return sendFile(res, join(REPO_ROOT, 'kiosk', 'web'), path.slice('/kiosk/'.length)) || json(res, 404, { error: '見つかりません' });
       if (sendFile(res, DIST, path === '/' ? 'index.html' : path)) return;
       if (sendFile(res, DIST, 'index.html')) return;
