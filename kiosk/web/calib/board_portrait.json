@@ -1,0 +1,19 @@
+{
+  "cols": 8,
+  "rows": 14,
+  "square_px": 135,
+  "marker_px": 101,
+  "offset_px": [
+    0,
+    15
+  ],
+  "face_px": [
+    1080,
+    1920
+  ],
+  "pitch_m": 0.0005,
+  "dictionary": "DICT_4X4_250",
+  "id_offset": 0,
+  "pitch_y_m": 0.0,
+  "square_py": 0
+}

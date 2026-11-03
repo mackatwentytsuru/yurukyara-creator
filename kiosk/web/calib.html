@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>校正の表示</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; overflow: hidden; cursor: none; }
+    #stage { position: fixed; inset: 0; }
+    #stage > * { position: absolute; }
+    #board { inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
+    #eye { width: 0; height: 0; display: none; }
+    #eye i { position: absolute; border-radius: 50%; border: 6px solid #3df; transform: translate(-50%, -50%); }
+    #eye i:nth-child(1) { width: 96px; height: 96px; }
+    #eye i:nth-child(2) { width: 24px; height: 24px; background: #fff; border: 0; }
+    #eye b { position: absolute; background: #3df; }
+    #eye b:nth-of-type(1) { width: 2px; height: 220px; transform: translate(-50%, -50%); }
+    #eye b:nth-of-type(2) { width: 220px; height: 2px; transform: translate(-50%, -50%); }
+    #grid { inset: 0; display: none; }
+    #grid span { position: absolute; width: 36px; height: 36px; border-radius: 50%; background: #fff; transform: translate(-50%, -50%); display: grid; place-items: center; color: #000; font-weight: 700; font-size: 20px; }
+    #flash { inset: 0; background: #fff; display: none; z-index: 5; }
+    #num { inset: 0; display: none; z-index: 4; background: #000; place-items: center; text-align: center; }
+    #num div { font-size: 22vmin; font-weight: 800; line-height: 1.1; }
+    #num small { display: block; font-size: 6vmin; font-weight: 400; color: #9cf; }
+    #label { left: 0; right: 0; bottom: 0; padding: 10px 14px; background: rgba(0,0,0,.55); font-size: 3.2vmin; z-index: 3; text-align: center; }
+    #help { left: 12px; top: 12px; font-size: 14px; line-height: 1.6; background: rgba(0,0,0,.75); padding: 10px 14px; border-radius: 10px; z-index: 6; max-width: 38em; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <img id="board" alt="" />
+    <div id="eye"><i></i><i></i><b></b><b></b></div>
+    <div id="grid"></div>
+    <div id="num"><div id="numText"></div></div>
+    <div id="flash"></div>
+    <div id="label"></div>
+    <div id="help">
+      <b>校正の表示</b>(F11 で全画面。マウスは隠れます)<br />
+      1 盤(レンズ用)/ 2 目の位置の印 / 3 9 点 / 0 黒<br />
+      <b>スペース</b> 次の位置へ(白いフラッシュ → 位置の番号 1 秒 → 目の印)/ b 前の位置 / f フラッシュだけ<br />      <b>a 自動で進める</b>(25 秒ごとに次の位置。?period=秒 で変える。もう一度 a で止める)<br />
+      矢印の上下左右 印を動かす(Shift で速く)/ [ ] 印の大きさ / h この説明を消す<br />
+      目の印の初期位置: ?ex=0.5&ey=0.3(画面の幅・高さに対する割合。キャラの目の位置に合わせる)
+    </div>
+  </div>
+  <script type="module" src="/kiosk/calib.js"></script>
+</body>
+</html>
