@@ -10,6 +10,8 @@
 //   face_w, face_h            面 A の横・縦(m)。既定 5.12 × 4.96。自宅なら画面の寸法
 //   led_bottom=<m>            LED の下端の床からの高さ(m)。既定 0.98
 //   charheight=<m>            キャラの背の高さ(m)。既定はそのまま
+//   fps=<数>                  描く fps の上限(既定 30。熱を下げるなら 15)。殻にも伝えて、姿勢を送る頻度を下げる
+//   pr=<数>                   描画の解像度の倍率(既定 1。0.5 で縦横半分。熱を下げる)
 //   demo=1                    校正なしで試す(熱・遅れの試験用): 最初の姿勢のカメラの 2 m 前の床を舞台の中心にして、客席(カメラ)向きで即座に始める
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -34,7 +36,7 @@ const native = hasNativeAR();
 if (!native) document.documentElement.classList.add('desktop');
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: false, powerPreference: 'low-power' });
-renderer.setPixelRatio(1);
+renderer.setPixelRatio(Number(params.get('pr') ?? 1));
 renderer.setSize(innerWidth, innerHeight);
 renderer.setClearColor(0x000000, 0);
 document.body.prepend(renderer.domElement);
@@ -192,6 +194,8 @@ let frames = 0;
 const ar = createNativeAR({ camera });
 const host = ar.host;
 const origPose = host.onPose;
+const targetFps = Number(params.get('fps') ?? 30);
+let lastRender = 0;
 host.onPose = (w, p, ts) => {
   origPose(w, p);
   if (Number.isFinite(ts)) lastTs = ts;
@@ -202,6 +206,9 @@ host.onPose = (w, p, ts) => {
     T_world_from_led = new THREE.Matrix4(); alignInfo = 'demo(校正なし)'; if (params.get('demo') !== '2') anchorTs = ts;   // demo=2 は、フラッシュを待って始める
   }
   frames++;
+  const nowMs = performance.now();
+  if (nowMs - lastRender < 1000 / targetFps - 4) return;   // 描くのを間引く(熱を下げる)
+  lastRender = nowMs;
   update();
   renderer.render(scene, camera);
 };
@@ -242,6 +249,7 @@ function update() {
 
 if (native) {
   ar.start();
+  window.webkit?.messageHandlers?.arhost?.postMessage({ type: 'config', fps: targetFps });
 } else {
   // 殻なし(ブラウザで確認): 面 A の 4 隅を (0,1.2,0) の前に置いた仮のレイで校正し、フラッシュ代わりに開始する
   camera.position.set(2.5, 1.3, 5);

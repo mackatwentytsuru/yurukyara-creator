@@ -38,6 +38,8 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var messages: [String] = []
     private var pageStatus: String?
     private var flashTimes: [Double] = []
+    private var poseEvery = 1
+    private var poseCounter = 0
     var flashThreshold = 25.0
     private static let urlKey = "armonitor.url"
     static let defaultURL = "https://192.168.x.x:8443/place/web/ar_show.html"
@@ -97,6 +99,8 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         detectFlash(frame)
         lock.lock()
         guard pageReady else { lock.unlock(); return }
+        poseCounter += 1
+        if poseCounter % poseEvery != 0 { lock.unlock(); return }
         if inFlight { posesSkipped += 1; lock.unlock(); return }
         inFlight = true
         let size = viewSize
@@ -168,6 +172,10 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        if type == "config", let fps = body["fps"] as? Double, fps > 0 {
+            lock.lock(); poseEvery = max(1, Int((30.0 / fps).rounded())); lock.unlock()
+            return
+        }
         if type == "status" {
             if let d = try? JSONSerialization.data(withJSONObject: body), let str = String(data: d, encoding: .utf8) { lock.lock(); pageStatus = str; lock.unlock() }
             return
