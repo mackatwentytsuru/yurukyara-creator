@@ -67,7 +67,10 @@ targets:
         INFOPLIST_KEY_UIFileSharingEnabled: YES
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        TARGETED_DEVICE_FAMILY: '1,2'   # iPhone と iPad(iPad は撮影用の予備機)
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: 作業用 PC の UE へ位置を送り、UE の絵を受けるためです。
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 会場の音を、映像と同じ時刻で録るためです。
         INFOPLIST_KEY_UIStatusBarHidden: YES
