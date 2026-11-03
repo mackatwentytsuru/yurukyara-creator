@@ -42,7 +42,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var poseCounter = 0
     var flashThreshold = 25.0
     private static let urlKey = "armonitor.url"
-    static let defaultURL = "app://app/place/web/ar_show.html?track=/show/data/ar/dance_track&start_at=21"   // アプリに同梱のページ(ネットワーク不要)
+    static let defaultURL = "app://app/place/web/ar_show.html?track=/show/data/ar/dance_track&start_at=21&fps=15&pr=0.5"   // アプリに同梱のページ(ネットワーク不要)
 
     var url: String {
         get { UserDefaults.standard.string(forKey: Self.urlKey) ?? Self.defaultURL }
