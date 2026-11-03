@@ -10,6 +10,7 @@
 //   face_w, face_h            面 A の横・縦(m)。既定 5.12 × 4.96。自宅なら画面の寸法
 //   led_bottom=<m>            LED の下端の床からの高さ(m)。既定 0.98
 //   charheight=<m>            キャラの背の高さ(m)。既定はそのまま
+//   demo=1                    校正なしで試す(熱・遅れの試験用): 最初の姿勢のカメラの 2 m 前の床を舞台の中心にして、客席(カメラ)向きで即座に始める
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
@@ -23,6 +24,8 @@ const posScale = Number(params.get('scale') ?? 1);
 const faceW = Number(params.get('face_w') ?? 5.12);
 const faceH = Number(params.get('face_h') ?? 4.96);
 const ledBottom = Number(params.get('led_bottom') ?? 0.98);
+const demoMode = params.get('demo') === '1';
+let demoOrigin = null;     // demo: {p: Vector3, yaw}
 const charHeightWanted = params.get('charheight') ? Number(params.get('charheight')) : null;
 const A_X0 = -749.7, A_X1 = -237.7;      // 面 A の左右の端(舞台の座標 cm。show/ue/stage_layout.py)
 const A_CX = (A_X0 + A_X1) / 2;
@@ -175,6 +178,11 @@ let lastTs = 0;
 function showTime() { return anchorTs === null ? null : startAt + (lastTs - anchorTs); }
 
 function stageToWorld(x, y) {
+  if (demoOrigin) {
+    const c = Math.cos(demoOrigin.yaw), s = Math.sin(demoOrigin.yaw);
+    const lx = posScale * x / 100, lz = posScale * y / 100;
+    return new THREE.Vector3(demoOrigin.p.x + lx * c + lz * s, demoOrigin.p.y, demoOrigin.p.z - lx * s + lz * c);
+  }
   const lx = faceW / 2 + posScale * (x - A_CX) / 100, lz = posScale * y / 100, ly = -ledBottom;
   return new THREE.Vector3(lx, ly, lz).applyMatrix4(T_world_from_led);
 }
@@ -187,6 +195,12 @@ const origPose = host.onPose;
 host.onPose = (w, p, ts) => {
   origPose(w, p);
   if (Number.isFinite(ts)) lastTs = ts;
+  if (demoMode && !demoOrigin) {
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
+    const p0 = camera.position.clone().addScaledVector(fwd, 2.0); p0.y = camera.position.y - 1.3;
+    demoOrigin = { p: p0, yaw: Math.atan2(-fwd.x, -fwd.z) };   // 客席(= +z)がカメラのほう
+    T_world_from_led = new THREE.Matrix4(); alignInfo = 'demo(校正なし)'; anchorTs = ts;
+  }
   frames++;
   update();
   renderer.render(scene, camera);
@@ -212,7 +226,7 @@ function update() {
       const pos = stageToWorld(p.x, p.y);
       holder.position.copy(pos);
       // 向き: 客席(LED の +z)向き = yaw 0。LED の向きを世界へ
-      const yawLed = Math.atan2(T_world_from_led.elements[8], T_world_from_led.elements[10]);   // 世界での LED の +z の向きの回転(y 回り)
+      const yawLed = demoOrigin ? demoOrigin.yaw : Math.atan2(T_world_from_led.elements[8], T_world_from_led.elements[10]);   // 世界での LED の +z の向きの回転(y 回り)
       holder.rotation.set(0, yawLed + (p.yaw * Math.PI) / 180, 0);
       shown = true;
       if (dance && vrm) { dance.apply(Math.round(t * danceFps)); vrm.update(1 / 30); }
