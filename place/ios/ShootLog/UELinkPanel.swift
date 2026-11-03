@@ -3,6 +3,9 @@ import UIKit
 /// 「UE モニター」の設定と測定の画面(撮影記録の下のボタン「UE」から開く)。
 final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
     private let link: UELinkController
+    private let pc: PCStreamer
+    private let pcSwitch = UISwitch()
+    private let pcPortField = UITextField()
     private let onChange: () -> Void
     private let enableSwitch = UISwitch()
     private let hostField = UITextField()
@@ -11,8 +14,9 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
     private let logView = UITextView()
     private var timer: Timer?
 
-    init(link: UELinkController, onChange: @escaping () -> Void) {
+    init(link: UELinkController, pc: PCStreamer, onChange: @escaping () -> Void) {
         self.link = link
+        self.pc = pc
         self.onChange = onChange
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
@@ -50,6 +54,8 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
         style(hostField, "送り先(作業用 PC の IP、例 192.168.x.x)", c.host)
         style(portField, "ポート", String(c.port))
         portField.keyboardType = .numberPad
+        style(pcPortField, "映像ポート", String(pc.port))
+        pcPortField.keyboardType = .numberPad
         style(urlField, "絵の URL(例 http://192.168.x.x/?AutoConnect=true&AutoPlayVideo=true&StartVideoMuted=true)", c.url)
 
         enableSwitch.isOn = link.enabled
@@ -82,11 +88,17 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
         logView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         logView.layer.cornerRadius = 8
 
+        pcSwitch.isOn = pc.enabled
+        pcSwitch.addTarget(self, action: #selector(pcSwitchChanged), for: .valueChanged)
+        let pcRow = UIStackView(arrangedSubviews: [label("作業用 PC へ映像(確認用。縮小した映像を TCP で送る。録画の元は端末に残る)"), pcPortField, pcSwitch])
+        pcRow.spacing = 10
+        pcPortField.widthAnchor.constraint(equalToConstant: 90).isActive = true
+
         let hostRow = UIStackView(arrangedSubviews: [hostField, portField])
         hostRow.spacing = 8
         portField.widthAnchor.constraint(equalToConstant: 90).isActive = true
 
-        let stack = UIStackView(arrangedSubviews: [switchRow, hostRow, urlField, buttons, logView])
+        let stack = UIStackView(arrangedSubviews: [switchRow, hostRow, urlField, pcRow, buttons, logView])
         stack.axis = .vertical
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -103,7 +115,8 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
 
     private func refresh() {
         let status = link.statusText
-        logView.text = (status.isEmpty ? "(モニターは切れている)\n" : status + "\n") + link.logText
+        let pcs = pc.statusText
+        logView.text = (status.isEmpty ? "(モニターは切れている)\n" : status + "\n") + (pcs.isEmpty ? "" : pcs + "\n") + link.logText
     }
 
     private func saveFields() {
@@ -116,6 +129,12 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
         textField.resignFirstResponder()
         saveFields()
         return true
+    }
+
+    @objc private func pcSwitchChanged() {
+        saveFields()
+        pc.setEnabled(pcSwitch.isOn, host: link.config.host, port: Int(pcPortField.text ?? "") ?? 9100)
+        onChange()
     }
 
     @objc private func switchChanged() {

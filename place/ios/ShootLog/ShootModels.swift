@@ -149,6 +149,7 @@ struct ShootMeta: Codable {
     var events: [ShootEvent]
     var stats: ShootStats
     var conventions: [String: String]
+    var pcStream: PCStreamSummary? = nil   // 「作業用 PC へ映像」を使った撮影なら、送った数・捨てた数・符号化の時間・熱
 
     static let conventionText: [String: String] = [
         "T": "カメラ→世界の 4x4(列順 16 個)。世界は重力に合わせた右手系、y が上、m",
