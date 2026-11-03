@@ -211,6 +211,80 @@ class RefusalTest(ClickTestCase):
         self.assertEqual((self.paste.clicks, cancel.clicks), (0, 1))
 
 
+class UpdateExceptionTest(ClickTestCase):
+    """Owner exception 2026-11-04: the exact User Aligned Points confirmation window."""
+
+    TITLE = "Character Creator 5"
+    BODY = "User Aligned Points Detected.\nHow would you like to update the User Aligned Points?"
+    BUTTONS = ["Update All", "Update Affected", "Discard Changes"]
+
+    def open_dialog(self, title: str | None = None, body: str | None = None, buttons: list[str] | None = None):
+        dlg = self.dialog(title or self.TITLE, body or self.BODY, buttons or self.BUTTONS)
+        dlg._modal = True
+        return dlg
+
+    def pressed(self, dlg: fake_qt.Widget, text: str) -> int:
+        return [b for b in dlg.findChildren(fake_qt.PushButton) if b.text() == text][0].clicks
+
+    def test_the_three_buttons_are_pressed(self) -> None:
+        for label in self.BUTTONS:
+            with self.subTest(label=label):
+                self.q.app.tops[:] = [self.win]
+                dlg = self.open_dialog()
+                result = self.run_click(window=self.TITLE, text=label)
+                self.assertTrue(result["success"], result)
+                self.assertEqual(self.pressed(dlg, label), 1)
+
+    def test_white_space_and_case_of_the_text_are_normalised(self) -> None:
+        dlg = self.open_dialog(body="user aligned points detected.   how would you like to UPDATE the user aligned points?")
+        self.run_click(window=self.TITLE, text="update all")
+        self.assertEqual(self.pressed(dlg, "Update All"), 1)
+
+    def test_other_body_text_is_refused(self) -> None:
+        dlg = self.open_dialog(body="User Aligned Points Detected. Update everything for 5 credits?")
+        self.assert_refused(self.click(window=self.TITLE, text="Update All"), "a person must decide")
+        self.assertEqual(self.pressed(dlg, "Update All"), 0)
+
+    def test_partial_body_match_is_refused(self) -> None:
+        dlg = self.open_dialog(body=self.BODY + " Your licence expires soon.")
+        self.assert_refused(self.click(window=self.TITLE, text="Update All"), "a person must decide")
+        self.assertEqual(self.pressed(dlg, "Update All"), 0)
+
+    def test_other_title_is_refused(self) -> None:
+        dlg = self.open_dialog(title="Software Update")
+        self.assert_refused(self.click(window="Software Update", text="Update All"), "a person must decide")
+        self.assertEqual(self.pressed(dlg, "Update All"), 0)
+
+    def test_button_named_just_update_is_refused(self) -> None:
+        dlg = self.open_dialog(buttons=["Update", "Update Affected", "Discard Changes"])
+        self.assert_refused(self.click(window=self.TITLE, text="Update"), "a person must decide")
+        self.assertEqual(self.pressed(dlg, "Update"), 0)
+
+    def test_extra_button_or_check_box_in_the_window_is_refused(self) -> None:
+        self.open_dialog(buttons=self.BUTTONS + ["Update Now"])
+        self.assert_refused(self.click(window=self.TITLE, text="Update All"), "a person must decide")
+        self.q.app.tops[:] = [self.win]
+        self.dialog(self.TITLE, self.BODY, self.BUTTONS, boxes=[("Don't ask again", False)])
+        self.assert_refused(self.click(window=self.TITLE, text="Update All"), "a person must decide")
+
+    def test_license_window_with_an_update_button_is_refused(self) -> None:
+        dlg = self.dialog("License", "Your license has expired", ["Update", "Update All"])
+        self.assert_refused(self.click(window="License", text="Update"), "a person must decide")
+        self.assert_refused(self.click(window="License", text="Update All"), "a person must decide")
+        self.assertEqual((self.pressed(dlg, "Update"), self.pressed(dlg, "Update All")), (0, 0))
+
+    def test_the_exception_does_not_open_other_words_or_other_windows(self) -> None:
+        dlg = self.open_dialog()
+        bad = fake_qt.PushButton("Update All", dlg, name="qtBuyUpdateAll")
+        self.assert_refused(self.click(window=self.TITLE, object_name="qtBuyUpdateAll"), "mentions 'buy'")
+        self.assertEqual(bad.clicks, 0)
+
+    def test_after_the_window_closes_nothing_stays_open(self) -> None:
+        self.open_dialog()
+        self.q.app.tops[:] = [self.win]
+        self.assert_refused(self.click(window=self.TITLE, text="Update All"), "no open CC5 window")
+
+
 class MenuTest(ClickTestCase):
     def setUp(self) -> None:
         super().setUp()

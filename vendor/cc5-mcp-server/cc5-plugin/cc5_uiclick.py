@@ -18,10 +18,15 @@ What it refuses (nothing is pressed; the reason comes back as HTTP 400):
   * (exception, owner 2026-10-31: inside the window "Body Wrap" the buttons with exactly the text
     "Generate Wrap Points" / "Align Points", and the menu entries "Save Wrap Points" / "Load Wrap Points",
     are pressed; see POINT_EXCEPTION_BUTTONS / POINT_EXCEPTION_MENU_ENTRIES)
+  * (exception, owner 2026-11-04: in the one confirmation window titled "Character Creator 5" whose text is
+    exactly "User Aligned Points Detected. How would you like to update the User Aligned Points?", the buttons
+    with exactly the text "Update All" / "Update Affected" / "Discard Changes" are pressed, although the window
+    and the buttons say "update"; any other window or button text still refuses; see UPDATE_DIALOG_*)
   * a button or menu entry whose text, objectName or tool tip contains a DENY_WORDS word (points,
     buy, purchase, delete, remove, licence, activate, upgrade, credit, subscribe, pay and the
     Japanese words) or a word of cc5_ui.forbidden_reason (login, update, terms, trial, ...);
-  * any click while a window that needs a person is open (licence, purchase, login, ...);
+  * any click while a window that needs a person is open (licence, purchase, login, ...; the one window of
+    the update exception above does not count);
   * a button outside the modal window that is open (a person could not press it either);
   * a button that opens a drop-down menu when no menu_item is given (the menu would stay open).
 
@@ -69,6 +74,30 @@ POINT_EXCEPTION_BUTTONS = frozenset({"generate wrap points", "align points"})
 # save / load the wrap points to a file. menu_item must be exactly one of these.
 POINT_EXCEPTION_MENU_ENTRIES = frozenset({"save wrap points", "load wrap points"})
 _POINT_WORDS = frozenset({"point", "ポイント"})
+
+# The owner's second exception (2026-11-04): the confirmation window Body Wrap opens when hand-fixed points
+# exist. Title AND text must match exactly (white space and case normalised by label_key, never a partial
+# match); the window may hold nothing else (no check boxes, no other text). Only the word "update" is
+# excused, and only for the three buttons named here, matched on their whole text.
+UPDATE_DIALOG_TITLE = "character creator 5"
+UPDATE_DIALOG_TEXT = "user aligned points detected. how would you like to update the user aligned points?"
+UPDATE_DIALOG_BUTTONS = frozenset({"update all", "update affected", "discard changes"})
+_UPDATE_WORD_RE = re.compile(r"update", re.IGNORECASE)
+
+
+def _is_update_dialog(info: dict[str, Any]) -> bool:
+    """True when `info` (cc5_ui.describe_window) is exactly the User Aligned Points confirmation window."""
+    if label_key(info.get("title")) != UPDATE_DIALOG_TITLE or label_key(info.get("text")) != UPDATE_DIALOG_TEXT:
+        return False
+    if info.get("checkboxes") or not {label_key(b) for b in info.get("buttons", [])} <= UPDATE_DIALOG_BUTTONS:
+        return False
+    reason = str(info.get("needs_human") or "")
+    if reason.startswith(("password field", "long text", "text too long")):
+        return False
+    rest = info.get("_full") or ""
+    for known in (info["title"], info["text"], *info.get("buttons", [])):
+        rest = re.sub(re.escape(known), " ", rest, flags=re.IGNORECASE)
+    return cc5_ui.forbidden_reason(rest) is None          # anything else in the window still needs a person
 
 
 def _call(obj: Any, method: str, default: Any = None) -> Any:
@@ -156,7 +185,7 @@ def blocking_reason(q: Any, scope: Any | None = None) -> str | None:
     """Why nothing may be pressed now: a window that needs a person is open, or a modal window is open
     and the target is not in it. None when pressing is allowed."""
     for info, _w in cc5_ui.scan_windows():
-        if info["needs_human"]:
+        if info["needs_human"] and not _is_update_dialog(info):
             return (f"the window '{info['title']}' mentions '{info['needs_human']}': a person must decide, and "
                     "nothing is pressed while it is open. Show it to the owner (list_cc5_windows)")
     if scope is None:
@@ -263,14 +292,25 @@ def _point_exception(button: Any, scope: Any, menu_item: str | None) -> bool:
     return label_key(cc5_ui.label_text(button)) in POINT_EXCEPTION_BUTTONS
 
 
+def _update_exception(button: Any, scope: Any, menu_item: str | None) -> bool:
+    """True for the three buttons of the exact User Aligned Points window (never for menu entries)."""
+    if scope is None or menu_item is not None:
+        return False
+    if label_key(cc5_ui.label_text(button)) not in UPDATE_DIALOG_BUTTONS:
+        return False
+    return _is_update_dialog(cc5_ui.describe_window(_top(scope), cc5_ui._qt()))
+
+
 def _target_problem(button: Any, menu_item: str | None,
                     scope: Any | None = None) -> tuple[Any | None, str | None]:
     """(what to press: the button or one of its menu entries, refusal)."""
     if not _call(button, "isEnabled", True):
         return None, f"the button {_button_desc(button)} is disabled (greyed out) and cannot be pressed now"
     skip = _POINT_WORDS if _point_exception(button, scope, menu_item) else frozenset()
-    word = deny_reason(cc5_ui.label_text(button), _call(button, "objectName", ""), _call(button, "toolTip", ""),
-                       skip_words=skip)
+    parts = [cc5_ui.label_text(button), _call(button, "objectName", ""), _call(button, "toolTip", "")]
+    if _update_exception(button, scope, menu_item):       # only the word "update" is excused; the rest still counts
+        parts = [_UPDATE_WORD_RE.sub("", str(part or "")) for part in parts]
+    word = deny_reason(*parts, skip_words=skip)
     if word:
         return None, (f"refused: the button {_button_desc(button)} mentions '{word}'. Buttons about points, buying, "
                       "deleting / removing, licences, activation, upgrades, credits, subscriptions or payment "
