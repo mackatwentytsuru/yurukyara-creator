@@ -77,6 +77,8 @@ node creator/pipeline/web_talk_check.mjs --port 8799 --character <id> --out <作
 
 性格の文(`persona.md`)には、キャラの話し方と、分からないことはスタッフに渡すことを書く。お店の情報を推測で書かない。
 
+動画に残すなら `node creator/pipeline/web_talk_record.mjs --port 8799 --character <id> --out <出力.webm>`(字幕ごとの画面と声。話す言葉はその場の返事)。作る様子の早回しは `python creator/skilltest/timelapse.py <作業フォルダ> <元の絵> <出力.mp4>`。
+
 ## 6. 報告する
 
 順番: できたか → 測った数字(輪郭の重なり、検査、判定の回数、かかった時間と費用)→ 開き方 → 確かめていないこと → 決めてほしいこと。
