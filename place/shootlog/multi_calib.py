@@ -380,7 +380,8 @@ def main():
     if len(views) < 6:
         raise SystemExit(f"盤が写った視点が少ない({len(views)})。6 以上要る")
     K4 = shoot.frames[views[0].frame]["K"]
-    K0 = np.array([[K4[0], 0, K4[2]], [0, K4[1], K4[3]], [0, 0, 1]])
+    scale = float(shoot.meta.get("intrinsics_scale", 1.0))     # PC に送った記録は、K が元の 4K の画素で、映像はフル HD
+    K0 = np.array([[K4[0] * scale, 0, K4[2] * scale], [0, K4[1] * scale, K4[3] * scale], [0, 0, 1]])
     prob, x, r = solve(faces, obs, views, K0, use_arkit=not a.no_arkit)
     out = report(prob, x, views)
     out["holdout"] = holdout(faces, obs, views, K0, use_arkit=not a.no_arkit)
