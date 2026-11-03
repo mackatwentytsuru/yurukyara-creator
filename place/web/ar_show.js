@@ -141,6 +141,23 @@ function simpleMotion(t, walking) {         // 踊りが無いとき: 歩く・�
 
 // ---- LED の面 A の位置合わせ(殻が送る 4 隅のレイから、世界 ← LED の変換を解く)-----------------------------
 let T_world_from_led = null, alignInfo = '未校正';
+// 点の校正: 外れたレイを除きながら解く。良い解(10 点以上・残差 1.5 cm 以下)だけを採り、悪い解で上書きしない(動かしている間に崩れないように)
+let lastGoodDots = null;
+function solveDots(corners) {
+  let use = corners.slice(), r = null;
+  for (let it = 0; it < 4; it++) {
+    r = solveAlign(use);
+    if (!r || !r.errs) return null;
+    const med = [...r.errs].sort((a, b) => a - b)[Math.floor(r.errs.length / 2)];
+    const lim = Math.max(1.5, 2.5 * med);        // cm
+    const kept = use.filter((_, i) => r.errs[i] <= lim);
+    if (kept.length === use.length || kept.length < 6) break;
+    use = kept;
+  }
+  r.nDots = new Set(use.map((c) => c.dot)).size;
+  r.nAll = corners.length;
+  return r;
+}
 function solveAlign(corners) {
   const pts = { tl: [0, faceH, 0], tr: [faceW, faceH, 0], br: [faceW, 0, 0], bl: [0, 0, 0] };
   const pointOf = (c) => {
@@ -176,8 +193,8 @@ function solveAlign(corners) {
     return { e, t };
   };
   let best = { e: Infinity, th: 0, t: null };
-  for (let k = 0; k < 720; k++) { const th = -Math.PI + (k / 720) * 2 * Math.PI; const r = cost(th); if (r.e < best.e) best = { e: r.e, th, t: r.t }; }
-  let lo = best.th - Math.PI / 360, hi = best.th + Math.PI / 360;
+  for (let k = 0; k < 180; k++) { const th = -Math.PI + (k / 180) * 2 * Math.PI; const r = cost(th); if (r.e < best.e) best = { e: r.e, th, t: r.t }; }
+  let lo = best.th - Math.PI / 90, hi = best.th + Math.PI / 90;
   for (let it = 0; it < 40; it++) {
     const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
     if (cost(m1).e < cost(m2).e) hi = m2; else lo = m1;
@@ -185,7 +202,8 @@ function solveAlign(corners) {
   const th = (lo + hi) / 2, r = cost(th);
   const T = new THREE.Matrix4().makeRotationY(th);
   T.setPosition(r.t);
-  return { T, rms_cm: Math.sqrt(r.e / rays.length) * 100, yaw_deg: th * 180 / Math.PI, n: rays.length };
+  const errs = rays.map((q, i) => { const P = new THREE.Vector3(...q.p).applyMatrix4(T); const v = P.sub(q.o); const along = v.dot(q.d); return v.addScaledVector(q.d, -along).length() * 100; });
+  return { T, rms_cm: Math.sqrt(r.e / rays.length) * 100, yaw_deg: th * 180 / Math.PI, n: rays.length, errs };
 }
 
 // ---- LED の面と校正の点を重ねて見せる(show_led=1)-------------------------------------------------
@@ -261,10 +279,25 @@ host.onPose = (w, p, ts) => {
 };
 host.onCalibration = (json) => {
   const corners = typeof json === 'string' ? JSON.parse(json) : json;
+  const isDots = corners.some((c) => c.dot !== undefined);
+  if (isDots) {
+    const r = solveDots(corners);
+    const all = new Set(corners.map((c) => c.dot)).size, total = DOT_COLS * DOT_ROWS;
+    if (r && r.nDots >= 10 && r.rms_cm <= 1.5) {
+      lastGoodDots = r;
+      T_world_from_led = r.T;
+      alignInfo = `面 A 点 ${r.nDots}/${total}(レイ ${r.n}/${r.nAll}) 残差 ${r.rms_cm.toFixed(1)} cm yaw ${r.yaw_deg.toFixed(1)}°`;
+      updateLedViz();
+    } else if (lastGoodDots) {
+      alignInfo = `面 A 前の校正を保持(点 ${lastGoodDots.nDots}/${total} 残差 ${lastGoodDots.rms_cm.toFixed(1)} cm)。今は 点 ${r ? r.nDots : all} 残差 ${r ? r.rms_cm.toFixed(1) : '-'} cm`;
+    } else {
+      alignInfo = `校正中(点 ${all}/${total}${r ? ` 残差 ${r.rms_cm.toFixed(1)} cm` : ''})`;
+    }
+    return;
+  }
   const r = solveAlign(corners);
-  const nDots = new Set(corners.filter((c) => c.dot !== undefined).map((c) => c.dot)).size;
-  if (r) { T_world_from_led = r.T; alignInfo = `面 A ${nDots ? `点 ${nDots}/${DOT_COLS * DOT_ROWS}(レイ ${r.n})` : `${r.n} 隅`} 残差 ${r.rms_cm.toFixed(1)} cm yaw ${r.yaw_deg.toFixed(1)}°`; updateLedViz(); }
-  else alignInfo = `校正が足りない(面 A の${nDots ? `点 ${nDots}/${DOT_COLS * DOT_ROWS}` : `隅 ${corners.filter((c) => c.face === 'A').length}/4`})`;
+  if (r) { T_world_from_led = r.T; alignInfo = `面 A ${r.n} 隅 残差 ${r.rms_cm.toFixed(1)} cm yaw ${r.yaw_deg.toFixed(1)}°`; updateLedViz(); }
+  else alignInfo = `校正が足りない(面 A の隅 ${corners.filter((c) => c.face === 'A').length}/4)`;
 };
 host.onFlash = (ts) => {
   if (anchorTs === null) { anchorTs = ts; info('フラッシュで開始'); }   // 最初の 1 回だけ(同期用の後のフラッシュでずらさない。やり直しは「やり直し」ボタン)
