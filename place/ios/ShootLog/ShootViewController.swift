@@ -42,6 +42,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let ueLink = UELinkController()
     private let pcStream = PCStreamer()
     private let audio = AudioCapture()
+    private let arMonitor = ARMonitor()
     private let ueButton = UIButton(type: .system)
     private var crosshair: UIView?
     private let faceControl = UISegmentedControl(items: ["LED 1面", "LED 3面(A・B・C)"])
@@ -86,6 +87,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         ueLink.webView.frame = view.bounds
         ueLink.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(ueLink.webView)
+        arMonitor.webView.frame = view.bounds
+        arMonitor.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(arMonitor.webView)
         ueLink.recorderInfo = { [weak self] in
             guard let self else { return nil }
             self.lock.lock(); defer { self.lock.unlock() }
@@ -106,6 +110,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer.frame = view.bounds
+        arMonitor.layoutChanged(view.bounds.size)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -503,6 +508,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             camera: Pack.camera(frame), rayOrigin: Pack.flat(origin), rayDirection: Pack.flat(forward),
             hit: hitPoint, hitKind: hit.map { $0.target == .estimatedPlane ? "estimatedPlane" : "plane" }
         ))
+        arMonitor.setCalibration(calibration)
         logEvent("corner:\(face)_\(Self.cornerIds[index])")
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
@@ -560,6 +566,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let expEnd = currentExposureInfo()
         let ueSummary: UELinkSummary? = ueLink.enabled ? ueLink.summary() : nil
         let pcSummary: PCStreamSummary? = pcStream.enabled ? pcStream.summary() : nil
+        let arSummary: ARMonitorSummary? = arMonitor.enabled ? arMonitor.summary() : nil
         let audioSummary: AudioSummary? = audio.running ? audio.summary(note: "録画に入れた塊 \(rec.audioBuffersWritten)、捨てた塊 \(rec.audioBuffersDropped)、最初の音は映像の \(rec.audioFirstRelative.map { String(format: "%.3f", $0) } ?? "-") 秒") : nil
         frameQueue.async { [weak self] in
             rec.finish { stats in
@@ -575,6 +582,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                 )
                 meta.pcStream = pcSummary
                 meta.audio = audioSummary
+                meta.arMonitor = arSummary
                 let enc = JSONEncoder()
                 enc.outputFormatting = [.prettyPrinted, .sortedKeys]
                 try? enc.encode(meta).write(to: rec.dir.appendingPathComponent("meta.json"))
@@ -590,7 +598,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     // MARK: - UE モニター・熱
 
     @objc private func ueTapped() {
-        let panel = UELinkPanelViewController(link: ueLink, pc: pcStream, audio: audio, setMic: { [weak self] on, done in self?.setMic(on, done) }) { [weak self] in
+        let panel = UELinkPanelViewController(link: ueLink, pc: pcStream, audio: audio, ar: arMonitor, setMic: { [weak self] on, done in self?.setMic(on, done) }) { [weak self] in
             guard let self else { return }
             self.crosshair?.isHidden = self.ueLink.enabled
             self.refreshUI()
@@ -670,6 +678,20 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
         if a.contains("--probe-multicam") { runMultiCamProbe(); return }
         if a.contains("--mic-on") { setMic(true) { _ in } }
+        if a.contains("--ar-on") {
+            if let thr = Double(value("--flash-thr") ?? "") { arMonitor.flashThreshold = thr }
+            arMonitor.setEnabled(true, url: value("--ar-url"))
+        }
+        // 露出の固定(スクリプトの試験用): --lock-exposure [--iso 値]。シャッター 1/60、ISO は値(省略は今の値)、ホワイトバランスとピントは固定した時点の値
+        if a.contains("--lock-exposure") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self else { return }
+                self.exposureLocked = true
+                self.exposureSwitch.isOn = true
+                if let v = Float(value("--iso") ?? "") { self.isoValue = v; self.applyExposure(lockFromCurrent: false) } else { self.applyExposure(lockFromCurrent: true) }
+                self.refreshUI()
+            }
+        }
         if a.contains("--pc-on") {
             pcStream.codec = value("--pc-codec") ?? "jpeg"
             if let w = Int(value("--pc-width") ?? "") { pcStream.width = w }
@@ -739,6 +761,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         if !ueLink.enabled { enqueuePreview(frame) }
         ueLink.handle(frame: frame, recording: rec != nil)
         pcStream.handle(frame: frame, recordedFrame: rec.map { max($0.currentFrameCount - 1, 0) })
+        arMonitor.handle(frame: frame)
         frameTick += 1
         if frameTick % 6 == 0 { measureClip(frame) }
     }
@@ -834,7 +857,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             let pcs = pcStream.statusText
             statusLabel.text = String(format: " %02d:%02d  コマ %d  追跡 %@  白飛び %.1f%% ", sec / 60, sec % 60, rec.currentFrameCount, tracking, clip) + (pcs.isEmpty ? "" : "\n \(pcs) ")
         } else {
-            let ue = [ueLink.statusText, pcStream.statusText, audio.statusText].filter { !$0.isEmpty }.joined(separator: "\n ")
+            let ue = [ueLink.statusText, pcStream.statusText, audio.statusText, arMonitor.statusText].filter { !$0.isEmpty }.joined(separator: "\n ")
             statusLabel.text = " \(notice ?? String(format: "追跡 %@  映像 %d コマ  白飛び %.1f%%", tracking, previewN, clip))" + (ue.isEmpty ? " " : "\n \(ue) ")
         }
     }

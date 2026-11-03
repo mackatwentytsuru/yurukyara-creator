@@ -5,6 +5,9 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
     private let link: UELinkController
     private let pc: PCStreamer
     private let audio: AudioCapture
+    private let ar: ARMonitor
+    private let arSwitch = UISwitch()
+    private let arURLField = UITextField()
     private let setMic: (Bool, @escaping (String?) -> Void) -> Void
     private let micSwitch = UISwitch()
     private let pcSwitch = UISwitch()
@@ -17,10 +20,11 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
     private let logView = UITextView()
     private var timer: Timer?
 
-    init(link: UELinkController, pc: PCStreamer, audio: AudioCapture, setMic: @escaping (Bool, @escaping (String?) -> Void) -> Void, onChange: @escaping () -> Void) {
+    init(link: UELinkController, pc: PCStreamer, audio: AudioCapture, ar: ARMonitor, setMic: @escaping (Bool, @escaping (String?) -> Void) -> Void, onChange: @escaping () -> Void) {
         self.link = link
         self.pc = pc
         self.audio = audio
+        self.ar = ar
         self.setMic = setMic
         self.onChange = onChange
         super.init(nibName: nil, bundle: nil)
@@ -104,11 +108,17 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
         let micRow = UIStackView(arrangedSubviews: [label("マイク(音を録画と作業用 PC へ送りに入れる。自動の音量調整は切る)"), micSwitch])
         micRow.spacing = 10
 
+        style(arURLField, "AR モニターのページの URL", ar.url)
+        arSwitch.isOn = ar.enabled
+        arSwitch.addTarget(self, action: #selector(arSwitchChanged), for: .valueChanged)
+        let arRow = UIStackView(arrangedSubviews: [label("AR モニター(カメラの映像の上にキャラを重ねる)"), arSwitch])
+        arRow.spacing = 10
+
         let hostRow = UIStackView(arrangedSubviews: [hostField, portField])
         hostRow.spacing = 8
         portField.widthAnchor.constraint(equalToConstant: 90).isActive = true
 
-        let stack = UIStackView(arrangedSubviews: [switchRow, hostRow, urlField, pcRow, micRow, buttons, logView])
+        let stack = UIStackView(arrangedSubviews: [switchRow, hostRow, urlField, pcRow, micRow, arRow, arURLField, buttons, logView])
         stack.axis = .vertical
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -139,6 +149,11 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
         textField.resignFirstResponder()
         saveFields()
         return true
+    }
+
+    @objc private func arSwitchChanged() {
+        ar.setEnabled(arSwitch.isOn, url: arURLField.text?.trimmingCharacters(in: .whitespaces))
+        onChange()
     }
 
     @objc private func micSwitchChanged() {
