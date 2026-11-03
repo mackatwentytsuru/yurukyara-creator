@@ -163,6 +163,11 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         wasAbove = above
     }
 
+    /// 解いた LED の枠を AR に重ねる・消す
+    func setLedViz(_ on: Bool) {
+        webView.evaluateJavaScript("window.__arhost&&window.__arhost.setLedViz&&window.__arhost.setLedViz(\(on))", completionHandler: nil)
+    }
+
     /// 点の校正をやり直す
     func resetDots() {
         lock.lock(); lastCalibrationJSON = nil; lock.unlock()

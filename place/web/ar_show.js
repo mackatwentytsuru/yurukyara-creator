@@ -193,6 +193,8 @@ function solveDots(corners) {
       (sum[q.face] ??= []).push(v.addScaledVector(d, -v.dot(d)).length() * 100);
     });
     r.faces = Object.fromEntries(Object.entries(sum).map(([f, e]) => [f, [...e].sort((x, y) => x - y)[Math.floor(e.length / 2)]]));   // 面ごとの中央値(cm)
+    r.faceDots = {};
+    new Set(use.map((c) => c.dot)).forEach((k) => { const f = LED3[k].face; r.faceDots[f] = (r.faceDots[f] ?? 0) + 1; });
   }
   return r;
 }
@@ -251,7 +253,7 @@ function solveAlign(corners) {
 const ledViz = new THREE.Group();
 ledViz.matrixAutoUpdate = false;
 ledViz.visible = false;
-if (showLed) {
+if (showLed || hasFaces) {
   const rectAt = (x0, x1, z) => new THREE.BufferGeometry().setFromPoints([[x0, 0, z], [x1, 0, z], [x1, faceH, z], [x0, faceH, z], [x0, 0, z]].map((p) => new THREE.Vector3(...p)));
   const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff88 });
   if (dotMode === 'led3') {
@@ -274,11 +276,12 @@ if (showLed) {
   ledViz.add(new THREE.Line(floor, new THREE.LineBasicMaterial({ color: 0x33aaff })));
   scene.add(ledViz);
 }
+let ledVizWanted = showLed;
 function updateLedViz() {
-  if (!showLed || !T_world_from_led) return;
+  if (!T_world_from_led) { ledViz.visible = false; return; }
   ledViz.matrix.copy(T_world_from_led);
   ledViz.matrixWorldNeedsUpdate = true;
-  ledViz.visible = true;
+  ledViz.visible = ledVizWanted;
 }
 
 // ---- 時刻 ------------------------------------------------------------------------------
@@ -333,7 +336,7 @@ host.onCalibration = (json) => {
     if (anchorByFlash) { anchorTs = null; anchorByFlash = false; info(''); }   // 点の映像の緑の合図で始まってしまった分を取り消す(本物のフラッシュは点のあと)
     const r = solveDots(corners);
     const all = new Set(corners.map((c) => c.dot)).size, total = dotTotal;
-    dotState = { n: r ? r.nDots : all, total, rms: r ? r.rms_cm : null, faces: r?.faces ?? null, good: Boolean(r && r.nDots >= 10 && r.rms_cm <= dotRms), held: false };
+    dotState = { n: r ? r.nDots : all, total, rms: r ? r.rms_cm : null, faces: r?.faces ?? null, faceDots: r?.faceDots ?? null, good: Boolean(r && r.nDots >= 10 && r.rms_cm <= dotRms), held: false };
     if (r && r.nDots >= 10 && r.rms_cm <= dotRms) {
       lastGoodDots = r;
       T_world_from_led = r.T;
@@ -353,6 +356,7 @@ host.onCalibration = (json) => {
   if (r) { T_world_from_led = r.T; alignInfo = `面 A ${r.n} 隅 残差 ${r.rms_cm.toFixed(1)} cm yaw ${r.yaw_deg.toFixed(1)}°`; updateLedViz(); }
   else alignInfo = `校正が足りない(面 A の隅 ${corners.filter((c) => c.face === 'A').length}/4)`;
 };
+host.setLedViz = (on) => { ledVizWanted = Boolean(on); updateLedViz(); };
 host.onCalibReset = () => { lastGoodDots = null; dotState = null; T_world_from_led = null; ledViz.visible = false; alignInfo = '未校正'; };
 host.onManualStart = () => { anchorTs = lastTs; info('手で開始'); };
 host.onFlash = (ts) => {

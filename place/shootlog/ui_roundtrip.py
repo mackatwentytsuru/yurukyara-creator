@@ -25,8 +25,15 @@ def ssh(cmd, timeout=120):
 
 
 def pull(name, dest: Path):
-    ssh(f"rm -f /tmp/{name}; xcrun devicectl device copy from --device {DEV} --domain-type appDataContainer --domain-identifier {BUNDLE} --source Documents/{name} --destination /tmp/{name} > /dev/null 2>&1")
-    subprocess.run(["scp", "-q", f"pc3:/tmp/{name}", str(dest / name)], check=False)
+    """iPad から取り寄せる。空や失敗のときは取り直す(取り寄せが空になることがあった)。"""
+    (dest / name).unlink(missing_ok=True)
+    for _ in range(4):
+        ssh(f"rm -f /tmp/{name}; xcrun devicectl device copy from --device {DEV} --domain-type appDataContainer --domain-identifier {BUNDLE} --source Documents/{name} --destination /tmp/{name} > /dev/null 2>&1")
+        subprocess.run(["scp", "-q", f"pc3:/tmp/{name}", str(dest / name)], check=False)
+        if (dest / name).exists() and (dest / name).stat().st_size > 0:
+            return
+        time.sleep(2)
+    raise SystemExit(f"{name} を取り寄せられなかった")
 
 
 def start_receiver(tag, seconds):
@@ -77,7 +84,7 @@ def main():
     check("連番の欠けが 0", s.get("seq_missing") == 0)
     check("長さが合う", abs(t.get("seconds", 0) - a.seconds) < 3, f"{t.get('seconds')} 秒")
     log = [json.loads(x) for x in (out / "ui_log.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
-    check("正常の間は赤の知らせが出ない", not any(r["alarm"].startswith("Mac") for r in log))
+    check("正常の間は赤の知らせが出ない", len(log) > 20 and not any(r["alarm"].startswith("Mac") for r in log), f"記録 {len(log)} 行")
 
     # ②異常: 録画の途中で受け手を止める
     clear_takes()

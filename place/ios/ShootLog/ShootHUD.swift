@@ -32,6 +32,7 @@ struct CalibInfo {
     var n = 0, total = 33, syncs = 0
     var rms: Double?
     var faces: [(String, Double)] = []
+    var faceDots: [String: Int] = [:]
     var good = false, held = false
 }
 
@@ -72,6 +73,7 @@ struct ShootStatus {
     var arText = ""
     var guides = true
     var lens = 0                 // 0 広角、1 超広角
+    var ledViz = true            // 解いた LED の枠を AR に重ねる
     var takes: [TakeInfo] = []
 }
 
@@ -90,6 +92,7 @@ struct ShootActions {
     var setCutName: (String) -> Void = { _ in }
     var setGuides: (Bool) -> Void = { _ in }
     var setLens: (Int) -> Void = { _ in }
+    var toggleLedViz: () -> Void = {}
     var nextCut: () -> Void = {}
     var markTake: (Int, String) -> Void = { _, _ in }
     var details: () -> Void = {}
@@ -130,6 +133,13 @@ final class HUDButton: UIControl {
     required init?(coder: NSCoder) { fatalError() }
 
     func setTitle(_ t: String) { if label.text != t { label.text = t } }
+
+    /// 1 行に収める(上の帯のステップ)
+    func singleLine() {
+        label.numberOfLines = 1
+        label.font = .systemFont(ofSize: 17, weight: .bold)
+        label.minimumScaleFactor = 0.5
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -248,7 +258,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
 
     /// 上下の帯の高さ。iPhone のように背が低い画面では詰める。
     static func bars(_ bounds: CGRect) -> (top: CGFloat, bottom: CGFloat) {
-        bounds.height >= 700 ? (52, 110) : (40, 78)
+        bounds.height >= 700 ? (60, 110) : (44, 78)
     }
 
     /// 映像を置く枠(映像の全部が入る)
@@ -284,14 +294,15 @@ final class ShootHUD: UIView, UITextFieldDelegate {
     private func build() {
         for v in [topBar, bottomBar] { v.backgroundColor = .black; addSubview(v) }
         for s in ShootStep.allCases {
-            let b = HUDButton(id: "step\(s.rawValue)", title: "\(s.rawValue + 1) \(s.title)")
+            let b = HUDButton(id: "step\(s.rawValue)", title: "\(s.rawValue + 1)\(s.title)")
+            b.singleLine()
             b.onFire = { [weak self] in self?.actions.setStep(s) }
             stepButtons.append(b)
             topBar.addSubview(b)
         }
         for _ in 0..<5 {
-            let d = UIView(); d.layer.cornerRadius = 7
-            let l = label(16, weight: .semibold)
+            let d = UIView(); d.layer.cornerRadius = 9
+            let l = label(21, weight: .bold)
             l.adjustsFontSizeToFitWidth = true
             l.minimumScaleFactor = 0.7
             lampDots.append(d); lampLabels.append(l)
@@ -299,9 +310,9 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         }
         gear.onFire = { [weak self] in self?.actions.details() }
         topBar.addSubview(gear)
-        alarmLabel.font = .systemFont(ofSize: 24, weight: .heavy)
+        alarmLabel.font = .systemFont(ofSize: 36, weight: .heavy)
         alarmLabel.textColor = .white
-        alarmLabel.backgroundColor = Lamp.red.color.withAlphaComponent(0.85)
+        alarmLabel.backgroundColor = UIColor(red: 0.78, green: 0.12, blue: 0.12, alpha: 1)
         alarmLabel.textAlignment = .center
         alarmLabel.adjustsFontSizeToFitWidth = true
         alarmLabel.minimumScaleFactor = 0.6
@@ -436,18 +447,18 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         let b = ShootHUD.bars(bounds)
         topBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: b.top)
         bottomBar.frame = CGRect(x: 0, y: bounds.height - b.bottom, width: bounds.width, height: b.bottom)
-        let stepW: CGFloat = min(84, bounds.width * 0.07), stepH = b.top - 8
-        for (i, s) in stepButtons.enumerated() { s.frame = CGRect(x: 8 + CGFloat(i) * (stepW + 4), y: 4, width: stepW, height: stepH) }
-        let gearW: CGFloat = 64
-        gear.frame = CGRect(x: bounds.width - gearW - 8, y: 4, width: gearW, height: stepH)
-        let lampsX = 8 + 5 * (stepW + 4) + 10
+        let stepW: CGFloat = min(70, bounds.width * 0.06), stepH = b.top - 10
+        for (i, s) in stepButtons.enumerated() { s.frame = CGRect(x: 6 + CGFloat(i) * (stepW + 3), y: 5, width: stepW, height: stepH) }
+        let gearW: CGFloat = 60
+        gear.frame = CGRect(x: bounds.width - gearW - 6, y: 5, width: gearW, height: stepH)
+        let lampsX = 6 + 5 * (stepW + 3) + 8
         let lampW = (gear.frame.minX - 8 - lampsX) / 5
         for i in 0..<5 {
             let x = lampsX + CGFloat(i) * lampW
-            lampDots[i].frame = CGRect(x: x, y: (b.top - 14) / 2, width: 14, height: 14)
-            lampLabels[i].frame = CGRect(x: x + 19, y: 2, width: lampW - 22, height: b.top - 4)
+            lampDots[i].frame = CGRect(x: x, y: (b.top - 18) / 2, width: 18, height: 18)
+            lampLabels[i].frame = CGRect(x: x + 22, y: 2, width: lampW - 24, height: b.top - 4)
         }
-        alarmLabel.frame = CGRect(x: 8, y: 2, width: lampsX - 16, height: b.top - 4)
+        alarmLabel.frame = CGRect(x: 0, y: 0, width: gear.frame.minX - 6, height: b.top)
 
         let side: CGFloat = bounds.height >= 700 ? 88 : 64
         let rec: CGFloat = bounds.height >= 700 ? 92 : 68
@@ -498,9 +509,12 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         for (i, b) in stepButtons.enumerated() {
             b.fill = i == s.step.rawValue ? ShootHUD.accent : UIColor(white: 0.14, alpha: 1)
             b.isEnabled = !recording || i == s.step.rawValue
+            b.isHidden = s.alarm != nil
         }
         gear.isEnabled = !recording
         for i in 0..<5 {
+            lampDots[i].isHidden = s.alarm != nil
+            lampLabels[i].isHidden = s.alarm != nil
             if i < s.lamps.count {
                 lampDots[i].backgroundColor = s.lamps[i].lamp.color
                 lampLabels[i].text = s.lamps[i].name + " " + s.lamps[i].text
@@ -509,7 +523,7 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         }
         alarmLabel.text = s.alarm
         alarmLabel.isHidden = s.alarm == nil
-        for b in stepButtons { b.isHidden = s.alarm != nil }
+        topBar.bringSubviewToFront(alarmLabel)
         guide.isHidden = !s.guides || s.step != .shoot
         recBorder.isHidden = s.phase != .recording
         recBorder.layer.borderColor = (s.alarm != nil ? Lamp.red.color : ShootHUD.recRed).cgColor
@@ -556,10 +570,17 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         let rms = c.rms.map { String(format: "%.1f cm", $0) } ?? "-"
         bigLabel.text = c.good ? "校正 OK  点 \(c.n)/\(c.total)  残差 \(rms)" : (c.held ? "前の校正を保持  点 \(c.n)/\(c.total)" : "校正中  点 \(c.n)/\(c.total)  残差 \(rms)")
         bigLabel.textColor = c.good ? Lamp.green.color : (c.held ? Lamp.yellow.color : ShootHUD.primary)
-        let faces = c.faces.map { "\($0.0) \(String(format: "%.1f", $0.1))" }.joined(separator: "  ")
+        let faces = c.faces.map { f in
+            let n = c.faceDots[f.0].map { "(\($0) 点)" } ?? ""
+            return "\(f.0) \(String(format: "%.1f", f.1))\(n)"
+        }.joined(separator: "  ")
         smallLabel.text = (faces.isEmpty ? "LED に点の映像を流し、8 m より離れて 3 面を入れる" : "面ごとの残差(cm) \(faces)") + "\n合図 \(c.syncs) 回。合格の目安: 点 20 以上・残差 4 cm 以下"
         leftButton.setTitle("やり直し\n(長押し)"); leftButton.hold = 1.2
         leftButton.onFire = { [weak self] in self?.actions.calibReset() }
+        left2Button.isHidden = false
+        left2Button.isEnabled = s.arOn
+        left2Button.setTitle(s.ledViz ? "枠を消す" : "枠を出す")
+        left2Button.onFire = { [weak self] in self?.actions.toggleLedViz() }
         rightButton.setTitle("次へ カット"); rightButton.onFire = { [weak self] in self?.actions.setStep(.cut) }
         rightButton.fill = c.good ? ShootHUD.accent : UIColor(white: 0.20, alpha: 1)
     }
@@ -605,8 +626,14 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         case .recording:
             rightButton.setTitle("停止\n長押し"); rightButton.fill = UIColor(white: 0.25, alpha: 1); rightButton.hold = 1.2
             bigLabel.text = "● REC \(time)"; bigLabel.textColor = Lamp.red.color
-            smallLabel.text = s.lens == 0 ? "Mac 保存 \(s.macFrames) コマ  切れた \(s.lost)  \(String(format: "%.0f", s.sentFps)) fps" : "超広角 iPad に保存 \(s.macFrames) コマ  切れた \(s.lost)"
-            smallLabel.textColor = s.alarm != nil ? Lamp.red.color : ShootHUD.secondary
+            let base = s.alarm != nil ? Lamp.red.color : ShootHUD.secondary
+            let head = s.lens == 0 ? "Mac 保存 \(s.macFrames) コマ  " : "超広角 iPad に保存 \(s.macFrames) コマ  "
+            let text = NSMutableAttributedString(string: head, attributes: [.foregroundColor: base, .font: UIFont.monospacedDigitSystemFont(ofSize: 18, weight: .medium)])
+            text.append(NSAttributedString(string: "切れた \(s.lost)", attributes: s.lost > 0
+                ? [.foregroundColor: Lamp.red.color, .font: UIFont.systemFont(ofSize: 26, weight: .heavy)]
+                : [.foregroundColor: base, .font: UIFont.monospacedDigitSystemFont(ofSize: 18, weight: .medium)]))
+            if s.lens == 0 { text.append(NSAttributedString(string: "  \(String(format: "%.0f", s.sentFps)) fps", attributes: [.foregroundColor: base, .font: UIFont.monospacedDigitSystemFont(ofSize: 18, weight: .medium)])) }
+            smallLabel.attributedText = text
         case .stopping:
             rightButton.setTitle("保存中"); rightButton.fill = UIColor(white: 0.25, alpha: 1); rightButton.isEnabled = false
             bigLabel.text = "保存を確かめています"; bigLabel.textColor = Lamp.yellow.color

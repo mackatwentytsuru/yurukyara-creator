@@ -72,6 +72,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private var uiDemo = false
     private var uiLog: FileHandle?
     private var lens = 0                 // 0 広角(ARKit)、1 超広角(ARKit なし)
+    private var ledVizOn = false
     private var ultraCut: UltraWideCut?
     private var ultraElapsedFrames = 0
     private var ultraWide: UltraWideCut?
@@ -956,6 +957,12 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         act.setCutName = { [weak self] n in self?.cutName = n }
         act.setGuides = { [weak self] on in self?.guidesOn = on }
         act.setLens = { [weak self] i in self?.switchLens(i) }
+        act.toggleLedViz = { [weak self] in
+            guard let self else { return }
+            self.ledVizOn.toggle()
+            self.arMonitor.setLedViz(self.ledVizOn)
+            self.refreshUI()
+        }
         act.nextCut = { [weak self] in
             guard let self else { return }
             self.cutNumber += 1
@@ -1063,7 +1070,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                 let dropped = info["dropped"] as? Int ?? 0
                 let saved = (info["writer_status"] as? Int) == AVAssetWriter.Status.completed.rawValue && frames > 0
                 self.takes.append(TakeInfo(number: self.takeNumber, cut: self.cutName, lens: "超広角", seconds: self.takeElapsed, sent: frames, macFrames: frames, lost: dropped,
-                                           thermal: UELinkController.thermalName(ProcessInfo.processInfo.thermalState), saved: saved))
+                                           thermal: Self.thermalJP(ProcessInfo.processInfo.thermalState), saved: saved))
                 Self.saveTakes(self.takes)
                 self.saveNote = saved ? "iPad に保存済み \(frames) コマ(テイク \(self.takeNumber))" : "保存できませんでした"
                 self.takeNumber += 1
@@ -1119,7 +1126,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private func finishTake(_ st: PCStreamer.SaveStatus, saved: Bool) {
         pcStream.setEnabled(false, host: macHost, port: macPort)
         let lost = st.skippedBusy + st.sendFailed
-        let thermal = UELinkController.thermalName(ProcessInfo.processInfo.thermalState)
+        let thermal = Self.thermalJP(ProcessInfo.processInfo.thermalState)
         takes.append(TakeInfo(number: takeNumber, cut: cutName, seconds: takeElapsed, sent: st.sent, macFrames: st.macFrames, lost: lost, thermal: thermal, saved: saved, gaps: ackGaps))
         Self.saveTakes(takes)
         saveNote = saved ? "保存済み \(st.macFrames) コマ(テイク \(takeNumber))" : "保存を確かめられません(送った \(st.sent)・Mac \(st.macFrames))"
@@ -1163,7 +1170,6 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         lock.lock(); let tracking = lastTracking; lock.unlock()
         let trackOK = tracking == "normal"
         let thermalState = ProcessInfo.processInfo.thermalState
-        let thermalName = UELinkController.thermalName(thermalState)
         let recording = phase == .recording
 
         // 校正
@@ -1177,6 +1183,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             c.good = d["good"] as? Bool ?? false
             c.held = d["held"] as? Bool ?? false
             if let f = d["faces"] as? [String: Double] { c.faces = f.sorted { $0.key < $1.key }.map { ($0.key, $0.value) } }
+            if let f = d["faceDots"] as? [String: Int] { c.faceDots = f }
         }
         s.calib = c
 
@@ -1197,12 +1204,13 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         }
         if lens == 1 { macLamp = .off; macText = "使わない" }
         s.lens = lens
+        s.ledViz = ledVizOn
         if lens == 1, let cut = ultraCut { s.macFramesOverride = phase == .recording ? cut.writtenFrames : nil }
         let trackLamp: Lamp = lens == 1 ? .off : (trackOK ? .green : .yellow)
         s.lamps = [
             LampInfo(name: "追跡", lamp: trackLamp, text: lens == 1 ? "なし" : (trackOK ? "OK" : "乱れ")),
             LampInfo(name: "Mac", lamp: macLamp, text: macText),
-            LampInfo(name: "熱", lamp: thLamp, text: thermalName),
+            LampInfo(name: "熱", lamp: thLamp, text: Self.thermalJP(thermalState)),
             LampInfo(name: "電池", lamp: batLamp, text: "\(batPct)%\(charging ? "+" : "")"),
             LampInfo(name: "校正", lamp: c.good ? .green : (c.held ? .yellow : .off), text: c.good || c.held ? "\(c.n)/\(c.total)" : "まだ"),
         ]
@@ -1227,7 +1235,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let mic = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         s.permissions = "カメラ \(cam ? "OK" : "未")・マイク \(mic ? "OK" : "未")"
         s.battery = "\(batPct)%\(charging ? " 充電中" : "")"
-        s.thermal = thermalName
+        s.thermal = Self.thermalJP(thermalState)
         if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
            let v = try? docs.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage {
             s.ipadFree = "\(v / 1_000_000_000) GB"
@@ -1247,6 +1255,16 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         s.guides = guidesOn
         s.takes = takes
         return s
+    }
+
+    private static func thermalJP(_ t: ProcessInfo.ThermalState) -> String {
+        switch t {
+        case .nominal: return "平常"
+        case .fair: return "少し"
+        case .serious: return "高い"
+        case .critical: return "危険"
+        @unknown default: return "-"
+        }
     }
 
     private static var takesURL: URL? {
@@ -1273,23 +1291,24 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private func runUISweep() {
         uiDemo = true
         var base = ShootStatus()
-        base.lamps = [LampInfo(name: "追跡", lamp: .green, text: "OK"), LampInfo(name: "Mac", lamp: .green, text: "OK"), LampInfo(name: "熱", lamp: .green, text: "nominal"),
+        base.lamps = [LampInfo(name: "追跡", lamp: .green, text: "OK"), LampInfo(name: "Mac", lamp: .green, text: "OK"), LampInfo(name: "熱", lamp: .green, text: "平常"),
                       LampInfo(name: "電池", lamp: .green, text: "100%+"), LampInfo(name: "校正", lamp: .green, text: "28/33")]
-        base.host = "192.168.x.x"; base.probe = "つながりました"; base.permissions = "カメラ OK・マイク OK"; base.battery = "100% 充電中"; base.thermal = "nominal"
+        base.host = "192.168.x.x"; base.probe = "つながりました"; base.permissions = "カメラ OK・マイク OK"; base.battery = "100% 充電中"; base.thermal = "平常"
         base.ipadFree = "93 GB"; base.macFree = "412 GB"; base.micOn = true; base.arOn = true; base.arText = "AR ショー 66.0 秒 表示中"; base.isoText = "ISO 50"; base.exposureLocked = true; base.isoFraction = 0.1
-        base.calib = CalibInfo(n: 28, total: 33, syncs: 3, rms: 1.2, faces: [("A", 0.8), ("B", 1.2), ("C", 0.9)], good: true, held: false)
-        base.takes = (1...7).map { TakeInfo(number: $0, cut: "カット\(($0 + 1) / 2)", seconds: Double(90 + $0), sent: 2800, macFrames: 2800, lost: $0 == 3 ? 12 : 0, thermal: "nominal", saved: $0 != 5, mark: $0 == 2 ? "OK" : ($0 == 4 ? "NG" : "")) }
+        base.calib = CalibInfo(n: 28, total: 33, syncs: 3, rms: 1.2, faces: [("A", 0.8), ("B", 1.2), ("C", 0.9)], faceDots: ["A": 8, "B": 14, "C": 6], good: true, held: false)
+        base.takes = (1...7).map { TakeInfo(number: $0, cut: "カット\(($0 + 1) / 2)", seconds: Double(90 + $0), sent: 2800, macFrames: 2800, lost: $0 == 3 ? 12 : 0, thermal: "平常", saved: $0 != 5, mark: $0 == 2 ? "OK" : ($0 == 4 ? "NG" : "")) }
         base.takeNumber = 8
         func with(_ f: (inout ShootStatus) -> Void) -> ShootStatus { var x = base; f(&x); return x }
         let cases: [(String, ShootStatus)] = [
             ("1_prepare", with { $0.step = .prepare }),
             ("1_prepare_ng", with { $0.step = .prepare; $0.probe = "つながりません(IP と、Mac の受け手を確かめる)"; $0.lamps[1] = LampInfo(name: "Mac", lamp: .off, text: "未確認") }),
             ("2_calib_ok", with { $0.step = .calibrate }),
-            ("2_calib_running", with { $0.step = .calibrate; $0.calib = CalibInfo(n: 12, total: 33, syncs: 1, rms: 6.2, faces: [("A", 3.1), ("B", 7.5)], good: false, held: false); $0.lamps[4] = LampInfo(name: "校正", lamp: .off, text: "まだ") }),
+            ("2_calib_running", with { $0.step = .calibrate; $0.calib = CalibInfo(n: 12, total: 33, syncs: 1, rms: 6.2, faces: [("A", 3.1), ("B", 7.5)], faceDots: ["A": 4, "B": 8], good: false, held: false); $0.lamps[4] = LampInfo(name: "校正", lamp: .off, text: "まだ") }),
             ("2_calib_held", with { $0.step = .calibrate; $0.calib.good = false; $0.calib.held = true; $0.lamps[4] = LampInfo(name: "校正", lamp: .yellow, text: "28/33") }),
             ("3_cut", with { $0.step = .cut }),
             ("4_shoot_idle", with { $0.step = .shoot }),
             ("4_shoot_rec", with { $0.step = .shoot; $0.phase = .recording; $0.elapsed = 754; $0.macFrames = 22610; $0.lost = 0; $0.sentFps = 30 }),
+            ("4_shoot_rec_lost", with { $0.step = .shoot; $0.phase = .recording; $0.elapsed = 754; $0.macFrames = 22610; $0.lost = 7; $0.sentFps = 29 }),
             ("4_shoot_alarm", with { $0.step = .shoot; $0.phase = .recording; $0.elapsed = 754; $0.macFrames = 22610; $0.lost = 3; $0.sentFps = 0; $0.alarm = "Mac に保存できていません"; $0.lamps[1] = LampInfo(name: "Mac", lamp: .red, text: "停止") }),
             ("4_shoot_saved", with { $0.step = .shoot; $0.note = "保存済み 22610 コマ(テイク 7)" }),
             ("5_takes", with { $0.step = .takes }),
