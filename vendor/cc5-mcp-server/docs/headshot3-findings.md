@@ -27,7 +27,7 @@ Headshot 3 の機能をほぼ持たない。古い API か、CC5 では機能し
 ```python
 CreateHeadFromPhoto(strPhotoPath: wstring, eMode: EHSMode, kOption: RHeadshotOption)
 ```
-`docs/rlpy-api-reference.md` L5200 に記載あり。実機の TypeError メッセージとも一致。
+the RLPy stub that ships with Character Creator (`RLPy.py`) L5200 に記載あり。実機の TypeError メッセージとも一致。
 
 ### クラッシュ実測(2026-07-20)
 
@@ -62,7 +62,7 @@ CreateHeadFromPhoto(
 - とくに `RLPy.RFileIO.ExportFbxFile()` を引数0個で呼ぶと**即座に**CC5 が死ぬ
   (`cc5_api.py` に既存のコメントあり)。
 - シグネチャ調査は次の順で行う:
-  1. `docs/rlpy-api-reference.md` を検索(今回 `CreateHeadFromPhoto` は L5200 に既にあった)
+  1. the RLPy stub that ships with Character Creator (`RLPy.py`) を検索(今回 `CreateHeadFromPhoto` は L5200 に既にあった)
   2. `Bin64/OpenPlugin/HeadShot3Kit/scripts/` の実サンプルを読む
   3. Reallusion 公式 Python API ドキュメント
   4. それでも不明ならユーザーに確認する。**推測で呼ばない**
