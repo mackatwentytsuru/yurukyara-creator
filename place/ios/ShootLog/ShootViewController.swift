@@ -73,6 +73,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private var uiLog: FileHandle?
     private var lens = 0                 // 0 広角(ARKit)、1 超広角(ARKit なし)
     private var ledVizOn = false
+    private var connectStart = 0.0
+    private var noteBad = false
     private var ultraCut: UltraWideCut?
     private var ultraElapsedFrames = 0
     private var ultraWide: UltraWideCut?
@@ -1073,6 +1075,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                                            thermal: Self.thermalJP(ProcessInfo.processInfo.thermalState), saved: saved))
                 Self.saveTakes(self.takes)
                 self.saveNote = saved ? "iPad に保存済み \(frames) コマ(テイク \(self.takeNumber))" : "保存できませんでした"
+                self.noteBad = !saved
                 self.takeNumber += 1
                 self.phase = .idle
                 self.refreshUI()
@@ -1098,6 +1101,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         pcStream.kbps = 18000
         pcStream.setEnabled(true, host: macHost, port: macPort)
         phase = .connecting
+        connectStart = ProcessInfo.processInfo.systemUptime
+        noteBad = false
         logEvent("take:start:\(takeNumber)")
         refreshUI()
     }
@@ -1130,6 +1135,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         takes.append(TakeInfo(number: takeNumber, cut: cutName, seconds: takeElapsed, sent: st.sent, macFrames: st.macFrames, lost: lost, thermal: thermal, saved: saved, gaps: ackGaps))
         Self.saveTakes(takes)
         saveNote = saved ? "保存済み \(st.macFrames) コマ(テイク \(takeNumber))" : "保存を確かめられません(送った \(st.sent)・Mac \(st.macFrames))"
+        noteBad = !saved
         logEvent("take:stop:\(takeNumber):\(saved)")
         takeNumber += 1
         phase = .idle
@@ -1142,6 +1148,13 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         if phase == .connecting, st.connected {
             phase = .recording
             takeStart = Date()
+        } else if phase == .connecting, now - connectStart > 6 {
+            // つながらないまま待たない(受け手があとで起動しても、勝手に録り始めない)
+            pcStream.setEnabled(false, host: macHost, port: macPort)
+            phase = .idle
+            saveNote = "Mac につながりません。録画していません"
+            noteBad = true
+            logEvent("take:connect-failed:\(takeNumber)")
         }
         if phase == .recording || phase == .stopping {
             if now - lastSent.t >= 1 {
@@ -1226,6 +1239,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         s.lost = lens == 1 ? 0 : st.skippedBusy + st.sendFailed
         s.sentFps = sentFps
         s.note = saveNote
+        s.noteBad = noteBad
         s.host = macHost
         s.port = macPort
         s.probe = probeText

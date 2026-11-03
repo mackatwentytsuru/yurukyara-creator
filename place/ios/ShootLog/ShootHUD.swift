@@ -60,6 +60,7 @@ struct ShootStatus {
     var macFramesOverride: Int?  // 超広角のとき、iPad に書いたコマ
     var sentFps: Double = 0
     var note: String?            // 例「保存済み 3603 コマ」
+    var noteBad = false
     var calib = CalibInfo()
     var host = "", probe = "", permissions = "", battery = "", thermal = "", ipadFree = "", macFree = ""
     var port = 9100
@@ -617,12 +618,12 @@ final class ShootHUD: UIView, UITextFieldDelegate {
         case .idle:
             rightButton.setTitle("録画"); rightButton.fill = ShootHUD.recRed
             bigLabel.text = s.note ?? "\(s.cutName) テイク \(s.takeNumber)"
-            bigLabel.textColor = s.note != nil ? Lamp.green.color : ShootHUD.primary
+            bigLabel.textColor = s.note != nil ? (s.noteBad ? Lamp.red.color : Lamp.green.color) : ShootHUD.primary
             smallLabel.text = s.lens == 0 ? s.arText : "超広角: AR と位置の記録なし"
         case .connecting:
             rightButton.setTitle("…"); rightButton.fill = UIColor(white: 0.25, alpha: 1); rightButton.isEnabled = false
             bigLabel.text = "Mac につないでいます"; bigLabel.textColor = Lamp.yellow.color
-            smallLabel.text = "まだ録画していません"
+            smallLabel.text = "まだ録画していません(6 秒でつながらなければ止めます)"
         case .recording:
             rightButton.setTitle("停止\n長押し"); rightButton.fill = UIColor(white: 0.25, alpha: 1); rightButton.hold = 1.2
             bigLabel.text = "● REC \(time)"; bigLabel.textColor = Lamp.red.color

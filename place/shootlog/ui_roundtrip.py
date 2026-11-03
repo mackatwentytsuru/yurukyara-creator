@@ -107,6 +107,22 @@ def main():
     delay = alarms[0]["t"] - rec_start if alarms else None
     check("受け手を止めると「Mac に保存できていません」が出る", bool(alarms) and delay > a.seconds / 2 - 3, f"{len(alarms)} 回(録画の開始から {delay:.1f} 秒。止めたのは約 {a.seconds / 2:.0f} 秒)" if alarms else "")
     check("そのテイクは保存未確認になる", t.get("saved") is False, f"送った {t.get('sent')}・応答 {t.get('macFrames')}")
+
+    # ③受け手が無いときに録画を押す: 録り始めず、待ちつづけず、あとで受け手が起動しても勝手に録らない
+    clear_takes()
+    ssh("pkill -f 'pc_stream_receiver.py --out' ; true")
+    launch(6)
+    time.sleep(3 + 2 + 9)
+    pull("ui_log.jsonl", out)
+    log = [json.loads(x) for x in (out / "ui_log.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    tried = any(r["phase"] == "connecting" for r in log)
+    check("受け手が無いと、つなぐのを 6 秒で諦める", tried and log[-1]["phase"] == "idle", f"最後の状態 {log[-1]['phase']}")
+    rx = start_receiver("rt_late", 8)
+    time.sleep(7)
+    rx.wait(timeout=30)
+    late = ssh("cat ~/sample_work/rx/rt_late/take_001/summary.json 2>/dev/null")
+    late_frames = json.loads(late).get("frames", 0) if late.strip().startswith("{") else 0
+    check("あとで受け手が起動しても勝手に録らない", late_frames == 0, f"受けたコマ {late_frames}")
     print("全部合格" if ok else "不合格あり")
     sys.exit(0 if ok else 1)
 

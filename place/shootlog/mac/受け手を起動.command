@@ -15,7 +15,8 @@ TS=$(/Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4 2>/dev/null | he
 IP=$(ipconfig getifaddr en0)
 echo ""
 echo "=== iPad の「送り先」に入れる IP ==="
-echo "  Tailscale: $TS    (同じ Wi-Fi の中: $IP)"
+echo "  同じ Wi-Fi の中: $IP   ← ふつうはこれ"
+echo "  (Tailscale を使うときだけ: $TS)"
 echo "  ポート: 9100"
 echo "記録先: $OUT"
 echo "iPad の録画ボタンを押すたびに、take_001、take_002 … と分かれます。5 秒おきに「コマ・毎秒・欠け」が出ます。全部終わったら Control+C。"
