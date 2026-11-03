@@ -2,6 +2,10 @@
 
 ゆるキャラの絵 1 枚から、3D・骨・顔・動きを作り、`characters/<id>/` に渡す工程です。各段の出来は Claude が絵で見て、足りなければ前の段をやり直します。
 
+## はじめかた
+
+このリポジトリを Claude Code で開いて、「この絵を話すキャラにして」と頼みます。スキル `talking-character` が、環境を調べて(`creator/setup/doctor.py`)、作って、検査して、別の目で判定して、会話の画面で話させるところまで進めます。鍵は聞きません。
+
 ## 2 つの道(同じ「絵 1 枚から」)
 
 - **手組み(本命)**: Claude が元の絵を見て部品の一覧(形・色・位置・大きさ)を決め、Blender の Python(`creator/builders/<id>.py`)で数式から一から組み、撮って元の絵と並べて比べ、数字を直す。1 周 16 秒。色むらが出ず、AI の 3D 生成 まわりの許諾の問題がなく、VRAM も要らない。骨・顔・動きは同じ道具を使う。
@@ -19,7 +23,10 @@
 | 9 | `b05_render.py` + `s01_sheet.py` | 8 方向の一覧 | Blender |
 | 手 | `m00_prims.py` + `creator/builders/<id>.py` + `run_built.sh` | 手組みの形(超楕円体・輪・布の板)を作って、骨・顔・動き・確かめまで 1 周 | Blender |
 | 比べ | `s03_compare.py` | 元の絵と作った物を並べ、輪郭の重なり(IoU)を測る | |
-| 10 | `pk01_package.py` | `characters/<id>/` に並べて `character.json` を書く | |
+| 10 | `pk01_package.py`・`pk04_install.py` | `characters/<id>/` に並べて `character.json` を書く | |
+| 検査 | `check_all.sh` | 形式・予算・埋まりと浮き・抜け・ブラウザ・視線を 1 回で。直すたびの様子は `check/history/` に残る | Blender・Chrome |
+| 判定 | `j01_judge.py` | 作り手以外の目で、同じキャラか・色・部分を判定(既定は新しい文脈の Claude) | claude |
+| 話す | `web_talk_check.mjs` | 会話の画面で読み込み・返事・口・表情か動きを確かめる | Chrome |
 
 骨と重みはキャラごとの `creator/specs/<id>_built.json`(位置は外接箱に対する割合)で決める。
 

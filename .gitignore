@@ -4,6 +4,7 @@ node_modules/
 __pycache__/
 .DS_Store
 creator/env.local.sh
+creator/env.local.sh.bak
 _trials/
 tools/history_terms.local.txt
 tools/prepush_terms.local.txt

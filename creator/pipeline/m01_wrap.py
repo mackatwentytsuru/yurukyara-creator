@@ -79,9 +79,10 @@ def _resample(path, n, closed):
 
 
 def wrap_band(name, body, path, width, thick=0.008, clearance=0.002, mat=None, seg=96, rows=8, closed=False, axis=None,
-              smooth=2):
+              smooth=2, taper=0.0, taper_min=0.6):
     """体に巻く帯。path = [(角度, 高さ), …]。closed=True なら一周(path に最後の点を重ねて書かない)。
-    断面はかまぼこ形(中央がふくらむ)。UV は u が帯の長さ、v が幅。"""
+    断面はかまぼこ形(中央がふくらむ)。UV は u が帯の長さ、v が幅。
+    taper: 両端のこの割合(0〜0.5)で、幅を taper_min 倍まで細める。肩や胴の端で帯の角が折れたり、頭や腕に刺さるのを防ぐ。"""
     bvh = body_bvh(body)
     axis = axis or _axis_of(body)
     samples = _resample(path, seg, closed)
@@ -95,11 +96,16 @@ def wrap_band(name, body, path, width, thick=0.008, clearance=0.002, mat=None, s
         dz = z1 - z0
         ln = max(math.hypot(ds, dz), 1e-6)
         across_s, across_z = -dz / ln, ds / ln   # 道に直角な向き(面の上)
+        w = width
+        if taper > 0 and not closed:
+            edge = min(k, len(samples) - 1 - k) / max(len(samples) - 1, 1) / taper
+            f = min(edge, 1.0)
+            w = width * (taper_min + (1 - taper_min) * f * f * (3 - 2 * f))
         row = []
         for j in range(rows + 1):
             u = 2 * j / rows - 1
-            aj = a + math.degrees(across_s * u * width / 2 / radius)
-            zj = z + across_z * u * width / 2
+            aj = a + math.degrees(across_s * u * w / 2 / radius)
+            zj = z + across_z * u * w / 2
             p, n = _hit(bvh, axis, aj, zj)
             row.append((p, n, u))
         grid.append(row)

@@ -4,10 +4,10 @@
 # 検査: ① character.json の形 ② GLB の予算 ③ 埋まりと浮き ④ 元の絵と比べた抜け ⑤ ブラウザ(three.js)で撮れる ⑥ 視線で体の骨が回り続けない
 # 出力: <出力フォルダ>/contact.json、gaps.json、gaps.png、browser/browser_front.png など、check.txt(結果)
 # ここが全部通っても、見た目の合格ではない。形・質感・色は、ブラウザの絵を作り手以外の AI に見せて判定する。
-# Git Bash では、パスを Windows の形にそろえる(/x/… のまま Blender や node へ渡すと、別の場所に書かれて、絵が迷子になる)
-BLEND=$(cygpath -m "$1"); PACK=$(cygpath -m "$2"); ORIG=$(cygpath -m "$3"); OUT=$(cygpath -m "$4"); HUG=$5
 HERE=$(cd "$(dirname "$0")" && pwd)
 ENV_SH="$HERE/check_all.sh"; . "$HERE/../env.sh"
+# Git Bash では、パスを Windows の形にそろえる(/x/… のまま Blender や node へ渡すと、別の場所に書かれて、絵が迷子になる)
+BLEND=$(cygpath -m "$1"); PACK=$(cygpath -m "$2"); ORIG=$(cygpath -m "$3"); OUT=$(cygpath -m "$4"); HUG=$5
 B=$BLENDER
 mkdir -p "$OUT"
 LOG="$OUT/check.txt"; : > "$LOG"
@@ -34,7 +34,7 @@ fi
 PORT=$("$PY" -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1])")
 PARENT=$(cd "$PACK/.." && pwd); NAME=$(basename "$PACK")
 SERVE=$(cygpath -m "$REPO/creator/viewer/serve.py")
-MSYS_NO_PATHCONV=1 python "$SERVE" "$PORT" "--mount=/trial=$(cygpath -m "$PARENT" 2>/dev/null || echo "$PARENT")" > /dev/null 2>&1 &
+MSYS_NO_PATHCONV=1 "$PY" "$SERVE" "$PORT" "--mount=/trial=$(cygpath -m "$PARENT" 2>/dev/null || echo "$PARENT")" > /dev/null 2>&1 &
 SRV=$!
 for _ in 1 2 3 4 5 6 7 8 9 10; do curl -sf -o /dev/null "http://127.0.0.1:$PORT/creator/viewer/index.html" && break; sleep 1; done
 SHOT=$(cygpath -m "$REPO/creator/skilltest/shot_browser.mjs")
@@ -52,4 +52,9 @@ fi
 kill "$SRV" 2> /dev/null
 
 [ "$FAIL" = 0 ] && say "全部 OK(見た目の合格ではない)" || say "落ちた検査あり"
+# 直すたびの様子を残す(動画の早回しと、試行錯誤の記録に使う)
+HIST="$OUT/history/$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$HIST"
+cp "$LOG" "$HIST/" 2> /dev/null
+cp "$OUT/browser/browser_front.png" "$OUT/browser/browser_q.png" "$OUT/gaps.png" "$HIST/" 2> /dev/null
 exit "$FAIL"

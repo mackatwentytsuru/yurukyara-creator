@@ -218,13 +218,33 @@ def outline(ob, thick, mat, name=None):
     return sh
 
 
-def loft(name, secs, mat=None, n=48, e=1.0, close=True):
+def _refine_secs(secs, k):
+    """断面の間を Catmull-Rom で k 分割して増やす。断面が少ないと、輪郭が折れ線に見える。"""
+    out = []
+    for i in range(len(secs) - 1):
+        p0, p1, p2, p3 = secs[max(i - 1, 0)], secs[i], secs[i + 1], secs[min(i + 2, len(secs) - 1)]
+        for j in range(k):
+            t = j / k
+            row = dict(p1)
+            for key in ("z", "cx", "cy", "rx", "ry"):
+                a, b, c, d = (s.get(key, 0.0) for s in (p0, p1, p2, p3))
+                row[key] = 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t ** 3)
+            row["rx"], row["ry"] = max(row["rx"], 1e-4), max(row["ry"], 1e-4)
+            out.append(row)
+    out.append(dict(secs[-1]))
+    return out
+
+
+def loft(name, secs, mat=None, n=48, e=1.0, close=True, refine=1):
     """高さごとの断面(超楕円)をつないで、1 つの滑らかな形にする。元の絵の輪郭から読み取った「高さごとの幅」を、そのまま使える。
 
     secs: [{z, cx, cy, rx, ry, e(省略可)}, …] を下から上へ。cx, cy は断面の中心(x, y)。rx, ry は半幅。
+    refine: 断面の間を何分割するか。3〜4 にすると、輪郭の折れ線が消える。
     """
     if secs[0]["z"] > secs[-1]["z"]:   # 上から下へ渡されても裏返らないように、下から上へそろえる
         secs = list(reversed(secs))
+    if refine > 1:
+        secs = _refine_secs(secs, refine)
     verts, faces = [], []
     for s in secs:
         ee = s.get("e", e)
