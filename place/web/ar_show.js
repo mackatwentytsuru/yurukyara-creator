@@ -24,7 +24,7 @@ const posScale = Number(params.get('scale') ?? 1);
 const faceW = Number(params.get('face_w') ?? 5.12);
 const faceH = Number(params.get('face_h') ?? 4.96);
 const ledBottom = Number(params.get('led_bottom') ?? 0.98);
-const demoMode = params.get('demo') === '1';
+const demoMode = params.get('demo') === '1' || params.get('demo') === '2';
 let demoOrigin = null;     // demo: {p: Vector3, yaw}
 const charHeightWanted = params.get('charheight') ? Number(params.get('charheight')) : null;
 const A_X0 = -749.7, A_X1 = -237.7;      // 面 A の左右の端(舞台の座標 cm。show/ue/stage_layout.py)
@@ -199,7 +199,7 @@ host.onPose = (w, p, ts) => {
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
     const p0 = camera.position.clone().addScaledVector(fwd, 2.0); p0.y = camera.position.y - 1.3;
     demoOrigin = { p: p0, yaw: Math.atan2(-fwd.x, -fwd.z) };   // 客席(= +z)がカメラのほう
-    T_world_from_led = new THREE.Matrix4(); alignInfo = 'demo(校正なし)'; anchorTs = ts;
+    T_world_from_led = new THREE.Matrix4(); alignInfo = 'demo(校正なし)'; if (params.get('demo') !== '2') anchorTs = ts;   // demo=2 は、フラッシュを待って始める
   }
   frames++;
   update();

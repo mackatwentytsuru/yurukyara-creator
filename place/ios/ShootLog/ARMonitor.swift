@@ -16,6 +16,7 @@ struct ARMonitorSummary: Codable {
     var thermalAtStart: String
     var thermalMax: String
     var pageMessages: [String]
+    var flashTimes: [Double] = []   // 検出した合図のフラッシュの時刻(ARFrame.timestamp = frames.jsonl の t と同じ時計)
     var pageStatus: String? = nil   // ページが 1〜2 秒おきに知らせる最後の状態(キャラが出ているか・ショーの時刻・校正の残差)
 }
 
@@ -36,6 +37,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var thermalMaxRank = 0
     private var messages: [String] = []
     private var pageStatus: String?
+    private var flashTimes: [Double] = []
     var flashThreshold = 25.0
     private static let urlKey = "armonitor.url"
     static let defaultURL = "https://192.168.x.x:8443/place/web/ar_show.html"
@@ -75,7 +77,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         enabled = on
         if on {
             lock.lock()
-            posesSent = 0; posesSkipped = 0; flashes = 0; baseline = -1; wasAbove = false; pageReady = false; messages = []
+            posesSent = 0; posesSkipped = 0; flashes = 0; baseline = -1; wasAbove = false; pageReady = false; messages = []; flashTimes = []
             thermalAtStart = UELinkController.thermalName(ProcessInfo.processInfo.thermalState)
             thermalMaxRank = UELinkController.thermalRank(ProcessInfo.processInfo.thermalState)
             lock.unlock()
@@ -129,7 +131,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let above = mean > baseline + flashThreshold
         if above && !wasAbove && frame.timestamp - lastFlashTs > 3.0 {
             lastFlashTs = frame.timestamp
-            lock.lock(); flashes += 1; lock.unlock()
+            lock.lock(); flashes += 1; if flashTimes.count < 30 { flashTimes.append(frame.timestamp) }; lock.unlock()
             let ts = frame.timestamp
             DispatchQueue.main.async { [weak self] in
                 self?.webView.evaluateJavaScript("window.__arhost&&window.__arhost.onFlash&&window.__arhost.onFlash(\(String(format: "%.6f", ts)))", completionHandler: nil)
@@ -199,7 +201,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func summary() -> ARMonitorSummary {
         lock.lock(); defer { lock.unlock() }
         return ARMonitorSummary(enabled: enabled, url: url, posesSent: posesSent, posesSkipped: posesSkipped, flashes: flashes,
-                                thermalAtStart: thermalAtStart, thermalMax: UELinkController.thermalNameFromRank(thermalMaxRank), pageMessages: messages, pageStatus: pageStatus)
+                                thermalAtStart: thermalAtStart, thermalMax: UELinkController.thermalNameFromRank(thermalMaxRank), pageMessages: messages, flashTimes: flashTimes, pageStatus: pageStatus)
     }
 
     var statusText: String {
