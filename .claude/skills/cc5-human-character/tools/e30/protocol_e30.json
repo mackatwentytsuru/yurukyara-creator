@@ -156,11 +156,11 @@
   "negative rz verified direction is specified by E04 brief; prior plan §2.1 had positive side yaw",
   "matched rx is provisional until et_pose_match fills a numeric rx_matched",
   "reopen repeat requires closing and re-opening the saved project in a separate session",
-  "11-03: eyes/closed の dolly を 0 に(作業用 PC は窓の都合で dolly が動かない。目のアップは 2000px の描画からの切り抜きで測る。作業用 PC では dolly -2 が動くが、2 台で同じ条件にそろえる)。closed のまばたきは /expression/set(Eye_Blink_L/R は表情であって形のモーフではない)。",
+  "11-03: eyes/closed の dolly を 0 に(作業用 PC は窓の都合で dolly が動かない。目のアップは 2000px の描画からの切り抜きで測る。サブ機では dolly -2 が動くが、2 台で同じ条件にそろえる)。closed のまばたきは /expression/set(Eye_Blink_L/R は表情であって形のモーフではない)。",
   "11-03 E14/E15 の結果: 前向きの最良が格子の端(rx=+9、n1 の pitch 13.2° に対し 11.8°)、真横の最良も端(rz=-50)だった。格子を延ばす(front_fine / side_fine)。protocol_v1 の本体は E13 まで変えない。",
-  "11-03 E14a: 前向きの一致 rx=+10(n1 の pitch 13.2° に対し 作業用 PC は dpitch -0.24° dyaw -0.94° で pose_agrees。作業用 PC は dyaw -1.04° で境界)。真横の最良は rz=-50 rx=0(粗い格子で chamfer 3.21%、n2 は純粋な横顔でなく dyaw 約 4°)。",
+  "11-03 E14a: 前向きの一致 rx=+10(n1 の pitch 13.2° に対し 作業用 PC は dpitch -0.24° dyaw -0.94° で pose_agrees。サブ機は dyaw -1.04° で境界)。真横の最良は rz=-50 rx=0(粗い格子で chamfer 3.21%、n2 は純粋な横顔でなく dyaw 約 4°)。",
   "11-03 真横の参照(n2・nl2・p2)は MediaPipe の yaw が −47〜−49° の 3/4 に近い写真で、本当の横顔(90°)ではない。CG の yaw は rz=−50 で −42.5°、−60 で −61.8° → 一致する向きは rz≈−53・rx≈+3(参照の pitch 6.4〜9.5° に合わせる)。輪郭の chamfer での一致(rz=−50)は、3/4 の参照では当てにならない。",
-  "11-03 決定(司令塔): 真横の一致は rz=-54・rx=+5(n2 の yaw −46.8°・pitch 8.5° に対し CG は yaw −46.1°、pitch 6.3°+rx の分)。距離の掃引は作業用 PC で dolly -4〜+4(dist_sweep)。",
+  "11-03 決定(司令塔): 真横の一致は rz=-54・rx=+5(n2 の yaw −46.8°・pitch 8.5° に対し CG は yaw −46.1°、pitch 6.3°+rx の分)。距離の掃引はサブ機で dolly -4〜+4(dist_sweep)。",
   "11-03 E13 固定(司令塔の決定どおり): 距離は現在のまま(dolly 0。掃引 −4 は顔が枠から切れ、−2〜+4 の揺れ 0.29〜0.38 %IOD は差が揺れの範囲内)/ 前向き rx=+10 / 真横 rz=−54・rx=+5 / 照明 Average / 目のアップは切り抜き / まばたきは /expression/set / 撮る前に描画の印を戻して捨て描画 / 枠合わせは 2 回押す(作業用 PC の σ_shot 0.43→0.017 %IOD、原因は 1 回目の枠合わせの位置 y=−130 と以後の −171.5 の違い)/ 照明を読んだ直後に捨て描画 / 出力先は組ごとに別。",
   "11-03 EREF 用: 凍結版の写し。front_fine=rx 0(まっすぐ正面)、side_yaw=rz −35(3/4)・−60・−90(真横)、rx 0。凍結版は変えていない"
  ]

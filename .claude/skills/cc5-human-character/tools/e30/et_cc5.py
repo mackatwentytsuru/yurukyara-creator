@@ -230,7 +230,7 @@ def shoot(client, args):
                     raise ValueError("no light preset for machine: %s" % machine)
                 try:
                     client.post("/asset/load", {"file_path": preset})
-                except RuntimeError as exc:   # 11-03 作業用 PC: 照明の読み込みが 30 秒を超えて 504 になる。CC5 は読み続けているので、メインスレッドが空くまで待って続ける
+                except RuntimeError as exc:   # 11-03 サブ機: 照明の読み込みが 30 秒を超えて 504 になる。CC5 は読み続けているので、メインスレッドが空くまで待って続ける
                     if "504" not in str(exc) and "Timeout" not in str(exc):
                         raise
                     for _ in range(60):
@@ -265,7 +265,7 @@ def shoot(client, args):
                             {"item_name": args.avatar, "move": old["move"], "rotate": [shot["rx"], shot["ry"], shot["rz"]],
                              "scale": old["scale"]})
                 if shot.get("blink"):
-                    # Eye_Blink_L/R は「表情」のスライダー(形のモーフではない)。/morph/set だと Unknown morph ID(HTTP 400)になる(11-03 作業用 PC で実測)
+                    # Eye_Blink_L/R は「表情」のスライダー(形のモーフではない)。/morph/set だと Unknown morph ID(HTTP 400)になる(11-03 サブ機で実測)
                     ids = protocol["poses"]["closed"]["blink_morph_ids"]
                     for mid in ids:
                         blink_values[mid] = 0.0   # 撮影の前に /expression/reset 済みなので、もとの値は 0
