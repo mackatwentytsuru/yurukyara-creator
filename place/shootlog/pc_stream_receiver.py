@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import shutil
 import json
 import struct
 import time
@@ -19,6 +20,7 @@ HEADER = struct.Struct(">4sIIiddHHB")   # magic, jpegLen, seq, recFrame, arTs, s
 FLOATS = struct.Struct(">20f")           # T 16 + K 4
 AUDH = struct.Struct(">4sIIIHHdd")      # AUD1, pcmLen, seq, sampleRate, channels, bits, ptsHostSeconds, captureEpochMs
 PING = struct.Struct(">4sdI")            # PNG1, サーバー時刻 ms, 通し番号(端末へ)
+RCV = struct.Struct(">4sIII")           # RCV1, ディスクへ書いたコマ数, MB, 受け手のディスクの空き GB(16 バイト。毎秒、端末へ)
 PONG = struct.Struct(">4sddI")           # PON1, 同じサーバー時刻, 端末の時刻 ms, 通し番号(端末から)
 
 
@@ -102,6 +104,11 @@ class Recorder:
                 "missing_buffers": (seqs[-1] - seqs[0] + 1) - len(set(seqs)), "buffers": len(rows),
                 "note": "audio.raw は int16 のリトルエンディアン。ffmpeg -f s16le -ar 48000 -ac 1 -i audio.raw audio.wav で wav にできる。pts は frames.jsonl の t と同じ時計"}
 
+    def flush(self):
+        for f in (self.mjpg, self.index, self.hevc_file, self.audio_file, self.audio_index):
+            if f:
+                f.flush()
+
     def checkpoint(self):
         """途中で止められても記録が読めるように、ファイルを書き出し、summary.json も途中の値で書く。"""
         for f in (self.mjpg, self.index, self.hevc_file, self.audio_file, self.audio_index):
@@ -140,16 +147,41 @@ async def ping_loop(writer: asyncio.StreamWriter, stop: asyncio.Event):
             pass
 
 
-async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec: Recorder):
+def free_gb(path: Path) -> int:
+    try:
+        return int(shutil.disk_usage(path).free / 1e9)
+    except OSError:
+        return 0
+
+
+async def ack_loop(writer: asyncio.StreamWriter, rec: Recorder, stop: asyncio.Event):
+    """毎秒、本当にディスクへ書いた分を端末へ返す(端末の画面の「Mac 保存」)。書けなくなったら返さない = 端末が警告を出す。"""
+    while not stop.is_set():
+        try:
+            rec.flush()
+            writer.write(RCV.pack(b"RCV1", len(rec.rows), int(rec.bytes / 1_000_000), free_gb(rec.out)))
+            await writer.drain()
+        except Exception as e:
+            print("保存の応答を止めた:", e, flush=True)
+            return
+        try:
+            await asyncio.wait_for(stop.wait(), 1.0)
+        except asyncio.TimeoutError:
+            pass
+
+
+async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec: Recorder, first: bytes | None = None):
     rec.connections += 1
     peer = writer.get_extra_info("peername")
     print("つながった:", peer)
     stop = asyncio.Event()
     pinger = asyncio.create_task(ping_loop(writer, stop))
+    acker = asyncio.create_task(ack_loop(writer, rec, stop))
     sent_at: dict[int, float] = {}
     try:
         while True:
-            magic = await reader.readexactly(4)
+            magic = first if first else await reader.readexactly(4)
+            first = None
             if magic == b"AUD1":
                 _, plen, aseq, rate, ch, bits, pts, cap_ms = AUDH.unpack(magic + await reader.readexactly(AUDH.size - 4))
                 pcm = await reader.readexactly(plen)
@@ -185,6 +217,7 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec
     finally:
         stop.set()
         pinger.cancel()
+        acker.cancel()
         print("切れた:", peer, "受けたコマ", len(rec.rows))
         writer.close()
 
@@ -194,6 +227,17 @@ async def main_async(a):
     state = {"rec": Recorder(Path(a.out) / "take_001") if a.split_takes else Recorder(Path(a.out)), "n": 1, "used": False}
 
     async def on_connect(r, w):
+        try:
+            first = await r.readexactly(4)
+        except asyncio.IncompleteReadError:
+            w.close()
+            return
+        if first == b"PRB1":        # つなぎの試し: テイクを作らずに答える
+            w.write(RCV.pack(b"RCV1", 0, 0, free_gb(Path(a.out))))
+            await w.drain()
+            w.close()
+            print("つなぎの試し: OK", flush=True)
+            return
         if a.split_takes:
             if state["used"]:
                 state["rec"].close()
@@ -203,7 +247,7 @@ async def main_async(a):
             print("テイク:", state["rec"].out, flush=True)
         rec = state["rec"]
         try:
-            await handle(r, w, rec)
+            await handle(r, w, rec, first)
         finally:
             if a.split_takes:
                 rec.checkpoint()

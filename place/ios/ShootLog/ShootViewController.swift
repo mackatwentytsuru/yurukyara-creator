@@ -45,6 +45,32 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let audio = AudioCapture()
     private let arMonitor = ARMonitor()
     private let arStartButton = UIButton(type: .system)
+    // 本番の画面(ShootHUD)。下の「撮影の流れ」を見る
+    private let hud = ShootHUD()
+    private var step: ShootStep = .prepare
+    private var legacyViews: [UIView] = []
+    private var legacyOn = false
+    private var phase: RecPhase = .idle
+    private var takeStart: Date?
+    private var takeElapsed: Double = 0
+    private var takes: [TakeInfo] = []
+    private var cutNumber = 1
+    private var cutName = "カット1"
+    private var takeNumber = 1
+    private var macHost = UserDefaults.standard.string(forKey: "shoot.macHost") ?? ""
+    private var macPort = 9100
+    private var probeText = "未確認"
+    private var probeOK = false
+    private var macFreeGB: Int?
+    private var guidesOn = true
+    private var arHidden = false
+    private var saveNote: String?
+    private var ackGaps = 0
+    private var inGap = false
+    private var lastSent = (n: 0, t: 0.0)
+    private var sentFps = 0.0
+    private var uiDemo = false
+    private var uiLog: FileHandle?
     private var ultraWide: UltraWideCut?
     private let backdropLayer = CALayer()    // 映像の外の帯(黒)
     private let ueButton = UIButton(type: .system)
@@ -107,6 +133,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         setupLabels()
         setupControls()
         pickFormats()
+        setupHUD()
         refreshUI()
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.refreshUI() }
     }
@@ -114,7 +141,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     /// 映像の全部が画面に入る枠(切らない)。録画される範囲と画面の範囲をそろえる(iPad の画面は 16:9 より縦長で、切ると録画より狭く見えて、画角を決められない)。
     private var pictureRect: CGRect {
         let image = chosenFormat?.imageResolution ?? CGSize(width: 16, height: 9)
-        return AVMakeRect(aspectRatio: image, insideRect: view.bounds)
+        return ShootHUD.pictureRect(in: view.bounds, image: image)
     }
 
     override func viewDidLayoutSubviews() {
@@ -125,7 +152,10 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         ueLink.webView.frame = fit
         arMonitor.webView.frame = fit
         arMonitor.layoutChanged(fit.size)
+        hud.frame = view.bounds
     }
+
+    override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { .all }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -153,6 +183,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let cross = UIView(frame: CGRect(x: 0, y: 0, width: size, height: size))
         cross.isUserInteractionEnabled = false
         crosshair = cross
+        legacyViews.append(cross)
         cross.translatesAutoresizingMaskIntoConstraints = false
         let path = UIBezierPath()
         path.move(to: CGPoint(x: size / 2, y: 0)); path.addLine(to: CGPoint(x: size / 2, y: size))
@@ -184,6 +215,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         }
         guideView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(guideView)
+        legacyViews += [stepLabel, statusLabel, guideView]
         NSLayoutConstraint.activate([
             stepLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
             stepLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
@@ -231,6 +263,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         bar.distribution = .fillProportionally
         bar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bar)
+        legacyViews.append(bar)
 
         faceControl.selectedSegmentIndex = 1
         faceControl.addTarget(self, action: #selector(faceChanged), for: .valueChanged)
@@ -271,6 +304,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         side.layer.cornerRadius = 8
         side.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(side)
+        legacyViews.append(side)
 
         NSLayoutConstraint.activate([
             bar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
@@ -718,6 +752,10 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private func applyLaunchArguments() {
         let a = ProcessInfo.processInfo.arguments
         func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
+        // 本番(引数なし): AR モニターを最初から入れる
+        if !a.contains(where: { $0.hasPrefix("--") }) { arMonitor.setEnabled(true) }
+        if a.contains("--ui-sweep") { runUISweep(); return }
+        if let sec = Double(value("--ui-roundtrip") ?? "") { runRoundTrip(host: value("--ui-host") ?? macHost, seconds: sec, arOn: a.contains("--ar-on"), url: value("--ar-url")); return }
         if a.contains("--probe-multicam") { runMultiCamProbe(); return }
         if a.contains("--probe-lenses") { runLensProbe(); return }
         if let sec = Double(value("--uw-record") ?? "") {
@@ -872,6 +910,370 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         }
     }
 
+    // MARK: - 撮影の流れ(本番の画面)
+
+    private func setupHUD() {
+        setLegacy(false)
+        hud.frame = view.bounds
+        view.addSubview(hud)
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        takes = Self.loadTakes()
+        takeNumber = (takes.last?.number ?? 0) + 1
+        var act = ShootActions()
+        act.setStep = { [weak self] s in self?.step = s; self?.refreshUI() }
+        act.record = { [weak self] in self?.startTake() }
+        act.stop = { [weak self] in self?.stopTake() }
+        act.arStart = { [weak self] in self?.arMonitor.startNow() }
+        act.arHide = { [weak self] in
+            guard let self else { return }
+            self.arHidden.toggle()
+            self.arMonitor.webView.isHidden = self.arHidden || !self.arMonitor.enabled
+            self.refreshUI()
+        }
+        act.calibReset = { [weak self] in self?.arMonitor.resetDots(); self?.refreshUI() }
+        act.probe = { [weak self] in self?.probeMac() }
+        act.setHost = { [weak self] h in
+            let t = h.trimmingCharacters(in: .whitespaces)
+            self?.macHost = t
+            UserDefaults.standard.set(t, forKey: "shoot.macHost")
+            self?.probeText = "未確認"; self?.probeOK = false
+        }
+        act.setMic = { [weak self] on in self?.setMic(on) { _ in } }
+        act.setExposure = { [weak self] on in
+            guard let self else { return }
+            self.exposureSwitch.isOn = on
+            self.exposureChanged()
+        }
+        act.setISO = { [weak self] v in
+            guard let self else { return }
+            self.isoSlider.value = v
+            self.isoSliderChanged()
+        }
+        act.setCutName = { [weak self] n in self?.cutName = n }
+        act.setGuides = { [weak self] on in self?.guidesOn = on }
+        act.nextCut = { [weak self] in
+            guard let self else { return }
+            self.cutNumber += 1
+            self.cutName = "カット\(self.cutNumber)"
+            self.step = .cut
+            self.refreshUI()
+        }
+        act.markTake = { [weak self] n, m in
+            guard let self, let i = self.takes.firstIndex(where: { $0.number == n }) else { return }
+            self.takes[i].mark = self.takes[i].mark == m ? "" : m
+            Self.saveTakes(self.takes)
+            self.refreshUI()
+        }
+        act.details = { [weak self] in self?.openDetails() }
+        hud.actions = act
+    }
+
+    private func setLegacy(_ on: Bool) {
+        legacyOn = on
+        for v in legacyViews {
+            v.isHidden = !on
+            if on { view.bringSubviewToFront(v) }
+        }
+    }
+
+    private func openDetails() {
+        let sheet = UIAlertController(title: "詳細", message: nil, preferredStyle: .actionSheet)
+        sheet.addAction(UIAlertAction(title: legacyOn ? "手の校正と形式の部品を隠す" : "手の校正(4 隅)と形式の部品を出す", style: .default) { [weak self] _ in
+            guard let self else { return }
+            self.setLegacy(!self.legacyOn)
+        })
+        sheet.addAction(UIAlertAction(title: "UE モニターの設定", style: .default) { [weak self] _ in self?.ueTapped() })
+        if lastDir != nil { sheet.addAction(UIAlertAction(title: "本体の録画を共有(AirDrop)", style: .default) { [weak self] _ in self?.shareTapped() }) }
+        sheet.addAction(UIAlertAction(title: "閉じる", style: .cancel))
+        sheet.popoverPresentationController?.sourceView = view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.width - 40, y: 48, width: 1, height: 1)
+        present(sheet, animated: true)
+    }
+
+    private func probeMac() {
+        probeText = "試しています…"
+        pcStream.probe(host: macHost, port: macPort) { [weak self] ok, gb in
+            guard let self else { return }
+            self.probeOK = ok
+            self.probeText = ok ? "つながりました" : "つながりません(IP と、Mac の受け手を確かめる)"
+            if ok { self.macFreeGB = gb }
+            self.refreshUI()
+        }
+        refreshUI()
+    }
+
+    private func startTake() {
+        guard phase == .idle, !macHost.isEmpty else {
+            if macHost.isEmpty { step = .prepare; refreshUI() }
+            return
+        }
+        saveNote = nil
+        ackGaps = 0
+        inGap = false
+        takeElapsed = 0
+        takeStart = nil
+        lastSent = (0, ProcessInfo.processInfo.systemUptime)
+        pcStream.codec = "hevc"
+        pcStream.width = 1920
+        pcStream.targetFps = 30
+        pcStream.kbps = 18000
+        pcStream.setEnabled(true, host: macHost, port: macPort)
+        phase = .connecting
+        logEvent("take:start:\(takeNumber)")
+        refreshUI()
+    }
+
+    private func stopTake() {
+        guard phase == .recording else { return }
+        phase = .stopping
+        takeElapsed = takeStart.map { Date().timeIntervalSince($0) } ?? 0
+        pcStream.pauseSending()
+        refreshUI()
+        waitForSave(tries: 0)
+    }
+
+    /// 受け手が全部書いたことを、応答で確かめてから閉じる(最大 4 秒)
+    private func waitForSave(tries: Int) {
+        let st = pcStream.saveStatus
+        let saved = st.sent > 0 && st.macFrames >= st.sent - 2
+        if saved || tries >= 20 {
+            finishTake(st, saved: saved)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.waitForSave(tries: tries + 1) }
+    }
+
+    private func finishTake(_ st: PCStreamer.SaveStatus, saved: Bool) {
+        pcStream.setEnabled(false, host: macHost, port: macPort)
+        let lost = st.skippedBusy + st.sendFailed
+        let thermal = UELinkController.thermalName(ProcessInfo.processInfo.thermalState)
+        takes.append(TakeInfo(number: takeNumber, cut: cutName, seconds: takeElapsed, sent: st.sent, macFrames: st.macFrames, lost: lost, thermal: thermal, saved: saved, gaps: ackGaps))
+        Self.saveTakes(takes)
+        saveNote = saved ? "保存済み \(st.macFrames) コマ(テイク \(takeNumber))" : "保存を確かめられません(送った \(st.sent)・Mac \(st.macFrames))"
+        logEvent("take:stop:\(takeNumber):\(saved)")
+        takeNumber += 1
+        phase = .idle
+        refreshUI()
+    }
+
+    private func tickTake() {
+        let st = pcStream.saveStatus
+        let now = ProcessInfo.processInfo.systemUptime
+        if phase == .connecting, st.connected {
+            phase = .recording
+            takeStart = Date()
+        }
+        if phase == .recording || phase == .stopping {
+            if now - lastSent.t >= 1 {
+                sentFps = Double(st.sent - lastSent.n) / (now - lastSent.t)
+                lastSent = (st.sent, now)
+            }
+            let late = (st.ackAge ?? 0) > 5 || !st.connected
+            if phase == .recording {
+                if late && !inGap { ackGaps += 1 }
+                inGap = late
+            }
+        }
+        if st.macFreeGB > 0 { macFreeGB = st.macFreeGB }
+        if let uiLog {
+            let row: [String: Any] = ["t": now, "phase": "\(phase)", "alarm": makeStatus().alarm ?? "", "sent": st.sent, "mac": st.macFrames, "connected": st.connected, "ackAge": st.ackAge ?? -1, "gaps": ackGaps]
+            if let d = try? JSONSerialization.data(withJSONObject: row) { uiLog.write(d); uiLog.write(Data([10])) }
+        }
+    }
+
+    private func makeStatus() -> ShootStatus {
+        var s = ShootStatus()
+        s.step = step
+        s.phase = phase
+        let st = pcStream.saveStatus
+        lock.lock(); let tracking = lastTracking; lock.unlock()
+        let trackOK = tracking == "normal"
+        let thermalState = ProcessInfo.processInfo.thermalState
+        let thermalName = UELinkController.thermalName(thermalState)
+        let recording = phase == .recording
+
+        // 校正
+        var c = CalibInfo()
+        let counts = arMonitor.dotCounts
+        c.n = counts.dots; c.total = counts.total; c.syncs = counts.syncs
+        if let d = arMonitor.pageState?["dots"] as? [String: Any] {
+            c.n = d["n"] as? Int ?? c.n
+            c.total = d["total"] as? Int ?? c.total
+            c.rms = d["rms"] as? Double
+            c.good = d["good"] as? Bool ?? false
+            c.held = d["held"] as? Bool ?? false
+            if let f = d["faces"] as? [String: Double] { c.faces = f.sorted { $0.key < $1.key }.map { ($0.key, $0.value) } }
+        }
+        s.calib = c
+
+        // 信号
+        let bat = UIDevice.current.batteryLevel
+        let charging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+        let batPct = bat < 0 ? 100 : Int((bat * 100).rounded())
+        let batLamp: Lamp = charging || batPct > 30 ? .green : (batPct > 15 ? .yellow : .red)
+        let thLamp: Lamp = thermalState == .critical ? .red : (thermalState == .serious ? .yellow : .green)
+        var macLamp: Lamp = probeOK ? .green : .off
+        var macText = probeOK ? "OK" : "未確認"
+        if phase == .connecting { macLamp = .yellow; macText = "接続中" }
+        if recording {
+            let age = st.ackAge ?? 99
+            macLamp = !st.connected || age > 5 ? .red : (age > 2.5 ? .yellow : .green)
+            macText = macLamp == .red ? "停止" : "保存中"
+        }
+        s.lamps = [
+            LampInfo(name: "追跡", lamp: trackOK ? .green : .yellow, text: trackOK ? "OK" : "乱れ"),
+            LampInfo(name: "Mac", lamp: macLamp, text: macText),
+            LampInfo(name: "熱", lamp: thLamp, text: thermalName),
+            LampInfo(name: "電池", lamp: batLamp, text: "\(batPct)%\(charging ? "+" : "")"),
+            LampInfo(name: "校正", lamp: c.good ? .green : (c.held ? .yellow : .off), text: c.good || c.held ? "\(c.n)/\(c.total)" : "まだ"),
+        ]
+        // 悪い知らせ(録画中は保存を最優先)
+        if recording && macLamp == .red { s.alarm = "Mac に保存できていません" }
+        else if recording && !trackOK { s.alarm = "位置の追跡が乱れています" }
+        else if thermalState == .critical { s.alarm = "本体が熱すぎます。休ませる" }
+        else if recording, let gb = macFreeGB, gb < 5 { s.alarm = "Mac の空きが少ない(\(gb) GB)" }
+        else if !charging && batPct <= 10 { s.alarm = "電池が少ない(\(batPct)%)" }
+
+        s.elapsed = takeStart.map { recording ? Date().timeIntervalSince($0) : takeElapsed } ?? 0
+        s.macFrames = st.macFrames
+        s.lost = st.skippedBusy + st.sendFailed
+        s.sentFps = sentFps
+        s.note = saveNote
+        s.host = macHost
+        s.port = macPort
+        s.probe = probeText
+        s.macFree = macFreeGB.map { "\($0) GB" } ?? "未確認"
+        s.micOn = audio.running
+        let cam = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+        let mic = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        s.permissions = "カメラ \(cam ? "OK" : "未")・マイク \(mic ? "OK" : "未")"
+        s.battery = "\(batPct)%\(charging ? " 充電中" : "")"
+        s.thermal = thermalName
+        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+           let v = try? docs.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage {
+            s.ipadFree = "\(v / 1_000_000_000) GB"
+        }
+        s.cutName = cutName
+        s.takeNumber = takeNumber
+        s.exposureLocked = exposureLocked
+        s.isoText = exposureLocked ? "ISO \(Int(isoValue))" : (captureDevice.map { "ISO \(Int($0.iso))" } ?? "")
+        s.isoFraction = isoSlider.value
+        s.arOn = arMonitor.enabled
+        s.arHidden = arHidden
+        let page = arMonitor.pageState
+        s.arShowing = page?["visible"] as? Bool ?? false
+        if !s.arOn { s.arText = "AR は切れています" }
+        else if let t = page?["showT"] as? Double { s.arText = String(format: "AR ショー %.1f 秒 %@", t, s.arShowing ? "表示中" : "出番の外") }
+        else { s.arText = "AR は合図待ち(フラッシュか AR 開始)" }
+        s.guides = guidesOn
+        s.takes = takes
+        return s
+    }
+
+    private static var takesURL: URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("takes.json")
+    }
+
+    private static func loadTakes() -> [TakeInfo] {
+        guard let u = takesURL, let d = try? Data(contentsOf: u) else { return [] }
+        return (try? JSONDecoder().decode([TakeInfo].self, from: d)) ?? []
+    }
+
+    private static func saveTakes(_ t: [TakeInfo]) {
+        guard let u = takesURL, let d = try? JSONEncoder().encode(t) else { return }
+        try? d.write(to: u)
+    }
+
+    // MARK: - 画面の自動の確かめ(試験の引数だけで動く)
+
+    private func docsFile(_ name: String) -> URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(name)
+    }
+
+    /// 各画面・各状態を出して、写真(ui_<名前>.png)と押す物の枠(ui_<名前>.json)を書く。
+    private func runUISweep() {
+        uiDemo = true
+        var base = ShootStatus()
+        base.lamps = [LampInfo(name: "追跡", lamp: .green, text: "OK"), LampInfo(name: "Mac", lamp: .green, text: "OK"), LampInfo(name: "熱", lamp: .green, text: "nominal"),
+                      LampInfo(name: "電池", lamp: .green, text: "100%+"), LampInfo(name: "校正", lamp: .green, text: "28/33")]
+        base.host = "192.168.x.x"; base.probe = "つながりました"; base.permissions = "カメラ OK・マイク OK"; base.battery = "100% 充電中"; base.thermal = "nominal"
+        base.ipadFree = "93 GB"; base.macFree = "412 GB"; base.micOn = true; base.arOn = true; base.arText = "AR ショー 66.0 秒 表示中"; base.isoText = "ISO 50"; base.exposureLocked = true; base.isoFraction = 0.1
+        base.calib = CalibInfo(n: 28, total: 33, syncs: 3, rms: 1.2, faces: [("A", 0.8), ("B", 1.2), ("C", 0.9)], good: true, held: false)
+        base.takes = (1...7).map { TakeInfo(number: $0, cut: "カット\(($0 + 1) / 2)", seconds: Double(90 + $0), sent: 2800, macFrames: 2800, lost: $0 == 3 ? 12 : 0, thermal: "nominal", saved: $0 != 5, mark: $0 == 2 ? "OK" : ($0 == 4 ? "NG" : "")) }
+        base.takeNumber = 8
+        func with(_ f: (inout ShootStatus) -> Void) -> ShootStatus { var x = base; f(&x); return x }
+        let cases: [(String, ShootStatus)] = [
+            ("1_prepare", with { $0.step = .prepare }),
+            ("1_prepare_ng", with { $0.step = .prepare; $0.probe = "つながりません(IP と、Mac の受け手を確かめる)"; $0.lamps[1] = LampInfo(name: "Mac", lamp: .off, text: "未確認") }),
+            ("2_calib_ok", with { $0.step = .calibrate }),
+            ("2_calib_running", with { $0.step = .calibrate; $0.calib = CalibInfo(n: 12, total: 33, syncs: 1, rms: 6.2, faces: [("A", 3.1), ("B", 7.5)], good: false, held: false); $0.lamps[4] = LampInfo(name: "校正", lamp: .off, text: "まだ") }),
+            ("2_calib_held", with { $0.step = .calibrate; $0.calib.good = false; $0.calib.held = true; $0.lamps[4] = LampInfo(name: "校正", lamp: .yellow, text: "28/33") }),
+            ("3_cut", with { $0.step = .cut }),
+            ("4_shoot_idle", with { $0.step = .shoot }),
+            ("4_shoot_rec", with { $0.step = .shoot; $0.phase = .recording; $0.elapsed = 754; $0.macFrames = 22610; $0.lost = 0; $0.sentFps = 30 }),
+            ("4_shoot_alarm", with { $0.step = .shoot; $0.phase = .recording; $0.elapsed = 754; $0.macFrames = 22610; $0.lost = 3; $0.sentFps = 0; $0.alarm = "Mac に保存できていません"; $0.lamps[1] = LampInfo(name: "Mac", lamp: .red, text: "停止") }),
+            ("4_shoot_saved", with { $0.step = .shoot; $0.note = "保存済み 22610 コマ(テイク 7)" }),
+            ("5_takes", with { $0.step = .takes }),
+        ]
+        func next(_ i: Int) {
+            guard i < cases.count else {
+                if let u = docsFile("ui_done.txt") { try? "done".write(to: u, atomically: true, encoding: .utf8) }
+                return
+            }
+            let (name, st) = cases[i]
+            hud.apply(st)
+            hud.layoutIfNeeded()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self else { return }
+                self.snapshotHUD(name: name)
+                next(i + 1)
+            }
+        }
+        next(0)
+    }
+
+    private func snapshotHUD(name: String) {
+        let r = UIGraphicsImageRenderer(bounds: view.bounds)
+        let img = r.image { ctx in
+            UIColor(white: 0.12, alpha: 1).setFill()
+            ctx.fill(view.bounds)
+            UIColor(white: 0.24, alpha: 1).setFill()
+            ctx.fill(hud.pictureFrame)
+            hud.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+        }
+        if let u = docsFile("ui_\(name).png"), let d = img.pngData() { try? d.write(to: u) }
+        let f = hud.pictureFrame
+        let info: [String: Any] = ["name": name, "bounds": [view.bounds.width, view.bounds.height], "picture": [f.minX, f.minY, f.width, f.height], "targets": hud.targets()]
+        if let u = docsFile("ui_\(name).json"), let d = try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted]) { try? d.write(to: u) }
+    }
+
+    /// 録画の往復の試験: 本物の経路(HUD のボタン)で、つなぎの試し → 録画 → 決めた秒 → 停止。状態を毎回 ui_log.jsonl へ。
+    private func runRoundTrip(host: String, seconds: Double, arOn: Bool, url: String?) {
+        if arOn { arMonitor.setEnabled(true, launch: url) }
+        macHost = host
+        if let u = docsFile("ui_log.jsonl") {
+            try? Data().write(to: u)
+            uiLog = try? FileHandle(forWritingTo: u)
+        }
+        step = .shoot
+        probeMac()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self else { return }
+            self.refreshUI()
+            let pressed = self.hud.fire("right")
+            self.logEvent("ui:record-pressed:\(pressed)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                guard let self else { return }
+                self.refreshUI()
+                _ = self.hud.fire("right")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+                    guard let self else { return }
+                    if let u = self.docsFile("ui_result.json"), let d = try? JSONEncoder().encode(self.takes) { try? d.write(to: u) }
+                }
+            }
+        }
+    }
+
     // MARK: - 追跡・割りこみ
 
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
@@ -936,6 +1338,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
 
     private func refreshUI() {
         arStartButton.isHidden = !arMonitor.enabled
+        tickTake()
+        if !uiDemo { hud.apply(makeStatus()) }
         lock.lock()
         let rec = recorder
         let started = recordStartDate

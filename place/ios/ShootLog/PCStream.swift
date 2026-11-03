@@ -58,6 +58,8 @@ final class PCStreamer {
     private(set) var hevcKeyFrames = 0
 
     private var framesSent = 0, skippedBusy = 0, skippedNotReady = 0, sendFailed = 0, bytesSent = 0
+    private var macFrames = 0, macMB = 0, macFreeGB = 0, lastAck = 0.0
+    private var sendingPaused = false
     private var encodeSum = 0.0, encodeMax = 0.0
     private var thermalMaxRank = 0
 
@@ -78,6 +80,7 @@ final class PCStreamer {
         self.host = host
         self.port = port
         if on && !wasOn {
+            sendingPaused = false; macFrames = 0; macMB = 0; lastAck = 0
             framesSent = 0; skippedBusy = 0; skippedNotReady = 0; sendFailed = 0; bytesSent = 0
             encodeSum = 0; encodeMax = 0; lastSentTs = -1; seq = 0
             thermalMaxRank = UELinkController.thermalRank(ProcessInfo.processInfo.thermalState)
@@ -110,10 +113,67 @@ final class PCStreamer {
         c.start(queue: queue)
     }
 
+    /// 録画の終わり: 送りだけを止める(つなぎは保ち、受け手の最後の応答を待てるようにする)
+    func pauseSending() {
+        lock.lock(); sendingPaused = true; lock.unlock()
+    }
+
+    /// 画面に出す値
+    struct SaveStatus {
+        var enabled: Bool, connected: Bool, sent: Int, skippedBusy: Int, skippedNotReady: Int, sendFailed: Int
+        var macFrames: Int, macMB: Int, macFreeGB: Int
+        var ackAge: Double?    // 最後の応答からの秒。まだ無ければ nil
+    }
+
+    var saveStatus: SaveStatus {
+        lock.lock(); defer { lock.unlock() }
+        return SaveStatus(enabled: enabled, connected: ready, sent: framesSent, skippedBusy: skippedBusy, skippedNotReady: skippedNotReady, sendFailed: sendFailed,
+                          macFrames: macFrames, macMB: macMB, macFreeGB: macFreeGB, ackAge: lastAck > 0 ? ProcessInfo.processInfo.systemUptime - lastAck : nil)
+    }
+
+    /// つなぎの試し(テイクを作らない)。done は主スレッドで、(つながったか, 受け手の空き GB)。
+    func probe(host: String, port: Int, done: @escaping (Bool, Int) -> Void) {
+        guard !host.isEmpty, let p = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { done(false, 0); return }
+        let c = NWConnection(host: NWEndpoint.Host(host), port: p, using: .tcp)
+        var finished = false
+        let finish: (Bool, Int) -> Void = { ok, gb in
+            DispatchQueue.main.async {
+                guard !finished else { return }
+                finished = true
+                c.cancel()
+                done(ok, gb)
+            }
+        }
+        c.stateUpdateHandler = { s in
+            switch s {
+            case .ready:
+                c.send(content: Data([0x50, 0x52, 0x42, 0x31]), completion: .contentProcessed { _ in })
+                c.receive(minimumIncompleteLength: 16, maximumLength: 16) { data, _, _, _ in
+                    if let data, data.count == 16, data.prefix(4) == Data([0x52, 0x43, 0x56, 0x31]) {
+                        let u = [UInt8](data)
+                        finish(true, Int(u[12]) << 24 | Int(u[13]) << 16 | Int(u[14]) << 8 | Int(u[15]))
+                    } else { finish(false, 0) }
+                }
+            case .failed: finish(false, 0)
+            default: break
+            }
+        }
+        c.start(queue: .global())
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { finish(false, 0) }
+    }
+
     /// PC からの時計合わせの問い合わせ(PNG1 + サーバー時刻 f64 + 通し番号 u32 = 16 バイト)に、PON1 + 同じ時刻 + 端末の時刻 f64 + 通し番号 u32 で答える。
     private func startReceive(_ c: NWConnection) {
         c.receive(minimumIncompleteLength: 16, maximumLength: 16) { [weak self] data, _, isComplete, err in
             guard let self else { return }
+            if let data, data.count == 16, data.prefix(4) == Data([0x52, 0x43, 0x56, 0x31]) {   // RCV1: 受け手が本当に書いた分
+                let u = [UInt8](data)
+                func be(_ i: Int) -> Int { Int(u[i]) << 24 | Int(u[i + 1]) << 16 | Int(u[i + 2]) << 8 | Int(u[i + 3]) }
+                self.lock.lock()
+                self.macFrames = be(4); self.macMB = be(8); self.macFreeGB = be(12)
+                self.lastAck = ProcessInfo.processInfo.systemUptime
+                self.lock.unlock()
+            }
             if let data, data.count == 16, data.prefix(4) == Data([0x50, 0x4E, 0x47, 0x31]) {
                 let nowMs = Date().timeIntervalSince1970 * 1000
                 var out = Data([0x50, 0x4F, 0x4E, 0x31])
@@ -178,7 +238,7 @@ final class PCStreamer {
     /// ARSession の delegateQueue から呼ぶ。重い処理は専用のキューで。送り中なら捨てる。
     func handle(frame: ARFrame, recordedFrame: Int?) {
         lock.lock()
-        guard enabled else { lock.unlock(); return }
+        guard enabled, !sendingPaused else { lock.unlock(); return }
         if lastSentTs >= 0 && frame.timestamp - lastSentTs < 1.0 / targetFps - 0.004 { lock.unlock(); return }
         if !ready { skippedNotReady += 1; lock.unlock(); return }
         if codec == "hevc", (hevc?.inFlight ?? 0) >= 3 { skippedBusy += 1; lock.unlock(); return }
@@ -306,7 +366,7 @@ final class PCStreamer {
     private var audioSeq: UInt32 = 0
     func handleAudio(_ sample: CMSampleBuffer) {
         lock.lock()
-        let on = enabled && ready
+        let on = enabled && ready && !sendingPaused
         let c = conn
         lock.unlock()
         guard on, let c, let fd = CMSampleBufferGetFormatDescription(sample), let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)?.pointee else { return }
