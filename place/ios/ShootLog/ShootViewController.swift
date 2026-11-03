@@ -45,6 +45,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let audio = AudioCapture()
     private let arMonitor = ARMonitor()
     private let arStartButton = UIButton(type: .system)
+    private var ultraWide: UltraWideCut?
     private let backdropLayer = CALayer()    // 映像の外の帯(黒)
     private let ueButton = UIButton(type: .system)
     private var crosshair: UIView?
@@ -719,6 +720,11 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         func value(_ key: String) -> String? { a.firstIndex(of: key).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
         if a.contains("--probe-multicam") { runMultiCamProbe(); return }
         if a.contains("--probe-lenses") { runLensProbe(); return }
+        if let sec = Double(value("--uw-record") ?? "") {
+            let correction = value("--uw-correction") != "0"
+            runUltraWideClip(name: value("--uw-name") ?? "uw", seconds: sec, correction: correction, iso: Float(value("--iso") ?? "") ?? 0)
+            return
+        }
         if a.contains("--mic-on") { setMic(true) { _ in } }
         if a.contains("--ar-on") {
             if let thr = Double(value("--flash-thr") ?? "") { arMonitor.flashThreshold = thr }
@@ -832,6 +838,22 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         if let d = try? JSONSerialization.data(withJSONObject: meta, options: [.prettyPrinted]) { try? d.write(to: docs.appendingPathComponent("ar_snap_\(tag)meta.json")) }
         arMonitor.webView.takeSnapshot(with: WKSnapshotConfiguration()) { img, _ in
             if let d = img?.pngData() { try? d.write(to: docs.appendingPathComponent("ar_snap_\(tag)web.png")) }
+        }
+    }
+
+    /// 超広角の試験の録画: ARKit を止めて、決めた秒だけ撮る。
+    private func runUltraWideClip(name: String, seconds: Double, correction: Bool, iso: Float) {
+        sceneView.session.pause()
+        let cut = UltraWideCut()
+        ultraWide = cut
+        do {
+            try cut.start(name: name, correction: correction, iso: iso)
+        } catch {
+            logEvent("uw-error:\(error.localizedDescription)")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            cut.stop { _ in }
         }
     }
 

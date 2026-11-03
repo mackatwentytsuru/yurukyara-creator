@@ -94,7 +94,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             thermalMaxRank = UELinkController.thermalRank(ProcessInfo.processInfo.thermalState)
             lock.unlock()
             let use = launchURL ?? url
-            dots.total = use.contains("dots=led3") ? 33 : 15
+            dots.total = (use.contains("dots=led3") || use.contains("dots=mon3")) ? 33 : 15
             if let u = URL(string: use), u.scheme != nil { webView.load(URLRequest(url: u)) }
             webView.isHidden = false
         } else {

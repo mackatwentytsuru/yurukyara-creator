@@ -15,6 +15,7 @@
 //   test_center=1             自宅の画面で試すとき: キャラを面 A の正面の中央(前へ test_z m、既定 0.25)に立たせ、ショーの時刻を ar_path の範囲で繰り返す(本番では使わない)
 //   show_led=1                殻が解いた LED の面と校正の点を、線と点で重ねて見せる(位置が合っているかを目で確かめる)
 //   dots=led3                 会場の 3 面の点の校正(make_led_dots_video.py の 33 点)。省略は自宅のモニターの 5×3(rehearsal/dot_calib.html)
+//   dots=mon3                 自宅の試し: 33 点の絵をモニターに縮めて映した形(rehearsal/dot_calib_led.html)。3 面とも同じ平面として解く
 //   dot_rms=<cm>              点の校正の解を採る残差の上限(既定 1.5。会場は 4)
 //   殻の点の自動校正: LED に点を順に光らせると、殻が点ごとのレイ {face:'A', dot:番号, origin, direction} を送る。4 隅の手の校正の代わり
 //   demo=1                    校正なしで試す(熱・遅れの試験用): 最初の姿勢のカメラの 2 m 前の床を舞台の中心にして、客席(カメラ)向きで即座に始める
@@ -55,7 +56,10 @@ const LED3 = (() => {
   add('C', 3, 3, 3346, 0, 943, 1240, (px, py) => [236.7 + (px - 3039) * 0.4, 0, 594 - py * 0.4]);
   return out;
 })();
-const dotTotal = dotMode === 'led3' ? LED3.length : DOT_COLS * DOT_ROWS;
+// モニターで模すとき: 絵の 1 画素 = 0.2113 mm、下端 1240 が LED の y=0。位置は 3 面とも平面に置く(曲面の分は残差に出る)
+if (dotMode === 'mon3') { const P = 1.2 / 5680; LED3.forEach((q) => { q.p = [q.px * P, (1240 - q.py) * P, 0]; }); }
+const hasFaces = dotMode === 'led3' || dotMode === 'mon3';
+const dotTotal = hasFaces ? LED3.length : DOT_COLS * DOT_ROWS;
 const dotFrac = (k) => { const c = k % DOT_COLS, r = Math.floor(k / DOT_COLS); return [0.1 + 0.8 * c / (DOT_COLS - 1), 0.15 + 0.7 * r / (DOT_ROWS - 1)]; };   // [x の割合(左→右), y の割合(上→下)]
 const charHeightWanted = params.get('charheight') ? Number(params.get('charheight')) : null;
 const A_X0 = -749.7, A_X1 = -237.7;      // 面 A の左右の端(舞台の座標 cm。show/ue/stage_layout.py)
@@ -178,7 +182,7 @@ function solveDots(corners) {
   }
   r.nDots = new Set(use.map((c) => c.dot)).size;
   r.nAll = corners.length;
-  if (dotMode === 'led3') {     // 面ごとの残差(図面と実物の差を見る)
+  if (hasFaces) {     // 面ごとの残差(図面と実物の差を見る)
     // 除く前の全部のレイで出す(面が図面からずれていると、その面のレイは外れとして除かれるので、除いた後の残差には出ない)
     const sum = {};
     corners.forEach((c) => {
@@ -196,7 +200,7 @@ function solveAlign(corners) {
   const pts = { tl: [0, faceH, 0], tr: [faceW, faceH, 0], br: [faceW, 0, 0], bl: [0, 0, 0] };
   const pointOf = (c) => {
     if (c.dot !== undefined) {   // 点: LED の座標(x 右、y 上、原点は左下)
-      if (dotMode === 'led3') return LED3[c.dot]?.p;
+      if (hasFaces) return LED3[c.dot]?.p;
       const [fx, fy] = dotFrac(c.dot); return [fx * faceW, (1 - fy) * faceH, 0];
     }
     return pts[c.id];
@@ -257,10 +261,10 @@ if (showLed) {
   } else {
     ledViz.add(new THREE.Line(rectAt(0, faceW, 0), lineMat));
   }
-  const dotGeo = new THREE.SphereGeometry(dotMode === 'led3' ? 0.08 : 0.008, 10, 8), dotMat = new THREE.MeshBasicMaterial({ color: 0xffee00 });
+  const dotGeo = new THREE.SphereGeometry(dotMode === 'led3' ? 0.08 : 0.006, 10, 8), dotMat = new THREE.MeshBasicMaterial({ color: 0xffee00 });
   for (let k = 0; k < dotTotal; k++) {
     const m = new THREE.Mesh(dotGeo, dotMat);
-    if (dotMode === 'led3') m.position.set(...LED3[k].p);
+    if (hasFaces) m.position.set(...LED3[k].p);
     else { const [fx, fy] = dotFrac(k); m.position.set(fx * faceW, (1 - fy) * faceH, 0); }
     ledViz.add(m);
   }
