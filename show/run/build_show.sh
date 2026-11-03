@@ -11,6 +11,8 @@
 #   SHOW_AUDIO_VERSION=<版>  音をほかの版のフォルダから使う
 #   SHOW_CHARACTER_FILE=<.vrm>  キャラをファイルで渡す
 #   SHOW_FROM=<コマ>      映像を途中のコマから続ける
+#   SHOW_DANCE_TRACK=<頭>  assemble_track.py の 1 本で踊らせ、サビの寄りを外す
+#   SHOW_PLATE=<png>      LED の中の会場の絵。show_stage.json のとおりに等身大・左右のモニター・出る戻るの光を描く
 #   SHOW_BUILD_ROOT      出力の置き場(既定 work/ue_show/show_build)
 #   SHOW_LOCK="python <札の道具>"  重い処理を札で包む命令。空なら札なしで動かす
 #   SHOW_WHO             札に書く名前
@@ -117,7 +119,7 @@ if [ "$MODE" = "sample" ]; then
   VIDEO_DIR="$ROOT/sample_$VERSION/video"
   mkdir -p "$VIDEO_DIR"
   echo "== 見本の映像($SAMPLE_SEC 秒)"
-  locked gpu 10 "ショーの見本の映像" -- node "$REPO/show/led_browser/render_show.mjs" --timeline "$TIMELINE" --character "$CHARACTER" --stretch "$STRETCH" --out "$VIDEO_DIR" --section song --seconds "$SAMPLE_SEC" --loud ${SHOW_CHARACTER_FILE:+--character-file "$SHOW_CHARACTER_FILE"}
+  locked gpu 10 "ショーの見本の映像" -- node "$REPO/show/led_browser/render_show.mjs" --timeline "$TIMELINE" --character "$CHARACTER" --stretch "$STRETCH" --out "$VIDEO_DIR" --section song --seconds "$SAMPLE_SEC" --loud ${SHOW_CHARACTER_FILE:+--character-file "$SHOW_CHARACTER_FILE"} ${SHOW_DANCE_TRACK:+--dance-track "$SHOW_DANCE_TRACK" --no-zoom} ${SHOW_PLATE:+--plate "$SHOW_PLATE"}
   FROM_FRAME="$(python -c "import json,sys; print(json.load(open(sys.argv[1]))['from'])" "$VIDEO_DIR/render_stats.json")"
   START_SEC="$(python -c "import sys; print(int(sys.argv[1]) / 60)" "$FROM_FRAME")"
   ffmpeg -y -v error -ss "$START_SEC" -t "$SAMPLE_SEC" -i "$MIX" -c:a pcm_s24le "$VIDEO_DIR/sample_audio.wav"
@@ -133,6 +135,13 @@ else
   [ -n "${SHOW_FROM:-}" ] && RENDER_ARGS+=(--from "$SHOW_FROM")
   [ "$NO_CHARACTER" = "1" ] && RENDER_ARGS+=(--no-character)
   [ -n "${SHOW_CHARACTER_FILE:-}" ] && [ "$NO_CHARACTER" != "1" ] && RENDER_ARGS+=(--character-file "$SHOW_CHARACTER_FILE")
+  if [ -n "${SHOW_PLATE:-}" ]; then
+    # LED の中の会場: キャラなしの版でも、左右のモニターにはキャラが映る
+    RENDER_ARGS+=(--plate "$SHOW_PLATE" --dance-track "$SHOW_DANCE_TRACK")
+    [ "$NO_CHARACTER" = "1" ] && RENDER_ARGS+=(--character-file "$SHOW_CHARACTER_FILE")
+  elif [ -n "${SHOW_DANCE_TRACK:-}" ] && [ "$NO_CHARACTER" != "1" ]; then
+    RENDER_ARGS+=(--dance-track "$SHOW_DANCE_TRACK" --no-zoom)
+  fi
   # キャラなしは GPU をほとんど使わない(1 コマ約 20 ms)ので、書き出しの札で並べて動かせる
   RENDER_KIND=gpu
   [ "$NO_CHARACTER" = "1" ] && RENDER_KIND=render

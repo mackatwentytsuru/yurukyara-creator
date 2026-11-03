@@ -18,10 +18,16 @@ UE_EXE = "C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.
 PROJECT = "work/ue_show/HackShow_live/HackShow.uproject"
 DDC = "work/ue_show/DDC"
 LEVEL = "/Game/Show/L_Live"
-DEFAULT_MEDIA = "work/ue_show/show_build/song1/video/preview.mp4"
+DEFAULT_MEDIA = "work/ue_show/sample_ue/led/led_without.mp4"
 CHROME = "C:/Program Files/Google/Chrome/Application/chrome.exe"
 PLAYER_PORT, STREAMER_PORT, UDP_PORT = 8080, 8888, 9000
 READY_TIMEOUT_SEC = 240
+
+
+def stage_file():
+    """現地の一式では同じフォルダ、リポジトリでは 1 つ上。"""
+    here = HERE / "show_stage.json"
+    return here if here.exists() else HERE.parent / "show_stage.json"
 
 
 def kill_tree(process, name):
@@ -103,6 +109,8 @@ def main():
     parser.add_argument("--max-fps", type=int, default=60)
     parser.add_argument("--bitrate", type=int, default=10000000)
     parser.add_argument("--media", default=DEFAULT_MEDIA)
+    parser.add_argument("--character", default="sample_show", help="import_motion_glb.py で入れた名前")
+    parser.add_argument("--start-sec", type=float, help="映像と動きを全編のこの秒から始める")
     parser.add_argument("--ue-exe", default=UE_EXE)
     parser.add_argument("--project", default=PROJECT)
     parser.add_argument("--ddc", default=DDC)
@@ -117,7 +125,8 @@ def main():
     (out / "ue_stats.jsonl").unlink(missing_ok=True)
     bind = "0.0.0.0" if args.lan else "127.0.0.1"
     config_path = out / "live_config.json"
-    config_path.write_text(json.dumps({"udp_bind": bind, "udp_port": UDP_PORT, "media": args.media,
+    config_path.write_text(json.dumps({"udp_bind": bind, "udp_port": UDP_PORT, "media": args.media, "character": args.character, "start_sec": args.start_sec,
+                                       "stage": json.loads(stage_file().read_text(encoding="utf-8")),
                                        "auto_recenter": {"pos": args.start_pos, "yaw": args.start_yaw} if args.start_pos else None,
                                        "stats_path": (out / "ue_stats.jsonl").as_posix()}), encoding="utf-8")
     server = subprocess.Popen([sys.executable, str(HERE / "signalling.py"), "--bind", bind, "--out", str(out),

@@ -23,7 +23,7 @@ WIDTH, HEIGHT = 1920, 1080
 WORLD_YAW_DEG = 37.0  # 仮の世界と UE の間の水平の回転
 WORLD_SHIFT_CM = np.array([123.0, -45.0, 67.0])
 AIM_ERROR_DEG = 0.1  # 4 隅に十字を合わせるときの狙いのずれ
-TRACK_LOST = (5.0, 5.3)  # 追跡が切れたことにする秒
+TRACK_LOST = (500.0, 500.3)  # 追跡が切れたことにする秒(今は切らない)
 SWAY = {"x": (7.0, 0.13), "y": (4.0, 0.09), "z": (2.5, 0.21), "yaw": (0.5, 0.11), "pitch": (0.35, 0.17),
         "roll": (0.8, 0.07)}  # 片振幅(cm か度)と周波数(Hz)。1 人で持つ、ゆっくりした揺れ
 SEED = 20261103
@@ -64,11 +64,28 @@ def base_pose(mm35=None):
     return position, pitch, yaw, (mm35 or spec["mm35"]) / 36.0 * WIDTH
 
 
-def truth_rows(seconds, still, mm35=None):
-    position, pitch, yaw, fx = base_pose(mm35)
+def path_offset(path, t):
+    """[秒, 横 cm, 奥 cm, 高さ cm, ヨー度, ピッチ度] の並びから、その秒のずれ。"""
+    if not path:
+        return np.zeros(5)
+    keys = np.array(path, dtype=float)
+    if t <= keys[0, 0]:
+        return keys[0, 1:]
+    for a, b in zip(keys, keys[1:]):
+        if t < b[0]:
+            k = (t - a[0]) / (b[0] - a[0])
+            return a[1:] + (b[1:] - a[1:]) * (k * k * (3 - 2 * k))
+    return keys[-1, 1:]
+
+
+def truth_rows(seconds, still, mm35=None, path=None):
+    base_position, pitch0, yaw0, fx = base_pose(mm35)
     rows = []
     for index in range(int(seconds * FPS)):
         t = index / FPS
+        dx, dy, dz, dyaw, dpitch = path_offset(path, t)
+        position = base_position + np.array([dx, dy, dz])
+        pitch, yaw = pitch0 + dpitch, yaw0 + dyaw
         wave = {k: 0.0 if still else a * np.sin(2 * np.pi * f * t + i) for i, (k, (a, f)) in enumerate(SWAY.items())}
         rows.append({"f": index, "x": float(position[0] + wave["x"]), "y": float(position[1] + wave["y"]),
                      "z": float(position[2] + wave["z"]), "pitch": pitch + wave["pitch"], "yaw": yaw + wave["yaw"],
@@ -116,10 +133,12 @@ def main():
     parser.add_argument("--seconds", type=float, default=20.0)
     parser.add_argument("--still", action="store_true", help="三脚の固定カメラ")
     parser.add_argument("--mm35", type=float, help="焦点距離(35mm 判)。無ければ案 1 の値")
+    parser.add_argument("--path", type=Path, help="カメラの動きの json: [[秒, 横 cm, 奥 cm, 高さ cm, ヨー度, ピッチ度], ...]")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(SEED)
-    rows, fx = truth_rows(args.seconds, args.still, args.mm35)
+    path = json.loads(args.path.read_text(encoding="utf-8")) if args.path else None
+    rows, fx = truth_rows(args.seconds, args.still, args.mm35, path)
     frames = make_frames(rows, fx, rng)
     (args.out / "frames.jsonl").write_text("\n".join(json.dumps(f) for f in frames) + "\n", encoding="utf-8")
     meta = {"videoFile": "video.mov", "framesFile": "frames.jsonl",

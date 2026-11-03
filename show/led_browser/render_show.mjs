@@ -17,7 +17,7 @@
 import http from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createWriteStream, existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, readdirSync } from 'node:fs';
+import { appendFileSync, createWriteStream, existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,7 @@ const STALL_SEC = 60;
 const MAX_RESTARTS = 3;
 const PROGRESS_SEC = 60;
 const ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
-const ALLOW = ['/show/led_browser/', '/show/show_motion.json', '/web/src/', '/web/node_modules/three/', '/web/node_modules/@pixiv/', '/creator/', '/characters/'];
+const ALLOW = ['/show/led_browser/', '/show/show_motion.json', '/show/show_stage.json', '/web/src/', '/web/node_modules/three/', '/web/node_modules/@pixiv/', '/creator/', '/characters/'];
 const TYPES = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.md': 'text/plain; charset=utf-8' };
 
 function parseArgs(argv) {
@@ -61,6 +61,7 @@ function startServer(state) {
     const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     if (req.method === 'POST' && path === '/frame') return receiveFrame(req, res, state);
     if (req.method === 'POST' && path === '/result') return receiveResult(req, res, state);
+    if (req.method === 'POST' && (path === '/pose' || path === '/pose-head')) return receivePose(req, res, state, path);
     try {
       if (path === '/show-data/timeline.json') {
         res.writeHead(200, { 'content-type': TYPES['.json'] }).end(state.timelineBody);
@@ -68,6 +69,10 @@ function startServer(state) {
       }
       if (path === '/show-data/character.vrm' && state.characterFile) {
         res.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' }).end(await readFile(state.characterFile));
+        return;
+      }
+      if (path === '/show-data/plate.png' && state.plateFile) {
+        res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' }).end(await readFile(state.plateFile));
         return;
       }
       if (state.danceTrack && path.startsWith('/show-data/dance_track')) {
@@ -107,6 +112,22 @@ function receiveResult(req, res, state) {
     const message = JSON.parse(body);
     if (message.kind === 'log') console.log('[page]', message.text);
     else state.onResult?.(message);
+  });
+}
+
+/** --pose-out のとき。骨の数字を 1 つのファイルへ順に書く */
+function receivePose(req, res, state, path) {
+  const chunks = [];
+  req.on('data', (chunk) => chunks.push(chunk));
+  req.on('end', () => {
+    const body = Buffer.concat(chunks);
+    if (path === '/pose-head') {
+      state.poseHead = JSON.parse(body.toString());
+      writeFileSync(`${state.poseOut}.bin`, Buffer.alloc(0));
+    } else {
+      appendFileSync(`${state.poseOut}.bin`, body);
+    }
+    res.writeHead(200).end('ok');
   });
 }
 
@@ -390,15 +411,28 @@ async function main() {
     rmSync(statsPath, { force: true });
   }
 
-  const state = { fileCache: new Map(), timelineBody, nextFrame: from, endFrame: end, done: 0, startedAt: 0, lastFrameAt: 0, chunks: 0, restarts: 0, ffmpeg: null, stats: null, characterFile, danceTrack: args['dance-track'] ? resolve(args['dance-track']) : null };
+  const state = { fileCache: new Map(), timelineBody, nextFrame: from, endFrame: end, done: 0, startedAt: 0, lastFrameAt: 0, chunks: 0, restarts: 0, ffmpeg: null, stats: null, characterFile, danceTrack: args['dance-track'] ? resolve(args['dance-track']) : null, plateFile: args.plate ? resolve(args.plate) : null };
   const server = await startServer(state);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try {
-    const base = { character, stretch, cx, ...(args['dance-track'] ? { dancetrack: 1 } : {}), ...(args['no-zoom'] ? { nozoom: 1 } : {}) };
+    const base = { character, stretch, cx, ...(args['dance-track'] ? { dancetrack: 1 } : {}), ...(args['no-zoom'] ? { nozoom: 1 } : {}), ...(args.plate ? { stage: 1 } : {}) };
+    if (args['pose-out']) {
+      state.poseOut = resolve(args['pose-out']);
+      await runPage(state, baseUrl, { ...base, run: 'pose', from: first, to: end });
+      const size = 7 + state.poseHead.bones.length * 7 + state.poseHead.morphs.length;
+      writeFileSync(`${state.poseOut}.json`, JSON.stringify({ ...state.poseHead, fps: timeline.fps, frames: end - first, floats_per_frame: size }));
+      console.log(`骨の数字: ${end - first} コマ、骨 ${state.poseHead.bones.length}、顔の形 ${state.poseHead.morphs.length}`);
+      return;
+    }
     const fitPath = join(outDir, 'fit.json');
     let fit;
     const t0 = performance.now();
-    if (resume && existsSync(fitPath)) {
+    if (args.plate) {
+      // 等身大: 大きさと足の高さは決まっている。下調べの基準は高さ 500 の絵の真ん中(足は 620 + 250)
+      const stage = JSON.parse(readFileSync(join(ROOT, 'show/show_stage.json'), 'utf8')).life_size;
+      fit = { scale: stage.height_px / 500, zoom: 1, anchorRefY: 870, anchorFull: stage.foot_y, anchorZoom: stage.foot_y, limitedBy: 'life_size', stretch, cx };
+      writeFileSync(fitPath, JSON.stringify(fit, null, 1));
+    } else if (resume && existsSync(fitPath)) {
       fit = JSON.parse(readFileSync(fitPath, 'utf8'));
     } else {
       const result = await runPage(state, baseUrl, { ...base, measure: 1, run: 'measure' }, (info) => console.log('GPU:', info.gpuName, '動き:', (info.motions ?? []).join(','), '踊り:', info.dance));

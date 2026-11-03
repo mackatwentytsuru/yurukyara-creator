@@ -12,7 +12,7 @@ import os
 import sys
 import traceback
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path[:0] = [os.path.dirname(os.path.abspath(__file__)), os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "live")]
 
 import unreal  # noqa: E402
 
@@ -22,6 +22,7 @@ from build_materials import scalar  # noqa: E402
 from build_sequences import add_camera_cut, reset_sequence, smooth  # noqa: E402
 from comp_keys import key_camera, make_camera  # noqa: E402
 from sim_layout import FPS, LEAD_FRAMES, MEDIA_LATENCY_FRAMES  # noqa: E402
+from stage_path import ar_at, on_led  # noqa: E402
 from sim_parts import (MATERIAL_DIR, add_glow_keys, build_file_source, build_level_for_sim,  # noqa: E402
                        build_render_config, describe, load_required, open_sim_level, outside_show_dependencies,
                        set_floor)
@@ -36,18 +37,32 @@ SHADOW_LIGHT_CANDELA = 400.0
 MATTE_EMISSIVE = 50.0
 MARKER_DIAMETER_CM = 12.0
 STAGE_Z = 90.0
+TICKS = 24000
 mel = unreal.MaterialEditingLibrary
 
 
-def character_assets():
+def character_assets(config):
+    """config の character(glb の名前)があれば、全編の動きが入ったキャラ。無ければ試しのキャラ。"""
+    name = config.get("character")
+    if name:
+        path = f"{SHOW_ROOT}/Character/{name}/{name}/SkeletalMeshes"
+        return load_required(f"{path}/{name}"), load_required(f"{path}/{name}_Anim")
     path = f"{MOTION_CHARACTER_DIR}/f_led_motion/SkeletalMeshes"
     return load_required(f"{path}/f_led_motion"), load_required(f"{path}/f_led_motionwave")
 
 
 def place_character(builder, config, report):
-    mesh, _ = character_assets()
+    mesh, _ = character_assets(config)
     face = load_required(f"{MATERIAL_DIR}/M_FaceCell")
-    return build_level.place_character(builder, [mesh], face, report)[0]
+    character = build_level.place_character(builder, [mesh], face, report)[0]
+    if config.get("character"):
+        # 取り込んだ材質をそのまま使う(試しのキャラの顔の材質を当てない)
+        component = character.skeletal_mesh_component
+        for index, slot in enumerate(mesh.get_editor_property("materials")):
+            component.set_material(index, slot.get_editor_property("material_interface"))
+        scale = float(config.get("character_scale", 1.0))
+        character.set_actor_scale3d(vec(scale, scale, scale))
+    return character
 
 
 def add_fill(builder, character):
@@ -83,6 +98,8 @@ def matte_material():
     mel.delete_all_material_expressions(material)
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     material.set_editor_property("used_with_skeletal_mesh", True)
+    material.set_editor_property("two_sided", True)  # スカートの裏が色の絵には写るので、透明でも抜かない
+    material.set_editor_property("used_with_morph_targets", True)  # 顔の形を持つキャラは、これが無いと既定の材質に戻る
     glow = scalar(material, "Glow", MATTE_EMISSIVE, -300, 0)
     if not mel.connect_material_property(glow, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR):
         raise RuntimeError("目印の材質をつなげない")
@@ -159,7 +176,7 @@ def new_sequence(name, count):
     sequence, _ = get_or_create(name, SEQUENCE_DIR, unreal.LevelSequence, unreal.LevelSequenceFactoryNew())
     reset_sequence(sequence)
     sequence.set_display_rate(unreal.FrameRate(FPS, 1))
-    sequence.set_tick_resolution(unreal.FrameRate(24000, 1))
+    sequence.set_tick_resolution(unreal.FrameRate(TICKS, 1))
     sequence.set_playback_start(LEAD_FRAMES)
     sequence.set_playback_end(LEAD_FRAMES + count)
     return sequence
@@ -184,12 +201,27 @@ def set_transform_defaults(actor, binding, count, location):
     return channels
 
 
+def key_ar_path(channels, config, count, floor_z, base_yaw):
+    stage = config["stage"]
+    for frame in range(count + 1):
+        t = float(config["show_start"]) + frame / FPS
+        number = unreal.FrameNumber(LEAD_FRAMES + frame)
+        x, y, yaw = ar_at(stage["ar_path"], t)
+        channels[0].add_key(number, float(x))
+        channels[1].add_key(number, float(y))
+        channels[2].add_key(number, UNDER_Z if on_led(stage, t) else float(floor_z), interpolation=unreal.MovieSceneKeyInterpolation.CONSTANT)
+        channels[5].add_key(number, float(base_yaw + yaw))
+
+
 def add_character(sequence, character, count, state, config, moves=True):
-    """state: floor(舞台に立つ)、under(床下)、emerge(LED の奥から舞台へ出てくる)。"""
+    """state: floor(舞台に立つ)、under(床下)、emerge(LED の奥から舞台へ出てくる)。
+    config に stage があれば floor は「舞台の上にいる間だけ、ar_path のとおりに動く」になる。"""
     at = character.get_actor_location()
     binding = sequence.add_possessable(character)
     place = (at.x, at.y, UNDER_Z if state == "under" else at.z)
     channels = set_transform_defaults(character, binding, count, place)
+    if state == "floor" and config.get("stage"):
+        key_ar_path(channels, config, count, at.z, character.get_actor_rotation().yaw)
     if state == "emerge":
         start, end = (float(v) * FPS for v in config["emerge_sec"])
         behind = float(config["emerge_from_y"])
@@ -200,7 +232,11 @@ def add_character(sequence, character, count, state, config, moves=True):
         section = binding.add_track(unreal.MovieSceneSkeletalAnimationTrack).add_section()
         section.set_range(0, LEAD_FRAMES + count)
         params = section.get_editor_property("params")
-        params.set_editor_property("animation", character_assets()[1])
+        params.set_editor_property("animation", character_assets(config)[1])
+        if config.get("character"):
+            # 動きの 0 秒は全編の 0 秒。LEAD_FRAMES のコマが show_start になるように頭を飛ばす
+            skip_sec = float(config["show_start"]) - LEAD_FRAMES / FPS
+            params.set_editor_property("first_loop_start_frame_offset", unreal.FrameNumber(int(round(skip_sec * TICKS))))
         section.set_editor_property("params", params)
 
 
@@ -222,6 +258,8 @@ def comp_passes(config, truth_rows, track_rows, sensor, character, glows, report
               ("Comp_BeautyWith", track_cam, track_rows, "without", "floor"),
               ("Comp_BeautyWithout", track_cam, track_rows, "without", "under")]
     for name, camera, rows, media, state in passes:
+        if config.get("stage"):
+            media = "with"  # LED は 1 本の筋。キャラが LED にいる間は、舞台の上にはいない
         sequence = new_sequence(name, count)
         add_media(sequence, media, config["media"][media], show_start, count)
         binding = add_camera_cut(sequence, camera, LEAD_FRAMES + count)

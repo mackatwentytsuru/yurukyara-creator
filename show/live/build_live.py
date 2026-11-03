@@ -1,6 +1,6 @@
 """リアルタイム用のレベル L_Live を作る。写しのプロジェクトの中だけで動かす。
 
--run=pythonscript -script=このファイル で動かす。L_Comp(ステージ + キャラ)を複製し、カメラと遅れの印と光を足す。
+-run=pythonscript -script=このファイル で動かす。L_Comp(ステージ)を複製し、キャラを LIVE_CHARACTER に置きかえ、カメラと遅れの印と光を足す。
 """
 import os
 import sys
@@ -16,6 +16,7 @@ from ue_helpers import MATERIAL_DIR, SHOW_ROOT, assets, get_or_create, save, vec
 SOURCE_LEVEL = f"{SHOW_ROOT}/L_Comp"
 LIVE_LEVEL = f"{SHOW_ROOT}/L_Live"
 REPORT_PATH = os.environ.get("LIVE_REPORT", "work/ue_show/live_logs/build_live_report.txt")
+CHARACTER = os.environ["LIVE_CHARACTER"]  # import_motion_glb.py で入れた名前
 GLOW_CANDELA = 6.0  # 床に落ちる光の一定の強さ(撮影の式の「60 cd × 輝度 0.1」)
 mel = unreal.MaterialEditingLibrary
 
@@ -32,6 +33,14 @@ def marker_material():
     mel.recompile_material(material)
     save(material)
     return material
+
+
+def load_character_mesh():
+    path = f"{SHOW_ROOT}/Character/{CHARACTER}/{CHARACTER}/SkeletalMeshes/{CHARACTER}"
+    mesh = unreal.load_asset(path)
+    if mesh is None:
+        raise RuntimeError(f"キャラが無い: {path}")
+    return mesh
 
 
 def main():
@@ -51,8 +60,13 @@ def main():
         elif label.startswith("SimGlow"):
             actor.rect_light_component.set_editor_property("intensity", GLOW_CANDELA)
         elif label.startswith("Character_"):
-            actor.tags = [unreal.Name("LiveChar")]
-            report.append(f"character {label} at {actor.get_actor_location()}")
+            standing = (actor.get_actor_location(), actor.get_actor_rotation())
+            actors.destroy_actor(actor)
+    character = actors.spawn_actor_from_class(unreal.SkeletalMeshActor, *standing)
+    character.skeletal_mesh_component.set_skinned_asset_and_update(load_character_mesh())
+    character.set_actor_label(f"Character_{CHARACTER}")
+    character.tags = [unreal.Name("LiveChar")]
+    report.append(f"character {CHARACTER} at {standing[0]}")
     camera = actors.spawn_actor_from_class(unreal.CineCameraActor, vec(130, 1600, 150))
     camera.set_actor_label("Live_Cam")
     camera.tags = [unreal.Name("LiveCam")]

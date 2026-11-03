@@ -3,7 +3,7 @@
 使い方: assemble_track.py --plan <案.json> --clips <フォルダ> --timeline <timeline.json> --vrm <.vrm> --out <出力の頭>
 出力: <頭>.bin(float32。コマ × [腰の x y z, 骨ごとの x y z w])と <頭>.json(骨の並び・コマの範囲)
 
-案の形: {"from_sec": 58, "to_sec": 82.4, "segments": [ {"clip": 名前, "beat": 開始の拍(timeline の beats の番号), "beats": 拍数,
+案の形: {"from_sec": 58, "to_sec": 82.4, "free_face_sec": [[始め, 終わり]], "segments": [ {"clip": 名前, "beat": 開始の拍(timeline の beats の番号), "beats": 拍数,
   "clip_from": 秒, "clip_to": 秒, "fade_beats": 1} ... ]}
 秒で置くときは "at_sec" と "speed"(既定 1)を書く。"beat" と "beats" を書けば、clip_from から clip_to までがその拍数にちょうど入る。
 """
@@ -40,6 +40,33 @@ class Clip:
             'left': self.ankle['left'][i] * (1 - k) + self.ankle['left'][i2] * k,
             'right': self.ankle['right'][i] * (1 - k) + self.ankle['right'][i2] * k,
         }
+
+
+def sample_segment(s, t):
+    """セグメントの t 秒の姿勢。in_place は前へ進む分を引いて、その場の足踏みにする(進むのは舞台の側で動かす)。"""
+    clip = s['clip']
+    at = s['clock'](t)
+    pose = clip.sample(at)
+    if s['in_place']:
+        forward = (clip.hips[-1] - clip.hips[0]) * min(max(at, 0.0), clip.length) / clip.length
+        pose = {**pose, 'hips': pose['hips'] - forward, 'left': pose['left'] - forward, 'right': pose['right'] - forward}
+    return pose
+
+
+def add_breath(pose, breath, strength, downbeat):
+    """歌う人の息づかい: 吸うと胸と肩が上がり、大きな声で胸が開き、首が小さく拍に乗る。動きの元はそのまま残す。"""
+    q = dict(pose['q'])
+
+    def turn(bone, axis, degrees):
+        half = np.radians(degrees) / 2
+        q[bone] = q_normalize(q_mul(q[bone], np.array([*(np.array(axis) * np.sin(half)), np.cos(half)])))
+
+    turn('chest', (1, 0, 0), -3.0 * breath - 1.5 * strength)
+    turn('neck', (1, 0, 0), -1.5 * strength + 1.5 * strength * downbeat)
+    turn('head', (1, 0, 0), -2.0 * breath - 1.0 * strength + 2.0 * strength * downbeat)
+    turn('leftShoulder', (0, 0, 1), 3.0 * breath + 1.0 * strength)
+    turn('rightShoulder', (0, 0, 1), -3.0 * breath - 1.0 * strength)
+    return {**pose, 'q': q}
 
 
 def smooth(k):
@@ -94,7 +121,7 @@ def make_segments(plan, clips, beats):
             end = s.get('end_sec', start + (c1 - c0) / speed)
             fade = s.get('fade_sec', 0.4)
             clock = (lambda c0, speed, start: lambda t: c0 + (t - start) * speed)(c0, speed, start)
-        out.append({'clip': clip, 'start': start, 'end': end, 'fade': fade, 'clock': clock, 'name': s['clip']})
+        out.append({'clip': clip, 'start': start, 'end': end, 'fade': fade, 'clock': clock, 'name': s['clip'], 'in_place': s.get('in_place', False)})
     return out
 
 
@@ -166,10 +193,12 @@ def main():
     ap.add_argument('--timeline', required=True)
     ap.add_argument('--vrm', required=True)
     ap.add_argument('--out', required=True)
+    ap.add_argument('--sing', help='make_sing_curves.py の出力。息づかいを足す')
     a = ap.parse_args()
     plan = json.loads(pathlib.Path(a.plan).read_text(encoding='utf-8'))
     timeline = json.loads(pathlib.Path(a.timeline).read_text(encoding='utf-8'))
     rest, parents = read_rest(a.vrm)
+    sing = json.loads(pathlib.Path(a.sing).read_text(encoding='utf-8')) if a.sing else None
     fps = timeline['fps']
     beats = timeline['beats']
     names = {s['clip'] for s in plan['segments']}
@@ -180,6 +209,7 @@ def main():
     last = round(plan['to_sec'] * fps)
     legs = Legs(rest, parents)
     fix = BodyFix(rest, parents)
+    free_face = plan.get('free_face_sec', [])  # 一礼のように、顔が下を向くのが正しい間
     frames = []
     worst_reach = 0.0
     face_fix = 0.0
@@ -191,13 +221,17 @@ def main():
                 cur = i
         cur = 0 if cur is None else cur
         s = segments[cur]
-        pose = s['clip'].sample(s['clock'](t))
+        pose = sample_segment(s, t)
         if cur > 0 and t - s['start'] < s['fade']:
             p = segments[cur - 1]
-            pose = blend(p['clip'].sample(p['clock'](t)), pose, smooth((t - s['start']) / s['fade']))
+            pose = blend(sample_segment(p, t), pose, smooth((t - s['start']) / s['fade']))
+        if sing and f < len(sing['breath']):
+            beat_phase = (time_beat(beats, t) % 1.0)
+            pose = add_breath(pose, sing['breath'][f], sing['strength'][f], np.exp(-beat_phase * 5.0))
         solved = legs.solve(pose)
         worst_reach = max(worst_reach, solved['reach_fail'])
-        face_fix = max(face_fix, fix.limit_face(solved['q'], solved['hips']))
+        if not any(a <= t < b for a, b in free_face):
+            face_fix = max(face_fix, fix.limit_face(solved['q'], solved['hips']))
         frames.append(solved)
     push_most, push_frames = fix.fix_hands(frames)
     out = np.zeros((last - first, 3 + 4 * len(bones)), dtype=np.float32)
@@ -211,6 +245,8 @@ def main():
     out.tofile(str(prefix) + '.bin')
     head = {'fps': fps, 'first': first, 'frames': last - first, 'bones': bones}
     pathlib.Path(str(prefix) + '.json').write_text(json.dumps(head), encoding='utf-8')
+    if a.sing:
+        pathlib.Path(str(prefix) + '_sing.json').write_text(pathlib.Path(a.sing).read_text(encoding='utf-8'), encoding='utf-8')
 
     # 跳びの点検: 1 コマの回転の最大(度)
     q = out[:, 3:].reshape(len(out), len(bones), 4)

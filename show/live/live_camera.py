@@ -18,10 +18,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unreal  # noqa: E402
 
 from live_math import IDENTITY, axes_to_rotator, camera_from_K, marker_color, pose_axes, recenter  # noqa: E402
+from stage_path import ar_at, on_led  # noqa: E402
 
 LEVEL_OBJECT = "/Game/Show/L_Live.L_Live"
 LED_TEXTURE = "/Game/Show/Media/MT_LED"
-WAVE_MOTION = "/Game/Show/Character/f_led_motion/f_led_motion/SkeletalMeshes/f_led_motionwave"
+SYNC_EVERY_SEC = 1.0
+SYNC_TOLERANCE_SEC = 0.15
 MARKER_DISTANCE_CM = 30.0
 MARKER_CENTER = (0.05, 0.90)  # 画面の左下寄り(横, 縦の割合)。受け側の player.html と同じ値
 MARKER_SIZE = 0.05  # 画面の幅に対して
@@ -50,6 +52,11 @@ class Receiver:
         self.filmback = None
         self.keep = []  # GC から守る
         self.media_player = None
+        self.character_component = None
+        self.character_actor = None
+        self.character_hidden = False
+        self.start_sec = config.get("start_sec")
+        self.last_sync = 0.0
         self.stats_path = config.get("stats_path")
         self.window_start = time.time()
         self.window_ticks = 0
@@ -81,6 +88,10 @@ class Receiver:
         unreal.log(f"LIVE_READY camera={self.camera.get_name()} udp={self.config.get('udp_port', 9000)}")
         return True
 
+    def character_motion(self):
+        name = self.config["character"]
+        return unreal.load_asset(f"/Game/Show/Character/{name}/{name}/SkeletalMeshes/{name}_Anim")
+
     def start_media(self):
         path = self.config.get("media")
         if not path:
@@ -97,11 +108,47 @@ class Receiver:
         self.keep += [player, texture]
 
     def start_character(self, statics):
-        wave = unreal.load_asset(WAVE_MOTION)
+        motion = self.character_motion()
         for actor in statics.get_all_actors_with_tag(self.world, "LiveChar"):
-            if wave is not None:
-                actor.skeletal_mesh_component.play_animation(wave, True)
-        self.keep.append(wave)
+            component = actor.skeletal_mesh_component
+            component.set_animation_mode(unreal.AnimationMode.ANIMATION_SINGLE_NODE)
+            component.play_animation(motion, True)
+            self.character_component = component
+            self.character_actor = actor
+            self.base_yaw = actor.get_actor_rotation().yaw
+            self.floor_z = actor.get_actor_location().z
+        self.keep.append(motion)
+
+    def place_on_stage(self):
+        """舞台の上にいる間は ar_path のとおりに動く。LED の中にいる間は隠す(本番の合成と同じ)。"""
+        stage = self.config.get("stage")
+        if not stage or self.character_actor is None:
+            return
+        t = self.character_component.get_position()
+        hidden = on_led(stage, t)
+        if hidden != self.character_hidden:
+            self.character_actor.set_actor_hidden_in_game(hidden)
+            self.character_hidden = hidden
+        if not hidden:
+            x, y, yaw = ar_at(stage["ar_path"], t)
+            self.character_actor.set_actor_location_and_rotation(unreal.Vector(x, y, self.floor_z), unreal.Rotator(0.0, 0.0, self.base_yaw + yaw), False, False)
+
+    def sync_show(self, now):
+        """キャラの動きを LED の映像の時刻にそろえる(映像の読み込みの待ち・巻き戻し・命令のあと)。"""
+        player = self.media_player
+        if player is None or self.character_component is None or not player.is_playing():
+            return
+        if self.start_sec is not None:
+            player.seek(unreal.MathLibrary.from_seconds(self.start_sec))
+            self.start_sec = None
+            return
+        if now - self.last_sync < SYNC_EVERY_SEC:
+            return
+        self.last_sync = now
+        media_sec = unreal.MathLibrary.get_total_seconds(player.get_time())
+        if abs(self.character_component.get_position() - media_sec) > SYNC_TOLERANCE_SEC:
+            self.character_component.set_position(media_sec, False)
+            unreal.log(f"LIVE_SYNC {media_sec:.2f}")
 
     def apply_lens(self, width, height, K):
         focal, sensor_w, sensor_h = camera_from_K(K, width, height)
@@ -184,6 +231,8 @@ class Receiver:
         if newest is not None:
             self.apply_pose(newest, started)
             self.window_poses += 1
+        self.sync_show(started)
+        self.place_on_stage()
         self.window_ticks += 1
         self.window_max_dt = max(self.window_max_dt, delta)
         self.window_tick_ms += (time.time() - started) * 1000.0

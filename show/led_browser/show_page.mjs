@@ -3,6 +3,7 @@
 // URL の引数: character, stretch, cx, timeline(URL), motion(URL), fit("大きさ,縦のずれ"), measure=1, display=1, run=measure|render, from, to
 // 自動操作の道具はつながない。結果は /result へ、コマは /frame へ自分で送る。
 import * as THREE from 'three';
+import { createStagePicture } from './show_stage.mjs';
 import { loadCharacter, characterUrl } from '/web/src/character/index.js';
 import { ShowTiming } from './show_timing.mjs';
 import { BACKGROUND_VERTEX, BACKGROUND_FRAGMENT } from './show_background.mjs';
@@ -43,6 +44,8 @@ const CENTER_X = Number(q.get('cx') ?? 2159);
 const DISPLAY = q.get('display') === '1';
 const MEASURE = q.get('measure') === '1';
 const MEASURE_NO_DANCE = q.get('nodance') === '1'; // 踊りなしで確かめるとき
+const DANCE_TRACK = q.get('dancetrack') === '1';
+const STAGE = q.get('stage') === '1' ? await (await fetch('/show/show_stage.json')).json() : null; // LED の中の会場・等身大・左右のモニター
 const RAW_EXPRESSIONS = q.get('rawexpr') === '1'; // 表情を読みかえない(VRM にその表情があるとき)
 const NO_CHARACTER = q.get('nocharacter') === '1'; // キャラだけ描かない版。背景と時刻は同じ
 const FIT = JSON.parse(q.get('fit') ?? 'null'); // render_show.mjs の computeFit の結果
@@ -120,6 +123,7 @@ const background = new THREE.Mesh(
 background.frustumCulled = false;
 background.renderOrder = -1000;
 scene.add(background);
+const stagePicture = STAGE ? await createStagePicture({ THREE, renderer, stage: STAGE, W, H, FPS, CENTER_X, uniforms }) : null;
 
 const character = await loadCharacter(characterUrl(q.get('character') ?? 'f_led'));
 scene.add(character.object3d);
@@ -160,6 +164,7 @@ function applyCamera(amount) {
   projection.elements[9] = (anchorY - H / 2 - k * (FIT.anchorRefY - H / 2)) / (H / 2);
 }
 applyCamera(0);
+if (STAGE) uniforms.uFloorY.value = STAGE.life_size.foot_y;
 camera.projectionMatrixInverse.copy(projection).invert();
 camera.updateProjectionMatrix = () => {}; // 手で入れた行列を上書きさせない
 
@@ -194,6 +199,26 @@ let currentFrame = 0;
 let dancing = false;
 const STANDARD_EXPRESSIONS = new Set(['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed', 'aa', 'ih', 'ou', 'ee', 'oh', 'blink', 'think']);
 
+const SING = DANCE_TRACK ? await fetch('/show-data/dance_track_sing.json').then((r) => (r.ok ? r.json() : null)) : null;
+const MOUTH_VOWELS = ['aa', 'ih', 'ou', 'ee', 'oh'];
+const MOOD_FADE = 12; // コマ
+
+/** 歌詞の読みの母音で口を動かし、歌詞の気持ちで表情を決める。歌の間だけ */
+function applySinging(manager) {
+  const i = currentFrame - SING.first;
+  if (i < 0 || i >= SING.frames) return false;
+  for (const v of MOUTH_VOWELS) manager.setValue(v, SING.vowels[v][i]);
+  const weights = new Map();
+  for (const [a, b, name, w] of SING.moods) {
+    if (currentFrame < a - MOOD_FADE || currentFrame > b + MOOD_FADE) continue;
+    const k = Math.min(Math.min(1, (currentFrame - a + MOOD_FADE) / MOOD_FADE), Math.min(1, (b + MOOD_FADE - currentFrame) / MOOD_FADE));
+    weights.set(name, Math.max(weights.get(name) ?? 0, w * k));
+  }
+  for (const key of character.emotionKeys) manager.setValue(key, weights.get(key) ?? 0);
+  for (const [name, w] of weights) if (character.available.has(name)) manager.setValue(name, w);
+  return true;
+}
+
 /** 標準でない表情(漫符など)と singBig を、VRM の表情へ渡す。キャラの土台は標準の表情しか渡さない */
 function applyCustomExpressions() {
   const manager = character.vrm.expressionManager;
@@ -201,6 +226,7 @@ function applyCustomExpressions() {
   for (const [name, value] of character.exprValue) {
     if (!STANDARD_EXPRESSIONS.has(name) && character.available.has(name)) manager.setValue(name, value);
   }
+  if (SING && applySinging(manager)) return;
   const big = vrmConfig.sing_big;
   if (big && character.available.has('singBig')) {
     const input = timeline.mouth[currentFrame] ?? 0;
@@ -212,7 +238,7 @@ function applyCustomExpressions() {
 if (IS_VRM) {
   let dance = null;
   let danceInputOf = null;
-  const danceFile = q.get('dancetrack') === '1' ? './show_vrm_track.mjs' : './show_vrm_dance.mjs';
+  const danceFile = DANCE_TRACK ? './show_vrm_track.mjs' : './show_vrm_dance.mjs';
   if (!MEASURE_NO_DANCE && (await fetch(danceFile, { method: 'HEAD' })).ok) {
     const module = await import(danceFile);
     dance = module.createDance(character.vrm, timeline);
@@ -290,9 +316,10 @@ function stepCharacter(frame) {
   const o = character.object3d;
   const bounce = dancing ? { y: 0, sq: 0, sway: 0 } : timing.bounce(t);
   const rise = MEASURE ? 1 : timing.rise(t);
-  o.visible = !NO_CHARACTER && timing.characterVisible(t);
+  o.visible = !NO_CHARACTER && timing.characterVisible(t) && (!stagePicture || stagePicture.characterOnLed(t));
   o.position.y = bounce.y + hopHeight(frame) + (rise - 1) * RISE_DISTANCE;
-  o.rotation.y = dancing ? 0 : THREE.MathUtils.degToRad(timing.turnDeg(t));
+  // 手付けの踊りは向きも自分で持つ。既存の動きを並べた 1 本は、聞く・答える向きをここで足す
+  o.rotation.y = dancing && !DANCE_TRACK ? 0 : THREE.MathUtils.degToRad(timing.turnDeg(t));
   o.rotation.z = THREE.MathUtils.degToRad(bounce.sway);
   const squash = IS_VRM ? 0 : bounce.sq; // 人型はつぶさない
   o.scale.set(1 + squash * 0.6, 1 - squash, 1 + squash * 0.6);
@@ -326,7 +353,7 @@ function setScene(frame) {
   u.uEmber.value = look.ember;
   u.uWarm.value = look.warm;
   u.uWash.value = look.wash;
-  u.uShadow.value = timing.characterVisible(t) ? timing.rise(t) : 0;
+  u.uShadow.value = timing.characterVisible(t) && (!stagePicture || stagePicture.characterOnLed(t)) ? timing.rise(t) : 0;
 
   const lightGain = IS_VRM ? vrmConfig.light_gain ?? 1 : 1;
   const pulse = lightGain * (1 + 0.9 * beat.pulse + 0.8 * beat.down);
@@ -376,8 +403,10 @@ function footPoint() {
 
 function drawFrame(frame) {
   setScene(frame);
+  if (stagePicture) stagePicture.renderMonitors(frame, scene, character, background);
   renderer.setRenderTarget(hdrTarget);
   renderer.render(scene, camera);
+  if (stagePicture) stagePicture.drawOver(frame, hdrTarget);
   renderer.setRenderTarget(null);
   const source = renderer.properties.get(hdrTarget.texture).__webglTexture;
   const t = frame / FPS;
@@ -451,11 +480,58 @@ window.showRun = async (from, to) => {
   return ms;
 };
 
+/** 描かずに、全部の骨の局所の位置と回転・顔の形の重みを 1 コマずつ送る。UE で同じ動きを再生するため */
+window.showPose = async (from, to) => {
+  const bones = [];
+  let face = null;
+  character.vrm.scene.traverse((node) => {
+    if (node.isBone) bones.push(node);
+    if (!face && node.isMesh && node.morphTargetInfluences?.length) face = node;
+  });
+  const names = Object.entries(face.morphTargetDictionary).sort((a, b) => a[1] - b[1]).map((e) => e[0]);
+  await fetch('/pose-head', { method: 'POST', body: JSON.stringify({ first: from, bones: bones.map((b) => b.name), morphs: names }) });
+  const size = 7 + bones.length * 7 + names.length;
+  const CHUNK = 300;
+  const buffer = new Float32Array(size * CHUNK);
+  for (let f = 0; f < from; f++) stepCharacter(f);
+  let used = 0;
+  const flush = async () => {
+    if (used) await fetch('/pose', { method: 'POST', body: buffer.slice(0, used * size) });
+    used = 0;
+  };
+  for (let f = from; f < to; f++) {
+    stepCharacter(f);
+    let at = used * size;
+    buffer[at++] = character.object3d.position.x;
+    buffer[at++] = character.object3d.position.y;
+    buffer[at++] = character.object3d.position.z;
+    buffer[at++] = character.object3d.quaternion.x;
+    buffer[at++] = character.object3d.quaternion.y;
+    buffer[at++] = character.object3d.quaternion.z;
+    buffer[at++] = character.object3d.quaternion.w;
+    for (const b of bones) {
+      buffer[at++] = b.position.x;
+      buffer[at++] = b.position.y;
+      buffer[at++] = b.position.z;
+      buffer[at++] = b.quaternion.x;
+      buffer[at++] = b.quaternion.y;
+      buffer[at++] = b.quaternion.z;
+      buffer[at++] = b.quaternion.w;
+    }
+    for (const w of face.morphTargetInfluences) buffer[at++] = w;
+    if (++used === CHUNK) await flush();
+  }
+  await flush();
+};
+
 window.showInfo.dance = dancing;
 report({ kind: 'info', info: window.showInfo });
 const job = q.get('run');
 if (job === 'measure') {
   report({ kind: 'done', measured: window.showMeasure() });
+} else if (job === 'pose') {
+  await window.showPose(Number(q.get('from') ?? 0), Number(q.get('to') ?? timing.frames));
+  report({ kind: 'done' });
 } else if (job === 'render') {
   const ms = await window.showRun(Number(q.get('from') ?? 0), Number(q.get('to') ?? timing.frames));
   report({ kind: 'done', ms });

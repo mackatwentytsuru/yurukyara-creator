@@ -16,6 +16,7 @@
 | `check/measure_cuts.py` `check/make_sheet.py` | 明るさ・継ぎ目の測定、確認シート |
 | `ue/build_sim.py` `ue/sim_layout.py` `run/render_sim.sh` `run/render_sim.py` | シミュレーター: 全編の映像と音を、LED だけが光るレベル `L_Sim` に流し、3 つのカメラで撮る |
 | `motion/` `led_browser/show_vrm_track.mjs` | 踊り: 外の素材の動き(Fab で購入した KAWAII ANIMATIONS 100。ファイルはリポジトリに入れない)を VRM へ移し、曲の拍に並べる。期間中に作ったのは、この移しかえと配置の道具。`dump_motion_ue.py` → `retarget_clips.py` → `assemble_track.py` → `render_show.mjs --dance-track <頭> --no-zoom` |
+| `run/sample_into_ue.sh` `ue/make_motion_glb.py` `ue/import_motion_glb.py` | LED の絵と同じ動きのキャラを UE へ: 描画ページの骨の数字(揺れ物と顔の形まで)を VRM に足して GLB にし、合成とリアルタイムの 2 つのプロジェクトへ入れる。案の差し替えはこの 1 行 |
 | `check/make_sim_test.py` `check/measure_sim_sync.py` `check/make_sim_sheet.py` | シミュレーターの同期のテスト素材、ずれの測定、3 案の並べ絵 |
 
 ## 動かし方

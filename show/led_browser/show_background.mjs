@@ -14,6 +14,8 @@ uniform float uT, uFlow, uBeatPos, uPulse, uDown, uEnergy, uDrive;
 uniform float uBarIndex, uIgniteAge, uBeatSec;
 uniform float uRingAge[4];
 uniform float uCone, uConeDrop, uPool, uSong, uEmber, uWarm, uWash, uShadow;
+uniform sampler2D uPlate;
+uniform float uPlateOn, uPlateGain, uSongMix, uPlateCx, uPlateScaleY, uPlateAspect;
 
 const vec3 TEAL = vec3(0.02, 0.62, 0.66);
 const vec3 AQUA = vec3(0.10, 0.92, 0.82);
@@ -220,14 +222,30 @@ vec3 quietPicture(vec2 px) {
   return col;
 }
 
+// LED の中の会場。絵の真ん中を面の中心に合わせ、足元を LED の下の端に合わせる。左右の長さが違うので、横の倍率を左右で変える
+vec3 platePicture(vec2 px) {
+  float dx = px.x - uPlateCx;
+  float u = 0.5 + 0.5 * dx / (dx < 0.0 ? uPlateCx : uRes.x - uPlateCx);
+  float plateHeight = uRes.y / (uPlateScaleY * 724.0);
+  float v = 1.0 - (uRes.y - px.y) / uRes.y * plateHeight;
+  vec3 col = texture2D(uPlate, vec2(u, v)).rgb * uPlateGain;
+  // 客席の光: 明るい粒だけが小さくまたたき、拍で少し強くなる
+  float lum = dot(col, vec3(0.3, 0.5, 0.2));
+  float twinkle = wave2(px * 0.09 + vec2(uT * 1.7, -uT * 1.1), 41.0);
+  float sway = 0.5 + 0.5 * sin(px.x * 0.0042 - uT * 3.0);
+  col *= 1.0 + smoothstep(0.02, 0.2, lum) * (0.9 * twinkle + 0.5 * sway * uPulse);
+  return col;
+}
+
 void main() {
   vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   vec3 col = vec3(0.0);
+  if (uPlateOn > 0.5) col += platePicture(px);
   if (uSong > 0.002) {
     // 灯る瞬間: 1 拍で中心から外へ光が広がる。光の先頭は強く、中心は一度だけ大きく光る
     float dist = length(px - vec2(uCx, 660.0));
     float radius = 4300.0 * uIgniteAge / uBeatSec;
-    col += songPicture(px) * uSong * (1.0 - smoothstep(radius - 800.0, radius, dist));
+    col += songPicture(px) * uSong * uSongMix * (1.0 - smoothstep(radius - 800.0, radius, dist));
     float fade = exp(-uIgniteAge * 2.0);
     float e = (dist - radius) / (130.0 + radius * 0.035);
     col += mix(AQUA, vec3(0.85, 1.0, 0.98), 0.45) * exp(-e * e) * 1.25 * fade;
