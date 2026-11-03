@@ -27,6 +27,7 @@ ap.add_argument("--delta", type=float, default=0.15)
 ap.add_argument("--amax", type=float, default=0.5)
 ap.add_argument("--noise-floor", type=float, default=0.01)
 ap.add_argument("--deadline", default="")
+ap.add_argument("--block", default="", help="部位のブロック回し: eyes・brows・nose・mouth・outline のどれか(空 = 全体の和)")
 ap.add_argument("--port", type=int, default=5111)
 a = ap.parse_args()
 out = Path(a.out)
@@ -77,15 +78,27 @@ def score(dirs):
 
 
 JB = {}
+BASE = {}  # 反復 0 の部位別の値(ブロック回しの悪化の上限に使う)
+# 部位の悪化の上限(%IOD、角度ごと)。手本のゆらぎ(同じ頼み・別の生成の散らばり: 正面 0.1〜0.2、約 30° 0.2、約 50° 0.4)から決めた値。
+TOL = {"0": 0.15, "30": 0.25, "50": 0.5}
+BLOCK = os.environ.get("E30_BLOCK", "")  # 例 eyes。空なら全体の和(従来)。コマンドの --block でも指定できる
 
 
 def J(sc):
+    blk = a.block or BLOCK
     tot = 0.0
     for ang, w in W.items():
         s = sc.get(ang)
         if s is None:
             return None
-        tot += w * s["all"] / JB[ang]
+        if not blk:
+            tot += w * s["all"] / JB[ang]
+        else:
+            # 部位のブロック回し: 目的 = その部位(角度の重みつき、反復 0 で割る)。ほかの部位(目・眉・鼻・口・輪郭)が上限を超えて悪化したら罰(大きな重み)
+            tot += w * s[blk] / BASE[ang][blk]
+            for r in ("eyes", "brows", "nose", "mouth", "outline"):
+                if r != blk:
+                    tot += 4.0 * w * max(0.0, s[r] - BASE[ang][r] - TOL[ang]) / BASE[ang][r]
     return tot
 
 
@@ -100,6 +113,7 @@ try:
     shoot(d0)
     sc = score([d0])[str(d0)]
     JB.update({k: sc[k]["all"] for k in W})
+    BASE.update({k: dict(sc[k]) for k in W})
     j_cur = J(sc)
     hist = [{"iter": 0, "J": j_cur, "regions": sc}]
     log("反復 0 J =", round(j_cur, 4), {k: round(sc[k]["all"], 3) for k in W})

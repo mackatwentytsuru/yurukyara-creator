@@ -46,6 +46,11 @@ for d in json.load(open(a.dirs, encoding="utf-8")):
             continue
         p = np.asarray(det["pts3d"], float)
         rows = [F.region_distance(p, r, 2)[0] for r in R[ang]]
-        res[d][ang] = {k: float(np.mean([r[k] for r in rows])) for k in REG}
+        # 手本の一部を確かめ用に残す(過剰な合わせを見張る): 偶数番目 = 合わせに使う(fit)、奇数番目 = 確かめ(hold)。1 枚だけの角度は fit のみ
+        fit = [r for i, r in enumerate(rows) if i % 2 == 0] if len(rows) > 1 else rows
+        hold = [r for i, r in enumerate(rows) if i % 2 == 1]
+        res[d][ang] = {k: float(np.mean([r[k] for r in fit])) for k in REG}
+        res[d][ang]["_hold"] = {k: float(np.mean([r[k] for r in hold])) for k in REG} if hold else None
+        res[d][ang]["_all_refs"] = {k: float(np.mean([r[k] for r in rows])) for k in REG}
 json.dump(res, open(a.out, "w", encoding="utf-8"), ensure_ascii=False)
 print("scored", len(res))
