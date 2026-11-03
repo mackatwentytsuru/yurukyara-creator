@@ -99,8 +99,9 @@ def test_bulb_rows_keep_off_the_seams():
 
 def test_exit_goes_from_zero_to_one_before_the_out_second():
     plan = make_plan(out_t=10.0)
-    assert plan.exit_progress(10.0 - fx_plan.EXIT_SEC - 0.01) == 0.0
-    assert 0.0 < plan.exit_progress(10.0 - fx_plan.EXIT_SEC / 2.0) < 1.0
+    begin = 10.0 - fx_plan.EXIT_START_BEFORE
+    assert plan.exit_progress(begin - 0.01) == 0.0
+    assert 0.0 < plan.exit_progress(begin + fx_plan.EXIT_SEC / 2.0) < 1.0
     assert plan.exit_progress(10.0) == 1.0
 
 
@@ -127,9 +128,10 @@ def test_landing_is_the_first_beat_after_the_out():
 
 def test_led_character_stays_behind_and_fades_late():
     plan = make_plan(out_t=10.0)
-    assert plan.led_character_fade(9.5) == 1.0
-    assert 0.0 < plan.led_character_fade(10.0) < 1.0
-    assert plan.led_character_fade(10.0 + fx_plan.LED_FADE_AFTER) == 0.0
+    assert plan.led_character_fade(10.0) == 1.0
+    middle = 10.0 + (fx_plan.LED_FADE_START + fx_plan.LED_FADE_END) / 2.0
+    assert 0.0 < plan.led_character_fade(middle) < 1.0
+    assert plan.led_character_fade(10.0 + fx_plan.LED_FADE_END) == 0.0
     assert plan.held_frame(int(10.1 * FPS)) == 10 * FPS - 1
 
 

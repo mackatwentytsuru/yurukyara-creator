@@ -26,9 +26,10 @@ CRASH_STRONG_RANK = 0.85
 WEAK_AMP = 0.1  # ふだんの音は少し動く程度
 DECAY_SEC = {"kick": 0.30, "snare": 0.22, "crash": 0.9}
 FALL_LEAD_SEC = 0.9  # 「出る」で電球の光が下へ落ち始める、出る秒の手前
-EXIT_SEC = 0.45  # 「出る」の秒の手前、舞台のキャラが足から現れる長さ
-LED_FADE_BEFORE = 0.25  # LED のキャラは奥に残り、出る秒のこの手前から薄れる
-LED_FADE_AFTER = 0.25  # 出る秒のこの後に消える。層が無いコマは最後のコマを保つ
+EXIT_START_BEFORE = 0.45  # 舞台のキャラが足から現れ始める、「出る」の秒の手前
+EXIT_SEC = 0.30  # 足から頭まで現れる長さ。短くして、離れる間は 2 人とも全身が見えるように
+LED_FADE_START = 0.05  # LED のキャラは舞台のキャラが離れるまで残り、「出る」のこの後から薄れる
+LED_FADE_END = 0.42  # 「出る」のこの後(着地のあたり)で消える。層が無いコマは最後のコマを保つ
 LAND_MIN_AFTER = 0.3  # 着地は「出る」のこの後の最初の拍
 CLOSED_FX = 0.14  # 緞帳が閉じている間の、光の面と柱の残り(開くと 1)
 OPEN_FX_SEC = 0.8
@@ -172,6 +173,7 @@ class FxPlan:
         self.back_times = [float(c["t"]) for c in self.stage["flashes"] if c["kind"] == "back"]
         self.all_flash = sorted(self.out_times + self.back_times)
         self.land_times = self._landings()
+        self.land_x = float(self.cues.get("landing_x", self.center_x))  # 床の光が広がり始める x
         self._build_opened()
 
     def _build_opened(self):
@@ -198,30 +200,30 @@ class FxPlan:
     def led_character_fade(self, t):
         """LED のキャラの濃さ(1 そのまま、0 消えた)。出る前後だけ下がる。"""
         for at in self.out_times:
-            if at - LED_FADE_BEFORE <= t <= at + LED_FADE_AFTER + 1.0:
-                return 1.0 - float(smoothstep((t - (at - LED_FADE_BEFORE)) / (LED_FADE_BEFORE + LED_FADE_AFTER)))
+            if at <= t <= at + LED_FADE_END + 1.0:
+                return 1.0 - float(smoothstep((t - (at + LED_FADE_START)) / (LED_FADE_END - LED_FADE_START)))
         return 1.0
 
     def held_frame(self, frame):
         """「出る」の後で薄れている間に見せるコマ。層は出る秒で終わるので、最後のコマを保つ。"""
         t = frame / self.fps
         for at in self.out_times:
-            if at <= t <= at + LED_FADE_AFTER + 1.0:
+            if at <= t <= at + LED_FADE_END + 1.0:
                 return int(round(at * self.fps)) - 1
         return frame
 
     def exit_progress(self, t):
         """足から順に舞台へ移る進み。0 まだ、1 全部出た。出る秒の手前 EXIT_SEC から。"""
         for at in self.out_times:
-            if at - EXIT_SEC <= t <= at + 1.0:
-                return round(float(np.clip((t - (at - EXIT_SEC)) / EXIT_SEC, 0.0, 1.0)), 6)
+            if at - EXIT_START_BEFORE <= t <= at + 1.0:
+                return round(float(np.clip((t - (at - EXIT_START_BEFORE)) / EXIT_SEC, 0.0, 1.0)), 6)
         return 0.0
 
     def exit_age(self, t):
         """出始めからの秒。無ければ None。"""
         for at in self.out_times:
-            if at - EXIT_SEC <= t <= at + 2.5:
-                return t - (at - EXIT_SEC)
+            if at - EXIT_START_BEFORE <= t <= at + 2.5:
+                return t - (at - EXIT_START_BEFORE)
         return None
 
     def _build_finale(self):

@@ -221,7 +221,7 @@ class FxRenderer:
         age = plan.last_flash_age(t, plan.land_times)
         if age is None or age > 4.5:
             return None
-        legs = (self.x - plan.center_x).abs()
+        legs = (self.x - plan.land_x).abs()
         reach = age * 3400.0
         filled = smooth((reach - legs) / 700.0 + 0.5)
         crest = torch.exp(-((reach - legs) / 340.0) ** 2)
