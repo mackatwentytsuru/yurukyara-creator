@@ -56,3 +56,11 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - **iPhone の空き**: 4K30 の録画は約 3.7 MB/s(1 時間 13.4 GB)。`volumeAvailableCapacityForImportantUsage` を録画の頭で meta に書く。実測 7.2〜7.4 GB(約 33 分)。
 - **自動の試験**: `run_concurrency.py` が、Mac 経由で `xcrun devicectl device process launch <bundle> --auto-record 60 --exit-after-record …` → `devicectl device info files`(Documents/shoots の一覧)→ `devicectl device copy from`(撮影フォルダ)→ scp。iPhone がロックされると `unavailable` で入れ直せない。ssh の Mac には `timeout` が無い。
 - 複数面の校正は `multi_calib.py`(scipy `least_squares` の疎なヤコビアン。面ごとに回転 3・移動 3・大きさ 1、ARKit→基準の変換 7、視点ごとに 6)。面の大きさを未知数にして事前の幅 2% を置くと、モニターの寸法の誤差(3%)が直る。コマ番号の帯は Gray コードで、露出の間に切り替わって明るさが混ざったビットから小数のコマが読める。
+
+## AR モニター(端末の中でカメラの映像の上にキャラを重ねる)と LED の校正の映像
+- 作り: 透明な `WKWebView`(`isOpaque=false`)に three.js のページを載せ、毎 ARFrame の姿勢を `evaluateJavaScript` で送る(ARStage と同じ約束 `window.__arhost.onPose(world16, proj16, ts)`)。`viewMatrix(for:)` と `projectionMatrix(for:viewportSize:)` には**画面の向き(.landscapeRight)と WKWebView の大きさ**を渡す(映像を `resizeAspectFill` で出すのと同じ切り取りになる)。JS の呼び出しは主スレッド。詰まったら最新だけ送る(`inFlight`)。
+- ショーの時刻はフラッシュで: ARFrame の `capturedImage` の輝度(plane 0)を 32×18 点で平均し、ゆっくり動くベースラインより 25 以上上がった立ち上がりを検出(3 秒は再検出しない)。検出した時刻は ARFrame.timestamp(frames.jsonl の `t` と同じ時計)。実機で 23.000 秒周期のフラッシュを数 ms で検出。
+- 世界 ← LED の変換は、4 隅の「十字の先のレイ」から、回転(y 回り)を総当たり+黄金分割、移動は最小二乗の閉じた式で解ける(4 未知数)。JS でも十分速い。
+- 熱: 「画面にもう 1 枚の絵を描き続ける」(UE の絵の受信・AR の three.js)が主因。録画・縮小映像の符号化・HEVC 送りは fair のまま。熱を下げる: 描く fps(`fps`)と解像度(`pr`)、殻の姿勢を送る頻度。
+- 校正の映像を作るとき: 面ごとに ID の範囲を分ける。**画素が縦横で違う面は、正方形の盤を作ってから縦だけ縮める**(OpenCV の `generateImage` に非正方形の大きさを渡すと小さな正方形が中央に出る)。角の「数」だけでなく「位置」(面→画像のホモグラフィーの対角が 1.0 か)で確かめる。LED の絵が重なって映る範囲(A と B の 957〜1279、B と C の 3039〜3345)は使わない。
+- コマ番号の帯(Gray コード 16 ビット)は、1/60 の露出で切り替わりが混ざっても、混ざったビットの明るさの割合からコマの小数まで読める(実カメラで B と C が 0.4 ms で一致)。
