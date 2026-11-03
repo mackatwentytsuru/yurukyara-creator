@@ -34,6 +34,8 @@ def row(label: str, shoot: Path, recv: Path | None) -> dict:
         "熱(UE側の記録)": ue.get("thermalMax", "-"), "熱(映像側の記録)": pc.get("thermalMax", "-"), "熱の変化の記録": ",".join(t.split(":")[1] for t in thermal) or "-",
         "UE の絵 fps/表示/落ち": f"{ue.get('videoFps', '-')}/{ue.get('videoFramesTotal', '-')}/{ue.get('videoFramesDropped', '-')}" if ue else "-",
         "熱の開始": next((t.split(":")[1] for t in thermal[:1]), "-"),
+        "AR 姿勢 送/捨/フラッシュ": (lambda a: f"{a.get('posesSent')}/{a.get('posesSkipped')}/{a.get('flashes')} {a.get('pageMessages')}")(meta.get("arMonitor") or {}) if meta.get("arMonitor") else "-",
+        "AR の熱(開始→最大)": (lambda a: f"{a.get('thermalAtStart')}→{a.get('thermalMax')}")(meta.get("arMonitor") or {}) if meta.get("arMonitor") else "-",
         "UE へ送った/失敗": f"{ue.get('packetsSent', '-')}/{ue.get('packetsFailed', '-')}" if ue else "-",
         "映像 送った/忙しく捨て/未接続で捨て": f"{pc.get('framesSent', '-')}/{pc.get('skippedBusy', '-')}/{pc.get('skippedNotReady', '-')}" if pc else "-",
         "符号化 平均/最大(ms)": f"{pc.get('encodeMsAvg', '-')}/{pc.get('encodeMsMax', '-')}" if pc else "-",

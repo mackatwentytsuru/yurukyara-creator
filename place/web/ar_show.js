@@ -234,6 +234,7 @@ function update() {
     }
   }
   holder.visible = shown;
+  if (frames % 60 === 0 && window.webkit?.messageHandlers?.arhost) window.webkit.messageHandlers.arhost.postMessage({ type: 'status', frames, visible: shown, showT: t, align: alignInfo, dance: Boolean(dance), vrm: Boolean(vrm), pos: holder.position.toArray().map((v) => Math.round(v * 100) / 100) });
   if (frames % 15 === 0) {
     hud.textContent = `${alignInfo}  ${t === null ? '合図待ち(フラッシュか「いま開始」)' : `ショー ${t.toFixed(1)} 秒 ${shown ? 'キャラ表示' : '(舞台の出番の外)'}`}  ${infoText}`;
   }

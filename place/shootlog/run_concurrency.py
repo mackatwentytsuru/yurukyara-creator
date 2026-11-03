@@ -48,20 +48,21 @@ def main():
     ap.add_argument("--pc-port", type=int, default=9100)
     ap.add_argument("--ue-port", type=int, default=9000)
     ap.add_argument("--mic", action="store_true", help="マイクを入れる(初回は iPhone の許可の窓が出る)")
+    ap.add_argument("--ar-url", default="https://192.168.x.x:8443/place/web/ar_show.html?demo=1&scale=0.5&charheight=1.0&led_bottom=0&start_at=62")
     ap.add_argument("--hevc-width", type=int, default=1920)
     ap.add_argument("--hevc-kbps", type=int, default=18000)
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     dev = device_id()
-    labels = {"A": "A 録画のみ", "B": "B 録画+UE", "C": "C 録画+作業用 PC へ映像(JPEG)", "D": "D 録画+UE+作業用 PC へ映像(JPEG)", "H": "H 録画+HEVC フル HD を作業用 PC へ", "I": "I 録画+UE+HEVC フル HD"}
+    labels = {"A": "A 録画のみ", "B": "B 録画+UE", "C": "C 録画+作業用 PC へ映像(JPEG)", "D": "D 録画+UE+作業用 PC へ映像(JPEG)", "H": "H 録画+HEVC フル HD を作業用 PC へ", "I": "I 録画+UE+HEVC フル HD", "R": "R 録画+AR モニター", "S": "S 録画+AR モニター+HEVC+音"}
     report_items = []
     for t in a.tests:
         d = out / t
         d.mkdir(exist_ok=True)
         before = set(list_shoots(dev))
         recv = None
-        if t in ("C", "D", "H", "I"):
+        if t in ("C", "D", "H", "I", "S"):
             recv = subprocess.Popen([sys.executable, str(HERE / "pc_stream_receiver.py"), "--out", str(d / "recv"), "--port", str(a.pc_port), "--seconds", str(a.seconds + 40)],
                                     stdout=open(d / "recv.log", "w"), stderr=subprocess.STDOUT)
             time.sleep(1.5)
@@ -70,7 +71,11 @@ def main():
             args += ["--ue-on", "--ue-host", a.host, "--ue-port", str(a.ue_port), "--ue-url", a.ue_url]
         if t in ("C", "D"):
             args += ["--pc-on", "--pc-host", a.host, "--pc-port", str(a.pc_port)]
-        if t in ("H", "I"):
+        if t in ("R", "S"):
+            args += ["--ar-on", "--ar-url", a.ar_url]
+        if t == "S":
+            args += ["--mic-on"]
+        if t in ("H", "I", "S"):
             args += ["--pc-on", "--pc-host", a.host, "--pc-port", str(a.pc_port), "--pc-codec", "hevc", "--pc-width", str(a.hevc_width), "--pc-kbps", str(a.hevc_kbps), "--pc-fps", "30"]
         if a.mic:
             args += ["--mic-on"]

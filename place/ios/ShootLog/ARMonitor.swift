@@ -16,6 +16,7 @@ struct ARMonitorSummary: Codable {
     var thermalAtStart: String
     var thermalMax: String
     var pageMessages: [String]
+    var pageStatus: String? = nil   // ページが 1〜2 秒おきに知らせる最後の状態(キャラが出ているか・ショーの時刻・校正の残差)
 }
 
 final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
@@ -34,6 +35,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var thermalAtStart = ""
     private var thermalMaxRank = 0
     private var messages: [String] = []
+    private var pageStatus: String?
     var flashThreshold = 25.0
     private static let urlKey = "armonitor.url"
     static let defaultURL = "https://192.168.x.x:8443/place/web/ar_show.html"
@@ -164,6 +166,10 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        if type == "status" {
+            if let d = try? JSONSerialization.data(withJSONObject: body), let str = String(data: d, encoding: .utf8) { lock.lock(); pageStatus = str; lock.unlock() }
+            return
+        }
         lock.lock(); if messages.count < 20 { messages.append(type) }; lock.unlock()
         if type == "ready" {
             lock.lock(); pageReady = true; lock.unlock()
@@ -193,7 +199,7 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func summary() -> ARMonitorSummary {
         lock.lock(); defer { lock.unlock() }
         return ARMonitorSummary(enabled: enabled, url: url, posesSent: posesSent, posesSkipped: posesSkipped, flashes: flashes,
-                                thermalAtStart: thermalAtStart, thermalMax: UELinkController.thermalNameFromRank(thermalMaxRank), pageMessages: messages)
+                                thermalAtStart: thermalAtStart, thermalMax: UELinkController.thermalNameFromRank(thermalMaxRank), pageMessages: messages, pageStatus: pageStatus)
     }
 
     var statusText: String {
