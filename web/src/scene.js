@@ -44,7 +44,7 @@ export function createStage(canvas) {
   scene.add(rim);
   scene.add(makeFloorGlow());
 
-  const state = { view: 'bust', height: 1.5, headY: 1.35, immersive: false };
+  const state = { view: 'bust', height: 1.5, headY: 1.35, immersive: false, bottomInset: 0 };
 
   /**
    * キャラの大きさ・位置・向きに合わせてカメラを置く。bust は腰から上、full は全身。
@@ -65,7 +65,12 @@ export function createStage(canvas) {
     const visibleH = view === 'full' ? height * 1.18 : height * 0.62;
     const centerY = floor + (view === 'full' ? height * 0.5 : height * 0.67);
     // 横が狭い画面(スマホ)でも、肩と腕が入るようにする
-    const neededH = Math.max(visibleH, (height * (view === 'full' ? 0.55 : 0.4)) / aspect);
+    let neededH = Math.max(visibleH, (height * (view === 'full' ? 0.55 : 0.4)) / aspect);
+    // 全身のときは、下の入力の帯(字幕・ボタン・入力欄)に足が隠れないよう、帯の上の範囲に全身を収める
+    const viewH = canvas.clientHeight || window.innerHeight;
+    const bottomPx = view === 'full' ? Math.min(state.bottomInset ?? 0, viewH * 0.5) : 0;
+    const usable = 1 - bottomPx / viewH;
+    neededH /= usable;
     let dist = neededH / (2 * Math.tan(fov / 2));
     camera.fov = 28;
     if (obstacles) {
@@ -79,8 +84,11 @@ export function createStage(canvas) {
       }
     }
     camera.updateProjectionMatrix();
-    camera.position.copy(character.object3d.localToWorld(new THREE.Vector3(0, centerY, dist)));
-    camera.lookAt(character.object3d.localToWorld(new THREE.Vector3(0, centerY, 0)));
+    // 画面の中心を、帯の分だけ下げる(= キャラが画面の上の側に寄る)。見える高さ × 帯の半分の割合
+    const visible = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const lookY = centerY - (bottomPx / 2 / viewH) * visible;
+    camera.position.copy(character.object3d.localToWorld(new THREE.Vector3(0, lookY, dist)));
+    camera.lookAt(character.object3d.localToWorld(new THREE.Vector3(0, lookY, 0)));
     state.camZ = dist;
     return state;
   }

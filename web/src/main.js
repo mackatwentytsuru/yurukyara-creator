@@ -427,6 +427,15 @@ async function boot() {
     stage.resize();
     if (app.character) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
   });
+  // 下の帯(よくある質問のボタン・入力欄)の高さが変わったら、全身の見せ方を取り直す(足が帯に隠れないように)
+  const bottomBar = document.querySelector('.bottom');
+  const fitBottom = () => {
+    document.documentElement.style.setProperty('--bottom-h', `${bottomBar.offsetHeight}px`);
+    stage.state.bottomInset = bottomBar.offsetHeight + 8 + 80; // 80 は、帯の上に出る字幕と札の分(足に重ならないように)
+    if (app.character && !stage.state.immersive) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
+  };
+  new ResizeObserver(fitBottom).observe(bottomBar);
+  fitBottom();
   try {
     const url = characterUrl(params.get('character') ?? params.get('char')); // id・URL のどちらでもよい
     app.place = await loadPlaceData(params.get('place'));

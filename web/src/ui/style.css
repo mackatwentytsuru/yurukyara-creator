@@ -46,9 +46,13 @@ body {
 .chip.warn b { color: var(--warn); }
 
 /* 字幕: 大きめ。最終審査の生上映でも読めるように */
+/* 字幕と「店のデータ」の札は、下の帯(--bottom-h。main.js が測る)のすぐ上に、縦に並べる */
+.subs {
+  position: fixed; left: 50%; bottom: calc(var(--bottom-h, 112px) + 6px); transform: translateX(-50%);
+  width: min(86vw, 880px); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
+}
 .caption {
-  position: fixed; left: 50%; bottom: calc(112px + var(--safe-b)); transform: translateX(-50%);
-  width: min(86vw, 880px); text-align: center;
+  width: 100%; text-align: center; margin: 0;
   font-size: clamp(20px, 3.4vw, 38px); font-weight: 700; line-height: 1.45; letter-spacing: 0.02em;
   padding: 12px 22px; border-radius: 22px; background: rgba(12, 10, 22, 0.66);
   border: 1px solid var(--line); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
@@ -59,8 +63,7 @@ body {
 
 /* 字幕の上: Claude が店のデータを見て答えている札(どの情報を、いつの更新として使ったか) */
 .shop-badge {
-  position: fixed; left: 50%; bottom: calc(112px + var(--safe-b) + clamp(70px, 9vw, 130px)); transform: translateX(-50%);
-  width: min(86vw, 880px); margin: 0; text-align: center; font-size: clamp(13px, 1.7vw, 20px); line-height: 1.45;
+  width: 100%; margin: 0; text-align: center; font-size: clamp(13px, 1.7vw, 20px); line-height: 1.45;
   padding: 6px 14px; border-radius: 999px; background: rgba(12, 10, 22, 0.72); border: 1px solid var(--mint); color: var(--mint);
 }
 .shop-badge[hidden] { display: none; }
@@ -148,7 +151,8 @@ html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: n
 
 @media (max-width: 640px) {
   .thought { top: calc(max(12px, env(safe-area-inset-top)) + 76px); right: 12px; left: 12px; width: auto; max-height: 46vh; overflow: auto; }
-  .caption { bottom: calc(150px + var(--safe-b)); width: calc(100vw - 24px); font-size: clamp(18px, 5vw, 26px); }
+  .subs { width: calc(100vw - 24px); }
+  .caption { font-size: clamp(18px, 5vw, 26px); }
   .mic span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
