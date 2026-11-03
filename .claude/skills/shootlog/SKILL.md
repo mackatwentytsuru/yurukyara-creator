@@ -46,3 +46,13 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - `cv2.remap` の地図は幅・高さが 32767 まで。点の列(数十万)は 512 列の 2 次元にして渡す(`sample_bilinear`)。
 - 合成の部屋(家具 12 個)で、見えた所の PSNR 30.5 dB(雑音なしのなめらかな模様は 40 dB)。見えた割合は歩く道しだいで 25〜50%(家具の後ろは見えない)。露出の違いは直していない。
 - WKWebView は WebRTC(RTCPeerConnection)の映像を受けて再生できた(同じページ内のループバックの試験で、10 秒に約 425 コマの動き検出が届いた)。UE の Pixel Streaming そのものは未確認。
+
+## 同時に動かす・PC へ送る・複数カメラ・音(11-03 夜の実機の学び)
+- 録画(4K30、ARKit の ARFrame を AVAssetWriter)に、UE の絵(WKWebView)・位置の UDP・縮小映像の送り(JPEG/HEVC)を足しても、**録画のコマは落ちなかった**(iPhone 12 Pro、各 60 秒)。熱を上げる主犯は **UE の絵の受信・表示**(冷えた状態から B/I だけ serious)。熱の比べは、試験ごとにアプリを閉じて冷ます(`--exit-after-record`)。アプリが動いたまま置くと次の試験が critical で始まる。
+- 縮小は **VideoToolbox の `VTPixelTransferSession`**(CPU/CIImage で 4K を縮めると符号化が 120 ms 超)。HEVC は `VTCompressionSession`(RealTime、AllowFrameReordering=false、`EnableLowLatencyRateControl`、`kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder` は iOS 17.4 以降なので付けない)で Annex B にして送る(キーフレームに VPS/SPS/PPS)。受け側は再符号化なしで `ffmpeg -f hevc -r 30 -i stream.hevc -c copy out.mp4`。
+- **時計**: 端末と PC の時計は数百 ms ずれることがある(見かけの遅れが 0.9 秒で一定 → 時計のずれ)。PC が PING(サーバー時刻)、端末が PONG(同じ時刻+端末の時刻)を返し、往復が最小のものから offset を出す。映像の「撮った時刻」は、ARFrame.timestamp(端末の起動からの秒)と systemUptime の差から epoch ms にする。
+- **ARKit は 1 つの背面カメラ(広角)を独占**: 録画の形式は広角 1 本だけ(4K の 24/25/30 など)。ARKit が動いている間に別の AVCaptureSession で超広角を動かすと ARKit が止まる(0.8 fps/0 コマ)。ARKit なしなら AVCaptureMultiCamSession で 2 レンズ 4K30×2(hardwareCost 0.57)、3 レンズは 1280×720/30 だけ(圧 1.05)。`supportedMultiCamDeviceSets` と各形式の `isMultiCamSupported` を端末で読み、`hardwareCost`/`systemPressureCost` が 1.0 を超える組み合わせは不可。新しい確認用アプリを別に作ると、カメラの許可の窓で止まる(許可は人が押す)ので、許可済みのアプリの中に起動引数(`--probe-multicam`)で組み込む。
+- **音**: `AVAudioSession` を `.record`/`.measurement`(自動音量調整なし)、`AVCaptureSession`(`automaticallyConfiguresApplicationAudioSession = false`)+`AVCaptureAudioDataOutput`。音の PTS は**ホスト時間 = ARFrame.timestamp と同じ時計**なので、映像の最初のコマの時刻を引くだけで揃う(`CMSampleBufferCreateCopyWithNewTiming`)。書き込みは映像と同じ直列キューで。video.mov は 24 bit PCM の音声トラックにできた。マイクの許可は初回に窓が出る(出ている間は音が来ない)。
+- **iPhone の空き**: 4K30 の録画は約 3.7 MB/s(1 時間 13.4 GB)。`volumeAvailableCapacityForImportantUsage` を録画の頭で meta に書く。実測 7.2〜7.4 GB(約 33 分)。
+- **自動の試験**: `run_concurrency.py` が、Mac 経由で `xcrun devicectl device process launch <bundle> --auto-record 60 --exit-after-record …` → `devicectl device info files`(Documents/shoots の一覧)→ `devicectl device copy from`(撮影フォルダ)→ scp。iPhone がロックされると `unavailable` で入れ直せない。ssh の Mac には `timeout` が無い。
+- 複数面の校正は `multi_calib.py`(scipy `least_squares` の疎なヤコビアン。面ごとに回転 3・移動 3・大きさ 1、ARKit→基準の変換 7、視点ごとに 6)。面の大きさを未知数にして事前の幅 2% を置くと、モニターの寸法の誤差(3%)が直る。コマ番号の帯は Gray コードで、露出の間に切り替わって明るさが混ざったビットから小数のコマが読める。
