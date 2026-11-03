@@ -40,7 +40,7 @@ def main():
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     dev = ssh("cat ~/sample_work/place_ios/device_id.txt").strip().splitlines()[-1]
-    url = (f"https://{a.mac_ip}:8481/place/web/ar_show.html?demo=1&scale=0.5&charheight=1.0&led_bottom=0&start_at={a.start_at}"
+    url = (f"app://app/place/web/ar_show.html?demo=1&scale=0.5&charheight=1.0&led_bottom=0&start_at={a.start_at}"
            f"&track=/show/data/ar/dance_track&fps={a.fps}")
     results = []
     for k in range(1, a.runs + 1):
