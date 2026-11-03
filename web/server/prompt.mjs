@@ -22,7 +22,7 @@ ${described.join(String.fromCharCode(10))}` : '' };
 
 /** 店のデータを使うときの、出力の形の足し(cite と reason)と例 */
 const SHOP_FORMAT = `
-- 店のデータを使う回は、1 行目に cite(答えに使ったデータの名前の配列。shows performers seats pricing support tips のうち。使わなければ [])を足す。handoff が true のときは reason(complaint payment emergency age booking unknown のどれか 1 つ)も足す。`;
+- 店のデータを使う回は、1 行目に cite(答えに使ったデータの名前の配列。今日のデータ shows performers seats pricing support tips と、店の記憶 m_hours m_pricing m_booking m_events m_performers m_support m_access m_rules m_food m_faq m_atmosphere m_contact m_rental のうち。使わなければ [])を足す。handoff が true のときは reason(complaint payment emergency age booking unknown のどれか 1 つ)も足す。`;
 
 const SHOP_EXAMPLES = `
 

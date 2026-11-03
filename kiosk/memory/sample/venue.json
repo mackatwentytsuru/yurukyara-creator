@@ -1,0 +1,23 @@
+{
+  "_comment": "見本の店の記憶。実在の店・人・料金ではありません(ハッカソンの期間中に作った、動かすための仮の中身)。本物の店の記憶は、同じ形で kiosk/memory/private/venue.json に置く(git に入れない)。fact は 1 文、取得日(fetchedAt)は必須。見つからなかった分類は fact を null にして残す。",
+  "source": { "kind": "sample", "label": "見本の記憶" },
+  "venue": "ショーのある新しい店",
+  "facts": [
+    { "id": "s001", "category": "営業時間・定休日", "fact": "営業時間は 18 時から 23 時までです。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": "2026-10", "volatility": "seasonal", "confidence": "high" },
+    { "id": "s002", "category": "営業時間・定休日", "fact": "定休日は毎週月曜日です。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s003", "category": "料金", "fact": "入場料は 2,000 円で、ドリンクは別料金です。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s004", "category": "席・予約", "fact": "席は 60 席で、予約は要りません。満席のときは入口で順番にご案内します。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s005", "category": "イベント・ショー", "fact": "ショーは毎日、夜に 3 回あります。曜日ごとの内容は、その日のデータでお伝えします。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "daily", "confidence": "high" },
+    { "id": "s006", "category": "出演者の出し方", "fact": "出演者の名前は、本人の同意があるものだけを公式サイトと店内に出しています。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s007", "category": "応援の仕方", "fact": "差し入れ(食べ物・飲み物・花)は、出演者には直接渡さず、受付で預かります。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": "2026-08", "volatility": "fixed", "confidence": "medium", "note": "公式以外の紹介記事" },
+    { "id": "s008", "category": "行き方", "fact": "最寄りは、あおぞら駅の北口です。そこから歩いて約 4 分です。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s009", "category": "行き方", "fact": "お店専用の駐車場はありません。近くの有料駐車場をご利用ください。", "sourceLabel": "見本の地図サイト", "fetchedAt": "2026-11-04", "infoDate": "2025-02", "volatility": "fixed", "confidence": "low", "note": "古い可能性" },
+    { "id": "s010", "category": "禁止事項・ルール", "fact": "ショーの録音と録画はできません。写真はフラッシュなしで、曲の間だけ撮れます。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s011", "category": "禁止事項・ルール", "fact": "20 歳未満の方はお酒を飲めません。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s012", "category": "飲食", "fact": "ドリンクのほか、軽い食べ物があります。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "seasonal", "confidence": "medium" },
+    { "id": "s013", "category": "よくある質問", "fact": "ペンライトは持ち込めます。貸し出しもあります。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s014", "category": "雰囲気", "fact": "ステージの壁一面が大きな LED になっていて、歌やダンスに光が合わさります。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s015", "category": "運営・連絡先", "fact": "お問い合わせは、受付のスタッフにお声がけください。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s016", "category": "貸切・イベント利用", "fact": null, "note": "調べたが見つからなかった" }
+  ]
+}

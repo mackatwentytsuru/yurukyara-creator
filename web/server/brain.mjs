@@ -268,7 +268,15 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     const { cite, ...rest } = thought;
     onEvent({ ...rest, sources: resolveSources(snap, cite, nowMs), shopLabel: snap?.source.label ?? '' });
   };
+  // 「スタッフにつなぎます」と言ったのに、引き継ぎの印(handoff)が立っていないとき、あとから印を足す(言葉と画面・通知をずらさない)
+  let handoffFlagged = false;
+  const STAFF_PROMISE = /スタッフ(に|を|へ|の方に).{0,6}(つな|呼|お呼び|おつな)/;
   const emit = (obj) => {
+    if (obj.handoff === true) handoffFlagged = true;
+    if (obj.type === 'say' && !handoffFlagged && STAFF_PROMISE.test(String(obj.text ?? ''))) {
+      handoffFlagged = true;
+      onEvent({ type: 'handoff', reason: 'unknown' });
+    }
     // 最初の say に用件・段階が付いているときは、画面の「考え」にも先に渡す
     if (obj.type === 'say' && (obj.intent !== undefined || obj.stage !== undefined)) {
       const thought = normalizeEvent({ type: 'thought', intent: obj.intent, stage: obj.stage, handoff: obj.handoff, cite: obj.cite, reason: obj.reason }, { expressions, motions });

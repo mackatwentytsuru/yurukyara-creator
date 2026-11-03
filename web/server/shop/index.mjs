@@ -7,6 +7,29 @@ import { join } from 'node:path';
 import { WEB_ROOT } from '../env.mjs';
 
 export const SHOP_KEYS = ['shows', 'performers', 'seats', 'pricing', 'support', 'tips'];
+/** 「店の記憶」(変わりにくい事実)の分類。cite の名前は m_ を付ける(今日のデータの pricing などと区別する) */
+export const MEMORY_CATEGORIES = [
+  ['hours', '営業時間・定休日'],
+  ['pricing', '料金'],
+  ['booking', '席・予約'],
+  ['events', 'イベント・ショー'],
+  ['performers', '出演者の出し方'],
+  ['support', '応援の仕方'],
+  ['access', '行き方'],
+  ['rules', '禁止事項・ルール'],
+  ['food', '飲食'],
+  ['faq', 'よくある質問'],
+  ['atmosphere', '雰囲気'],
+  ['contact', '運営・連絡先'],
+  ['rental', '貸切・イベント利用'],
+];
+export const MEMORY_KEYS = MEMORY_CATEGORIES.map(([k]) => `m_${k}`);
+export const MEMORY_LABELS = Object.fromEntries(MEMORY_CATEGORIES.map(([k, label]) => [`m_${k}`, `店の記憶: ${label}`]));
+const MEMORY_BY_NAME = new Map(MEMORY_CATEGORIES.flatMap(([k, label]) => [[k, k], [label, k], [`m_${k}`, k]]));
+const CONFIDENCE = { high: '高(公式サイトに明記)', medium: '中(公式以外の公開情報)', low: '低(古い・食い違う・断片)' };
+const VOLATILITY = { fixed: '', seasonal: '季節や月で変わる', daily: '日ごとに変わる' };
+const FACTS_MAX = 120;
+const FACTS_PER_CATEGORY = 12;
 export const SHOP_LABELS = {
   shows: '今日のショー',
   performers: '今日の出演者',
@@ -90,6 +113,58 @@ export function normalizeShop(raw, nowMs = Date.now()) {
   return { source: { kind: text(src.kind, 20) || 'unknown', label: text(src.label, 40) || '店のデータ' }, venue: text(raw.venue, 60), date, sections };
 }
 
+/** 日付(YYYY-MM-DD か YYYY-MM)。それ以外は空 */
+const dateText = (v) => (typeof v === 'string' && /^\d{4}-\d{2}(-\d{2})?$/.test(v.trim()) ? v.trim() : '');
+
+/**
+ * 店の記憶(調べた事実)を、頭脳に渡す形にそろえる。取得日の無い事実・本文の無い事実は捨てる(いつ・どこの情報か言えないため)。
+ * 「見つからなかった」と記録された分類(fact が null)は missing に残し、聞かれたら推測せずスタッフへ渡す。
+ * @returns {{source:{kind:string,label:string}, venue:string, categories:Record<string,{label:string,items:object[],fetchedAt:string}>, missing:string[]}|null}
+ */
+export function normalizeFacts(raw) {
+  if (!isObject(raw) || !Array.isArray(raw.facts)) return null;
+  const categories = {};
+  const missing = new Set();
+  const gaps = {}; // 事実のある分類の中で「これは見つからなかった」と書かれた物(推測せずスタッフへ渡すための印)
+  let total = 0;
+  for (const f of raw.facts) {
+    if (!isObject(f)) continue;
+    const key = MEMORY_BY_NAME.get(typeof f.category === 'string' ? f.category.trim() : '');
+    if (!key) continue;
+    const body = text(f.fact, 240);
+    if (!body) {
+      if (f.fact === null) {
+        missing.add(key);
+        const gap = text(f.note, 80);
+        if (gap) (gaps[key] ??= []).push(gap);
+      }
+      continue;
+    }
+    const fetchedAt = dateText(f.fetchedAt ?? f.fetched_at);
+    if (!fetchedAt || total >= FACTS_MAX) continue;
+    const bucket = (categories[key] ??= { label: MEMORY_CATEGORIES.find(([k]) => k === key)[1], items: [], fetchedAt });
+    if (bucket.items.length >= FACTS_PER_CATEGORY) continue;
+    bucket.items.push({
+      id: text(f.id, 20),
+      text: body,
+      sourceUrl: text(f.sourceUrl ?? f.source_url, 200),
+      sourceLabel: text(f.sourceLabel ?? f.source_label, 40),
+      fetchedAt,
+      infoDate: dateText(f.infoDate ?? f.info_date),
+      volatility: VOLATILITY[f.volatility] !== undefined ? f.volatility : 'fixed',
+      confidence: CONFIDENCE[f.confidence] ? f.confidence : 'low',
+      note: text(f.note, 80),
+    });
+    if (fetchedAt > bucket.fetchedAt) bucket.fetchedAt = fetchedAt;
+    total += 1;
+  }
+  for (const k of Object.keys(categories)) missing.delete(k); // 事実が 1 つでもあれば「見つからなかった」ではない
+  if (!total && !missing.size) return null;
+  const src = isObject(raw.source) ? raw.source : {};
+  for (const k of Object.keys(gaps)) if (!categories[k]) delete gaps[k];
+  return { source: { kind: text(src.kind, 20) || 'facts', label: text(src.label, 40) || '店の記憶' }, venue: text(raw.venue, 60), categories, missing: [...missing], gaps };
+}
+
 /** 更新から何分たっているか・古いか */
 export function freshness(section, key, nowMs) {
   const ageMin = Math.max(0, Math.round((nowMs - section.updatedMs) / 60_000));
@@ -111,6 +186,26 @@ export function renderShopData(snap) {
   if (s.tips) L.push(head('tips'), ...s.tips.items.map((x) => `- ${x}`));
   const missing = SHOP_KEYS.filter((k) => !s[k]).map((k) => SHOP_LABELS[k]);
   if (missing.length) L.push(`## データにないもの\n${missing.join('・')}(聞かれたら答えず、スタッフにつなぐ)`);
+  if (snap.memory) L.push(renderMemory(snap.memory));
+  return L.join('\n');
+}
+
+/** 店の記憶の本文。時刻に関係なく同じ文になる(キャッシュが効く)。出どころ・取得日・確度を行ごとに付ける */
+export function renderMemory(mem) {
+  const L = [`# 店の記憶(${mem.source.label}。調べた事実で、変わりにくい。今日のデータと食い違うときは今日のデータを優先する。確度が低い・古い物は、断定せず「公開されている情報では」と言い、スタッフにも確かめるよう添える)`];
+  for (const [k] of MEMORY_CATEGORIES) {
+    const c = mem.categories[k];
+    if (!c) continue;
+    L.push(`## [m_${k}] ${c.label}`);
+    for (const x of c.items) {
+      const tags = [`出典 ${x.sourceLabel || x.sourceUrl || '不明'}`, `取得 ${x.fetchedAt}`, ...(x.infoDate ? [`情報の日付 ${x.infoDate}`] : []), `確度 ${CONFIDENCE[x.confidence]}`, ...(VOLATILITY[x.volatility] ? [VOLATILITY[x.volatility]] : []), ...(x.note ? [x.note] : [])];
+      L.push(`- ${x.text}(${tags.join(' / ')})`);
+    }
+    for (const g of mem.gaps?.[k] ?? []) L.push(`- 【調べたが見つからなかった】${g}(聞かれたら推測せず、スタッフにつなぐ)`);
+  }
+  const searched = new Set(mem.missing);
+  const absent = MEMORY_CATEGORIES.filter(([k]) => !mem.categories[k]);
+  if (absent.length) L.push(`## 記憶にないもの\n${absent.map(([k, label]) => (searched.has(k) ? `${label}(調べたが見つからなかった)` : label)).join('・')}(聞かれたら推測せず、スタッフにつなぐ)`);
   return L.join('\n');
 }
 
@@ -134,8 +229,18 @@ export function renderShopNow(snap, nowMs) {
 /** 画面に出す「参照した情報」。cite の名前を、ラベル・更新時刻・古いかどうかにする */
 export function resolveSources(snap, cite, nowMs) {
   if (!snap) return [];
-  const keys = [...new Set((Array.isArray(cite) ? cite : []).filter((k) => typeof k === 'string' && snap.sections[k]))];
-  return keys.map((key) => ({ key, label: SHOP_LABELS[key], updatedAt: snap.sections[key].updatedHm, stale: freshness(snap.sections[key], key, nowMs).stale }));
+  const names = [...new Set((Array.isArray(cite) ? cite : []).filter((k) => typeof k === 'string'))];
+  const out = [];
+  for (const key of names) {
+    if (snap.sections[key]) out.push({ key, label: SHOP_LABELS[key], updatedAt: snap.sections[key].updatedHm, stale: freshness(snap.sections[key], key, nowMs).stale });
+    else if (key.startsWith('m_') && snap.memory?.categories[key.slice(2)]) {
+      const c = snap.memory.categories[key.slice(2)];
+      // 取得日(MM/DD)と、いちばん低い確度を画面に出す。確度が低い物は「古い可能性」と同じ扱い
+      const low = c.items.some((x) => x.confidence === 'low');
+      out.push({ key, label: MEMORY_LABELS[key], updatedAt: c.fetchedAt.slice(5).replace('-', '/'), stale: low, confidence: low ? 'low' : c.items.some((x) => x.confidence === 'medium') ? 'medium' : 'high' });
+    }
+  }
+  return out;
 }
 
 /**
@@ -163,6 +268,7 @@ export function createShopSource({ file = SAMPLE_FILE, url = '', token = '', ttl
   };
 }
 
+// 店の記憶(SHOP_MEMORY_FILE): 調べた事実の JSON。出どころ・取得日・確度つき。無ければ、今日のデータだけで動く
 // 録画や試験で時刻を固定するときだけ SHOP_NOW(ISO の時刻)を使う
 function fixedNowOrReal() {
   const t = Date.parse(process.env.SHOP_NOW ?? '');
@@ -170,17 +276,29 @@ function fixedNowOrReal() {
 }
 
 /** サーバーが使う窓口。取れなければ null(止まらない) */
-export function createShop({ source = createShopSource({ file: process.env.SHOP_DATA_FILE || SAMPLE_FILE, url: process.env.SHOP_DATA_URL ?? '', token: process.env.SHOP_DATA_TOKEN ?? '' }), now = fixedNowOrReal } = {}) {
+export function createShop({ source = createShopSource({ file: process.env.SHOP_DATA_FILE || SAMPLE_FILE, url: process.env.SHOP_DATA_URL ?? '', token: process.env.SHOP_DATA_TOKEN ?? '' }), now = fixedNowOrReal, memoryFile = process.env.SHOP_MEMORY_FILE ?? '' } = {}) {
   return {
     now,
     async snapshot() {
       const nowMs = now();
+      let daily = null;
       try {
-        return normalizeShop(await source.load(), nowMs);
+        daily = normalizeShop(await source.load(), nowMs);
       } catch (err) {
         console.warn(`[店のデータ] 取れませんでした: ${err.message}`);
-        return null;
       }
+      let memory = null;
+      if (memoryFile) {
+        try {
+          memory = normalizeFacts(JSON.parse(readFileSync(memoryFile, 'utf8')));
+        } catch (err) {
+          console.warn(`[店の記憶] 読めませんでした: ${err.message}`);
+        }
+      }
+      if (!daily && !memory) return null;
+      // 今日のデータが取れなくても、店の記憶だけで動く(今日のショー・空席などは「データにない」として、スタッフへ渡す)
+      const base = daily ?? { source: { kind: 'memory', label: memory.source.label }, venue: memory.venue, date: jstParts(nowMs).date, sections: {} };
+      return { ...base, venue: base.venue || memory?.venue || '', memory };
     },
   };
 }

@@ -6,7 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createRe
 import { extname, join, normalize, sep } from 'node:path';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
-import { createShop, SHOP_KEYS, SHOP_LABELS } from './shop/index.mjs';
+import { createShop, SHOP_KEYS, SHOP_LABELS, MEMORY_CATEGORIES } from './shop/index.mjs';
 import { streamSpeech, ttsStatus } from './tts.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
@@ -149,7 +149,7 @@ const handler = async (req, res) => {
       const snap = await shop.snapshot();
       return json(res, 200, {
         shop: snap
-          ? { available: true, label: snap.source.label, sections: SHOP_KEYS.filter((k) => snap.sections[k]).map((k) => ({ key: k, label: SHOP_LABELS[k], updatedAt: snap.sections[k].updatedHm })) }
+          ? { available: true, label: snap.source.label, venue: snap.venue, memory: snap.memory ? { label: snap.memory.source.label, categories: MEMORY_CATEGORIES.filter(([k]) => snap.memory.categories[k]).map(([k, label]) => ({ key: `m_${k}`, label, count: snap.memory.categories[k].items.length })), notFound: snap.memory.missing } : null, sections: SHOP_KEYS.filter((k) => snap.sections[k]).map((k) => ({ key: k, label: SHOP_LABELS[k], updatedAt: snap.sections[k].updatedHm })) }
           : { available: false },
         brain: config.anthropicKey ? 'haiku' : 'mock',
         model: config.model,
@@ -187,6 +187,10 @@ const handler = async (req, res) => {
         if (sendFile(res, REPO_ROOT, path)) return;
         return json(res, 404, { error: '見つかりません' });
       }
+      // キオスクの画面(kiosk/web)。設定(kiosk/config.json)も同じ道で渡す
+      if (path === '/kiosk' || path === '/kiosk/') return sendFile(res, join(REPO_ROOT, 'kiosk', 'web'), 'index.html') || json(res, 404, { error: '見つかりません' });
+      if (path === '/kiosk/config.json') return sendFile(res, join(REPO_ROOT, 'kiosk'), 'config.json') || json(res, 404, { error: '見つかりません' });
+      if (path.startsWith('/kiosk/')) return sendFile(res, join(REPO_ROOT, 'kiosk', 'web'), path.slice('/kiosk/'.length)) || json(res, 404, { error: '見つかりません' });
       if (sendFile(res, DIST, path === '/' ? 'index.html' : path)) return;
       if (sendFile(res, DIST, 'index.html')) return;
       return json(res, 404, { error: '先に npm run build をしてください' });

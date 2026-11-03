@@ -88,3 +88,24 @@ test('API がエラーを返したら、分かる言葉で例外にする', asyn
     server.close();
   }
 });
+
+test('「スタッフにつなぎます」と言ったのに handoff が false のとき、あとから handoff の印が届く。お客さんに「聞いて」と案内するだけなら足さない', async () => {
+  const promise = [
+    '{"type":"say","text":"ロッカーのことですね。","expression":"happy","motion":"nod","gaze":"person","intent":"ロッカー","stage":"guide","handoff":false,"cite":[]}\n',
+    '{"type":"say","text":"わたしでは分からないので、スタッフにつなぎますね。","expression":"happy","motion":"bow","gaze":"person"}\n',
+  ];
+  await withFakeApi(promise, async (runTurn) => {
+    const events = [];
+    await runTurn({ text: 'ロッカーはありますか', place: { name: '試し' } }, { onEvent: (e) => events.push(e), signal: new AbortController().signal });
+    const h = events.filter((e) => e.type === 'handoff');
+    assert.equal(h.length, 1);
+    assert.equal(h[0].reason, 'unknown');
+    assert.ok(events.findIndex((e) => e.type === 'handoff') < events.findLastIndex((e) => e.type === 'say'), '2 文目を出す前に印が届く');
+  });
+  const advice = ['{"type":"say","text":"くわしくは、スタッフにお聞きくださいね。","expression":"happy","motion":"nod","gaze":"person","intent":"飲食","stage":"guide","handoff":false,"cite":[]}\n'];
+  await withFakeApi(advice, async (runTurn) => {
+    const events = [];
+    await runTurn({ text: '食べ物は', place: { name: '試し' } }, { onEvent: (e) => events.push(e), signal: new AbortController().signal });
+    assert.equal(events.filter((e) => e.type === 'handoff').length, 0);
+  });
+});
