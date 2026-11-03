@@ -3,7 +3,7 @@
   python place/shootlog/topaz_shake_check.py --rx <受け手の記録> --out <出力フォルダ> [--start 400] [--frames 240] [--model prob-4] [--scale 2]
 やること: 実写(フル HD)→ Topaz で拡大 → 緑の点の重心を、元のコマと拡大後のコマで比べる(拡大後を倍率で割った位置の差、画素)。あわせて、同じ所の切り出しの比べ絵を作る。
 差が 1 画素未満なら「Topaz のあとに重ねる」順番で位置は変わらない。大きければ「重ねてから Topaz」を考える。
-札(GPU)を取ってから流す。Topaz の ffmpeg はフルパスで呼ぶ(PATH の ffmpeg には tvai_up が無い)。
+札(GPU)を取ってから流す。Topaz の ffmpeg はフルパスで呼ぶ(PATH の ffmpeg には tvai_up が無い)。Topaz の ffmpeg には libx264 が無いので、ProRes で書き出す。
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ def main():
                     "-c:v", "libx264", "-crf", "10", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", "30", "-map_metadata", "-1", str(raw)], check=True)
     env = dict(os.environ, TVAI_MODEL_DIR=MODELS, TVAI_MODEL_DATA_DIR=MODELS)
     up = out / f"topaz_{a.model}_x{a.scale}.mov"
-    subprocess.run([TVAI, "-v", "error", "-y", "-i", str(raw), "-vf", f"tvai_up=model={a.model}:scale={a.scale}:device=0:vram=1:instances=1,format=yuv420p", "-c:v", "libx264", "-crf", "12", "-preset", "fast", "-threads", "2", "-map_metadata", "-1", str(up)], check=True, env=env)
+    subprocess.run([TVAI, "-v", "error", "-y", "-i", str(raw), "-vf", f"tvai_up=model={a.model}:scale={a.scale}:device=0:vram=1:instances=1,format=yuv422p10le", "-c:v", "prores_ks", "-profile:v", "3", "-vendor", "apl0", "-threads", "2", "-map_metadata", "-1", str(up)], check=True, env=env)
     rows = []
     sheet_pairs = []
     for i, (f0, f1) in enumerate(zip(frames_of(raw), frames_of(up))):
