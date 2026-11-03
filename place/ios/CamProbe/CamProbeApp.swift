@@ -29,9 +29,18 @@ final class ProbeModel: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        UIApplication.shared.isIdleTimerDisabled = true
+        let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let logURL = docs?.appendingPathComponent("probe_log.txt")
+        if let logURL { try? "start \(Date())\n".write(to: logURL, atomically: true, encoding: .utf8) }
+        func append(_ line: String) {
+            guard let logURL, let h = try? FileHandle(forWritingTo: logURL) else { return }
+            h.seekToEndOfFile()
+            h.write((line + "\n").data(using: .utf8) ?? Data())
+            try? h.close()
+        }
         DispatchQueue.global(qos: .userInitiated).async { [self] in
-            UIApplication.shared.isIdleTimerDisabled = true
-            let result = Probe().run { line in DispatchQueue.main.async { self.text += "\n" + line } }
+            let result = Probe().run { line in append(line); DispatchQueue.main.async { self.text += "\n" + line } }
             if let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true),
                let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
                 try? data.write(to: docs.appendingPathComponent("multicam_probe.json"))
