@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>校正の盤</title>
+<style>
+  html, body { margin: 0; background: #000; overflow: hidden; cursor: none; }
+  canvas { display: block; position: absolute; left: 0; top: 0; image-rendering: pixelated; }
+  #hud { position: fixed; right: 8px; top: 8px; color: #0f0; font: 14px monospace; background: #000a; padding: 4px 8px; display: none; z-index: 5; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<script>
+// 校正の盤(面ごとの画像 pattern_<面>.png)を 1 画素 = 1 画素で全画面に出し、盤の上下の帯にコマ番号(Gray コード)を出す。
+// 使い方: calib_pattern.html?face=center[&hz=60][&dir=./]   キー: S=記録(コマ番号と時刻)を保存、H=記録の表示の切りかえ、Esc は何もしない。
+// コマ番号は時刻から決める(n = n0 + floor(経過秒 × hz))ので、画面の更新が 60/120/144 Hz のどれでも、番号の進みは hz のまま。
+const q = new URLSearchParams(location.search);
+const faceName = q.get('face') || 'center';
+const hz = Number(q.get('hz') || 60);
+const dir = q.get('dir') || './';
+const BITS = 16, CELLS = 18;
+const grayEncode = (n) => n ^ (n >> 1);
+
+(async () => {
+  const spec = await (await fetch(dir + 'faces.json', { cache: 'no-store' })).json();
+  const face = spec.faces.find((f) => f.name === faceName);
+  const img = new Image();
+  img.src = dir + `pattern_${faceName}.png`;
+  await img.decode();
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const c = document.getElementById('c');
+  c.width = W; c.height = H;
+  c.style.width = (W / dpr) + 'px'; c.style.height = (H / dpr) + 'px';
+  const ctx = c.getContext('2d', { alpha: false });
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0);
+  const strips = face.timecode ? face.timecode.strips : [];
+  const n0 = Math.floor(Date.now() / (1000 / hz)) % (1 << BITS);
+  const t0 = performance.now();
+  const log = [];
+  let last = -1, rafs = 0, prevTs = null, dts = [];
+  function drawStrips(n) {
+    const g = grayEncode(n % (1 << BITS));
+    for (const s of strips) {
+      const cell = s.cell;
+      ctx.fillStyle = '#000'; ctx.fillRect(s.x, s.y, CELLS * cell, cell);
+      ctx.fillStyle = '#fff'; ctx.fillRect(s.x, s.y, cell, cell);                 // 白の基準
+      for (let b = 0; b < BITS; b++) if ((g >> (BITS - 1 - b)) & 1) ctx.fillRect(s.x + (2 + b) * cell, s.y, cell, cell);
+    }
+  }
+  function frame(ts) {
+    const n = (n0 + Math.floor((ts - t0) * hz / 1000)) % (1 << BITS);
+    if (n !== last) {
+      drawStrips(n);
+      last = n;
+      if (log.length < 200000) log.push([ts, performance.timeOrigin + ts, n]);
+    }
+    if (prevTs !== null) { dts.push(ts - prevTs); if (dts.length > 120) dts.shift(); }
+    prevTs = ts; rafs++;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  const hud = document.getElementById('hud');
+  setInterval(() => {
+    const mean = dts.length ? dts.reduce((a, b) => a + b, 0) / dts.length : 0;
+    hud.textContent = `${faceName} ${W}x${H} 画面の更新 ${mean ? (1000 / mean).toFixed(1) : '-'} Hz  コマ番号 ${last}  記録 ${log.length}`;
+  }, 500);
+  addEventListener('keydown', (e) => {
+    if (e.key === 's' || e.key === 'S') {
+      const blob = new Blob([JSON.stringify({ face: faceName, hz, n0, W, H, dpr, timeOrigin: performance.timeOrigin, rows: log.slice(-20000), columns: ['raf_ms', 'epoch_ms', 'n'] })], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `tc_log_${faceName}_${Date.now()}.json`; a.click();
+    }
+    if (e.key === 'h' || e.key === 'H') hud.style.display = hud.style.display === 'block' ? 'none' : 'block';
+  });
+  window.__tc = { get: () => ({ n0, hz, log, dts: dts.slice() }), W, H, dpr, face: faceName };
+})();
+</script>
+</body>
+</html>
