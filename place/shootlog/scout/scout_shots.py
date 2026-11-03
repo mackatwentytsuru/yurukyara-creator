@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from scout import RUN_LIVE, SPOTS, UDP_PORT, yaw_to_target  # noqa: E402
+from scout import RUN_LIVE, SPOTS, UDP_PORT, stop_live, yaw_to_target  # noqa: E402
 
 K = [3065.0, 3065.0, 1920.0, 1080.0]      # iPad の ARKit(4K の画素)の代表値
 W_, H_ = 3840, 2160
@@ -98,11 +98,10 @@ def main():
             b.close()
     finally:
         s.close()
-        live.terminate()
-        try:
-            live.wait(timeout=40)
-        except subprocess.TimeoutExpired:
-            pass
+        log.close()
+        left = stop_live(live, out / "run_live.log")
+        if left:
+            print("※ 閉じられなかった UE:", left, flush=True)
     tiles = [label(cv2.resize(cv2.imdecode(np.fromfile(str(f), np.uint8), 1), (800, 450)), t) for f, t in shots]
     while len(tiles) % 2:
         tiles.append(np.zeros_like(tiles[0]))

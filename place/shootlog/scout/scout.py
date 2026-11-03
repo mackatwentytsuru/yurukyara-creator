@@ -12,6 +12,7 @@ import html
 import http.server
 import json
 import math
+import re
 import socket
 import subprocess
 import sys
@@ -36,6 +37,18 @@ SPOTS = [
 ]
 # ショーの秒: キャラが舞台に出ている所(show/show_stage.json の ar_path)
 TIMES = [("キャラが出てくる", 58.8), ("正面で踊る", 66.0), ("客席へ歩く", 70.5), ("上手で踊る", 72.5), ("また正面", 82.0)]
+
+
+def stop_live(proc, log_path):
+    """run_live.py を閉じる。Windows では親を止めても UE と取り次ぎが残るので、ログの「ue pid」「signalling pid」(自分で起動した物)も閉じて、消えたことを確かめる。"""
+    text = Path(log_path).read_text(encoding="utf-8", errors="replace") if Path(log_path).exists() else ""
+    pids = [int(m) for m in re.findall(r"(?:ue|signalling) pid (\d+)", text)]
+    proc.terminate()
+    for pid in pids:
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+    left = [pid for pid in pids if str(pid) in subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True, errors="replace").stdout]
+    print("閉じた:", pids, "残り:", left, flush=True)
+    return left
 
 
 def yaw_to_target(pos):
@@ -112,12 +125,17 @@ def main():
     if a.media:
         cmd += ["--media", a.media]
     Path(a.out).mkdir(parents=True, exist_ok=True)
-    p = subprocess.Popen(cmd)
-    try:
-        sys.exit(p.wait())
-    except KeyboardInterrupt:
-        p.terminate()      # run_live.py が、自分で起動した UE と取り次ぎだけを閉じる
-        p.wait(timeout=30)
+    log_path = Path(a.out) / "run_live.log"
+    with open(log_path, "w", encoding="utf-8") as log:
+        p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+        print("UE を起動しています(1〜4 分)。止めるときは Ctrl+C。", flush=True)
+        try:
+            code = p.wait()
+        except KeyboardInterrupt:
+            code = 0
+        finally:
+            stop_live(p, log_path)
+    sys.exit(code)
 
 
 if __name__ == "__main__":
