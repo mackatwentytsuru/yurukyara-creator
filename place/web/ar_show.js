@@ -97,7 +97,8 @@ holder.scale.setScalar(charHeightWanted ? charHeightWanted / naturalHeight : pos
 let dance = null, danceFirst = 0, danceFps = 30;
 if (trackBase && vrm) {
   try {
-    const head = await (await fetch(`${trackBase}.json`)).json();
+    const head0 = await (await fetch(`${trackBase}.json`)).json();
+    const head = head0.head ?? head0;   // ショーの形は fps・first・frames・bones が直下(古い形は head の下)
     const data = new Float32Array(await (await fetch(`${trackBase}.bin`)).arrayBuffer());
     const stride = 3 + 4 * head.bones.length;
     const hips = vrm.humanoid.getNormalizedBoneNode('hips');
@@ -219,7 +220,7 @@ host.onCalibration = (json) => {
   else alignInfo = `校正が足りない(面 A の隅 ${corners.filter((c) => c.face === 'A').length}/4)`;
 };
 host.onFlash = (ts) => {
-  if (anchorTs === null || (Number.isFinite(ts) && ts - anchorTs > 20)) { anchorTs = ts; info('フラッシュで開始'); }
+  if (anchorTs === null) { anchorTs = ts; info('フラッシュで開始'); }   // 最初の 1 回だけ(同期用の後のフラッシュでずらさない。やり直しは「やり直し」ボタン)
 };
 let infoText = '';
 function info(t) { infoText = t; }
@@ -234,7 +235,7 @@ function update() {
       holder.position.copy(pos);
       // 向き: 客席(LED の +z)向き = yaw 0。LED の向きを世界へ
       const yawLed = demoOrigin ? demoOrigin.yaw : Math.atan2(T_world_from_led.elements[8], T_world_from_led.elements[10]);   // 世界での LED の +z の向きの回転(y 回り)
-      holder.rotation.set(0, yawLed + (p.yaw * Math.PI) / 180, 0);
+      holder.rotation.set(0, yawLed - (p.yaw * Math.PI) / 180, 0);   // ショーの yaw: 前の向き (x, y) = (-sin yaw, cos yaw)(客席 +y が yaw 0)
       shown = true;
       if (dance && vrm) { dance.apply(Math.round(t * danceFps)); vrm.update(1 / 30); }
       else simpleMotion(t, true);

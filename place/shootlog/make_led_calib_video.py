@@ -57,8 +57,14 @@ def build_faces(dictionary="DICT_5X5_1000"):
     return canvas, specs
 
 
-def frame_for(canvas, specs, index, seconds_boards):
+def frame_for(canvas, specs, index, seconds_boards, bare=False):
     """映像のコマ index の絵(グレー)。0〜59 黒、60〜89 全面の白(フラッシュ)、90〜119 黒、120〜(120+秒×60) 盤+帯、その後 黒 1 秒。"""
+    if bare:   # 盤+帯だけ(ショーの映像の中に入れる区間用)。コマ番号は 0 から
+        img = canvas.copy()
+        for s in specs:
+            x, y, w, h = s["canvas_rect"]
+            TC.draw(img[y:y + h, x:x + w], index, s["timecode"]["strips"])
+        return img
     if index < 60 or 90 <= index < 120:
         return None
     if 60 <= index < 90:
@@ -72,13 +78,13 @@ def frame_for(canvas, specs, index, seconds_boards):
     return None
 
 
-def encode_procs(out: Path):
+def encode_procs(out: Path, name="led_calib_head"):
     common = ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{CANVAS_W}x{CANVAS_H}", "-r", str(FPS), "-i", "-",
               "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-shortest"]
     mov = subprocess.Popen(common + ["-vf", "format=yuv420p10le", "-c:v", "libx265", "-preset", "medium", "-crf", "12", "-tag:v", "hvc1", "-x265-params", "log-level=error:pools=8",
-                                     "-c:a", "pcm_s24le", "-map_metadata", "-1", str(out / "led_calib_head_5680x1240.mov")], stdin=subprocess.PIPE)
+                                     "-c:a", "pcm_s24le", "-map_metadata", "-1", str(out / f"{name}.mov")], stdin=subprocess.PIPE)
     mp4 = subprocess.Popen(common + ["-vf", "format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-crf", "14", "-c:a", "aac", "-b:a", "128k", "-map_metadata", "-1",
-                                     str(out / "led_calib_head_H264.mp4")], stdin=subprocess.PIPE)
+                                     str(out / f"{name}_H264.mp4")], stdin=subprocess.PIPE)
     return mov, mp4
 
 
@@ -87,6 +93,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--seconds", type=int, default=20, help="盤を出す秒数")
     ap.add_argument("--no-video", action="store_true", help="faces_led.json と静止画だけ作る")
+    ap.add_argument("--bare", action="store_true", help="黒・フラッシュなしで、盤+コマ番号の帯だけを --seconds 秒(ちょうど 秒×60 コマ)。ショーの映像の中に入れる区間用")
+    ap.add_argument("--name", default="led_calib_head", help="出力のファイル名の頭(例 calib_5680x1240_60p)")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -104,12 +112,12 @@ def main():
     if a.no_video:
         print("書いた(映像なし):", out)
         return
-    total = 120 + a.seconds * FPS + 60
-    mov, mp4 = encode_procs(out)
+    total = a.seconds * FPS if a.bare else 120 + a.seconds * FPS + 60
+    mov, mp4 = encode_procs(out, a.name)
     black = np.zeros((CANVAS_H, CANVAS_W), np.uint8).tobytes()
     white = np.full((CANVAS_H, CANVAS_W), 255, np.uint8).tobytes()
     for i in range(total):
-        f = frame_for(canvas, specs, i, a.seconds)
+        f = frame_for(canvas, specs, i, a.seconds, a.bare)
         data = black if f is None else (white if isinstance(f, str) else f.tobytes())
         for p in (mov, mp4):
             p.stdin.write(data)

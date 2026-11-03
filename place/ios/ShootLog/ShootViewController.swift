@@ -636,6 +636,27 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         }
     }
 
+    private struct StreamSummary: Codable {
+        var seconds: Double
+        var arkitFrames: Int
+        var pc: PCStreamSummary?
+        var ar: ARMonitorSummary?
+        var audio: AudioSummary?
+        var thermalMax: String
+    }
+
+    private func writeStreamSummary(seconds: Double) {
+        let pc = pcStream.enabled ? pcStream.summary() : nil
+        let ar = arMonitor.enabled ? arMonitor.summary() : nil
+        let rank = max(UELinkController.thermalRank(ProcessInfo.processInfo.thermalState),
+                       [pc?.thermalMax, ar?.thermalMax].compactMap { $0 }.map { name in ["nominal": 0, "fair": 1, "serious": 2, "critical": 3][name] ?? 0 }.max() ?? 0)
+        let s = StreamSummary(seconds: seconds, arkitFrames: frameTick, pc: pc, ar: ar, audio: audio.running ? audio.summary() : nil, thermalMax: UELinkController.thermalNameFromRank(rank))
+        guard let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return }
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try? enc.encode(s).write(to: docs.appendingPathComponent("stream_summary.json"))
+    }
+
     /// 実機の調べ(--probe-multicam): (1) ARKit が動いたまま、超広角・望遠を別の仕組み(AVCaptureMultiCamSession)で動かすと、ARKit のコマが続くか。
     /// (2) ARKit を止めて、背面カメラの複数同時の組み合わせを全部測る。結果は Documents/multicam_probe.json。終わったらアプリを閉じる。
     private func runMultiCamProbe() {
@@ -698,6 +719,15 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             if let k = Int(value("--pc-kbps") ?? "") { pcStream.kbps = k }
             if let f = Double(value("--pc-fps") ?? "") { pcStream.targetFps = f }
             pcStream.setEnabled(true, host: value("--pc-host") ?? ueLink.config.host, port: Int(value("--pc-port") ?? "") ?? 9100)
+        }
+        // 録画なしの送りの試験用: --auto-stream 秒(録画せず、その秒数だけ AR モニター・マイク・PC への送りを動かし、概要を Documents/stream_summary.json に書く。--exit-after-record で閉じる)
+        if let sec = Double(value("--auto-stream") ?? ""), sec > 0 {
+            let started = Date()
+            DispatchQueue.main.asyncAfter(deadline: .now() + sec) { [weak self] in
+                guard let self else { return }
+                self.writeStreamSummary(seconds: Date().timeIntervalSince(started))
+                if ProcessInfo.processInfo.arguments.contains("--exit-after-record") { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { exit(0) } }
+            }
         }
         // 同時の試験用: --auto-record 秒(校正なしで、5 秒後に録画を始め、その秒数で止める。画面は点けたまま立てておく)
         if let sec = Double(value("--auto-record") ?? ""), sec > 0 {
