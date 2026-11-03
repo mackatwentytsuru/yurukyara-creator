@@ -38,10 +38,11 @@ def main():
     ap.add_argument("--no-ar", action="store_true")
     ap.add_argument("--no-mic", action="store_true")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--device", default="", help="機器の UDID(省略すると Mac の device_id.txt の iPhone)")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    dev = ssh("cat ~/sample_work/place_ios/device_id.txt").strip().splitlines()[-1]
+    dev = a.device or ssh("cat ~/sample_work/place_ios/device_id.txt").strip().splitlines()[-1]
     url = (f"app://app/place/web/ar_show.html?demo=1&scale=0.5&charheight=1.0&led_bottom=0&start_at={a.start_at}"
            f"&track=/show/data/ar/dance_track&fps={a.fps}&pr={a.pr}")
     results = []
