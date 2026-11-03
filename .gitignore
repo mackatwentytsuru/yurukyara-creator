@@ -10,3 +10,6 @@ tools/history_terms.local.txt
 tools/prepush_terms.local.txt
 place/shootlog/rehearsal/board.png
 characters/sample_vrm/model.vrm
+
+# 踊りの動きの数字(外の素材から作った物。コミットしない)
+show/data/
