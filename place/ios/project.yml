@@ -71,7 +71,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UIRequiresFullScreen: YES
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: 作業用 PC の UE へ位置を送り、UE の絵を受けるためです。
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: メイン PC の UE へ位置を送り、UE の絵を受けるためです。
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 会場の音を、映像と同じ時刻で録るためです。
         INFOPLIST_KEY_UIStatusBarHidden: YES
   CamProbe:

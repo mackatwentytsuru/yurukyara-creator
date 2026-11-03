@@ -1,8 +1,8 @@
-"""同時に動かす試験(録画のみ / +UE モニター / +作業用 PC へ映像 / 両方)の結果を 1 枚の表にする。
+"""同時に動かす試験(録画のみ / +UE モニター / +PC へ映像 / 両方)の結果を 1 枚の表にする。
 
-  python place/shootlog/concurrency_report.py "A 録画のみ=<撮影フォルダ>" "B +UE=<撮影フォルダ>" "C +作業用 PC へ映像=<撮影フォルダ>[|<受け手の出力フォルダ>]" ... [--out report.md]   (受け手のフォルダは "|" で区切る: "C=<撮影>|<受け手>")
+  python place/shootlog/concurrency_report.py "A 録画のみ=<撮影フォルダ>" "B +UE=<撮影フォルダ>" "C +PC へ映像=<撮影フォルダ>[|<受け手の出力フォルダ>]" ... [--out report.md]   (受け手のフォルダは "|" で区切る: "C=<撮影>|<受け手>")
 撮影フォルダ(AirDrop で届いた物)の meta.json・frames.jsonl から、録画の質(落ちたコマ・コマの間隔・追跡)・熱・送りの数を読み、
-受け手(pc_stream_receiver.py)の summary.json があれば、作業用 PC 側の fps・Mbps・見かけの遅れ・欠けも並べる。比べるときは、場所・動き・最初の熱の状態を同じにする。
+受け手(pc_stream_receiver.py)の summary.json があれば、メイン PC 側の fps・Mbps・見かけの遅れ・欠けも並べる。比べるときは、場所・動き・最初の熱の状態を同じにする。
 """
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ def row(label: str, shoot: Path, recv: Path | None) -> dict:
     }
     if recv and (recv / "summary.json").exists():
         s = json.loads((recv / "summary.json").read_text(encoding="utf-8"))
-        r["作業用 PC fps/Mbps"] = f"{s.get('fps')}/{s.get('mbps')}"
-        r["作業用 PC 欠け"] = s.get("seq_missing")
+        r["メイン PC fps/Mbps"] = f"{s.get('fps')}/{s.get('mbps')}"
+        r["メイン PC 欠け"] = s.get("seq_missing")
         lat = s.get("latency_corrected_ms") or {}
         r["映像の遅れ(時計補正) 中央/p95/最大(ms)"] = f"{lat.get('median')}/{lat.get('p95')}/{lat.get('max')}" if lat else "-"
         clk = s.get("clock") or {}

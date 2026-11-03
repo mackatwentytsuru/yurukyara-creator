@@ -60,7 +60,7 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
             f.heightAnchor.constraint(equalToConstant: 38).isActive = true
         }
         let c = link.config
-        style(hostField, "送り先(作業用 PC の IP、例 192.168.x.x)", c.host)
+        style(hostField, "送り先(メイン PC の IP、例 192.168.x.x)", c.host)
         style(portField, "ポート", String(c.port))
         portField.keyboardType = .numberPad
         style(pcPortField, "映像ポート", String(pc.port))
@@ -99,13 +99,13 @@ final class UELinkPanelViewController: UIViewController, UITextFieldDelegate {
 
         pcSwitch.isOn = pc.enabled
         pcSwitch.addTarget(self, action: #selector(pcSwitchChanged), for: .valueChanged)
-        let pcRow = UIStackView(arrangedSubviews: [label("作業用 PC へ映像(確認用。縮小した映像を TCP で送る。録画の元は端末に残る)"), pcPortField, pcSwitch])
+        let pcRow = UIStackView(arrangedSubviews: [label("PC へ映像(確認用。縮小した映像を TCP で送る。録画の元は端末に残る)"), pcPortField, pcSwitch])
         pcRow.spacing = 10
         pcPortField.widthAnchor.constraint(equalToConstant: 90).isActive = true
 
         micSwitch.isOn = audio.running
         micSwitch.addTarget(self, action: #selector(micSwitchChanged), for: .valueChanged)
-        let micRow = UIStackView(arrangedSubviews: [label("マイク(音を録画と作業用 PC へ送りに入れる。自動の音量調整は切る)"), micSwitch])
+        let micRow = UIStackView(arrangedSubviews: [label("マイク(音を録画とメイン PC へ送りに入れる。自動の音量調整は切る)"), micSwitch])
         micRow.spacing = 10
 
         style(arURLField, "AR モニターのページの URL", ar.url)

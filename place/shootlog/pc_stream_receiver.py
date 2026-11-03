@@ -1,4 +1,4 @@
-"""撮影記録アプリの「作業用 PC へ映像」(確認用の縮小映像+姿勢)を TCP で受けて、ディスクに記録し、数字を出す。
+"""撮影記録アプリの「PC へ映像」(確認用の縮小映像+姿勢)を TCP で受けて、ディスクに記録し、数字を出す。
 
   python place/shootlog/pc_stream_receiver.py --out <出力フォルダ> [--port 9100] [--seconds 120]
 出力: stream.mjpg(JPEG を並べただけ。ffmpeg -f mjpeg -i stream.mjpg ... で動画にできる)、index.jsonl(1 コマ 1 行:

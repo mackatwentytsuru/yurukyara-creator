@@ -75,13 +75,13 @@
 - 試験は偽の撮影だけ。本物の RoomPlan の room.json と USDZ の形は、まだ未確認のまま(`clearance.mjs` も `glbBoxes.mjs` と同じ形の前提)。
 
 ### 2026-11-02 夜 本人の実機試験に向けた受け入れの準備
-- 作業用 PC のサーバー(PID 88820、8443)が動き続け、`?place=test_room` は 200。ARステージが開く URL は組み立て時に固定(`?place=test_room`)なので、新しく撮った部屋はページ上の「場所」の選び口から開く(`places/index.json`、`placeIndex.mjs`。ingest が作り直す)。作り直し不要。
-- `place/tools/receive_scan.mjs`: Mac の ~/Downloads に AirDrop で届いた 4 ファイルを集めて(`mac_collect_scan.py`)作業用 PC へ scp、取りこみまで一発。偽の AirDrop(`room_mesh 2.usdz` の名前重なり)で通し予行 6 秒、予算「採用」・通れる 93%。390 px の画面で選び口を確認。予行の物は全部消した。
+- メイン PC のサーバー(PID 88820、8443)が動き続け、`?place=test_room` は 200。ARステージが開く URL は組み立て時に固定(`?place=test_room`)なので、新しく撮った部屋はページ上の「場所」の選び口から開く(`places/index.json`、`placeIndex.mjs`。ingest が作り直す)。作り直し不要。
+- `place/tools/receive_scan.mjs`: Mac の ~/Downloads に AirDrop で届いた 4 ファイルを集めて(`mac_collect_scan.py`)メイン PC へ scp、取りこみまで一発。偽の AirDrop(`room_mesh 2.usdz` の名前重なり)で通し予行 6 秒、予算「採用」・通れる 93%。390 px の画面で選び口を確認。予行の物は全部消した。
 - 未確認: 本物の AirDrop が実際に ~/Downloads に 4 つ別々のファイルとして届くか(ShareLink の挙動)。実機で ARステージを開くのも未実施。
 
-### 2026-11-02 夜 Quest をつなぐ道具(adb)を作業用 PC に入れた
-- Google 公式 `dl.google.com/android/repository/platform-tools-latest-windows.zip`(8,044,989 バイト)を 作業用 PC の `work\tools\platform-tools\` に展開。adb 1.0.41(Version 37.0.1-15733141)、署名は Google LLC で有効。PATH・設定ファイルは変えていない(`work\tools\platform-tools\adb.exe` をフルパスで呼ぶ)。C: 472 GB、D: 125 GB の空き。
-- この時点で、作業用 PC の USB に Quest は見えない(Meta の USB の ID 2833 が無く、`adb devices` も空)。ケーブル・Quest の電源・開発者モードの確認待ち。
+### 2026-11-02 夜 Quest をつなぐ道具(adb)をサブ機に入れた
+- Google 公式 `dl.google.com/android/repository/platform-tools-latest-windows.zip`(8,044,989 バイト)をサブ機の `work\tools\platform-tools\` に展開。adb 1.0.41(Version 37.0.1-15733141)、署名は Google LLC で有効。PATH・設定ファイルは変えていない(`work\tools\platform-tools\adb.exe` をフルパスで呼ぶ)。C: 472 GB、D: 125 GB の空き。
+- この時点で、サブ機の USB に Quest は見えない(Meta の USB の ID 2833 が無く、`adb devices` も空)。ケーブル・Quest の電源・開発者モードの確認待ち。
 - つまずき: 札の種類名は `cpu`(「CPU の重い処理」は通らない)。札を取る前にダウンロードを先に走らせてしまったので、あとから取って返した(小さな作業)。
 
 ### 2026-11-02 夜 初めての本物の撮影(iPhone 12 Pro・RoomPlan)を取りこんだ
@@ -116,8 +116,8 @@
 - LED に出す物と手順は `J: のショー用フォルダ(リポジトリの外)` に置いた(リポジトリの外)。
 
 ### 2026-11-03 早朝 UE モニター・予行・写真で部屋に色(PC 側)
-- **UE モニター**(撮影記録に「UE」ボタン、スイッチを切れば従来どおり): ARKit の位置・向き・画角を UDP(1 コマ 1 行の JSON)で作業用 PC へ、UE の絵(Pixel Streaming)を WKWebView の全画面に。実機(iPhone 12 Pro + 作業用 PC、UE なし)で、UDP 30 パケット/秒・100 秒超・欠け 1・間隔 33.3 ms(最大 45 ms)、WKWebView は作業用 PC の http の動画を再生、RTCPeerConnection のループバックの映像も受けて 10 秒に約 425 コマの動き検出が届いた。熱は 40 秒の測定で nominal↔fair。**未確認**: UE の Pixel Streaming そのもの、遅れ(ms)の実値(UE が無いので、仕組みの確認までで値は 0.18 の弱い相関)、1 分テスト(アプリが 45 秒ほどで止まり最後まで回らなかった。画面が消える/ほかの操作の可能性)、録画と同時の負荷。公式の Unreal VCam は自前の ARKit を持つので撮影記録と同時には使えない(DeepSeek の調べ、docs で照合)。
-- **予行**(ウルトラワイド 5120×1440 を LED の代わりに): `place/shootlog/rehearsal/led_sim.html`(盤・4 隅・同期フラッシュ・短い映像を Space 1 回で自動)と、`rehearsal_analyze.py`(本物の映像で ARKit のドリフト・位置合わせの誤差・iPhone のレンズ・同期・画素の大きさの確かめ)。合成データで動作確認。作業用 PC のメイン画面を全画面にするため、本人の合図待ち。
+- **UE モニター**(撮影記録に「UE」ボタン、スイッチを切れば従来どおり): ARKit の位置・向き・画角を UDP(1 コマ 1 行の JSON)でメイン PC へ、UE の絵(Pixel Streaming)を WKWebView の全画面に。実機(iPhone 12 Pro + メイン PC、UE なし)で、UDP 30 パケット/秒・100 秒超・欠け 1・間隔 33.3 ms(最大 45 ms)、WKWebView はメイン PC の http の動画を再生、RTCPeerConnection のループバックの映像も受けて 10 秒に約 425 コマの動き検出が届いた。熱は 40 秒の測定で nominal↔fair。**未確認**: UE の Pixel Streaming そのもの、遅れ(ms)の実値(UE が無いので、仕組みの確認までで値は 0.18 の弱い相関)、1 分テスト(アプリが 45 秒ほどで止まり最後まで回らなかった。画面が消える/ほかの操作の可能性)、録画と同時の負荷。公式の Unreal VCam は自前の ARKit を持つので撮影記録と同時には使えない(DeepSeek の調べ、docs で照合)。
+- **予行**(ウルトラワイド 5120×1440 を LED の代わりに): `place/shootlog/rehearsal/led_sim.html`(盤・4 隅・同期フラッシュ・短い映像を Space 1 回で自動)と、`rehearsal_analyze.py`(本物の映像で ARKit のドリフト・位置合わせの誤差・iPhone のレンズ・同期・画素の大きさの確かめ)。合成データで動作確認。メイン PC のメイン画面を全画面にするため、本人の合図待ち。
 - **写真で部屋に色**(1 段目): `room_color_project.py`(映像 + ARKit の姿勢 + 窓の 4 隅 → 壁・床のテクスチャ → `room_photo.glb`、variants.photo で `?variant=photo`)。合成の部屋(家具 12 個、ARKit の雑音つき)で見えた所の PSNR 30.5 dB、中央値の差 5/255、見えた割合 25〜50%。ビューアで photo の版が読めた。つまずき: `cv2.remap` の地図が 32767 超で落ちる(512 列に分ける)、家具の箱を縮めて遮りを見ると家具の色が壁に漏れる(大きめに見る)。露出の補正は未。
 - 24p/30p の両方で、同期・ずれ・UE カメラ位置の試験が合格(レンズ校正は fps 非依存)。lens_calib に `--fix-principal-point`。
 
@@ -134,7 +134,7 @@
 
 ## 2026-11-03 夜 土台の再編その 2: 同時の試験・複数カメラ・HEVC の PC 録画・音・複数面の校正(場所の柱)
 - **同時試験(iPhone 12 Pro、4K30 録画、各 60 秒、Wi-Fi、UE は 720p/30)**: A 録画のみ・B +UE・C +映像(JPEG)・D 全部・H +HEVC フル HD・I +UE+HEVC、どれも**録画のコマは落ちず(落ち 0)、間隔は 33.3 ms のまま、追跡も切れなかった**。熱は、冷えた状態から始めた回で、A・C・H は fair のまま、**UE の絵を足した B・I は serious**(熱の主犯は UE の絵の受信・表示。符号化と送りではない)。1 巡目の D は直前の B の熱が残って critical で始まった(アプリが動き続けて冷えなかった)ので、アプリを試験ごとに自動で閉じて冷ます(`--exit-after-record`)ようにした。表は `concurrency_report.py`、自動の回しは `run_concurrency.py`(`--auto-record 秒`、ssh で Mac 経由、iPhone から `devicectl` で取り出す)。
-- **作業用 PC へ映像**(撮影記録 `PCStream.swift`、受け手 `pc_stream_receiver.py`): 最初は JPEG(960 幅、符号化が平均 123 ms で 9 fps)→ 縮小を VideoToolbox(`VTPixelTransferSession`)にして平均 11〜14 ms・約 15 fps・約 5 Mbps。時計のずれは PING/PONG(PC が問い合わせ、端末が時刻を返す。往復が最小のものから推定)で引き、遅れは中央 92〜106 ms。見かけの遅れが約 0.9 秒で一定だったのは、**端末と PC の時計のずれ**(最小値 902 ms のまま動かなかったので気づいた)。
+- **PC へ映像**(撮影記録 `PCStream.swift`、受け手 `pc_stream_receiver.py`): 最初は JPEG(960 幅、符号化が平均 123 ms で 9 fps)→ 縮小を VideoToolbox(`VTPixelTransferSession`)にして平均 11〜14 ms・約 15 fps・約 5 Mbps。時計のずれは PING/PONG(PC が問い合わせ、端末が時刻を返す。往復が最小のものから推定)で引き、遅れは中央 92〜106 ms。見かけの遅れが約 0.9 秒で一定だったのは、**端末と PC の時計のずれ**(最小値 902 ms のまま動かなかったので気づいた)。
 - **HEVC のハードウェア符号化**(`HEVCEncoder.swift`、VTCompressionSession、低遅れ・B フレームなし・Annex B)で 1920×1080・30 fps・目標 18 Mbps: 実測 17.6 Mbps、PC が 2127 コマを欠けなしで受け、`ffmpeg -f hevc -c copy` で再符号化なしに mp4 にできた(キー 36)。遅れ 中央 130 ms(p95 190〜280 ms)。つまずき: `kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder` は iOS 17.4 以降(iOS では既定がハードウェアなので外した)、`CACurrentMediaTime` は QuartzCore の import が要る。
 - **実機の複数カメラ(`--probe-multicam`、AVCaptureMultiCamSession)**: **ARKit が動いている間に別の撮影を始めると ARKit は止まる**(超広角で 0.8 fps、望遠で 0 コマ)。ARKit なしで、2 レンズは **4K30×2**(広角+超広角、広角+望遠、超広角+望遠。hardwareCost 0.57)、3 レンズは **1280×720/30 だけ**(圧 1.05)、LiDAR のカメラ映像+1 レンズは 4K×2。ARKit の録画の形式は広角 1 本だけ(4K の 24/25/30、1920×1440 と 1080p の 30/60)。**ARKit の 4K の横の画角は約 68°(35mm 換算 約 26 mm)**。つまずき: 別のアプリ(CamProbe)はカメラの許可の窓で止まったので、撮影記録(許可済み)の中に組み込んだ。
 - **マイク**(`AudioCapture.swift`): AVAudioSession=measurement(自動音量調整なし)、48 kHz、映像と同じホスト時間の時刻つき。録画は video.mov に 24 bit PCM の音声トラック(最初の音は映像の 0.071 秒、30.035 秒、6007 塊・捨て 0)、PC へは AUD1(40.9 秒、欠け 0)。静かな部屋の最大 −48 dBFS。**iPhone の空き容量は 7.2〜7.4 GB(128 GB の端末)**: 4K30 の録画は 3.7 MB/s(1 時間 13.4 GB)なので、**今の空きでは約 33 分**。本番の前に空けるか、フル HD の録画にする。

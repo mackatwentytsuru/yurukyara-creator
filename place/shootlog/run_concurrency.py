@@ -1,12 +1,12 @@
-"""同時に動かす試験を、作業用 PC から自動で回す(iPhone は画面を点けたまま立てておくだけ)。
+"""同時に動かす試験を、メイン PC から自動で回す(iPhone は画面を点けたまま立てておくだけ)。
 
   python place/shootlog/run_concurrency.py --out <出力フォルダ> --tests A B C D [--seconds 60] [--cooldown 120]
     [--host 192.168.x.x] [--ue-url "http://192.168.x.x:8080/?AutoConnect=true&AutoPlayVideo=true&StartVideoMuted=true&HoveringMouse=true"]
-  A 録画のみ / B 録画 + UE モニター / C 録画 + 作業用 PC へ映像 / D 録画 + 両方
+  A 録画のみ / B 録画 + UE モニター / C 録画 + PC へ映像 / D 録画 + 両方
 やること(試験ごと): 受け手(C・D)を起動 → Mac 経由で iPhone のアプリを起動引数つきで起動(--auto-record で 5 秒後に録画、指定の秒数で止める)
-  → 終わったら撮影フォルダを iPhone から取り出して作業用 PC へ → 次の試験の前に冷ます → 最後に concurrency_report.py で表にする。
+  → 終わったら撮影フォルダを iPhone から取り出してメイン PC へ → 次の試験の前に冷ます → 最後に concurrency_report.py で表にする。
 前提: iPhone がロック解除・画面点灯で、機種が Mac(ssh pc3)から見える。B・D は UE の待ち受け(show/live/run_live.py serve)が動いている。
-作業用 PC 側の記録は --out(J: か D:)。重い GPU 処理は無いが、受け手が書き込むので、呼ぶ前に札を取る(machine_lock.py run --kind cpu)。
+メイン PC 側の記録は --out(J: か D:)。重い GPU 処理は無いが、受け手が書き込むので、呼ぶ前に札を取る(machine_lock.py run --kind cpu)。
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def main():
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     dev = device_id()
-    labels = {"A": "A 録画のみ", "B": "B 録画+UE", "C": "C 録画+作業用 PC へ映像(JPEG)", "D": "D 録画+UE+作業用 PC へ映像(JPEG)", "H": "H 録画+HEVC フル HD を作業用 PC へ", "I": "I 録画+UE+HEVC フル HD", "R": "R 録画+AR モニター", "S": "S 録画+AR モニター+HEVC+音"}
+    labels = {"A": "A 録画のみ", "B": "B 録画+UE", "C": "C 録画+PC へ映像(JPEG)", "D": "D 録画+UE+PC へ映像(JPEG)", "H": "H 録画+HEVC フル HD をメイン PC へ", "I": "I 録画+UE+HEVC フル HD", "R": "R 録画+AR モニター", "S": "S 録画+AR モニター+HEVC+音"}
     report_items = []
     for t in a.tests:
         d = out / t
