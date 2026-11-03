@@ -79,3 +79,10 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - **iPad の最初の起動**: iOS の「ローカルネットワーク」の許可が、最初に PC/Mac へつなぐときに出る。許可待ちの間は送りが全部 `skippedNotReady`(framesSent 0)で、受け手は 0 コマ。**ARKit は回るので、一見は正常に見える**。測定の前に 1 度、本人に許可してもらう(カメラ・マイクの許可も同じ)。測定結果は `stream_table.py` で表にする(`framesSent` と `skippedNotReady` が見える)。Windows の Python で ssh の出力を読むときは `encoding="utf-8"`(日本語を含む JSON で cp932 の読み取りが落ちて、結果が空になった)。
 - iPad Pro 11 インチ第 3 世代(M1、iPad13,4)の実測(AR 15 fps・半分の解像度+フル HD 30 fps 18 Mbps+音、LAN 経由、127 秒×3 回続けて): 熱は 3 回とも nominal のまま、端末が送れた率 97.9/97.9/98.0%、実効 29.9〜30.0 fps、17.6 Mbps、遅れ 中央 85〜86・p95 152〜158・最大 357〜507 ms、連番の欠け 0、音の欠け 0。ARKit は 4K 30 fps(fx=3065 px@3840 → 横の画角 64°、35 mm 換算 28.7 mm。iPhone 12 Pro は約 68°)。
 - iPad で **AR を 30 fps・解像度そのまま(`fps=30&pr=1.0`)**にしても、127 秒×3 回続けて 熱 nominal、送れた率 97.9/98.0/98.0%、17.7〜17.9 Mbps、遅れ 中央 85〜86 ms、連番の欠け 0、AR の姿勢 約 3700 送(捨 約 78)。iPhone は同じ条件で 100→89→78%・critical に落ちた。AR を 15 fps に落とさなくてよいのは iPad だけ。
+
+## 端末どうしの画質の比べ(11-03 夜、iPad と iPhone を手持ちで)
+- 道具: `quality_chart.py make`(絵。5120×1440 のモニターの中央 2560 幅に、色見本 24・星・斜めの縁・日本語の文字・ChArUco 盤)→ `rehearsal/open_image_fullscreen.ps1` で全画面(要:本人の一声。自分で起動した Chrome と http.server の PID だけ止める)→ 端末で `--auto-stream 14 --lock-exposure --iso 50` → Mac で `ffmpeg -f hevc -r 30 -i stream.hevc -vf select=not(mod(n\,10)) -fps_mode passthrough f_%03d.png`(古い ffmpeg では `-vsync` が使えない)→ `quality_chart.py measure/sheet`。
+- **露出は ISO を決めて固定する**(`--lock-exposure` だけだと、暗い絵に合わせて明るく固定され、背景が灰色に浮く)。この絵・このモニターでは ISO 50 で白飛び 0%、ISO 100 で 3.7% 飛ぶ。
+- **曲がったモニター(ウルトラワイド)では、盤から作った平面の変換が盤から遠い所でずれる**(灰色の標準偏差が 50 になった)。縁・灰色は予測の位置のまわりで直接探す(`edge_width_local`・`flat_noise_local`)。縁の立ち上がりは「絵の 1 画素あたり」に直して比べる(距離が違うため)。
+- 結果(手持ち、HEVC フル HD 18 Mbps の受け側のコマ、鮮明な上位 10 コマの中央値): 縁の立ち上がり iPad 3.35 / iPhone 3.39(絵の画素)、雑音 0.34 / 0.31、盤の角 63 / 60 点 → **画質は同等**。違いは画角と距離: 絵 1 画素=コマの 0.52 画素(iPad)/ 0.40(iPhone)で、同じ位置なら iPad のほうが少し狭く(64° 対 68°)大きく写る。限界は端末のレンズよりモニターの表示と HEVC のほうにある可能性が高い。
+- 注意: 同時刻の撮影ではない(iPad の数分後に iPhone)。手持ちで角度・距離が違う。色は数字にしていない(曲面で見本の位置がずれるため。目では同程度)。

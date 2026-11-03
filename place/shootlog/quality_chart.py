@@ -311,7 +311,9 @@ def sheet(a_json: Path, b_json: Path, out: Path):
         d.text((12, 8), text, fill=(255, 255, 255), font=f)
         return cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
-    top = np.hstack([label(ra, f"{ja['name']}(全体)"), label(rb, f"{jb['name']}(全体)")])
+    def tag(j):
+        return f"{j['name']}  縁 {j.get('edge_10_90_px')} 画素 / 雑音 {j.get('flat_gray_std')} / 絵1画素={j.get('frame_px_per_chart_px')}画素"
+    top = np.hstack([label(ra, tag(ja)), label(rb, tag(jb))])
     rows = [top]
     for title, box in (("星(解像)", (OX + 1040, 160, OX + 1560, 680)), ("縁と色の見本", (OX + 1050, 700, OX + 1450, 1100)), ("文字", (OX + 1620, 80, OX + 2420, 330))):
         ca, cb = crop_chart(Path(ja["frame"]), ja, box), crop_chart(Path(jb["frame"]), jb, box)
