@@ -36,7 +36,7 @@ elif [ "$NOW" = "$USED" ] && [ -f "$ROOT/$VERSION/video_nochar/show.mov" ]; then
   echo "背景は同じなので、キャラなしはそのまま使います"
 else
   echo "== キャラなしの全編"
-  bash "$BUILD" --no-character unused "" "" f_led "${SHOW_STRETCH:-1.48}" "$VERSION" > "$ROOT/${VERSION}_nochar.log" 2>&1 &
+  SHOW_CHARACTER_FILE="$VRM" bash "$BUILD" --no-character unused "" "" f_led "${SHOW_STRETCH:-1.48}" "$VERSION" > "$ROOT/${VERSION}_nochar.log" 2>&1 &
   PID_NOCHAR=$!
 fi
 wait "$PID_CHARACTER" || { FAILED=1; echo "キャラありに不合格: $ROOT/${VERSION}_character.log"; }

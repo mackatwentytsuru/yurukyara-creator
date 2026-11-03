@@ -41,7 +41,7 @@ void main() {
     float e = (r - radius) / (24.0 + uAge * 120.0);
     col += vec3(0.25, 1.0, 0.92) * exp(-e * e) * exp(-uAge * 2.2) * 1.3;
     float pillar = exp(-pow(d.x / 170.0, 2.0)) * smoothstep(-900.0, 0.0, d.y) * exp(-uAge * 7.0);
-    col += vec3(0.7, 1.0, 0.97) * pillar * 2.4;
+    col += vec3(0.7, 1.0, 0.97) * pillar * 1.5;
   } else {
     // 戻る: 周りから中心へ集まるピンクの輪と、中心の光
     float radius = max(0.0, 1500.0 * (1.0 - uAge / 0.45));
@@ -49,7 +49,7 @@ void main() {
     float inFlight = 1.0 - smoothstep(0.42, 0.5, uAge);
     col += vec3(1.0, 0.3, 0.68) * exp(-e * e) * inFlight * 1.1;
     float core = exp(-pow(r / 300.0, 2.0)) * exp(-pow((uAge - 0.45) / 0.14, 2.0));
-    col += vec3(1.0, 0.8, 0.92) * core * 2.2;
+    col += vec3(1.0, 0.8, 0.92) * core * 1.4;
   }
   gl_FragColor = vec4(col, 1.0);
 }
@@ -65,6 +65,7 @@ const SHOTS = {
 const FOV_DEG = 20;
 const SIDE_ANGLE = 0.16; // モニターごとのカメラの横のずれ(距離に対する割合)
 const FOLLOW = 0.12; // カメラが頭を追う速さ(1 コマあたり)
+const PLATE_OFF = new Set(['preroll', 'calib', 'sync_head', 'tail', 'sync_tail', 'black_end']); // 黒のままの区間
 
 export async function createStagePicture({ THREE, renderer, stage, W, H, FPS, CENTER_X, uniforms }) {
   const plate = await new THREE.TextureLoader().loadAsync('/show-data/plate.png');
@@ -147,6 +148,16 @@ export async function createStagePicture({ THREE, renderer, stage, W, H, FPS, CE
   }
 
   return {
+    /** 会場の絵の明るさ。歌で明るく、静かな場面で暗く、暗転と同期の間は消す */
+    setPlate(section, t, song) {
+      const { quiet_gain: quiet, song_gain: full } = stage.plate;
+      let gain = quiet + (full - quiet) * song;
+      if (PLATE_OFF.has(section.id)) gain = 0;
+      else if (section.id === 'dark') gain = quiet * Math.min(1, (t - section.start) / (section.end - section.start));
+      else if (section.id === 'outro') gain *= Math.max(0, 1 - (t - section.start) / (section.end - section.start));
+      uniforms.uPlateGain.value = gain;
+      uniforms.uPlateOn.value = gain > 0 ? 1 : 0;
+    },
     characterOnLed(t) {
       return stage.led_character.some(([a, b]) => t >= a && t < b);
     },

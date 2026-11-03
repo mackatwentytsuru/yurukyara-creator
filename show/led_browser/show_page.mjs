@@ -363,6 +363,7 @@ function setScene(frame) {
   rimRight.intensity = look.rim * pulse;
   hemi.intensity = look.hemi * lightGain;
   applyCamera(IS_VRM ? timing.zoomAmount(t) : 0);
+  if (stagePicture) stagePicture.setPlate(timing.primary(t), t, look.song);
   for (const item of liftMaterials) item.material.emissiveIntensity = item.base * look.lift;
 }
 

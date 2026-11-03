@@ -12,6 +12,7 @@
 #   SHOW_CHARACTER_FILE=<.vrm>  キャラをファイルで渡す
 #   SHOW_FROM=<コマ>      映像を途中のコマから続ける
 #   SHOW_DANCE_TRACK=<頭>  assemble_track.py の 1 本で踊らせ、サビの寄りを外す
+#   SHOW_CALIB_VIDEO=<映像>  timeline の calib の区間を、校正の盤の映像に差しかえる
 #   SHOW_PLATE=<png>      LED の中の会場の絵。show_stage.json のとおりに等身大・左右のモニター・出る戻るの光を描く
 #   SHOW_BUILD_ROOT      出力の置き場(既定 work/ue_show/show_build)
 #   SHOW_LOCK="python <札の道具>"  重い処理を札で包む命令。空なら札なしで動かす
@@ -150,6 +151,11 @@ else
   NAME=show
   CHECK_ARGS=()
   [ "$NO_CHARACTER" = "1" ] && CHECK_ARGS+=(--no-character)
+fi
+
+if [ "$MODE" = "full" ] && [ -n "${SHOW_CALIB_VIDEO:-}" ]; then
+  echo "== 校正の盤を差しこむ"
+  python "$REPO/show/run/splice_calib.py" "$VIDEO_DIR/master.mov" "$TIMELINE" "$SHOW_CALIB_VIDEO"
 fi
 
 echo "== 書き出し"

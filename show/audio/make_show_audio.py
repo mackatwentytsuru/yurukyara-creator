@@ -235,8 +235,10 @@ def main():
     over = bool(script["song"].get("line_over_intro", False))
     line_n = pad_n(LEAD) + ceil_frame(len(voices["line"])) + pad_n(TRAIL)
     plan = []  # (id, サンプル数)。重ならない並び。line_over_intro のときの line は曲の上に重ねる
-    for sid in ("preroll", "sync_head", "dark", "enter"):
-        plan.append((sid, pad_n(dur[sid])))
+    # calib は校正の盤を映す間(絵はあとで差し込む)。台本に無ければ入れない
+    for sid in ("preroll", "calib", "sync_head", "dark", "enter"):
+        if sid in dur:
+            plan.append((sid, pad_n(dur[sid])))
     if not over:
         plan.append(("line", line_n))
     plan.append(("song", song_n))
