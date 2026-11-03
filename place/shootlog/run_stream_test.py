@@ -30,7 +30,9 @@ def main():
     ap.add_argument("--gap", type=int, default=20)
     ap.add_argument("--kbps", type=int, default=18000)
     ap.add_argument("--width", type=int, default=1920)
-    ap.add_argument("--fps", type=int, default=30, help="AR を描く fps と PC へ送る fps")
+    ap.add_argument("--fps", type=int, default=30, help="AR を描く fps")
+    ap.add_argument("--pc-fps", type=int, default=30, help="PC へ送る fps")
+    ap.add_argument("--pr", type=float, default=1.0, help="AR の描画の解像度の倍率")
     ap.add_argument("--start-at", type=float, default=45.0)
     ap.add_argument("--lock-exposure", action="store_true")
     ap.add_argument("--no-ar", action="store_true")
@@ -41,7 +43,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     dev = ssh("cat ~/sample_work/place_ios/device_id.txt").strip().splitlines()[-1]
     url = (f"app://app/place/web/ar_show.html?demo=1&scale=0.5&charheight=1.0&led_bottom=0&start_at={a.start_at}"
-           f"&track=/show/data/ar/dance_track&fps={a.fps}")
+           f"&track=/show/data/ar/dance_track&fps={a.fps}&pr={a.pr}")
     results = []
     for k in range(1, a.runs + 1):
         label = f"run{k}"
@@ -51,7 +53,7 @@ def main():
                               stdout=open(out / f"{label}_rx.log", "w"), stderr=subprocess.STDOUT)
         time.sleep(3)
         args = ["--auto-stream", str(a.seconds), "--exit-after-record", "--pc-on", "--pc-host", a.mac_ip, "--pc-port", "9100", "--pc-codec", "hevc",
-                "--pc-width", str(a.width), "--pc-kbps", str(a.kbps), "--pc-fps", str(a.fps)]
+                "--pc-width", str(a.width), "--pc-kbps", str(a.kbps), "--pc-fps", str(a.pc_fps)]
         if not a.no_ar:
             args += ["--ar-on", "--ar-url", url]
         if not a.no_mic:
