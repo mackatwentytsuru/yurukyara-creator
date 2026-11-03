@@ -32,6 +32,8 @@ def row(label: str, shoot: Path, recv: Path | None) -> dict:
         "落ちたコマ": st["droppedFrames"], "コマ間隔 p95/最大(ms)": f"{np.percentile(dt, 95):.1f} / {dt.max():.1f}",
         "追跡が正常でないコマ": st["trackingNotNormalFrames"], "形式": f"{st.get('width')}x{st.get('height')}",
         "熱(UE側の記録)": ue.get("thermalMax", "-"), "熱(映像側の記録)": pc.get("thermalMax", "-"), "熱の変化の記録": ",".join(t.split(":")[1] for t in thermal) or "-",
+        "UE の絵 fps/表示/落ち": f"{ue.get('videoFps', '-')}/{ue.get('videoFramesTotal', '-')}/{ue.get('videoFramesDropped', '-')}" if ue else "-",
+        "熱の開始": next((t.split(":")[1] for t in thermal[:1]), "-"),
         "UE へ送った/失敗": f"{ue.get('packetsSent', '-')}/{ue.get('packetsFailed', '-')}" if ue else "-",
         "映像 送った/忙しく捨て/未接続で捨て": f"{pc.get('framesSent', '-')}/{pc.get('skippedBusy', '-')}/{pc.get('skippedNotReady', '-')}" if pc else "-",
         "符号化 平均/最大(ms)": f"{pc.get('encodeMsAvg', '-')}/{pc.get('encodeMsMax', '-')}" if pc else "-",

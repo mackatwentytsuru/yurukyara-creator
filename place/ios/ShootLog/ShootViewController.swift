@@ -612,6 +612,10 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
                 self.startRecording()
                 DispatchQueue.main.asyncAfter(deadline: .now() + sec) { [weak self] in
                     if let self, self.isRecording { self.stopRecording() }
+                    // 試験の間に端末を冷ますため、終わったらアプリを閉じる(UE の絵と映像の送りが動き続けて熱くなるのを防ぐ)
+                    if ProcessInfo.processInfo.arguments.contains("--exit-after-record") {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { exit(0) }
+                    }
                 }
             }
         }

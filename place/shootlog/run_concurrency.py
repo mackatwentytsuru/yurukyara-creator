@@ -42,7 +42,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--tests", nargs="+", default=["A", "B", "C", "D"])
     ap.add_argument("--seconds", type=int, default=60)
-    ap.add_argument("--cooldown", type=int, default=120)
+    ap.add_argument("--cooldown", type=int, default=240)
     ap.add_argument("--host", default="192.168.x.x")
     ap.add_argument("--ue-url", default="")
     ap.add_argument("--pc-port", type=int, default=9100)
@@ -62,7 +62,7 @@ def main():
             recv = subprocess.Popen([sys.executable, str(HERE / "pc_stream_receiver.py"), "--out", str(d / "recv"), "--port", str(a.pc_port), "--seconds", str(a.seconds + 40)],
                                     stdout=open(d / "recv.log", "w"), stderr=subprocess.STDOUT)
             time.sleep(1.5)
-        args = ["--auto-record", str(a.seconds)]
+        args = ["--auto-record", str(a.seconds), "--exit-after-record"]
         if t in ("B", "D"):
             args += ["--ue-on", "--ue-host", a.host, "--ue-port", str(a.ue_port), "--ue-url", a.ue_url]
         if t in ("C", "D"):

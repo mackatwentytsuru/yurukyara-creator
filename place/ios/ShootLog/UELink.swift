@@ -162,6 +162,10 @@ struct UELinkSummary: Codable {
     var packetsFailed: Int
     var thermalAtStart: String
     var thermalMax: String
+    var videoFps: Double? = nil        // 受けた絵(WKWebView の動画)の fps(最後の 1 秒の値)
+    var videoFramesTotal: Int? = nil   // 動画が表示したコマの数(JS の統計)
+    var videoFramesDropped: Int? = nil // 動画が落としたコマの数(JS の統計)
+    var videoState: String? = nil
 }
 
 final class UELinkController: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
@@ -349,7 +353,8 @@ final class UELinkController: NSObject, WKScriptMessageHandler, WKNavigationDele
     func summary() -> UELinkSummary {
         let c = sender.counts
         return UELinkSummary(enabled: enabled, host: config.host, port: config.port, url: config.url, packetsSent: c.sent, packetsFailed: c.failed,
-                             thermalAtStart: thermalAtStart, thermalMax: Self.thermalNameFromRank(thermalMaxRank))
+                             thermalAtStart: thermalAtStart, thermalMax: Self.thermalNameFromRank(thermalMaxRank),
+                             videoFps: videoFps, videoFramesTotal: videoTotal, videoFramesDropped: videoDropped, videoState: videoState)
     }
 
     // MARK: - 表示用
