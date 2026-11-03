@@ -47,6 +47,7 @@ def main():
     ap.add_argument("--ue-url", default="")
     ap.add_argument("--pc-port", type=int, default=9100)
     ap.add_argument("--ue-port", type=int, default=9000)
+    ap.add_argument("--mic", action="store_true", help="マイクを入れる(初回は iPhone の許可の窓が出る)")
     ap.add_argument("--hevc-width", type=int, default=1920)
     ap.add_argument("--hevc-kbps", type=int, default=18000)
     a = ap.parse_args()
@@ -71,6 +72,8 @@ def main():
             args += ["--pc-on", "--pc-host", a.host, "--pc-port", str(a.pc_port)]
         if t in ("H", "I"):
             args += ["--pc-on", "--pc-host", a.host, "--pc-port", str(a.pc_port), "--pc-codec", "hevc", "--pc-width", str(a.hevc_width), "--pc-kbps", str(a.hevc_kbps), "--pc-fps", "30"]
+        if a.mic:
+            args += ["--mic-on"]
         launch = ssh(f"xcrun devicectl device process launch --device {dev} --terminate-existing {BUNDLE} " + " ".join(f"'{x}'" for x in args) + " 2>&1 | tail -3")
         print(f"[{t}] 起動:", launch.strip().replace("\n", " | "))
         time.sleep(5 + a.seconds + 15)
