@@ -1,0 +1,11 @@
+{
+  "note": "仮の場面(座席の位置は未実測。実測の座席表ができたら eye を差し替える)。単位 cm。座標は show/ue/stage_layout.py と同じ。",
+  "seats": [
+    {"id": "seat1", "name": "座席1(中央・後ろ)", "eye": [130, 1600, 120], "look_at": [238, 0, 340], "mm35": 26},
+    {"id": "seat2", "name": "座席2(左寄り・前)", "eye": [-600, 1000, 120], "look_at": [120, -60, 335], "mm35": 26}
+  ],
+  "performer_sets": [
+    {"id": "perf1", "name": "演者 中央", "performers": [{"x": 20, "y": 250, "radius": 30, "height": 160}]},
+    {"id": "perf2", "name": "演者 左前", "performers": [{"x": -400, "y": 120, "radius": 30, "height": 160}]}
+  ]
+}
