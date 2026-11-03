@@ -35,6 +35,8 @@ body {
 .place-mode-button { font: inherit; font-size: 13px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .place-mode-button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .place-mode-button[hidden] { display: none; }
+/* ヘッドセットの 2D の画面では、次に押す物を大きく(コントローラーで狙いやすく) */
+html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background: var(--lav, #b8a6ff); color: #14121f; font-weight: 700; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   font-size: 12px; line-height: 1; padding: 7px 10px; border-radius: 999px;

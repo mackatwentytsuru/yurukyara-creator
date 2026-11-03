@@ -94,6 +94,7 @@ export function createStage(canvas) {
   }
 
   function resize() {
+    if (renderer.xr.isPresenting) return; // VR の中の大きさは端末が決める
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);

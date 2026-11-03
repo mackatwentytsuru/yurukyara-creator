@@ -31,6 +31,15 @@ renderer.setAnimationLoop(() => { modes.frame(); renderer.render(scene, camera);
 - 殻で自動に `enter('ar')` しても、ボタンの表示は自動で今のモードに合う(`modes.subscribe`、2026-11-02 の試験で Haiku が見つけた不具合を直した)。ページの側で `buttons.refresh()` を呼ぶ必要は無い。
 - 判定の限界: canvas の隅の alpha の確認は、`preserveDrawingBuffer: true` が無いと中身に関係なく 0 になって通りうる。本当の透明の確認は html と body の背景の計算値(`rgba(0, 0, 0, 0)`)で見ている。
 
+## Quest 3 の VR で話す(2026-11-04。ここまでは偽の WebXR で確かめた物。実機の結果は devlog を見る)
+- 偽物は Meta の IWER(`iwer`)が使える。`web/scripts/vr-check.mjs` が見本。**Chrome 本体の navigator.xr に負けるので `installRuntime({ forceInstall: true })`。** IWER 2.7.0 の `getOffsetReferenceSpace` は `XRRigidTransform` を行列として扱うので、ずれが効かない(`offset.matrix` を渡す包みを試験の中で足す)。頭は `device.position.set(...)`、スティックは `controllers.right.updateAxes('thumbstick', x, y)`、トリガーは `updateButtonValue('trigger', 1)`。
+- 偽のマイク: `--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<wav>%noloop`。ファイルの頭に長い無音を入れて、VR に入ったあとで声を流す。**「字が出た」だけで合格にしない**(「カルカルカル…」でも合格になった)。声に入っている言葉と照らす。
+- **`ScriptProcessor` は描画と同じ流れなので、VR の描画が重いと音が欠けて字が崩れた。`AudioWorklet` に替えると、同じ声が正しく字になった。**
+- Whisper は聞き取れない音でやり直しを繰り返す(2.8 秒の音に 45 秒)。`temperature=0.0` で止める。`no_speech_prob` だけで切ると、きれいな声(0.67)まで捨てる。`avg_logprob` と合わせて見る。
+- 立ち位置は、キャラを動かさず、`renderer.xr.setReferenceSpace(base.getOffsetReferenceSpace(変換の逆))` で見ている人のほうを動かす(撮った部屋の立ち位置・視線の計算を変えなくてよい)。計算は `web/src/vrStage.js` の `computeRig`。
+- 3D の文字の板は、変わったときだけ描き直す(毎フレーム `needsUpdate` にしない)。
+- ヘッドセットの判定は `isSessionSupported` でなく UA で行う(Link の入った PC の Chrome でも VR が true になり、カメラの入口が消えるのを防ぐ)。
+
 ## 段下げ試験(2026-11-02、切りかえページ作り)
 固定の試験: `place/testdata/skill_trials/brief_modes.md` の依頼文だけで、`place/skilltest/<段>/index.html` と `main.js` を作らせる(`modes.js`・`mountModeButtons`・`loadPlace` を使う)。まっさらな文脈の作業役。合否は私が別に `check_modes_page.py`(偽の殻あり・なし)で判定した。トークンはその作業役が使った合計。
 

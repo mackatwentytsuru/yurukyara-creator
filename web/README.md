@@ -70,6 +70,7 @@ conversation.setPeople([{ id: 'a', position: [x, y, z], speaking: true }]);  // 
 
 - 画面: 既定。入力は MediaPipe かマウス。
 - AR(iPhone の殻アプリ): ページが殻の中だと分かると、すぐ AR に入ります。殻の姿勢が `PoseSource` に届き(カメラは使わない)、キャラは見ている方向の 1.6m 先の床に立ち、床をタップするとそこへ移ります。撮った部屋は隠します(AR の世界と重ならないため)。
+- VR(Quest 3)の話す手順は、下の「Quest 3 で話す」にまとめました。
 - AR / VR(Quest): 「AR で見る」「VR で見る」のボタンが出ます。入ると入力は頭の位置になり、MediaPipe のカメラは止めます。VR では撮った部屋の中に、spawn の位置で立ちます。
 - 画面に戻ると、入力・カメラの構図・キャラの位置を元に戻します。
 - **AR の位置合わせ**: 殻の中で撮った部屋(`?place=`)があると、「『入口』の真下の床をタップしてください(1/2)」と案内が出ます(場所の柱の `alignFlow`)。2 か所タップすると、撮った部屋が現実の部屋に重なり、キャラは部屋の立ち位置に立ち、撮った部屋は見えない遮蔽物になります。食い違いが 15cm を超えると、やり直しになります。**重なるまでは、部屋の目印を Claude に渡しません**(現実と合わないため)。重なったあとは、位置合わせを織りこんだ距離と向きを渡します。
@@ -80,6 +81,31 @@ iPhone の殻から開く HTTPS(同じネットワークに公開するときだ
 cd web && npm run build
 HOST=0.0.0.0 PORT=8443 TLS_CERT=../place/.certs/192.168.x.x.crt TLS_KEY=../place/.certs/192.168.x.x.key   ANTHROPIC_API_KEY=… ELEVENLABS_API_KEY=… node server/index.mjs
 # 殻が開く URL: https://<この PC の IP>:8443/?source=pose&place=<id>
+```
+
+## Quest 3 で話す(ブラウザだけ。アプリのビルドは要らない)
+
+Quest のブラウザで開いて、「はじめる」でマイクを許可し、「VR で見る」を押します。同じ `?character=<id>` で、GLB のキャラ(`rig`)も VRM も動きます。
+
+- **聞き取り**: Quest のブラウザには聞き取りの機能が無い報告があるので、声の区間をサーバーへ送って文字にします(`/api/stt`、faster-whisper。`pip install faster-whisper`)。音は文字にしたら消します。鍵は要りません。設定は `STT_MODEL`(既定 small)・`STT_DEVICE`(cpu)・`STT_THREADS`(4)・`STT_ENGINE=off`(使わない)。
+- **立ち位置**: キャラの正面 1.6m に立ちます。キャラは場所が決めた位置のままで、見ている人の原点をずらします(`src/vrStage.js`)。体で歩くか、スティックで歩きます。撮った部屋が無いときは、空と床を出します。
+- **文字**: ページの文字は VR の中で見えないので、状態・話した言葉・返事を、キャラの横の板に出します(`src/ui/vrPanel.js`)。トリガーで「こんにちは」と話しかけられます(マイクが使えないときの確かめに)。
+- **キャラの声を拾わない**: キャラが話している間は聞きません(割り込みは `?bargein=1`)。スピーカーがマイクの近くにあるためです。
+
+USB でつなぐとき(証明書も Wi-Fi の設定も要らない。Quest から見て localhost になる):
+
+```bash
+cd web && npm run build
+PORT=8799 SHOP_DATA_FILE=../creator/setup/shop_empty.json ANTHROPIC_API_KEY=… ELEVENLABS_API_KEY=… node server/index.mjs
+node scripts/quest-usb.mjs --port 8799 --character <id>   # 「USB デバッグを許可」を待って、道を張り、Quest のブラウザで開く
+```
+
+同じ Wi-Fi でつなぐときは、上の「iPhone の殻から開く HTTPS」と同じ起動で、`https://<この PC の IP>:8443/?character=<id>` を開きます(証明書の警告は「詳細設定 → 進む」)。
+
+実機なしの確かめ(Meta の IWER という WebXR の偽物と、偽のマイクで、入る・立ち位置・床・大きさ・視線・歩く・スティック・トリガー・声・口・出る、を測る):
+
+```bash
+node scripts/vr-check.mjs --port 8799 --character <id> --out <フォルダ> [--mic 声.wav --mic-word 声に入っている言葉]
 ```
 
 ## 確かめる

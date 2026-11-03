@@ -83,7 +83,16 @@ node creator/pipeline/web_talk_check.mjs --port 8799 --character <id> --out <作
 
 動画に残すなら `node creator/pipeline/web_talk_record.mjs --port 8799 --character <id> --out <出力.webm>`(字幕ごとの画面と声。話す言葉はその場の返事)。作る様子の早回しは `python creator/skilltest/timelapse.py <作業フォルダ> <元の絵> <出力.mp4>`。
 
-## 6. 報告する
+## 6. Quest 3 でも話させる(頼まれたら)
+
+アプリのビルドは要らない。**同じキャラのまま、Quest のブラウザで VR に入って話せる。** GLB のキャラ(`rig`)も VRM も、`?character=<id>` を替えるだけ。詳しくは `web/README.md` の「Quest 3 で話す」。
+
+- 聞き取りはサーバーで行う(Quest のブラウザに聞き取りの機能が無い報告があるため)。`pip install faster-whisper`。鍵は要らない。
+- 使う人の操作: 開発者モードと USB デバッグの許可。`node web/scripts/quest-usb.mjs --port 8799 --character <id>` が許可を待って、道を張り、ブラウザで開く。
+- 見せる前に偽物で確かめる: `node web/scripts/vr-check.mjs --port 8799 --character <id> --out <作業フォルダ>/vr`。立ち位置・床・大きさ・視線・歩く・トリガー・声・口を数字で見る。**これは偽物の結果。実機で確かめるまで「Quest で動く」と言わない。**
+- 作ったキャラを VRM で持っている人は、`characters/<id>/` に `model.vrm` と `character.json`(`"type": "vrm"`、`height_m`、`persona`)を置くだけ。権利のある物だけを使う(買った素材の再配布の条件を確かめる)。
+
+## 7. 報告する
 
 順番: できたか → 測った数字(輪郭の重なり、検査、判定の回数、かかった時間と費用)→ 開き方 → 確かめていないこと → 決めてほしいこと。
 

@@ -32,6 +32,7 @@ export function createUi() {
   let captionTimer = null;
   let replyParts = [];
   let actParts = [];
+  let mirror = null; // VR の中の板へも同じ文字を渡す
 
   // 狭い画面では、最初は畳んでおく(字幕と顔を隠さないため)
   if (window.matchMedia('(max-width: 640px)').matches) {
@@ -82,6 +83,10 @@ export function createUi() {
   };
 
   return {
+    /** @param {(next:{user?:string, reply?:string, error?:string})=>void} fn */
+    setMirror(fn) {
+      mirror = fn;
+    },
     /** 見えた様子(こちらで数字から作った言葉)を先に出す */
     scene(text) {
       if (els.seen.dataset.claude !== '1') els.seen.textContent = text || '—';
@@ -96,6 +101,7 @@ export function createUi() {
       els.shop.textContent = '—';
       badge.hidden = true;
       if (text) setCaption(text, 4000, 'user');
+      mirror?.({ user: text ?? '', reply: '', error: '' });
     },
     thought(ev) {
       if (ev.seen) {
@@ -112,6 +118,7 @@ export function createUi() {
       replyParts.push(ev.text);
       actParts.push(`${ev.expression} / ${ev.motion} / ${ev.gaze}`);
       els.reply.textContent = replyParts.join('');
+      mirror?.({ reply: replyParts.join(''), error: '' });
       els.act.replaceChildren(...actParts.flatMap((t, i) => (i ? [document.createElement('br'), document.createTextNode(t)] : [document.createTextNode(t)])));
     },
     caption: setCaption,
@@ -139,6 +146,7 @@ export function createUi() {
     },
     error(message) {
       els.reply.textContent = `エラー: ${message}`;
+      mirror?.({ error: `エラー: ${message}` });
       setCaption(null);
     },
     foot(text) {

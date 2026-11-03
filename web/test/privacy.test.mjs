@@ -43,7 +43,7 @@ test('カメラの追従(tracking/)は、通信をいっさいしない', () => 
 });
 
 test('通信先は、自分のサーバー(/api/…)と、キャラ・場所のデータだけ', () => {
-  const allowed = [/^\/api\/(chat|tts|metrics|status|fillers)$/, /^\/mediapipe\//];
+  const allowed = [/^\/api\/(chat|tts|stt|stt\/warm|metrics|status|fillers)$/, /^\/mediapipe\//];
   for (const f of files) {
     for (const m of code(f).matchAll(/fetch\(\s*(['"`])([^'"`]*)\1/g)) {
       const url = m[2];

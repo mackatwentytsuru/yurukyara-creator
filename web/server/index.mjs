@@ -8,6 +8,7 @@ import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
 import { createShop, SHOP_KEYS, SHOP_LABELS, MEMORY_CATEGORIES } from './shop/index.mjs';
 import { streamSpeech, ttsStatus } from './tts.mjs';
+import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
@@ -38,6 +39,10 @@ const claudeLimiter = createLimiter({
 
 const shop = createShop();
 
+const stt = createStt();
+const sttLimiter = createLimiter({ file: join(LOG_DIR, 'stt_usage.json'), dailyCap: 3000, perMinute: 40 });
+stt.check().then((ok) => console.log(`聞き取り(サーバー): ${ok ? 'faster-whisper' : 'なし(pip install faster-whisper で使えます)'}`));
+
 const json = (res, status, obj) => res.writeHead(status, { 'content-type': MIME['.json'] }).end(JSON.stringify(obj));
 
 async function readBody(req, limit = 64 * 1024) {
@@ -54,6 +59,18 @@ async function readBody(req, limit = 64 * 1024) {
   } catch {
     throw new ValidationError('本文が JSON ではありません');
   }
+}
+
+/** 音など、JSON でない本文をそのまま読む */
+async function readRaw(req, limit) {
+  let size = 0;
+  const chunks = [];
+  for await (const c of req) {
+    size += c.length;
+    if (size > limit) throw Object.assign(new ValidationError('本文が大きすぎます'), { status: 413 });
+    chunks.push(c);
+  }
+  return Buffer.concat(chunks);
 }
 
 /** root の外に出られないようにしてファイルを返す */
@@ -154,6 +171,7 @@ const handler = async (req, res) => {
         brain: config.anthropicKey ? 'haiku' : 'mock',
         model: config.model,
         tts: ttsStatus(),
+        stt: stt.status(),
         claude: claudeLimiter.status(),
         latency: latencySummary(),
       });
@@ -173,6 +191,16 @@ const handler = async (req, res) => {
       const ac = new AbortController();
       res.on('close', () => ac.abort());
       return await streamSpeech(body.text, res, ac.signal);
+    }
+    if (req.method === 'POST' && path === '/api/stt/warm') {
+      stt.warm();
+      return json(res, 200, stt.status());
+    }
+    if (req.method === 'POST' && path === '/api/stt') {
+      const slot = sttLimiter.take(req.socket.remoteAddress ?? 'unknown');
+      if (!slot.ok) return json(res, 429, { error: slot.message });
+      if (!stt.status().available) return json(res, 503, { error: '聞き取りの部品がありません(pip install faster-whisper)' });
+      return json(res, 200, await stt.transcribe(await readRaw(req, MAX_WAV_BYTES + 1024)));
     }
     if (req.method === 'POST' && path === '/api/metrics') {
       const body = await readBody(req);

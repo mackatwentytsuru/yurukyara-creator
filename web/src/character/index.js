@@ -27,7 +27,7 @@ export async function loadCharacter(url, overrides = {}) {
 
   if (type === 'rig') {
     // 身長合わせの大きさは、rigRuntime が中身(gltf.scene)に掛ける。object3d の座標は、メートルのまま
-    return Object.assign(await loadRigCharacter(url), { kind: 'rig', expressionHints: json.expression_hints ?? {} });
+    return Object.assign(await loadRigCharacter(url, overrides), { kind: 'rig', expressionHints: json.expression_hints ?? {} });
   }
   if (type !== 'vrm') throw new Error(`知らない type です: ${type}`);
   const base = new URL(url, location.href);

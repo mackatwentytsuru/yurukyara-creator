@@ -13,6 +13,8 @@ import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conve
 import { createUi } from './ui/panel.js';
 import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
 import { createArPlacement } from './arPlacement.js';
+import { createVrStage } from './vrStage.js';
+import { createVrPanel } from './ui/vrPanel.js';
 import { createAlignFlow } from '../../place/web/alignFlow.js'; // 撮った部屋を現実に重ねる手順(場所の柱)
 // 見せ方(画面・AR・VR)の切りかえは、場所の柱が出している入口(docs/共通の決まり.md)
 import { createPresentation } from '../../place/web/modes.js';
@@ -24,6 +26,10 @@ const HFOV = Number(params.get('hfov') ?? 65); // カメラの横の画角(度)
 const APPROACH_DIST_M = 2.2; // この近さに来たら、声をかける
 const APPROACH_HOLD_S = 1.2;
 const GREET_COOLDOWN_S = 90;
+// ヘッドセットのブラウザ。カメラは使えず、聞き取りはサーバーで行い、マイクの許可は VR に入る前に取る
+const IS_HEADSET = params.get('headset') === '1' || /OculusBrowser|Quest/i.test(navigator.userAgent);
+const VR_FUR_LAYERS = 4;
+const VR_HELLO = 'こんにちは'; // コントローラーのトリガーで話しかける言葉(マイクが使えなくても、返事と声を確かめられる)
 
 const $ = (id) => document.getElementById(id);
 const ui = createUi();
@@ -43,8 +49,11 @@ const app = {
   lastAttention: { tracks: [], primaryId: null, speakerId: null },
 };
 window.__app = app; // 試験と開発の確認用
+if (IS_HEADSET) document.documentElement.classList.add('is-headset');
 app.speaker = speaker;
 app.stage = stage;
+app.THREE = THREE;
+Object.defineProperty(app, 'listener', { get: () => listener });
 app.picker = picker;
 
 /* ---------- 視線 ---------- */
@@ -160,6 +169,13 @@ function onMisheard() {
   speaker.enqueue(line, {}).catch(() => {});
   if (step === 'choices' && app.status?.shop?.available) showShopChoices(true);
 }
+/** 聞き取りをどの提供元でするか。ブラウザに無ければサーバー。どちらも無ければ null */
+function listenProvider() {
+  const serverOk = Boolean(app.status?.stt?.available);
+  if (IS_HEADSET || params.get('stt') === 'server') return serverOk ? 'server' : null;
+  if (webSpeechSupported()) return 'web';
+  return serverOk ? 'server' : null;
+}
 async function toggleMic() {
   const btn = $('micBtn');
   if (listener?.listening) {
@@ -173,6 +189,8 @@ async function toggleMic() {
   }
   try {
     speaker.unlock();
+    const provider = listenProvider();
+    if (!provider) throw new Error('聞き取りを使えません(サーバーに faster-whisper が入っていないか、このブラウザが対応していません)');
     listener = new Listener({
       onInterim: (t) => {
         lastInterimAt = performance.now();
@@ -195,14 +213,18 @@ async function toggleMic() {
         if (!active && !speaker.speaking && !dialogue.busy) {
           const endedAt = performance.now();
           setTimeout(() => {
-            if (lastTextAt < endedAt && !speaker.speaking && !dialogue.busy && listener?.listening) onMisheard();
+            if (lastTextAt < endedAt && !speaker.speaking && !dialogue.busy && listener?.listening && !listener.transcribing) onMisheard();
           }, 2600);
         }
       },
       onError: (msg) => ui.error(msg),
-    });
+      onEmpty: () => {
+        if (!speaker.speaking && !dialogue.busy) onMisheard();
+      },
+    }, { provider, isBusy: () => speaker.speaking && params.get('bargein') !== '1' });
     await listener.start();
-    void startStereoMic(); // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く
+    // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く(ヘッドセットの中では、頭の位置が分かるので使わない)
+    if (!IS_HEADSET) void startStereoMic();
     btn.setAttribute('aria-pressed', 'true');
     updatePrivacy();
   } catch (err) {
@@ -218,7 +240,7 @@ function updatePrivacy() {
     sim: 'カメラは使っていません(マウスで人の位置を動かしています)。',
   };
   let text = texts[app.mode] ?? texts.sim;
-  if (listener?.listening) text += ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
+  if (listener?.listening) text += listener.provider === 'server' ? ' 声は、この画面を配っている PC へ送って文字にします。音は保存しません。' : ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
   if (stereoMic?.status === 'stereo') text += ' 声のする向きは、この端末の中で左右の音の差を調べるだけです(音は保存も、この仕組みからの送信もしません)。';
   ui.privacy(text, app.mode !== 'camera');
 }
@@ -241,7 +263,7 @@ function updateChips() {
   const info = app.source?.info() ?? { label: 'なし', ok: false };
   chips.push([app.mode === 'pose' ? '位置' : 'カメラ', info.label, info.ok ? 'ok' : 'warn']);
   chips.push(['人', String(app.lastAttention.tracks.length), '']);
-  if (listener?.listening) chips.push(['聞き取り', 'ブラウザ', 'ok']);
+  if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'サーバー' : 'ブラウザ', 'ok']);
   if (stereoMic) {
     const sp = app.lastAttention?.speaker;
     const est = stereoMic.estimate();
@@ -255,12 +277,23 @@ function updateChips() {
   ui.chips(chips);
 }
 
+/** VR の中の板に出す、いまの状態 */
+function vrState() {
+  if (speaker.speaking) return 'speaking';
+  if (listener?.voiceActive) return 'hearing';
+  if (listener?.transcribing) return 'transcribing';
+  if (dialogue.busy) return 'thinking';
+  return listener?.listening ? 'idle' : 'off';
+}
+
 /* ---------- 毎フレーム ---------- */
 let prevT = performance.now();
 let presence = { since: 0, greetedAt: -1e9, lastSeen: 0 };
 let chipClock = 0;
 
-function frame(nowMs) {
+function frame(rawMs) {
+  // XR の時刻は、端末によって performance.now と基準が違うことがあるので、そろえる
+  const nowMs = stage.renderer.xr.isPresenting ? performance.now() : rawMs;
   const dt = (nowMs - prevT) / 1000;
   prevT = nowMs;
   const c = app.character;
@@ -268,6 +301,7 @@ function frame(nowMs) {
   const nowS = nowMs / 1000;
 
   modes?.frame(); // Quest の中なら、見ている人の頭の位置が onViewer で届く
+  vrStage?.update(dt);
 
   // 1. 人の位置(入力から。ワールド座標)を、キャラの座標に直す
   const people = (app.source?.getPeople(nowMs) ?? []).map((p) => ({
@@ -319,6 +353,10 @@ function frame(nowMs) {
   // 5. 口・描画
   c.setMouth(speaker.level());
   c.update(dt);
+  if (vrPanel?.mesh.visible) {
+    vrPanel.set({ state: vrState() });
+    vrPanel.place(c.object3d, stage.state.height, stage.camera);
+  }
   stage.render();
 
   if (nowMs - chipClock > 500) {
@@ -351,6 +389,8 @@ let arPlacement = null;
 let alignFlow = null; // AR で、撮った部屋を現実に重ねる手順(床を 2 回タップ)
 let alignHits = 0;
 let screenSource = null; // AR/VR に入る前の入力(戻るときに使う)
+let vrStage = null; // VR の立ち位置と背景
+let vrPanel = null; // VR の中の文字の板
 const headTmp = new THREE.Vector3();
 
 /** 入力を替える。MediaPipe のカメラは、AR(殻のカメラ)と競合するので、離れるときに止める */
@@ -373,6 +413,29 @@ async function useSource(next, mode) {
 async function onPresentationChange(mode) {
   stage.state.immersive = mode === 'ar' && Boolean(modes.nativeAR); // 殻のあいだは、射影行列を殻に任せる
   const place = app.place?.loaded;
+  // ヘッドセットの中(WebXR)では、ページの文字が見えないので、状態を 3D の板に出す
+  const webxr = mode !== 'screen' && Boolean(modes.session);
+  if (webxr) {
+    ui.align(null);
+    vrPanel ??= createVrPanel({ scene: stage.scene });
+    app.vrPanel = vrPanel;
+    ui.setMirror((next) => vrPanel.set(next));
+    vrPanel.set({ state: vrState() });
+    vrPanel.setVisible(true);
+    modes.session.session.addEventListener('select', onVrSelect);
+  } else if (vrPanel) {
+    vrPanel.setVisible(false);
+    ui.setMirror(null);
+  }
+  if (mode === 'vr') {
+    vrStage = createVrStage({ renderer: stage.renderer, scene: stage.scene, getCharacterObject: () => app.character.object3d });
+    app.vrStage = vrStage;
+    vrStage.start({ floor: modes.session.floor, showBackdrop: !place });
+  } else if (vrStage) {
+    vrStage.stop();
+    vrStage = null;
+    app.vrStage = null;
+  }
   if (mode === 'screen') {
     arPlacement?.restore();
     arPlacement = null;
@@ -392,6 +455,7 @@ async function onPresentationChange(mode) {
     // AR の世界は、撮った部屋と重ならない。部屋は隠し、キャラは現実の床に立たせる
     if (place) place.object3d.visible = false;
     arPlacement = createArPlacement({ object3d: app.character.object3d, camera: stage.camera });
+    if (modes.session?.floor) arPlacement.onFloor(0); // Quest の AR の床は、local-floor の y=0
     // 撮った部屋があれば、床を 2 回タップして現実に重ねる。重なるまで、部屋の目印は Claude に渡さない
     if (place && modes.nativeAR) {
       app.arUnaligned = true;
@@ -401,6 +465,12 @@ async function onPresentationChange(mode) {
     }
   }
   await useSource(poseSource, 'pose').catch((e) => ui.error(e.message));
+}
+
+/** コントローラーのトリガー(手なら、つまむ): 話しかける。マイクが使えなくても、返事と声を確かめられる */
+function onVrSelect() {
+  speaker.unlock();
+  if (!dialogue.busy && !speaker.speaking) dialogue.send({ text: VR_HELLO, mode: 'text' });
 }
 
 /** 殻で床をタップした点。位置合わせの途中ならそれに使い、終わったあとは、キャラをそこへ移す */
@@ -475,7 +545,8 @@ async function boot() {
   try {
     const url = characterUrl(params.get('character') ?? params.get('char')); // id・URL のどちらでもよい
     app.place = await loadPlaceData(params.get('place'));
-    const character = await loadCharacter(url);
+    // 毛の層は重ね描きで、ソフト描画で 20 倍遅かった(実測)。ヘッドセットでは減らす
+    const character = await loadCharacter(url, IS_HEADSET ? { furLayers: Number(params.get('fur')) || VR_FUR_LAYERS } : {});
     app.character = character;
     dialogue.character = character;
     if (app.place.loaded) {
@@ -519,18 +590,24 @@ async function boot() {
       app.mode = kind;
       $('gate').classList.add('hidden');
       updatePrivacy();
+      if (IS_HEADSET) {
+        // マイクの許可は、VR に入る前のこの画面で取る(VR の中で許可の窓が出るとどうなるかは、資料が無い)
+        await toggleMic();
+        if (modes?.available.vr) ui.align(listener?.listening ? '左上の「VR で見る」を押してください' : 'マイクなしで進めます。左上の「VR で見る」を押してください');
+      }
     } catch (err) {
       console.error(err);
       status.textContent = `${kind === 'camera' ? 'カメラ' : '入力'}を使えませんでした(${err.message})。「カメラなしで試す」なら動かせます。`;
       buttons.forEach((b) => (b.disabled = false));
     }
   }
-  const wantPose = params.get('source') === 'pose'; // AR(iPhone の殻アプリ)・VR(Quest)では、位置を外から受け取る
+  const wantPose = params.get('source') === 'pose' || IS_HEADSET; // AR(iPhone の殻アプリ)・VR(Quest)では、位置を外から受け取る
   $('startCam').addEventListener('click', () => (wantPose ? startSource('pose', '準備しています…') : startSource('camera', 'カメラとモデルを準備しています…')));
   $('startSim').addEventListener('click', () => startSource('sim', ''));
   if (wantPose) {
-    $('startCam').textContent = 'はじめる';
+    $('startCam').textContent = IS_HEADSET ? 'はじめる(マイクを使います)' : 'はじめる';
     document.querySelector('.gate .fine').textContent = 'カメラの映像は使いません。この端末の位置だけで、あなたのいる方向を知ります。';
+    if (IS_HEADSET) $('startSim').hidden = true;
   }
 
   $('micBtn').addEventListener('click', toggleMic);
@@ -543,7 +620,7 @@ async function boot() {
     speaker.unlock();
     dialogue.send({ text, mode: 'text' });
   });
-  if (!webSpeechSupported()) {
+  if (!listenProvider()) {
     $('micBtn').disabled = true;
     $('micBtn').title = 'このブラウザは声の聞き取りに対応していません';
   }

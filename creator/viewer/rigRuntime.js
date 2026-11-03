@@ -225,10 +225,12 @@ export class RigCharacterV2 extends CharacterBase {
   }
 }
 
-export async function loadRigCharacter(url) {
+/** @param {{furLayers?:number}} [options] furLayers: 毛の層の数を減らす(重ね描きなので、弱い GPU のヘッドセット用) */
+export async function loadRigCharacter(url, options = {}) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`character.json を読めません: ${url} (${res.status})`);
   const json = await res.json();
+  if (json.fur && options.furLayers) json.fur = { ...json.fur, layers: options.furLayers };
   const base = new URL(url, location.href);
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(new URL(json.model, base).href);
