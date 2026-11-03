@@ -24,20 +24,26 @@ class Board:
     face_px: tuple[int, int]     # 面の画像の大きさ(幅, 高さ)
     pitch_m: float      # LED の 1 画素の大きさ(m)
     dictionary: str
+    id_offset: int = 0  # マーカー ID の始まり(複数の面の盤で ID が重ならないように面ごとにずらす)
 
     @staticmethod
     def load(path) -> "Board":
         d = json.loads(Path(path).read_text(encoding="utf-8"))
-        return Board(d["cols"], d["rows"], d["square_px"], d["marker_px"], tuple(d["offset_px"]), tuple(d["face_px"]), d["pitch_m"], d["dictionary"])
+        return Board(d["cols"], d["rows"], d["square_px"], d["marker_px"], tuple(d["offset_px"]), tuple(d["face_px"]), d["pitch_m"], d["dictionary"], d.get("id_offset", 0))
 
     def to_json(self) -> dict:
         return {"cols": self.cols, "rows": self.rows, "square_px": self.square_px, "marker_px": self.marker_px,
-                "offset_px": list(self.offset_px), "face_px": list(self.face_px), "pitch_m": self.pitch_m, "dictionary": self.dictionary}
+                "offset_px": list(self.offset_px), "face_px": list(self.face_px), "pitch_m": self.pitch_m, "dictionary": self.dictionary,
+                "id_offset": self.id_offset}
 
     def cv_board(self):
         aruco = cv2.aruco
         d = aruco.getPredefinedDictionary(getattr(aruco, self.dictionary))
-        return aruco.CharucoBoard((self.cols, self.rows), self.square_px * self.pitch_m, self.marker_px * self.pitch_m, d)
+        board = aruco.CharucoBoard((self.cols, self.rows), self.square_px * self.pitch_m, self.marker_px * self.pitch_m, d)
+        if self.id_offset:
+            n = len(board.getIds())
+            board = aruco.CharucoBoard((self.cols, self.rows), self.square_px * self.pitch_m, self.marker_px * self.pitch_m, d, np.arange(n) + self.id_offset)
+        return board
 
     def corner_led_m(self, ids: np.ndarray) -> np.ndarray:
         """角の id → LED の座標(m)。内側の角は (cols-1)×(rows-1) 個で、左から右、上から下の順。"""
