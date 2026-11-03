@@ -44,5 +44,5 @@ TIMELINE="$OUT/timeline.json" SING="$JOB/sing.json" WORK="$JOB" bash "$SHOW/run/
 [ "${STOP_AFTER:-}" = "ue" ] && exit 0
 
 echo "== LED の全編"
-SHOW_WHO="$WHO" SHOW_DANCE_TRACK="$JOB/track_sample_show" SHOW_PLATE="$PLATE" bash "$SHOW/run/build_vrm_show.sh" "$VRM" "$VERSION" "$VERSION"
+SHOW_CALIB_VIDEO="${SHOW_CALIB_VIDEO:-work/キャラクターショー/本番_1103/LEDに出す物/LED校正の頭_5680x1240.mov}" SHOW_WHO="$WHO" SHOW_DANCE_TRACK="$JOB/track_sample_show" SHOW_PLATE="$PLATE" bash "$SHOW/run/build_vrm_show.sh" "$VRM" "$VERSION" "$VERSION"
 echo "できた: $VERSION"

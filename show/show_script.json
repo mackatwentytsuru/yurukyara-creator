@@ -8,6 +8,7 @@
   "tts_model": "eleven_v4_turbo",
   "durations": {
     "preroll": 20,
+    "calib": 23,
     "sync_head": 12,
     "dark": 4,
     "enter": 3,
