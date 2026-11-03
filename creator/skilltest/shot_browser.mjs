@@ -13,10 +13,14 @@ const li = process.argv.indexOf('--lift');
 const lift = li > 0 ? process.argv[li + 1] : null; // 明るさの持ち上げを上書きして撮る(試し用)
 const fi = process.argv.indexOf('--fur');
 const fur = fi > 0 ? encodeURIComponent(process.argv[fi + 1]) : null; // 毛の殻を足して撮る(試し用)。JSON で渡す
+const SETTLE_FRAMES = 8; // 毛の殻を CPU で描くと 1 コマに数秒かかる。動きは実時間で進むので、待つコマは少なくてよい
+const CAMERA_FRAMES = 2;
+const SHOT_TIMEOUT_MS = 180000;
 fs.mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+  // 毛の殻で三角形が数十万になると CPU での 1 コマが長く、GPU の見張りに落とされる(Target crashed)。撮影では見張りを切る
+  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-watchdog'],
 });
 const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
 const errors = [];
@@ -30,6 +34,7 @@ try {
   await browser.close();
   process.exit(1);
 }
+await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {}); // 毛の殻の写真など、あとから読む絵を待つ。待ちきれなくても撮る
 // パネルを隠し、背景を白に近づけ、マウス追従を切る
 await page.evaluate(() => {
   document.getElementById('panel').style.display = 'none';
@@ -40,7 +45,7 @@ async function frame(n = 8) {
 }
 // 撮影中はまばたきを止める(目を閉じた瞬間が写ると、形の判定を誤らせる)
 await page.evaluate(() => { const c = window.__c; c.blinkTimer = 1e9; c.blinkT = -1; c.blink = 0; });
-await frame(30);
+await frame(SETTLE_FRAMES);
 const info = await page.evaluate(() => {
   const c = window.__c;
   return { h: c.heightM ?? 1, motions: c.motionNames, morphs: c.morphMeshes?.length ?? 0 };
@@ -54,13 +59,32 @@ async function snap(name, camPos, lookAt, fov) {
       if (f) { cam.fov = f; cam.updateProjectionMatrix(); }
     }
   }, [camPos, lookAt, fov]);
-  await frame(6);
-  await page.screenshot({ path: path.join(outDir, name) });
+  await frame(CAMERA_FRAMES);
+  await page.screenshot({ path: path.join(outDir, name), timeout: SHOT_TIMEOUT_MS });
 }
 const h = info.h;
-await snap('browser_front.png', [0, h * 0.55, h * 3.2], [0, h * 0.5, 0], 30);
-await snap('browser_q.png', [h * 1.6, h * 0.6, h * 2.6], [0, h * 0.5, 0], 30);
-await snap('browser_close.png', [0, h * 0.62, h * 1.7], [0, h * 0.62, 0], 28);
+// 球や箱の胴は高さより横に広い。高さだけでカメラを決めると手が切れるので、広いほうに合わせて引く
+const width = await page.evaluate(() => {
+  let min = Infinity;
+  let max = -Infinity;
+  window.__c.object3d.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry.computeBoundingBox();
+    const b = o.geometry.boundingBox;
+    const e = o.matrixWorld.elements;
+    for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+      const wx = e[0] * x + e[4] * y + e[8] * z + e[12];
+      min = Math.min(min, wx);
+      max = Math.max(max, wx);
+    }
+  });
+  return max - min;
+});
+const s = Number.isFinite(width) ? Math.max(h, width) : h;
+// 全身は、元の絵と同じくらいの大きさで撮る(小さいと毛が画素より細くなり、砂に見える)
+await snap('browser_front.png', [0, h * 0.55, s * 2.1], [0, h * 0.5, 0], 30);
+await snap('browser_q.png', [s * 1.05, h * 0.6, s * 1.7], [0, h * 0.5, 0], 30);
+await snap('browser_close.png', [0, h * 0.62, s * 1.7], [0, h * 0.62, 0], 28);
 fs.writeFileSync(path.join(outDir, 'browser_info.json'), JSON.stringify({ ...info, errors }, null, 1));
 await browser.close();
 console.log('撮った:', outDir, JSON.stringify(info), errors.length ? 'エラー ' + errors.length : '');

@@ -30,12 +30,13 @@ else
 fi
 
 # ⑤ ブラウザで撮る。サーバーは自分で立て、自分の番号だけを止める
-PORT=$((8800 + $$ % 150))
+# 空いている番号を OS に選ばせる。決め打ちだと、同時に動く別の検査のサーバーへつながり、別のキャラを撮って OK を出す(試験で実際に起きた)
+PORT=$("$PY" -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1])")
 PARENT=$(cd "$PACK/.." && pwd); NAME=$(basename "$PACK")
 SERVE=$(cygpath -m "$REPO/creator/viewer/serve.py")
 MSYS_NO_PATHCONV=1 python "$SERVE" "$PORT" "--mount=/trial=$(cygpath -m "$PARENT" 2>/dev/null || echo "$PARENT")" > /dev/null 2>&1 &
 SRV=$!
-sleep 2
+for _ in 1 2 3 4 5 6 7 8 9 10; do curl -sf -o /dev/null "http://127.0.0.1:$PORT/creator/viewer/index.html" && break; sleep 1; done
 SHOT=$(cygpath -m "$REPO/creator/skilltest/shot_browser.mjs")
 if MSYS_NO_PATHCONV=1 node "$SHOT" "$PORT" "/trial/$NAME/character.json" "$OUT/browser" > "$OUT/_shot.txt" 2>&1; then
   say "⑤ OK ブラウザで撮れた($OUT/browser/)"
