@@ -45,6 +45,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let audio = AudioCapture()
     private let arMonitor = ARMonitor()
     private let arStartButton = UIButton(type: .system)
+    private let backdropLayer = CALayer()    // 映像の外の帯(黒)
     private let ueButton = UIButton(type: .system)
     private var crosshair: UIView?
     private let faceControl = UISegmentedControl(items: ["LED 1面", "LED 3面(A・B・C)"])
@@ -85,12 +86,12 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         // カメラの映像は、ARSCNView 任せにせず、ARFrame の映像を自前で出す(ARSCNView が映さない端末・形式でも出る)
         previewLayer.videoGravity = .resizeAspectFill
         previewLayer.frame = view.bounds
-        view.layer.insertSublayer(previewLayer, above: sceneView.layer)
+        backdropLayer.backgroundColor = UIColor.black.cgColor
+        view.layer.insertSublayer(backdropLayer, above: sceneView.layer)
+        view.layer.insertSublayer(previewLayer, above: backdropLayer)
         ueLink.webView.frame = view.bounds
-        ueLink.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(ueLink.webView)
         arMonitor.webView.frame = view.bounds
-        arMonitor.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(arMonitor.webView)
         ueLink.recorderInfo = { [weak self] in
             guard let self else { return nil }
@@ -109,10 +110,20 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.refreshUI() }
     }
 
+    /// 映像の全部が画面に入る枠(切らない)。録画される範囲と画面の範囲をそろえる(iPad の画面は 16:9 より縦長で、切ると録画より狭く見えて、画角を決められない)。
+    private var pictureRect: CGRect {
+        let image = chosenFormat?.imageResolution ?? CGSize(width: 16, height: 9)
+        return AVMakeRect(aspectRatio: image, insideRect: view.bounds)
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        previewLayer.frame = view.bounds
-        arMonitor.layoutChanged(view.bounds.size)
+        let fit = pictureRect
+        backdropLayer.frame = view.bounds
+        previewLayer.frame = fit
+        ueLink.webView.frame = fit
+        arMonitor.webView.frame = fit
+        arMonitor.layoutChanged(fit.size)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -295,6 +306,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         }
         formatControl.selectedSegmentIndex = options.isEmpty ? UISegmentedControl.noSegment : 0
         chosenFormat = options.first
+        view.setNeedsLayout()
     }
 
     private var formatOptions: [ARConfiguration.VideoFormat] = []
@@ -312,6 +324,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let i = formatControl.selectedSegmentIndex
         guard i >= 0, i < formatOptions.count, !isRecording else { return }
         chosenFormat = formatOptions[i]
+        view.setNeedsLayout()
         calibration = Calibration()
         runSession(reset: true)
     }
@@ -884,6 +897,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     // MARK: - 表示の更新
 
     private func refreshUI() {
+        arStartButton.isHidden = !arMonitor.enabled
         lock.lock()
         let rec = recorder
         let started = recordStartDate
