@@ -18,7 +18,7 @@ PATH = "export PATH=/opt/homebrew/bin:$PATH; "
 
 
 def ssh(cmd, timeout=300):
-    r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", "pc3", PATH + cmd], capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", "pc3", PATH + cmd], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     return (r.stdout or "") + (r.stderr or "")
 
 
