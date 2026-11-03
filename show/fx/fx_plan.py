@@ -26,6 +26,9 @@ CRASH_STRONG_RANK = 0.85
 WEAK_AMP = 0.1  # ふだんの音は少し動く程度
 DECAY_SEC = {"kick": 0.30, "snare": 0.22, "crash": 0.9}
 FALL_LEAD_SEC = 0.9  # 「出る」で電球の光が下へ落ち始める、出る秒の手前
+EXIT_SEC = 0.55  # 「出る」の秒の手前、足から順に舞台へ移る長さ
+CLOSED_FX = 0.14  # 緞帳が閉じている間の、光の面と柱の残り(開くと 1)
+OPEN_FX_SEC = 0.8
 FINALE_DECAY_SEC = 2.2
 BULB_IDLE = 0.14
 RUN_DECAY_SEC = 0.35
@@ -76,10 +79,12 @@ def default_bulbs(center_x):
 
 
 def flow_order(bulbs, center_x):
-    """光が流れる順(0 が先)。アーチの頂点から足へ、列は中央側から外へ。"""
+    """光が流れる順(0 が先)。アーチの頂点から足へ、列は中央側から外へ。測った電球は flow を持つ。"""
     out = np.zeros(len(bulbs))
     for index, bulb in enumerate(bulbs):
-        if bulb["y"] <= ROW_Y + 1.0:
+        if "flow" in bulb:
+            out[index] = bulb["flow"]
+        elif bulb["y"] <= ROW_Y + 1.0:
             out[index] = min(1.0, abs(bulb["x"] - center_x) / (CANVAS[0] - center_x))
         else:
             out[index] = (bulb["y"] - ARCH["top"]) / (ARCH["foot"] - ARCH["top"])
@@ -98,6 +103,7 @@ class FxPlan:
         self.hits = hits
         self.bulbs = bulbs or default_bulbs(self.center_x)
         self.flow = flow_order(self.bulbs, self.center_x)
+        self.measured_bulbs = bool(bulbs) and "flow" in bulbs[0]
         self.index = np.arange(self.frames, dtype=np.float64)
         self._build_scene()
         self._build_hit_tracks()
@@ -162,6 +168,31 @@ class FxPlan:
         self.out_times = [float(c["t"]) for c in self.stage["flashes"] if c["kind"] == "out"]
         self.back_times = [float(c["t"]) for c in self.stage["flashes"] if c["kind"] == "back"]
         self.all_flash = sorted(self.out_times + self.back_times)
+        self._build_opened()
+
+    def _build_opened(self):
+        """緞帳の開き具合(0 閉じ、1 開き)。出るで開き、戻るで閉じる。"""
+        times = self.index / self.fps
+        self.opened = np.zeros(self.frames, dtype=np.float32)
+        for at in self.out_times:
+            back = [b for b in self.back_times if b > at]
+            until = back[0] if back else self.frames / self.fps + 10.0
+            rise = smoothstep((times - at) / OPEN_FX_SEC) * smoothstep((until - times) / OPEN_FX_SEC + 1.0)
+            self.opened = np.maximum(self.opened, rise.astype(np.float32))
+
+    def exit_progress(self, t):
+        """足から順に舞台へ移る進み。0 まだ、1 全部出た。出る秒の手前 EXIT_SEC から。"""
+        for at in self.out_times:
+            if at - EXIT_SEC <= t <= at + 1.0:
+                return float(np.clip((t - (at - EXIT_SEC)) / EXIT_SEC, 0.0, 1.0))
+        return 0.0
+
+    def exit_age(self, t):
+        """出始めからの秒。無ければ None。"""
+        for at in self.out_times:
+            if at - EXIT_SEC <= t <= at + 2.5:
+                return t - (at - EXIT_SEC)
+        return None
 
     def _build_finale(self):
         self.finale_t = self._finale_time()

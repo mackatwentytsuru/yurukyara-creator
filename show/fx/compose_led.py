@@ -26,6 +26,7 @@ import audio_hits  # noqa: E402
 import fx_plan  # noqa: E402
 from fx_layers import FxRenderer, smooth  # noqa: E402
 from fx_plan import CANVAS, led_plan  # noqa: E402
+from stage_open import StageOpen  # noqa: E402
 
 KNEE = 0.62  # 背景と効果の明るさの折れ点(直線)
 CEILING = 0.84  # 背景と効果はここを超えない(sRGB で約 237)。全面の純白を作らない
@@ -37,6 +38,9 @@ FRAME_THICK = 4.0
 FRAME_GLOW = 20.0
 FRAME_MARGIN = 72
 READ_AHEAD = 4
+EXIT_FADE_FROM = 0.45
+EXIT_TOP_MARGIN = 40.0  # 頭の上まで抜けるための余り
+EXIT_GLOW = (0.20, 0.85, 0.80)  # 移る境目の光(直線)
 
 
 def to_linear(x):
@@ -265,6 +269,12 @@ def parse_args():
     parser.add_argument("--bg", help="背景の静止画か動画。省くと黒")
     parser.add_argument("--bg-at", type=float, default=0.0, help="背景の動画の、始めのコマの秒")
     parser.add_argument("--bg-center-src", type=float, help="仮の絵の中心の割合(0〜1)を x=2159 へ寄せる")
+    parser.add_argument("--bg-open", help="緞帳が開いた世界の静止画か動画。--bg は閉じた緞帳")
+    parser.add_argument("--open-plates", help="stage_plates.py の出力のフォルダ")
+    parser.add_argument("--open-at", type=float, help="緞帳が開き始める秒。省くと範囲の中の最初の「出る」")
+    parser.add_argument("--open-bg-at", type=float, default=0.0, help="開いた世界の動画の、始めのコマの秒")
+    parser.add_argument("--shadow-dir", help="足元の影の連番のフォルダ")
+    parser.add_argument("--reflect-dir", help="床の映り込みの連番のフォルダ")
     parser.add_argument("--char-dir", help="キャラの連番のフォルダ")
     parser.add_argument("--char-key", choices=("alpha", "black"), default="alpha")
     parser.add_argument("--char-tint", default="0.55,0.42,0.50", help="黒地の連番を塗る色(sRGB)")
@@ -313,6 +323,14 @@ class Composer:
         self.size = (int(round(CANVAS[0] * args.scale)), int(round(CANVAS[1] * args.scale)))
         self.fx = None if args.no_fx else FxRenderer(self.plan, args.scale, self.device)
         self.background = Background(args.bg, self.size, self.device, args.bg_center_src, self.plan.center_x, args.bg_at)
+        self.stage_open = None
+        if args.bg_open:
+            opened = Background(args.bg_open, self.size, self.device, video_at=args.open_bg_at)
+            self.stage_open = StageOpen(self.background, opened, args.open_plates, self._open_time(args), self.plan.fps,
+                                        self.size, self.device, to_linear)
+        self.shadow = Sequence(args.shadow_dir)
+        self.reflect = Sequence(args.reflect_dir)
+        self.y_grid = None
         self.character = Sequence(args.char_dir)
         self.mon_left = Sequence(args.mon_left)
         self.mon_right = Sequence(args.mon_right) if args.mon_right else None
@@ -324,9 +342,60 @@ class Composer:
         self.fps = self.plan.fps
         self.monitors = monitor_state(self.plan.stage, self.start - 1.0, self.end + 1.0, self.fps)
 
+    def _open_time(self, args):
+        if args.open_at is not None:
+            return args.open_at
+        start = args.start if args.start is not None else 0.0
+        later = [t for t in self.plan.out_times if t >= start]
+        if not later:
+            raise ValueError("範囲の中に「出る」がありません。--open-at を指定してください")
+        return later[0]
+
+    def _layer(self, sequence, frame):
+        image = sequence.get(frame)
+        return None if image is None else character_layer(image, self.size, self.args.char_key, self.tint, self.device)
+
+    def _exit_keep(self, t):
+        """足から順に消す割合と、移る境目の光。出る前は None。"""
+        progress = self.plan.exit_progress(t)
+        if progress <= 0.0:
+            return None, None
+        if self.y_grid is None:
+            ys = (torch.arange(self.size[1], device=self.device, dtype=torch.float32) + 0.5) * CANVAS[1] / self.size[1]
+            xs = (torch.arange(self.size[0], device=self.device, dtype=torch.float32) + 0.5) * CANVAS[0] / self.size[0]
+            self.y_grid, self.x_grid = torch.meshgrid(ys, xs, indexing="ij")
+        foot, tall = self.plan.foot_y, float(self.plan.stage["life_size"]["height_px"])
+        front_y = foot + 12.0 - (tall + EXIT_TOP_MARGIN + 12.0) * progress ** 1.25
+        front = front_y + 9.0 * torch.sin(self.x_grid / 23.0 + t * 19.0)
+        keep = smooth((front - self.y_grid) / 26.0 + 0.5)
+        # 上半身は後半で薄くする(頭だけが宙に残って見えないように。舞台のキャラは逆に濃くなる)
+        keep = keep * (1.0 - smooth(torch.tensor((progress - EXIT_FADE_FROM) / (1.0 - EXIT_FADE_FROM))))
+        glow = torch.exp(-(((self.y_grid - front) / 20.0) ** 2))
+        return keep, glow
+
+    def _draw_character(self, final, frame):
+        t = frame / self.fps
+        keep, glow = self._exit_keep(t)
+        for layer in (self._layer(self.shadow, frame), self._layer(self.reflect, frame)):
+            if layer is None:
+                continue
+            color, alpha = layer
+            fade = 1.0 - self.plan.exit_progress(t)
+            final = final * (1.0 - alpha * fade) + color * fade
+        char = self._layer(self.character, frame)
+        if char is None:
+            return final, None
+        color, alpha = char
+        if keep is None:
+            return final * (1.0 - alpha) + color, alpha
+        kept = alpha * keep
+        final = final * (1.0 - kept) + color * keep
+        light = torch.tensor(EXIT_GLOW, device=self.device).view(3, 1, 1)
+        return final + light * glow * alpha * 0.55, kept
+
     def draw(self, frame):
         """このコマの絵(直線、3 × 高さ × 幅)と、キャラの透明。"""
-        background = self.background.next()
+        background = self.stage_open.next(frame) if self.stage_open else self.background.next()
         if self.fx is not None:
             fx = self.fx.render(frame)
             small = (self.size[1] // LIMIT_DIV, self.size[0] // LIMIT_DIV)
@@ -336,11 +405,7 @@ class Composer:
         else:
             scale = 1.0
             final = background.clone()
-        char_alpha = None
-        image = self.character.get(frame)
-        if image is not None:
-            color, char_alpha = character_layer(image, self.size, self.args.char_key, self.tint, self.device)
-            final = final * (1.0 - char_alpha) + color
+        final, char_alpha = self._draw_character(final, frame)
         self._draw_monitors(final, frame)
         return final, char_alpha, scale
 
@@ -386,7 +451,7 @@ class Composer:
                 raise RuntimeError("ffmpeg が失敗しました")
         if stats:
             stats.close()
-        self.background.close()
+        (self.stage_open or self.background).close()
         print(json.dumps({"frames": last - first, "sec": round(total, 1), "sec_per_frame": round(total / max(1, last - first), 4),
                           "hits_source": self.hits_source, "device": self.device}, ensure_ascii=False))
 

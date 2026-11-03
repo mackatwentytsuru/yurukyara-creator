@@ -10,7 +10,7 @@ import math
 import torch
 import torch.nn.functional as F
 
-from fx_plan import ARCH, CANVAS, FALL_LEAD_SEC
+from fx_plan import ARCH, CANVAS, CLOSED_FX, EXIT_SEC, FALL_LEAD_SEC
 
 SOFT_DIV = 4
 TEAL = (0.02, 0.60, 0.56)
@@ -110,8 +110,10 @@ class FxRenderer:
         self.s_x, self.s_y, self.s_flow = self.b_x[::2], self.b_y[::2], flow[::2]
         count = self.s_x.numel()
         # 等間隔の棒に見せないよう、太さ・長さ・落ち方・強さをそろえない
-        self.s_x = self.s_x + (self._rand(count) - 0.5) * 90.0
-        self.s_width = 70.0 + self._rand(count) * 120.0
+        jitter = self._rand(count) - 0.5
+        if not self.plan.measured_bulbs:  # 本物の電球の座標なら、そこから落とす
+            self.s_x = self.s_x + jitter * 90.0
+        self.s_width = (18.0 + self._rand(count) * 34.0) if self.plan.measured_bulbs else (70.0 + self._rand(count) * 120.0)
         self.s_trail = 300.0 + self._rand(count) * 420.0
         self.s_power = 1.7 + self._rand(count) * 1.2
         self.s_level = 0.25 + self._rand(count) ** 2 * 0.75
@@ -195,7 +197,7 @@ class FxRenderer:
             across = torch.exp(-((self.x_line.view(1, -1) - self.s_x.view(-1, 1)) / self.s_width.view(-1, 1)) ** 2)
             field = (shape * active.view(-1, 1)).t() @ across
             haze = (1.0 + 0.16 * self._haze_at(t, 2.2, 0.7, 0.0, -0.25)).clamp(min=0.5)
-            out = out + self.colors["fall"] * field * haze * 0.14 * self.flash_mask
+            out = out + self.colors["fall"] * field * haze * (0.21 if self.plan.measured_bulbs else 0.14) * self.flash_mask
         return out
 
     def _floor_wave(self, t):
@@ -208,12 +210,12 @@ class FxRenderer:
         reach = age * 3400.0
         filled = smooth((reach - legs) / 700.0 + 0.5)
         crest = torch.exp(-((reach - legs) / 340.0) ** 2)
-        tall = 90.0 + 190.0 * min(age, 1.2)
+        tall = 70.0 + 110.0 * min(age, 1.2)
         rise = float(smooth(torch.tensor(age * plan.fps / 3.0 + 0.5)))
         bottom = torch.exp(-(CANVAS[1] - self.y) / tall)
         fade = math.exp(-age / 0.95) * rise
-        return (self.colors["warm"] * crest * 0.50 + self.colors["gold"] * crest * 0.2
-                + self.colors["teal"] * filled * 0.38) * bottom * fade * self.flash_mask
+        return (self.colors["warm"] * crest * 0.30 + self.colors["gold"] * crest * 0.2
+                + self.colors["teal"] * filled * 0.22) * bottom * fade * self.flash_mask
 
     def _flash(self, frame, kind, tint):
         """led_plan の式の輪と光(出るは外へ、戻るは内へ)。"""
@@ -225,11 +227,28 @@ class FxRenderer:
         distance = torch.sqrt(((self.x - self.plan.center_x) / 1.48) ** 2 + (self.y - self.plan.foot_y) ** 2)
         band = torch.exp(-((distance - radius) / (width * 3.0 + 110.0)) ** 2)
         wash = smooth((self.y - 200.0) / 1040.0) ** 2
-        field = self.colors[tint] * (band * ring * 0.20 + wash * light * 0.10)
+        field = self.colors[tint] * (band * ring * 0.16 + wash * light * 0.05)
         if core > 0.0:
             mixed = self.colors["pink"] * 0.7 + self.colors["warm"] * 0.3  # 薄い暖色は灰色に濁る
             field = field + mixed * torch.exp(-(distance / 330.0) ** 2) * core * 0.26
         return field * self.flash_mask
+
+    def _exit_floor(self, t):
+        """足元の光が床へ伸びる。足が移り始めると中央から横へ広がり、絵の下の端へ流れる。"""
+        age = self.plan.exit_age(t)
+        if age is None:
+            return None
+        rise = float(smooth(torch.tensor(age / EXIT_SEC)))
+        fade = 1.0 if age < EXIT_SEC else math.exp(-(age - EXIT_SEC) / 0.55)
+        center = self.plan.center_x
+        foot = self.plan.foot_y
+        halfway = 90.0 + 760.0 * rise + 1500.0 * max(0.0, age - EXIT_SEC)
+        along = torch.exp(-((self.x - center) / halfway) ** 2)
+        depth = torch.exp(-(((self.y - (foot + 8.0)) / 36.0) ** 2))
+        below = smooth((self.y - (foot - 40.0)) / 60.0)
+        # 足からまっすぐ前(絵の下)へ伸びる帯。本物の床の反射につなげる
+        beam = torch.exp(-((self.x - center) / (70.0 + 170.0 * rise)) ** 2) * below
+        return (self.colors["teal"] * along * depth * 0.42 + self.colors["warm"] * beam * 0.55) * rise * fade
 
     def _crash(self, frame, t):
         crash, finale = float(self.plan.track["crash"][frame]), float(self.plan.finale[frame])
@@ -249,8 +268,9 @@ class FxRenderer:
         return self.colors["gold"] * halo
 
     def _soft_layer(self, frame, t, level):
-        layer = self._plane(frame, t, level) + self._pillars(frame, t, level) + self._soft_bulbs(frame)
-        for extra in (self._fall(t), self._floor_wave(t), self._flash(frame, "out", "teal"),
+        scene = CLOSED_FX + (1.0 - CLOSED_FX) * float(self.plan.opened[frame])
+        layer = (self._plane(frame, t, level) + self._pillars(frame, t, level)) * scene + self._soft_bulbs(frame)
+        for extra in (self._fall(t), self._floor_wave(t), self._exit_floor(t), self._flash(frame, "out", "teal"),
                       self._flash(frame, "back", "pink"), self._crash(frame, t)):
             if extra is not None:
                 layer = layer + extra

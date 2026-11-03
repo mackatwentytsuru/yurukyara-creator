@@ -97,6 +97,28 @@ def test_bulb_rows_keep_off_the_seams():
         assert min(abs(b["x"] - seam) for b in bulbs) >= 40.0
 
 
+def test_exit_goes_from_zero_to_one_before_the_out_second():
+    plan = make_plan(out_t=10.0)
+    assert plan.exit_progress(10.0 - fx_plan.EXIT_SEC - 0.01) == 0.0
+    assert 0.0 < plan.exit_progress(10.0 - fx_plan.EXIT_SEC / 2.0) < 1.0
+    assert plan.exit_progress(10.0) == 1.0
+
+
+def test_curtain_opens_at_out_and_closes_at_back():
+    plan = make_plan(out_t=10.0, back_t=20.0)
+    assert plan.opened[int(9.9 * FPS)] == 0.0
+    assert plan.opened[int(15.0 * FPS)] == 1.0
+    assert plan.opened[int(25.0 * FPS)] == 0.0
+
+
+def test_measured_bulbs_keep_their_flow_and_position():
+    bulbs = [{"x": 100.0, "y": 200.0, "flow": 0.4, "arch": False}, {"x": 2159.0, "y": 300.0, "flow": 0.0, "arch": True}]
+    plan = fx_plan.FxPlan(make_timeline(), make_stage(), make_hits(), None, bulbs)
+    assert plan.measured_bulbs and list(plan.flow) == [0.4, 0.0]
+    renderer = FxRenderer(plan, 0.125, "cpu")
+    assert renderer.s_x.tolist() == [100.0]  # 2 つに 1 つ。ずらさない
+
+
 if __name__ == "__main__":
     tests = [value for name, value in sorted(globals().items()) if name.startswith("test_")]
     for test in tests:
