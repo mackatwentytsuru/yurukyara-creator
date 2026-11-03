@@ -80,7 +80,7 @@ def main():
     step("口が動いた", web_data.get("mouth_max", 0) > 0)
     step("表情か動きが出た", web_data.get("expressions") or web_data.get("motions"))
     done = sum(s["ok"] for s in steps)
-    humans = sum(1 for e in events if e.get("type") == "user" and not any(c.get("type") == "tool_result" for c in (e.get("message", {}).get("content") or []) if isinstance(c, dict)))
+    humans = sum(1 for e in events if e.get("type") == "user" and not e.get("isSynthetic") and not any(c.get("type") == "tool_result" for c in (e.get("message", {}).get("content") or []) if isinstance(c, dict)))
     report = dict(steps=steps, done=done, total=len(steps), ratio=round(done / len(steps), 3), human_messages_after_first=humans,
                   cost_usd=result.get("total_cost_usd"), minutes=round(result.get("duration_ms", 0) / 60000, 1), turns=result.get("num_turns"),
                   tool_calls=len(tools), check_rounds=len(glob.glob(os.path.join(trials, "**", "check", "history", "*"), recursive=True)),
