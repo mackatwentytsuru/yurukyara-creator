@@ -26,6 +26,7 @@ final class DotCalibrator {
     private var lastTs = 0.0
     private static let gapAfterSync = 0.4, step = 0.3, onTime = 0.2
     private(set) var syncCount = 0
+    var total = 15                 // 点の数(自宅のモニター 5×3 = 15、会場の 3 面 = 33)
     private(set) var eventCount = 0
 
     /// 新しい点を 1 つ確定したとき true。
@@ -104,7 +105,7 @@ final class DotCalibrator {
         let mid = (frames.first!.ts + frames.last!.ts) / 2
         let q = (mid - syncEnd - Self.gapAfterSync - Self.onTime / 2) / Self.step
         let k = Int(q.rounded())
-        guard abs(q - q.rounded()) * Self.step <= 0.08, k >= 0, k < Self.cols * Self.rows else { return false }
+        guard abs(q - q.rounded()) * Self.step <= 0.08, k >= 0, k < total else { return false }
         let fx = ev.k[0][0], fy = ev.k[1][1], cx = ev.k[2][0], cy = ev.k[2][1]
         let dc = simd_float4((ev.cx - cx) / fx, -(ev.cy - cy) / fy, -1, 0)
         let dw4 = ev.tf * dc

@@ -41,10 +41,15 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var poseEvery = 1
     private var poseCounter = 0
     var flashThreshold = 25.0
-    var dotCalibEnabled = false     // --dot-calib: LED の点の自動校正を使う(手の 4 隅の代わり)
+    var dotCalibEnabled = true      // LED の点の自動校正(手の 4 隅の代わり)。点の映像が流れなければ何もしない
     private let dots = DotCalibrator()
-    private static let urlKey = "armonitor.url"
-    static let defaultURL = "app://app/place/web/ar_show.html?track=/show/data/ar/dance_track&start_at=21&fps=15&pr=0.5"   // アプリに同梱のページ(ネットワーク不要)
+    private static let urlKey = "armonitor.url.v2"
+    private var launchURL: String?      // 起動の引数(試験用)の URL。保存しない
+    /// アプリに同梱のページ(ネットワーク不要)。iPad は熱に余裕があるので 30 fps・解像度そのまま(実測で nominal)、iPhone は 15 fps・半分。dots=led3 は会場の 3 面の点の校正。
+    static var defaultURL: String {
+        let quality = UIDevice.current.userInterfaceIdiom == .pad ? "fps=30&pr=1" : "fps=15&pr=0.5"
+        return "app://app/place/web/ar_show.html?track=/show/data/ar/dance_track&start_at=21&dots=led3&dot_rms=4&\(quality)"
+    }
 
     var url: String {
         get { UserDefaults.standard.string(forKey: Self.urlKey) ?? Self.defaultURL }
@@ -76,8 +81,9 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         lock.lock(); viewSize = size; lock.unlock()
     }
 
-    func setEnabled(_ on: Bool, url newURL: String? = nil) {
+    func setEnabled(_ on: Bool, url newURL: String? = nil, launch: String? = nil) {
         if let newURL, !newURL.isEmpty { url = newURL }
+        launchURL = (launch?.isEmpty == false) ? launch : nil
         guard on != enabled else { return }
         enabled = on
         if on {
@@ -86,7 +92,9 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             thermalAtStart = UELinkController.thermalName(ProcessInfo.processInfo.thermalState)
             thermalMaxRank = UELinkController.thermalRank(ProcessInfo.processInfo.thermalState)
             lock.unlock()
-            if let u = URL(string: url), u.scheme != nil { webView.load(URLRequest(url: u)) }
+            let use = launchURL ?? url
+            dots.total = use.contains("dots=led3") ? 33 : 15
+            if let u = URL(string: use), u.scheme != nil { webView.load(URLRequest(url: u)) }
             webView.isHidden = false
         } else {
             webView.isHidden = true
@@ -151,6 +159,11 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         }
         if !above { baseline = baseline * 0.9 + mean * 0.1 }
         wasAbove = above
+    }
+
+    /// 手で開始(ページのボタンは iPad のボタンに隠れるうえ、タッチを受けないので、アプリのボタンから呼ぶ)
+    func startNow() {
+        webView.evaluateJavaScript("window.__arhost&&window.__arhost.onManualStart&&window.__arhost.onManualStart()", completionHandler: nil)
     }
 
     // MARK: - 校正をページへ
@@ -223,6 +236,6 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var statusText: String {
         lock.lock(); defer { lock.unlock() }
         guard enabled else { return "" }
-        return "AR: \(pageReady ? "ページ接続" : "ページ待ち") 姿勢 \(posesSent)(捨て \(posesSkipped)) フラッシュ \(flashes)" + (dotCalibEnabled ? " 点 \(dots.dotCount)/15(拾った \(dots.eventCount)、合図 \(dots.syncCount))" : "") + (messages.last.map { $0.hasPrefix("fail") ? " \($0)" : "" } ?? "")
+        return "AR: \(pageReady ? "ページ接続" : "ページ待ち") 姿勢 \(posesSent)(捨て \(posesSkipped)) フラッシュ \(flashes)" + (dotCalibEnabled ? " 点 \(dots.dotCount)/\(dots.total)(拾った \(dots.eventCount)、合図 \(dots.syncCount))" : "") + (messages.last.map { $0.hasPrefix("fail") ? " \($0)" : "" } ?? "")
     }
 }

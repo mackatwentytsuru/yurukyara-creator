@@ -44,6 +44,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private let pcStream = PCStreamer()
     private let audio = AudioCapture()
     private let arMonitor = ARMonitor()
+    private let arStartButton = UIButton(type: .system)
     private let ueButton = UIButton(type: .system)
     private var crosshair: UIView?
     private let faceControl = UISegmentedControl(items: ["LED 1面", "LED 3面(A・B・C)"])
@@ -195,6 +196,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         b.heightAnchor.constraint(equalToConstant: 48).isActive = true
     }
 
+    @objc private func arStartTapped() { arMonitor.startNow() }
+
     private func setupControls() {
         styled(calibButton, "床を記録", .systemBlue)
         styled(resetButton, "校正をやり直す", .systemGray)
@@ -205,9 +208,12 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         recordButton.addTarget(self, action: #selector(recordTapped), for: .touchUpInside)
         shareButton.addTarget(self, action: #selector(shareTapped), for: .touchUpInside)
 
+        styled(arStartButton, "AR 開始", .systemPink)
+        arStartButton.addTarget(self, action: #selector(arStartTapped), for: .touchUpInside)
+        arStartButton.isHidden = true
         styled(ueButton, "UE", .systemIndigo)
         ueButton.addTarget(self, action: #selector(ueTapped), for: .touchUpInside)
-        let bar = UIStackView(arrangedSubviews: [calibButton, resetButton, recordButton, shareButton, ueButton])
+        let bar = UIStackView(arrangedSubviews: [calibButton, resetButton, recordButton, shareButton, arStartButton, ueButton])
         bar.axis = .horizontal
         bar.spacing = 8
         bar.distribution = .fillProportionally
@@ -702,8 +708,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         if a.contains("--mic-on") { setMic(true) { _ in } }
         if a.contains("--ar-on") {
             if let thr = Double(value("--flash-thr") ?? "") { arMonitor.flashThreshold = thr }
-            arMonitor.dotCalibEnabled = a.contains("--dot-calib")
-            arMonitor.setEnabled(true, url: value("--ar-url"))
+            arMonitor.setEnabled(true, launch: value("--ar-url"))
         }
         // AR の見え方の確認(試験用): --ar-snapshot 秒。その秒に、カメラの映像(ar_snap_cam.jpg)・AR のページの絵(ar_snap_web.png)・向きなど(ar_snap_meta.json)を Documents に書く
         if let sec = Double(value("--ar-snapshot") ?? "") {

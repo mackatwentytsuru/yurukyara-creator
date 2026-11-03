@@ -14,7 +14,9 @@
 //   pr=<数>                   描画の解像度の倍率(既定 1。0.5 で縦横半分。熱を下げる)
 //   test_center=1             自宅の画面で試すとき: キャラを面 A の正面の中央(前へ test_z m、既定 0.25)に立たせ、ショーの時刻を ar_path の範囲で繰り返す(本番では使わない)
 //   show_led=1                殻が解いた LED の面と校正の点を、線と点で重ねて見せる(位置が合っているかを目で確かめる)
-//   殻の点の自動校正: 面 A に点を 5×3 の格子で順に光らせると(rehearsal/dot_calib.html)、殻が点ごとのレイ {face:'A', dot:番号, origin, direction} を送る。4 隅の手の校正の代わり
+//   dots=led3                 会場の 3 面の点の校正(make_led_dots_video.py の 33 点)。省略は自宅のモニターの 5×3(rehearsal/dot_calib.html)
+//   dot_rms=<cm>              点の校正の解を採る残差の上限(既定 1.5。会場は 4)
+//   殻の点の自動校正: LED に点を順に光らせると、殻が点ごとのレイ {face:'A', dot:番号, origin, direction} を送る。4 隅の手の校正の代わり
 //   demo=1                    校正なしで試す(熱・遅れの試験用): 最初の姿勢のカメラの 2 m 前の床を舞台の中心にして、客席(カメラ)向きで即座に始める
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -36,6 +38,24 @@ const showLed = params.get('show_led') === '1';
 const testZ = Number(params.get('test_z') ?? 0.25);
 // 点の校正の格子(殻の DotCalibrator と rehearsal/dot_calib.html と同じ決まり。番号 = 行 * 5 + 列。面 A の中の割合)
 const DOT_COLS = 5, DOT_ROWS = 3;
+const dotMode = params.get('dots') ?? 'grid';
+const dotRms = Number(params.get('dot_rms') ?? 1.5);
+// 会場の 3 面の点(make_led_dots_video.py と同じ決まり)。番号順に A 3×3、B 5×3、C 3×3。p は LED の座標(m。x = 面 A の左端から右、y = LED の下端から上、z = 客席のほう)
+const LED3 = (() => {
+  const out = [];
+  const add = (face, cols, rows, rx, ry, rw, rh, toStage) => {
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const px = rx + (0.1 + 0.8 * c / (cols - 1)) * rw, py = ry + (0.15 + 0.7 * r / (rows - 1)) * rh;
+      const [X, Y, Z] = toStage(px, py);
+      out.push({ face, px, py, p: [(X + 749.7) / 100, (Z - 98) / 100, Y / 100] });
+    }
+  };
+  add('A', 3, 3, 0, 0, 956, 1240, (px, py) => [-749.7 + px * 0.4, 0, 594 - py * 0.4]);
+  add('B', 5, 3, 1280, 85, 1759, 1133, (px, py) => [-352 + (px - 957) * (704 / 2388), -140, 594 - (py - 85) * (496 / 1133)]);
+  add('C', 3, 3, 3346, 0, 943, 1240, (px, py) => [236.7 + (px - 3039) * 0.4, 0, 594 - py * 0.4]);
+  return out;
+})();
+const dotTotal = dotMode === 'led3' ? LED3.length : DOT_COLS * DOT_ROWS;
 const dotFrac = (k) => { const c = k % DOT_COLS, r = Math.floor(k / DOT_COLS); return [0.1 + 0.8 * c / (DOT_COLS - 1), 0.15 + 0.7 * r / (DOT_ROWS - 1)]; };   // [x の割合(左→右), y の割合(上→下)]
 const charHeightWanted = params.get('charheight') ? Number(params.get('charheight')) : null;
 const A_X0 = -749.7, A_X1 = -237.7;      // 面 A の左右の端(舞台の座標 cm。show/ue/stage_layout.py)
@@ -43,6 +63,7 @@ const A_CX = (A_X0 + A_X1) / 2;
 const hud = document.getElementById('hud');
 const native = hasNativeAR();
 if (!native) document.documentElement.classList.add('desktop');
+else document.getElementById('bar')?.style.setProperty('display', 'none');
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: false, powerPreference: 'low-power' });
 renderer.setPixelRatio(Number(params.get('pr') ?? 1));
@@ -156,12 +177,27 @@ function solveDots(corners) {
   }
   r.nDots = new Set(use.map((c) => c.dot)).size;
   r.nAll = corners.length;
+  if (dotMode === 'led3') {     // 面ごとの残差(図面と実物の差を見る)
+    // 除く前の全部のレイで出す(面が図面からずれていると、その面のレイは外れとして除かれるので、除いた後の残差には出ない)
+    const sum = {};
+    corners.forEach((c) => {
+      const q = LED3[c.dot];
+      if (!q) return;
+      const P = new THREE.Vector3(...q.p).applyMatrix4(r.T), o = new THREE.Vector3(...c.origin), d = new THREE.Vector3(...c.direction).normalize();
+      const v = P.sub(o);
+      (sum[q.face] ??= []).push(v.addScaledVector(d, -v.dot(d)).length() * 100);
+    });
+    r.faces = Object.fromEntries(Object.entries(sum).map(([f, e]) => [f, [...e].sort((x, y) => x - y)[Math.floor(e.length / 2)]]));   // 面ごとの中央値(cm)
+  }
   return r;
 }
 function solveAlign(corners) {
   const pts = { tl: [0, faceH, 0], tr: [faceW, faceH, 0], br: [faceW, 0, 0], bl: [0, 0, 0] };
   const pointOf = (c) => {
-    if (c.dot !== undefined) { const [fx, fy] = dotFrac(c.dot); return [fx * faceW, (1 - fy) * faceH, 0]; }   // 点: LED の座標(x 右、y 上、原点は左下)
+    if (c.dot !== undefined) {   // 点: LED の座標(x 右、y 上、原点は左下)
+      if (dotMode === 'led3') return LED3[c.dot]?.p;
+      const [fx, fy] = dotFrac(c.dot); return [fx * faceW, (1 - fy) * faceH, 0];
+    }
     return pts[c.id];
   };
   const rays = corners.filter((c) => c.face === 'A' && pointOf(c)).map((c) => ({ p: pointOf(c), o: new THREE.Vector3(...c.origin), d: new THREE.Vector3(...c.direction).normalize() }));
@@ -211,13 +247,20 @@ const ledViz = new THREE.Group();
 ledViz.matrixAutoUpdate = false;
 ledViz.visible = false;
 if (showLed) {
-  const rect = new THREE.BufferGeometry().setFromPoints([[0, 0, 0], [faceW, 0, 0], [faceW, faceH, 0], [0, faceH, 0], [0, 0, 0]].map((p) => new THREE.Vector3(...p)));
-  ledViz.add(new THREE.Line(rect, new THREE.LineBasicMaterial({ color: 0x00ff88 })));
-  const dotGeo = new THREE.SphereGeometry(0.008, 10, 8), dotMat = new THREE.MeshBasicMaterial({ color: 0xffee00 });
-  for (let k = 0; k < DOT_COLS * DOT_ROWS; k++) {
-    const [fx, fy] = dotFrac(k);
+  const rectAt = (x0, x1, z) => new THREE.BufferGeometry().setFromPoints([[x0, 0, z], [x1, 0, z], [x1, faceH, z], [x0, faceH, z], [x0, 0, z]].map((p) => new THREE.Vector3(...p)));
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff88 });
+  if (dotMode === 'led3') {
+    ledViz.add(new THREE.Line(rectAt(0, 5.12, 0), lineMat));                                   // 面 A
+    ledViz.add(new THREE.Line(rectAt((-352 + 749.7) / 100, (352 + 749.7) / 100, -1.4), lineMat));   // 面 B
+    ledViz.add(new THREE.Line(rectAt((236.7 + 749.7) / 100, (736.7 + 749.7) / 100, 0), lineMat));   // 面 C の平らな部分
+  } else {
+    ledViz.add(new THREE.Line(rectAt(0, faceW, 0), lineMat));
+  }
+  const dotGeo = new THREE.SphereGeometry(dotMode === 'led3' ? 0.08 : 0.008, 10, 8), dotMat = new THREE.MeshBasicMaterial({ color: 0xffee00 });
+  for (let k = 0; k < dotTotal; k++) {
     const m = new THREE.Mesh(dotGeo, dotMat);
-    m.position.set(fx * faceW, (1 - fy) * faceH, 0);
+    if (dotMode === 'led3') m.position.set(...LED3[k].p);
+    else { const [fx, fy] = dotFrac(k); m.position.set(fx * faceW, (1 - fy) * faceH, 0); }
     ledViz.add(m);
   }
   const axis = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(faceW / 2, faceH / 2, 0), new THREE.Vector3(faceW / 2, faceH / 2, 0.3)]);   // 客席のほう(+z)へ 30 cm
@@ -282,14 +325,15 @@ host.onCalibration = (json) => {
   const isDots = corners.some((c) => c.dot !== undefined);
   if (isDots) {
     const r = solveDots(corners);
-    const all = new Set(corners.map((c) => c.dot)).size, total = DOT_COLS * DOT_ROWS;
-    if (r && r.nDots >= 10 && r.rms_cm <= 1.5) {
+    const all = new Set(corners.map((c) => c.dot)).size, total = dotTotal;
+    if (r && r.nDots >= 10 && r.rms_cm <= dotRms) {
       lastGoodDots = r;
       T_world_from_led = r.T;
-      alignInfo = `面 A 点 ${r.nDots}/${total}(レイ ${r.n}/${r.nAll}) 残差 ${r.rms_cm.toFixed(1)} cm yaw ${r.yaw_deg.toFixed(1)}°`;
+      const perFace = r.faces ? ` [${Object.entries(r.faces).map(([f, v]) => `${f} ${v.toFixed(1)}`).join(' ')}]` : '';
+      alignInfo = `点 ${r.nDots}/${total}(レイ ${r.n}/${r.nAll}) 残差 ${r.rms_cm.toFixed(1)} cm${perFace} yaw ${r.yaw_deg.toFixed(1)}°`;
       updateLedViz();
     } else if (lastGoodDots) {
-      alignInfo = `面 A 前の校正を保持(点 ${lastGoodDots.nDots}/${total} 残差 ${lastGoodDots.rms_cm.toFixed(1)} cm)。今は 点 ${r ? r.nDots : all} 残差 ${r ? r.rms_cm.toFixed(1) : '-'} cm`;
+      alignInfo = `前の校正を保持(点 ${lastGoodDots.nDots}/${total} 残差 ${lastGoodDots.rms_cm.toFixed(1)} cm)。今は 点 ${r ? r.nDots : all} 残差 ${r ? r.rms_cm.toFixed(1) : '-'} cm`;
     } else {
       alignInfo = `校正中(点 ${all}/${total}${r ? ` 残差 ${r.rms_cm.toFixed(1)} cm` : ''})`;
     }
@@ -299,6 +343,7 @@ host.onCalibration = (json) => {
   if (r) { T_world_from_led = r.T; alignInfo = `面 A ${r.n} 隅 残差 ${r.rms_cm.toFixed(1)} cm yaw ${r.yaw_deg.toFixed(1)}°`; updateLedViz(); }
   else alignInfo = `校正が足りない(面 A の隅 ${corners.filter((c) => c.face === 'A').length}/4)`;
 };
+host.onManualStart = () => { anchorTs = lastTs; info('手で開始'); };
 host.onFlash = (ts) => {
   if (anchorTs === null) { anchorTs = ts; info('フラッシュで開始'); }   // 最初の 1 回だけ(同期用の後のフラッシュでずらさない。やり直しは「やり直し」ボタン)
 };
@@ -353,5 +398,7 @@ window.__arShow = {
   get showTime() { return showTime(); },
   get visible() { return holder.visible; },
   get position() { return holder.position.toArray(); },
-  startAt, pathStart, pathEnd, vrmLoaded: Boolean(vrm), dance: Boolean(dance),
+  startAt, pathStart, pathEnd, vrmLoaded: Boolean(vrm), dance: Boolean(dance), led3: LED3,
+  get T() { return T_world_from_led ? Array.from(T_world_from_led.elements) : null; },
+  host,
 };
