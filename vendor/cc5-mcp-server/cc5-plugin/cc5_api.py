@@ -694,7 +694,7 @@ def export_fbx(
         texture_size: "Max Texture Size" in pixels (0 = original).
         bone_structure: "UE5" | "UE4" | "" — Unreal skeleton layout (RExportFbxSetting.SetUnrealBoneStructure).
             "UE5" gives the UE5 Mannequin names (spine_01..05, neck_01/02, *_metacarpal_*, ik_* bones,
-            lowercase cc_base_*) that the sample_project project's C++ and ABPs expect (10-24).
+            lowercase cc_base_*) that the target Unreal project's C++ and ABPs expect (10-24).
         basic_bind_pose: RExportFbxSetting.EnableBasicBindPose(True/False); None leaves the default.
         reset_skin_pose: keep ResetSkinPose in the UE5 preset (default). False keeps the avatar's
             current pose as the bind pose (an HD Neutral body otherwise binds in T-pose, 10-24).
