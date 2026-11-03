@@ -127,3 +127,10 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - `devicectl device install app` の最後の数行に「App installed」は出ない。`tail` で切らずに全体で確かめる。
 - Mac のバイナリの中の日本語は、ssh の引数の grep では合わない。Python でバイト列を数える(`b.count('文字'.encode())`)。
 - `ui_roundtrip` の押下の間隔は、確かめる時間(諦めの 6 秒など)と重ねない。
+
+## UE の通しのリハーサル(11-04)
+- `rehearsal.py media`(LED の映像を組む)→ `rehearsal.py dots`(点を録る)→ `rehearsal_dots.py`(解いて正解と比べる)、`rehearsal.py cuts`(カットを録る)→ `rehearsal.py sheet`(選ぶ 1 枚と通しの動画)。UE の札を取ってから流す。ポート 8080・8888・9000 を使うので、同時に 1 つだけ。
+- UE に流す映像は 2840×620・30p・音なし。5680 幅の H264 は読めず、音の線があると絵が進まない。
+- カットの秒は `show_stage.json` の flashes から読む(`at("out", 0, -3.8)`)。値を写さない。
+- 点の番号がずれたら録画の止まりを疑う(`ffprobe` の frame の間隔)。1 秒の止まりで 1 つずれる。
+- 起動の直後にページをつながない(5 秒待つ)。`__enter__` の失敗でも UE を閉じる。
