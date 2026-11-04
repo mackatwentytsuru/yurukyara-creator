@@ -179,5 +179,6 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - **D の重ね(向きのずれなし)**: 足元 中央値 1.60 px、輪郭の重なり(IoU)中央値 0.92(p5 0.86、最小 0.83)。
 - 見比べの判定: 外の判定役は使えなかった(停止と利用上限)ので、作った担当以外の判定は別の読み取りだけの担当に頼んだ(結果は「保留」。位置と縁は合い、床の粒状感と格子の有無が違う)。
 - UE の MRQ の PNG は 1920×1080 で約 1.7 MB/コマ。D: の空きが少ないので、連番は J: に置く。
+- 舞台の予定を替えるときは環境変数 `SHOW_STAGE=<json のパス>`(`sim/` と `scout/rehearsal.py` が読む。既定は `show/show_stage.json`)。
 - `sim_ue.py` は機械名を書かない: 環境変数 `SIM_UE_HOST`(サブ機の ssh の名前)、`SIM_LOCK_SUB`・`SIM_LOCK_MAIN`(札の機械名)、`MACHINE_LOCK_TOOL` を渡す。`--where sub|main`。
 - カット 8 の 3 コマ目の真っ白の LED は不具合でなく、リハーサルの LED の映像に足した「出る・戻るの光(0.12 秒)」。`show_stage.json` の flashes の秒に当たる。

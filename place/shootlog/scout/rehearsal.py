@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import math
 import re
 import socket
@@ -32,7 +33,7 @@ FX = {"wide": 3065.0, "zoom": 6130.0, "ultra": 1478.0}     # iPad の実測(4K �
 LENS_JP = {"wide": "広角", "zoom": "広角 寄り 2 倍", "ultra": "超広角 固定"}
 UDP = ("127.0.0.1", run_live.UDP_PORT)
 RES = "1920x1080"
-STAGE = json.loads((REPO / "show" / "show_stage.json").read_text(encoding="utf-8"))
+STAGE = json.loads(Path(os.environ.get("SHOW_STAGE") or REPO / "show" / "show_stage.json").read_text(encoding="utf-8"))   # SHOW_STAGE で別の舞台の予定に替えられる
 LED_MIDDLE = (0.0, 0.0, 330.0)
 CHAR_Z = 185.0      # 舞台の上のキャラの胸のあたり
 

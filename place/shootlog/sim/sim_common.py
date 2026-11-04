@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 import math
 import sys
 from pathlib import Path
@@ -34,7 +35,7 @@ W, H = 1920, 1080
 W4K = 3840
 FX4K = {"wide": 3065.0, "ultra": 1478.0}           # iPad の実測(4K の画素)。寄り 2 倍は広角の中央の切り出し
 READOUT_MS = 11.0                                   # ローリングシャッターの読み出し時間(timecode_selftest の値。仮定)
-STAGE = json.loads((REPO / "show" / "show_stage.json").read_text(encoding="utf-8"))
+STAGE = json.loads(Path(os.environ.get("SHOW_STAGE") or REPO / "show" / "show_stage.json").read_text(encoding="utf-8"))   # SHOW_STAGE で別の舞台の予定に替えられる
 
 
 def fx_video(lens: str) -> float:
