@@ -42,6 +42,9 @@ export class Listener {
     this.level = 0;
     this.floor = 0.01;
     this.transcribing = 0; // サーバーで文字にしている最中の区間の数
+    // 区間ごとの時刻(performance.now())。声の区間が閉じた → 送った → 字が返った、を残す(遅延の測定用。音も字も入れない)
+    this.timings = [];
+    this._closedAt = 0;
     this._voiceSince = 0;
     this._silentSince = 0;
     this._busyUntil = 0;
@@ -117,6 +120,10 @@ export class Listener {
       if (!this._silentSince) this._silentSince = now;
       if (this.voiceActive && now - this._silentSince > 450) {
         this.voiceActive = false;
+        this._closedAt = now;
+        // 話し終わりの合図(onVoice(false))で、あいづちを先に出す条件は「直近に途中の字が届いた」こと。server では声の出始めの「…」しか無く、
+        // 2.5 秒を超える発話ではあいづちが字より後になった(実測)。閉じるときにも「…」を出して、条件を満たす
+        if (this.collector) this.cb.onInterim('…');
         this._sendSegment();
         this.cb.onVoice(false);
       }
@@ -149,6 +156,9 @@ export class Listener {
     if (!pcm || pcm.length < this.ctx.sampleRate * MIN_SEGMENT_S) return;
     const lastVoicedAt = this.lastVoicedAt;
     this.transcribing += 1;
+    const tm = { lastVoicedAt, closedAt: this._closedAt || null, sendAt: performance.now(), doneAt: null, serverMs: null, audioS: +(pcm.length / this.ctx.sampleRate).toFixed(2) };
+    this.timings.push(tm);
+    if (this.timings.length > 50) this.timings.shift();
     try {
       const res = await fetch('/api/stt', {
         method: 'POST',
@@ -156,6 +166,8 @@ export class Listener {
         body: encodeWav(resample(pcm, this.ctx.sampleRate, STT_RATE)),
       });
       const data = await res.json();
+      tm.doneAt = performance.now();
+      tm.serverMs = data.ms ?? null;
       if (!res.ok) throw new Error(data.error ?? `聞き取りのサーバー (${res.status})`);
       if (!this.listening) return;
       if (data.text) this.cb.onFinal(data.text, { lastVoicedAt });
