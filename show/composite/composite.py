@@ -29,17 +29,17 @@ SHADOW_BLUR_SIGMA = 1.2
 SHADOW_STRENGTH = 0.85
 REFLECTION_STRENGTH = 1.0  # キャラの床の映り込み(with−without に掛ける)。本物の床が光らないなら下げる(11-04 実測: 0.65 だと正解の約 0.3〜0.5 倍)
 REFLECTION_FADE = 4.0  # 足から離れると消える長さ(キャラの身長に対する割合)。with−without が元々足元だけなので長くてよい
-REFLECTION_SHADOW = 0.3  # 靴の下・広い影が映り込みを暗くする割合(1 で全部。0 で映り込みは影を受けない)
+REFLECTION_SHADOW = 0.8  # 靴の下・広い影が映り込みを暗くする割合(1 で全部。0 で映り込みは影を受けない)
 REFLECTION_START = 0.002  # 靴のすぐ下で映り込みが立ち上がる長さ(身長に対する割合。靴の下の影は contact が担う)
 RIM_GAIN = 0.32  # LED の光がキャラの縁に回る強さ(直線)
-WIDE_SHADOW = 0.45  # 足元の広く柔らかい影の濃さ(直線)。1 つで調整する
-WIDE_SHADOW_SPAN = 2.8  # その影の幅(靴の幅の倍数)
-CONTACT_SHADOW = 0.84 # 足が床に着く所の影の濃さ(直線。sRGB で約 40% 暗い)
+WIDE_SHADOW = 0.2  # 足元の広く柔らかい影の濃さ(直線)。濃いと楕円が床に浮いて見える(11-04)
+WIDE_SHADOW_SPAN = 2.2  # その影の幅(靴の幅の倍数)
+CONTACT_SHADOW = 0.5  # 足が床に着く所の影の濃さ(直線。sRGB で約 40% 暗い)
 LAND_IMPACT = 0.1
 FOOT_NEAR_CM = 6.0  # 足がこの高さ(cm)上がると、靴の下の影が 1/e に薄れる
-GRADE_GAIN = 0.76  # キャラを背景になじませる明るさ(直線)
+GRADE_GAIN = 0.9  # キャラを背景になじませる明るさ(直線)
 GRADE_SATURATION = 0.88  # 同じ、彩度
-SOFT_SIGMA = 0.7  # 色と透明を少しぼかす画素(ギザつきを減らす。実写の甘さに近づける)
+SOFT_SIGMA = 0.3  # 色と透明を少しぼかす画素(ギザつきを減らす。実写の甘さに近づける)
 EDGE_CHOKE = 0.12  # 透明の、これより薄い所を捨てる(明るい縁を減らす)
 LINE_WIDTH = 0.012  # 現れる境目の光の線(身長に対する、ガウスの幅)
 RIM_BLUR = 0.018  # 縁の幅(絵の高さに対する割合)
@@ -139,14 +139,14 @@ def contact_shadow(alpha, air=0.0):
     cols = np.where(alpha[near_foot:bottom + 1].max(axis=0) > 0.5)[0]
     if cols.size == 0:
         return np.ones_like(alpha)
-    middle, half = (cols[0] + cols[-1]) / 2.0, max(8.0, np.ptp(cols) * (0.8 + 0.6 * air) + 3.0)
+    middle, half = (cols[0] + cols[-1]) / 2.0, max(8.0, np.ptp(cols) * (0.48 + 0.6 * air) + 3.0)
     ys, xs = np.mgrid[0:alpha.shape[0], 0:alpha.shape[1]].astype(np.float32)
     spread = max(5.0, tall * (0.022 + 0.02 * air))
     spot = np.exp(-(((xs - middle) / half) ** 4 + ((ys - bottom - tall * 0.008 - 1.0) / spread) ** 2))
     # 広く柔らかい楕円の影(靴の幅の約 2.8 倍)。体は後で上から重ねるので掛からない
     wide_half = max(20.0, np.ptp(cols) * WIDE_SHADOW_SPAN / 2.0 * (1.0 + 0.3 * air))
-    wide_high = max(8.0, tall * 0.045)
-    wide = np.exp(-(((xs - middle) / wide_half) ** 2 + ((ys - bottom - wide_high * 0.3) / wide_high) ** 2))
+    wide_high = max(5.0, tall * 0.025)
+    wide = np.exp(-(((xs - middle) / wide_half) ** 2 + ((ys - bottom + wide_high * 0.3) / wide_high) ** 2))  # 中心は靴の底より少し上(下だと影が浮く)
     tight = CONTACT_SHADOW * (1.0 - 0.75 * air) * spot
     broad = WIDE_SHADOW * (1.0 - 0.75 * air) * wide
     return ((1.0 - tight) * (1.0 - broad))[..., None]
@@ -162,6 +162,29 @@ def reflection_fade(alpha):
     # 靴のすぐ下は影の中なので、映り込みは少し下から始める
     start = 1.0 - np.exp(-((distance / max(2.0, tall * REFLECTION_START)) ** 2))
     return (start * np.exp(-distance / (tall * REFLECTION_FADE)))[:, None, None]
+
+
+REFLECT_GAIN = 1.15  # 床へ写るキャラの色の強さ(直線)
+REFLECT_LENGTH = 0.105  # 映り込みの縦の長さ(身長に対する、指数の長さ)
+
+
+def mirror_reflection(character, alpha, foot, tall):
+    """キャラを足の線で上下に反転してぼかした形だけを床の映り込みにする(UE の床の青緑の四角い差は使わない)。"""
+    height = character.shape[0]
+    n = int(min(foot - 1, height - foot - 2, tall * 0.4))
+    if n <= 4:
+        return np.zeros_like(character)
+    premult = np.zeros_like(character)
+    premult[foot + 1:foot + 1 + n] = character[foot - n:foot][::-1]
+    linear = np.clip(premult, 0.0, 1.0) ** GAMMA
+    near = cv2.GaussianBlur(linear, (0, 0), sigmaX=2.0, sigmaY=2.0)
+    far = cv2.GaussianBlur(linear, (0, 0), sigmaX=max(3.0, tall * 0.03), sigmaY=max(4.0, tall * 0.05))
+    d = (np.arange(height, dtype=np.float32) - foot)[:, None, None]
+    mix = np.clip(d / (tall * 0.08), 0.0, 1.0)
+    blurred = near * (1.0 - mix) + far * mix
+    fade = np.exp(-(np.maximum(d, 0.0) / (tall * REFLECT_LENGTH)) ** 2)
+    fade = fade * np.clip(d / max(2.0, tall * REFLECTION_START * 10), 0.0, 1.0)
+    return blurred * fade * REFLECT_GAIN
 
 
 def lift_up(image, pixels):
@@ -190,6 +213,7 @@ def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0, nea
     """lift: キャラを上へずらす画素。air: 宙にいる割合(0 で着地)。near: 足が床に近い割合(1 床、0 高い。靴の下の影を消す)。"""
     raw_alpha = frames["matte"].mean(axis=2, keepdims=True)
     character = np.clip(frames["with"] - (1.0 - raw_alpha) * frames["without"], 0.0, 1.0) * np.clip(raw_alpha * 8.0, 0.0, 1.0)
+    base_color = character
     character, alpha = soften_edge(character, raw_alpha)
     lifted = lift_up(alpha, lift)[..., None] if lift > 0.0 else alpha
     keep, glow = exit_mask(lifted, progress)
@@ -205,11 +229,16 @@ def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0, nea
     character = character * keep
     alpha = lifted * keep
     shaded_plate = (plate ** GAMMA * shadow) ** (1.0 / GAMMA)
-    reflection = REFLECTION_STRENGTH * np.clip(frames["with"] - frames["without"], -1.0, 1.0) * progress * reflection_fade(raw_alpha)
-    reflection = reflection * (1.0 - raw_alpha)  # キャラの内側の差は色なので除く
+    rows = np.where(raw_alpha.max(axis=1) > 0.5)[0]
+    if rows.size:
+        reflection = mirror_reflection(base_color, raw_alpha, int(rows[-1]), float(max(1, np.ptp(rows)))) * progress
+    else:
+        reflection = np.zeros_like(plate)
+    floor_mask = np.clip(plate.mean(axis=2, keepdims=True) ** GAMMA / 0.1, 0.0, 1.0)  # 映り込みは床の明るさに比例(暗い床・床の外の黒では出さない)
+    reflection = reflection * (1.0 - raw_alpha) * floor_mask
     # 靴の真下の影は床を暗くする。映り込み(UE の正解では影に埋もれない)は REFLECTION_SHADOW の分だけ暗くする
-    floor = (np.clip(shaded_plate, 0.0, 1.0) ** GAMMA * contact) ** (1.0 / GAMMA)
-    floor = np.clip(floor + reflection * (1.0 - (1.0 - contact) * REFLECTION_SHADOW), 0.0, 1.0)
+    floor = np.clip(shaded_plate, 0.0, 1.0) ** GAMMA * contact
+    floor = np.clip(floor + reflection * (1.0 - (1.0 - contact) * REFLECTION_SHADOW), 0.0, 1.0) ** (1.0 / GAMMA)
     light = glow * lifted * np.array(EXIT_GLOW_BGR, dtype=np.float32)
     return np.clip(character + (1.0 - alpha) * floor + light, 0.0, 1.0)
 
