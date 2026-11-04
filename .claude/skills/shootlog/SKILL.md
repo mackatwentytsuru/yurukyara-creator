@@ -106,7 +106,7 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - 手順: `rehearsal/make_monitor_boards.py`(LED の盤の絵をモニターの寸法に。faces_monitor.json)→ 全画面で出す → `--auto-stream 36 --lock-exposure --iso 50` で 36 秒、手持ちでゆっくり動く → `pc_to_frames.py --rx … --out …` → `multi_calib.py --faces … --shoot … --every 6`。
 - 結果: 95 視点、再投影 中央値 0.74 px・rms 1.51 px、取り置いた視点 1.50 px(フル HD)。面ごと A 0.37・B 2.00・C 0.74 px。ARKit の姿勢との差 中央値 0.50 cm・0.36°。fx 1545.6(ARKit 1530.0、差 1.0%)。縮尺 0.984。
 - 形も合う: 面 B の原点は A から 0.271 m(絵の位置からの計算 0.2705 m)、面の向きは B -8.2°・C -18.3° と曲面のとおりに順に回る(カタログの曲率は未確かめ)。B の残差が大きいのは、幅広の面が曲面で平らでないためと見ている(本物の LED の面は平ら)。
-- **`multi_calib.py` は `meta.json` の `intrinsics_scale` を使う**(前は PC に送った記録に 4K の K を当てていた)。
+- **`multi_calib.py` は `meta.json` の `intrinsics_scale` を使う**(前は PC に送った記録に 4K の K を当てていた)。(11-04 夜から `pc_to_frames.py` が K を映像の画素に直して書き `intrinsics_scale` は 1.0 になったので、`multi_calib.py` も `shoot_track.py` も同じ約束で読める。)
 
 ## 本番の画面(ShootHUD、11-04)
 - 層の分け方: 録画・送り・校正の中身は触らず、読むだけの `ShootStatus` と操作の `ShootActions` を間に置く。`ShootHUD.swift` は値を見るだけ。古い部品は消さず「詳細」から出す(4 隅の手の校正など)。
@@ -121,7 +121,7 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - 寄り: 4K からの切り出しは、フル HD の拡大より細かさ 3.4 倍(1 シーンの実測)。今の送りには切り出しの経路が無い。
 
 ## 寄り 2 倍と、離れた所からの更新(11-04)
-- 寄り: `PCStream.zoom2x`。4K の中央をそのまま送る。K は「元の 4K の画素」の約束を保つため `fx·2, fy·2, (cx−960)·2, (cy−540)·2` で送る。受け手の `intrinsics_scale 0.5` はそのまま使える。実機で細かさ 2.69 倍、127 秒 ×3 で熱は平常。試しは `run_stream_test.py --zoom`。
+- 寄り: `PCStream.zoom2x`。4K の中央をそのまま送る。K は「元の 4K の画素」の約束を保つため `fx·2, fy·2, (cx−960)·2, (cy−540)·2` で送る。受け手が 0.5 倍して映像の画素にする(`pc_to_frames.py` が frames.jsonl にその値を書く)。実機で細かさ 2.69 倍、127 秒 ×3 で熱は平常。試しは `run_stream_test.py --zoom`。
 - 更新: `python place/ios/tools/update_remote.py --check`(状態だけ)→ `--device ipad`(差分を送り、組み立て、入れる)→ 合格したら `--keep`、だめなら `--rollback`。組み立てに失敗すると入れない。Mac の画面がロック中でも署名は通る。USB の許可だけは本人がロックを解いて押す。
 - `devicectl` は同じ Wi-Fi でも入れられる(`transportType: localNetwork`)。USB が無くても動いているように見えるので、店の Wi-Fi が端末どうしを通さない時に初めて USB が要る。
 - `devicectl device install app` の最後の数行に「App installed」は出ない。`tail` で切らずに全体で確かめる。
@@ -134,3 +134,27 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - カットの秒は `show_stage.json` の flashes から読む(`at("out", 0, -3.8)`)。値を写さない。
 - 点の番号がずれたら録画の止まりを疑う(`ffprobe` の frame の間隔)。1 秒の止まりで 1 つずれる。
 - 起動の直後にページをつながない(5 秒待つ)。`__enter__` の失敗でも UE を閉じる。
+
+## 点の校正の結果を Mac のテイクから合成まで届かせる(11-04 夜)
+- **つまずき 1: 校正が Mac に届いていなかった**。`ARMonitor` はレイを端末の Documents に書くだけで、受け手の記録にも `pc_to_frames` の meta にも無く、`build_track()` が「4 隅の記録も alignment も無い」で止まった。直し: 新しい電文 `CAL1`(接続の直後・レイの更新(1 秒に 1 回まで)・止める直前。映像と別の列で送る)→ 受け手が `calibration_rays.json` に原子的に書く → `pc_to_frames` が `dots_align.py` で解いて `alignment_A/B/C.json`。
+- **つまずき 2: K の縮尺**。`pc_to_frames` は K を 4K の画素のまま書き、`intrinsics_scale 0.5` を meta に書いていたが、`shoot_track.py` はそれを読まない。実測(同じテイクで旧版): 焦点距離 57.47 mm・横の画角 34.78°・主点のずれ [967, 535] px(正しくは 28.73 mm・64.13°・[3.5, −2.5])。直し: K を映像の画素にして書き、`intrinsics_scale` は 1.0、元の縮尺は `source_intrinsics_scale`。
+- **世界の ID(`arSessionId`)**: ARKit の世界は、起動と `resetTracking` で変わる。`switchLens`(pause → run し直すだけ)は変わらない。世界が変わったら古いレイを捨てる。受け手は 1 テイクの CAL1 の ID を `sessions` に順に残し、2 通り以上なら(録画の途中で世界が変わった)`pc_to_frames` が使わない。frames の T は世界の ID を持たないので、これが唯一の検出(途中の中断・再追跡が世界を変えるかは未確認)。
+- **悪い校正を黙って使わない**: 使えないときは「校正: 使えない — 理由」を出して alignment を書かず(前の実行の `source: "dots"` の alignment が残っていれば消す)、`build_track()` は止まる。理由は 4 つ: ファイルなし・世界の ID 違い・点のレイなし・点 10 未満か残差 4 cm 超。
+- **`dots_align.py` は標準ライブラリだけ**(Mac の python3 は 3.9 で numpy が無い)。`ar_show.js` の solveDots/solveAlign の写し。本物のページに同じレイを 4 通り(雑音・外れ 2 割・面 B が 20 cm 奥・雑音大)渡して、yaw 差 0.0000°・位置の差 0.000 cm(合格の線は 0.1°・0.5 cm)。ページは `face === 'A'` のレイだけを使う(アプリは全部 'A' で送る)ので写しも同じ。
+- **面ごとの alignment**: ページの LED の座標は 3 面で 1 つの枠。面の座標(左下が原点)への変換は図面(`stage_layout.py`)から作り、面 C は端と端を結ぶ板。このため `shoot_track` の面ごとの残差は図面どおりで 0 になる(面 B が図面からずれても、そこには出ない)。ずれは alignment の `face_residual_cm`(点のレイの面ごとの残差の中央値)で見る。
+- **通しの試験**(`calib_handoff_selftest.py`、合成): 位置 中央値 0.15 cm、向き 0.002°、焦点距離 28.73 mm(横の画角 64.13°)、寄り 2 倍は 57.47 mm(34.78°)、主点のずれ [3.5, −2.5](寄り [7, −5])が想定どおり、点 33/33(レイ 64/66)・rms 0.7 cm・面ごと A 0.5・B 0.8・C 0.7 cm。レイなし・世界の ID 違いは理由つきで失敗し、レイの更新は最新が使われる。**ARKit の世界・点の拾いは作り物**なので、実機の通しは未確認。
+- 型の確認(Mac、別フォルダ、署名なし): `ue_link_defaults.json` が無いと `xcodegen` の資源で落ちる(リポジトリに無い)。確認用のフォルダに `{}` を置いて通す。
+- `DotCalibrator.json()` は 30 秒より古いレイを外す。点の映像は 3 周(約 34 秒)あるので、校正に時間がかかるほど古い点の分が減る。
+
+## 校正の追加(11-04 夜 その 2)
+- **つまずき: 最新のレイで良い校正が消える**。`DotCalibrator.json()` は 30 秒より古いレイを外すので、校正のあと誤検出が数本入ると「最新」はその数本だけになる。ページは「前の校正を保持」で正しいのに、Mac の `calibration_rays.json` だけ壊れる。直し: ページの `dots.good` を受けた時に渡してあった JSON を `goodCalibrationJSON` に覚え、CAL1 の rays はそれ(`accepted: true`)。status は前の JSON の判定かもしれないので、渡した直後 0.5 秒は採らない。世界が変わったら良い校正・ページの古い校正も捨てる(`worldChanged` はページの `onCalibReset` も呼ぶ)。
+- **別のテイクの校正を借りる**条件は「世界の ID が 1 通りで同じ」だけ。ID が無い・違う物は借りない(試験⑦)。accepted を先に選ぶ(試験⑥: 33 点の accepted でない物より、17 点の accepted の物が選ばれた。位置の誤差 0.38 cm)。
+- **超広角の固定カット**は、alignment が無く `build_track()` が止まっていた(試験で確認)。世界は舞台の座標なので、ページの LED の座標から (A_X0, LED_Z_BOTTOM, 0)/100 ずれた平行移動だけで、`dots_align.stage_world_docs` が面ごとの alignment を書く。試験(1.5 px の雑音、13 m): build_track の位置は camera.json と 0.05 cm・正解と 3.3 cm、向き 0.123°、横の画角 104.82°(camera.json と同じ)、主点のずれ 4K の画素で [6, −4]。
+- `update_remote.py --rx` で Mac の受け手の道具を更新(`--check` は差だけ)。`pgrep -f` は自分の sh のコマンド行にも当たるので `'[p]c_stream_receiver.py'` と書く。
+- **ツールの注意**: Bash の heredoc で Python を渡すと、文字列の中のバックスラッシュ 2 つ + n が本物の改行になり、書き換えた文字列が壊れた(3 回)。バックスラッシュが要る所は `chr(92)` で作るか、Edit で直す。
+
+## 校正を合成へ渡す実機の確かめ(11-04)
+- `calib_device_test.py`(点を見ずにレイを読み込ませて、本物の iPad → Mac → pc_to_frames → build_track)。止める直前の CAL1 はボタンの経路だけなので `ui_roundtrip.py` で見る(`--auto-stream` では接続の直後の 1 回)。
+- 1 時間の連続: 送れた率 99.93%、欠け 0、熱の最大 serious。2 分の試験は熱を測ったことにならない。
+- 受け手の要約の遅れは、端末の時計が途中で補正されると飛ぶ(約 1.8 秒)。遅れを見るときは区間ごとの生の値で見る。
+- `run_stream_test.py` の iPad の要約の取り出しは、長い試験だと書き終わる前に走って空になることがある。あとで `devicectl device copy from` で取り直せる。

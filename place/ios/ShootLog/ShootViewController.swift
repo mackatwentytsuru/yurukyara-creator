@@ -117,6 +117,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         sceneView.session.delegate = self
         sceneView.session.delegateQueue = frameQueue
         view.addSubview(sceneView)
+        // 校正の結果(点のレイ・世界の ID)を PC へ CAL1 で送る道
+        pcStream.calibrationSource = { [weak self] in self?.arMonitor.calibrationPayload() ?? "" }
+        arMonitor.onCalibrationChanged = { [weak self] in self?.pcStream.calibrationUpdated() }
         // カメラの映像は、ARSCNView 任せにせず、ARFrame の映像を自前で出す(ARSCNView が映さない端末・形式でも出る)
         previewLayer.videoGravity = .resizeAspectFill
         previewLayer.frame = view.bounds
@@ -390,6 +393,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         config.planeDetection = [.horizontal, .vertical]
         if let f = chosenFormat { config.videoFormat = f }
         config.isAutoFocusEnabled = autoFocus
+        if reset { arMonitor.worldChanged() }   // 世界が変わる: 古いレイを捨て、世界の ID を作り直す
         sceneView.session.run(config, options: reset ? [.resetTracking, .removeExistingAnchors] : [])
         logEvent(reset ? "session:run(reset)" : "session:run")
         if exposureLocked {
@@ -705,6 +709,11 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         var ar: ARMonitorSummary?
         var audio: AudioSummary?
         var thermalMax: String
+        var batteryStart: Double?
+        var batteryStateStart: String?
+        var batteryEnd: Double?
+        var batteryStateEnd: String?
+        var calSent: Int?          // 送った CAL1(校正)の数
     }
 
     private func writeStreamSummary(seconds: Double) {
@@ -712,7 +721,9 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
         let ar = arMonitor.enabled ? arMonitor.summary() : nil
         let rank = max(UELinkController.thermalRank(ProcessInfo.processInfo.thermalState),
                        [pc?.thermalMax, ar?.thermalMax].compactMap { $0 }.map { name in ["nominal": 0, "fair": 1, "serious": 2, "critical": 3][name] ?? 0 }.max() ?? 0)
-        let s = StreamSummary(seconds: seconds, arkitFrames: frameTick, pc: pc, ar: ar, audio: audio.running ? audio.summary() : nil, thermalMax: UELinkController.thermalNameFromRank(rank))
+        let s = StreamSummary(seconds: seconds, arkitFrames: frameTick, pc: pc, ar: ar, audio: audio.running ? audio.summary() : nil, thermalMax: UELinkController.thermalNameFromRank(rank),
+                          batteryStart: pcStream.batteryStart.map { Double($0.level) }, batteryStateStart: pcStream.batteryStart?.state,
+                          batteryEnd: Double(UIDevice.current.batteryLevel), batteryStateEnd: PCStreamer.batteryStateName(UIDevice.current.batteryState), calSent: pc?.calSent)
         guard let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return }
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -772,6 +783,8 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
             return
         }
         if a.contains("--mic-on") { setMic(true) { _ in } }
+        // 試験用: 校正のレイを Documents の中のファイルから読み込んだことにする(実機で点を見なくても、CAL1 の経路を試せる)
+        if let f = value("--test-calib-json") { logEvent("test-calib:\(arMonitor.loadTestCalibration(fileName: f) ? "ok" : "read-failed")") }
         if a.contains("--ar-on") {
             if let thr = Double(value("--flash-thr") ?? "") { arMonitor.flashThreshold = thr }
             arMonitor.setEnabled(true, launch: value("--ar-url"))
@@ -1125,7 +1138,7 @@ final class ShootViewController: UIViewController, ARSessionDelegate {
     private func waitForSave(tries: Int) {
         let st = pcStream.saveStatus
         let saved = st.sent > 0 && st.macFrames >= st.sent - 2
-        if saved || tries >= 20 {
+        if (saved && !pcStream.calFinalPending) || tries >= 20 {   // 止める直前の校正(CAL1)も送り終えてから閉じる
             finishTake(st, saved: saved)
             return
         }

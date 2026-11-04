@@ -11,6 +11,7 @@ import VideoToolbox
 /// 1 コマの形(大きい順に、すべてビッグエンディアン): "PCF1" / jpegLen u32 / seq u32 / recFrame i32(録画中なら録画のコマ番号、でなければ -1) /
 ///   arTimestamp f64(ARFrame.timestamp、frames.jsonl の t と同じ) / captureEpochMs f64(映像を撮った時刻。端末の時計) / w u16 / h u16 / flags u8(bit0 録画中、bit1 追跡が正常) /
 ///   T f32×16(カメラ→世界、列順) / K f32×4(元の映像の画素で fx fy cx cy) / jpeg バイト列。
+/// 校正(CAL1): "CAL1" / jsonLen u32 / UTF-8 の JSON({"arSessionId":"…","rays":[点のレイ…] か null})。テイクの接続の直後・レイが変わったとき(1 秒に 1 回まで)・送りを止める直前に送る。
 struct PCStreamSummary: Codable {
     var enabled: Bool
     var host: String
@@ -28,6 +29,7 @@ struct PCStreamSummary: Codable {
     var thermalMax: String
     var codec: String? = nil
     var kbps: Int? = nil
+    var calSent: Int? = nil     // 送った CAL1 の数
 }
 
 final class PCStreamer {
@@ -65,6 +67,13 @@ final class PCStreamer {
     private var cropPoolSize = CGSize.zero
     private var encodeSum = 0.0, encodeMax = 0.0
     private var thermalMaxRank = 0
+    // 校正(CAL1)。映像の符号化・送りの列(queue)とは別の列で送る
+    var calibrationSource: (() -> String)?     // CAL1 の JSON を返す(ARMonitor.calibrationPayload)
+    private let calQueue = DispatchQueue(label: "shootlog.pccal", qos: .utility)
+    private var calSent = 0, calLastSend = -100.0
+    private var calTrailing: DispatchWorkItem?
+    private(set) var calFinalPending = false   // 止める直前の CAL1 が、まだ送り終わっていない
+    private(set) var batteryStart: (level: Float, state: String)?   // 送りを始めたときの電池
 
     init() {
         NotificationCenter.default.addObserver(self, selector: #selector(thermalChanged), name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
@@ -86,6 +95,9 @@ final class PCStreamer {
             sendingPaused = false; macFrames = 0; macMB = 0; lastAck = 0
             framesSent = 0; skippedBusy = 0; skippedNotReady = 0; sendFailed = 0; bytesSent = 0
             encodeSum = 0; encodeMax = 0; lastSentTs = -1; seq = 0
+            calSent = 0; calLastSend = -100; calFinalPending = false
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            batteryStart = (UIDevice.current.batteryLevel, Self.batteryStateName(UIDevice.current.batteryState))
             thermalMaxRank = UELinkController.thermalRank(ProcessInfo.processInfo.thermalState)
         }
         lock.unlock()
@@ -105,6 +117,7 @@ final class PCStreamer {
             case .ready:
                 self.ready = true
                 self.startReceive(c)
+                self.calQueue.async { [weak self] in self?.sendCalibration(forced: true, final: false) }   // つながった直後に 1 回(レイが無くても世界の ID を送る)
             case .failed, .cancelled, .waiting:
                 self.ready = false
                 if self.enabled { self.scheduleRetry() }
@@ -118,7 +131,64 @@ final class PCStreamer {
 
     /// 録画の終わり: 送りだけを止める(つなぎは保ち、受け手の最後の応答を待てるようにする)
     func pauseSending() {
+        lock.lock(); calFinalPending = enabled && ready; lock.unlock()
+        calQueue.async { [weak self] in self?.sendCalibration(forced: true, final: true) }   // 止める直前の校正(映像のあとに届く)
         lock.lock(); sendingPaused = true; lock.unlock()
+    }
+
+    /// ARMonitor が、レイ・世界が変わったと知らせる(どのスレッドからでも)。1 秒に 1 回まで、間の更新は最後の分だけ遅れて送る。
+    func calibrationUpdated() {
+        calQueue.async { [weak self] in self?.sendCalibration(forced: false, final: false) }
+    }
+
+    /// calQueue の中で呼ぶ。映像の送りを待たせない(小さい電文を 1 つ足すだけ)。
+    private func sendCalibration(forced: Bool, final: Bool) {
+        lock.lock()
+        guard enabled, ready, let c = conn else {
+            if final { calFinalPending = false }
+            lock.unlock()
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        if !forced && now - calLastSend < 1.0 {
+            if calTrailing == nil {
+                let w = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    self.lock.lock(); self.calTrailing = nil; self.lock.unlock()
+                    self.sendCalibration(forced: false, final: false)
+                }
+                calTrailing = w
+                calQueue.asyncAfter(deadline: .now() + (1.0 - (now - calLastSend)) + 0.01, execute: w)
+            }
+            lock.unlock()
+            return
+        }
+        calLastSend = now
+        lock.unlock()
+        guard let json = calibrationSource?(), let body = json.data(using: .utf8) else {
+            if final { lock.lock(); calFinalPending = false; lock.unlock() }
+            return
+        }
+        var d = Data([0x43, 0x41, 0x4C, 0x31])
+        var n = UInt32(body.count).bigEndian
+        d.append(Data(bytes: &n, count: 4))
+        d.append(body)
+        c.send(content: d, completion: .contentProcessed { [weak self] err in
+            guard let self else { return }
+            self.lock.lock()
+            if err == nil { self.calSent += 1 }
+            if final { self.calFinalPending = false }
+            self.lock.unlock()
+        })
+    }
+
+    static func batteryStateName(_ s: UIDevice.BatteryState) -> String {
+        switch s {
+        case .unplugged: return "unplugged"
+        case .charging: return "charging"
+        case .full: return "full"
+        default: return "unknown"
+        }
     }
 
     /// 画面に出す値
@@ -455,7 +525,7 @@ final class PCStreamer {
         return PCStreamSummary(enabled: enabled, host: host, port: port, width: width, targetFps: targetFps, quality: quality,
                                framesSent: framesSent, skippedBusy: skippedBusy, skippedNotReady: skippedNotReady, sendFailed: sendFailed,
                                bytesSent: bytesSent, encodeMsAvg: (encodeSum / Double(n) * 10).rounded() / 10, encodeMsMax: (encodeMax * 10).rounded() / 10,
-                               thermalMax: UELinkController.thermalNameFromRank(thermalMaxRank), codec: codec, kbps: codec == "hevc" ? kbps : nil)
+                               thermalMax: UELinkController.thermalNameFromRank(thermalMaxRank), codec: codec, kbps: codec == "hevc" ? kbps : nil, calSent: calSent)
     }
 
     var statusText: String {

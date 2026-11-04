@@ -3,7 +3,8 @@
   python place/shootlog/uw_fixed_camera.py --video <点を撮った超広角.mov> --info <同じ名前.json> --out <出力フォルダ> [--shot <本番の超広角.mov>]
   試し(自宅のモニター): --curved で、点の位置を曲面のモニターの形にして、曲率も解く
 入力: iPad の画面の超広角で、固定のまま点の映像(1 周 11.4 秒)を撮った物。同じ置き場のまま本番を撮る。
-出力: camera.json(舞台の座標のカメラの位置 cm・向き・K・誤差)、frames.jsonl と meta.json(撮影記録の形。全部のコマが同じ姿勢。--shot を付けたとき、そのコマ数の分)。
+出力: camera.json(舞台の座標のカメラの位置 cm・向き・K・誤差)、frames.jsonl と meta.json(撮影記録の形。全部のコマが同じ姿勢。--shot を付けたとき、そのコマ数の分)、
+alignment_A/B/C.json(--shot を付けたとき。世界が舞台の座標なので面の位置は図面どおり。shoot_track.build_track() がそのまま読む)。
 舞台の座標: show/ue/stage_layout.py と同じ(cm、x 右、y 客席、z 上)。世界の座標は撮影記録の決まりに合わせて y 上(x, z, -y ではなく (x, z, y) の右手系に直す)で書く。
 解き方: 点の 3D は、面が前後に 1.4 m ずれているので(B 面)、1 視点でも焦点距離を一緒に解ける(--solve-focal)。歪みは iOS の補正のあとの残りとして k1 だけを解く。外れた点は除く。
 """
@@ -21,6 +22,7 @@ from scipy.optimize import least_squares
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import dots_align  # noqa: E402
 from make_led_dots_video import GAP, ON, STEP, dots  # noqa: E402
 
 
@@ -142,6 +144,45 @@ def monitor_points(table, keys, radius_m):
     return np.array(out, np.float64)
 
 
+def camera_result(rv, tv, fx, k1, e, use, faces, K_ios):
+    """solve_pose の結果 → camera.json の中身(舞台の座標のカメラの位置・T・K・誤差)。"""
+    fx0, fy0, cx0, cy0 = K_ios
+    R, _ = cv2.Rodrigues(np.asarray(rv))
+    cam = (-R.T @ np.asarray(tv)).ravel()
+    per = {f: {"rms_px": round(float(np.sqrt((e[[i for i, x in enumerate(faces) if x == f]] ** 2).mean())), 2), "points": faces.count(f)} for f in sorted(set(faces))}
+    # OpenCV のカメラ(x 右、y 下、z 前)→ 撮影記録のカメラ(x 右、y 上、z 後ろ)で、カメラ → 世界 の 4×4
+    D = np.diag([1.0, -1.0, -1.0])
+    T = np.eye(4)
+    T[:3, :3] = R.T @ D
+    T[:3, 3] = cam
+    fy = fx * fy0 / fx0
+    return {"rms_px_4k": round(float(np.sqrt((e[use] ** 2).mean())), 2), "used": int(use.sum()), "per_face": per, "fx": round(fx, 2), "k1": round(k1, 5),
+            "hfov_deg": round(float(2 * np.degrees(np.arctan(1920 / fx))), 2),
+            "camera_stage_cm": [round(float(cam[0] * 100), 1), round(float(cam[2] * 100), 1), round(float(cam[1] * 100), 1)],
+            "T_camera_to_world": T.T.flatten().tolist(), "K": [fx, fy, cx0, cy0], "size": [3840, 2160]}
+
+
+def write_shoot(out, result, n, video):
+    """撮影記録の形(frames.jsonl・meta.json)。全部のコマが同じ姿勢。K は 4K(3840 幅)の画素で、映像も 3840 幅。"""
+    out = Path(out)
+    with open(out / "frames.jsonl", "w", encoding="utf-8") as f:
+        for i in range(n):
+            f.write(json.dumps({"i": i, "t": i / 30.0, "pts": i / 30.0, "T": result["T_camera_to_world"], "K": result["K"], "track": "fixed", "ok": True}) + "\n")
+    (out / "meta.json").write_text(json.dumps({"videoFile": str(Path(video).resolve()), "stats": {"width": 3840, "height": 2160, "frames": n}, "source": "ultrawide_fixed", "lens": "ultrawide",
+                                               "note": "固定のカメラ。T は舞台の座標(右手系 m、x 右・y 上・z 客席)。alignment_A/B/C.json は同じ世界での面の位置(図面から)"}, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def write_stage_alignments(out, result):
+    """alignment_A/B/C.json。世界が舞台の座標なので、面の位置は図面(stage_layout.py)のとおり。shoot_track.build_track() が読む。
+    面ごとの誤差は、その面の点の画素の誤差(4K)。"""
+    docs = dots_align.stage_world_docs(lambda face: {
+        "source": "dots", "camera": "ultrawide_fixed", "rms_cm": None, "rms_px_4k": result["rms_px_4k"], "face_residual_px_4k": (result["per_face"].get(face) or {}).get("rms_px"),
+        "dots_used": result["used"], "dots_used_on_face": (result["per_face"].get(face) or {}).get("points", 0), "dots_found": result["points"],
+        "notes": "超広角の固定カット(uw_fixed_camera.py)。世界は舞台の座標。面ごとの形は図面から。"})
+    for face, doc in docs.items():
+        (Path(out) / f"alignment_{face}.json").write_text(json.dumps(doc, indent=1, ensure_ascii=False), encoding="utf-8")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--video", required=True)
@@ -179,29 +220,17 @@ def main():
     else:
         P3 = stage_points(table, keys)
     rv, tv, fx, k1, e, use = solve_pose(P3, P2, K0, solve_focal=a.solve_focal, solve_k1=a.solve_focal)
-    R, _ = cv2.Rodrigues(np.asarray(rv))
-    cam = (-R.T @ np.asarray(tv)).ravel()
-    per = {f: {"rms_px": round(float(np.sqrt((e[[i for i, x in enumerate(faces) if x == f]] ** 2).mean())), 2), "points": faces.count(f)} for f in sorted(set(faces))}
-    # OpenCV のカメラ(x 右、y 下、z 前)→ 撮影記録のカメラ(x 右、y 上、z 後ろ)で、カメラ → 世界 の 4×4
-    D = np.diag([1.0, -1.0, -1.0])
-    Rcw = R.T @ D
-    T = np.eye(4)
-    T[:3, :3] = Rcw
-    T[:3, 3] = cam
-    fy = fx * fy0 / fx0
-    result.update({"rms_px_4k": round(float(np.sqrt((e[use] ** 2).mean())), 2), "used": int(use.sum()), "per_face": per, "fx": round(fx, 2), "k1": round(k1, 5),
-                   "hfov_deg": round(float(2 * np.degrees(np.arctan(1920 / fx))), 2),
-                   "camera_stage_cm": [round(float(cam[0] * 100), 1), round(float(cam[2] * 100), 1), round(float(cam[1] * 100), 1)],
-                   "T_camera_to_world": T.T.flatten().tolist(), "K": [fx, fy, cx0, cy0], "size": [3840, 2160]})
+    result.update(camera_result(rv, tv, fx, k1, e, use, faces, info["K"]))
     (out / "camera.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps({k: result[k] for k in ("rms_px_4k", "used", "per_face", "fx", "k1", "hfov_deg", "camera_stage_cm")}, ensure_ascii=False))
     if a.shot:
         r = subprocess.run(["ffprobe", "-v", "error", "-count_packets", "-select_streams", "v", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", a.shot], capture_output=True, text=True)
         n = int(r.stdout.strip().split()[0])
-        with open(out / "frames.jsonl", "w", encoding="utf-8") as f:
-            for i in range(n):
-                f.write(json.dumps({"i": i, "t": i / 30.0, "pts": i / 30.0, "T": result["T_camera_to_world"], "K": result["K"], "track": "fixed", "ok": True}) + "\n")
-        (out / "meta.json").write_text(json.dumps({"videoFile": str(Path(a.shot).resolve()), "stats": {"width": 3840, "height": 2160, "frames": n}, "source": "ultrawide_fixed", "lens": "ultrawide", "note": "固定のカメラ。T は舞台の座標(右手系 m、x 右・y 上・z 客席)"}, ensure_ascii=False, indent=1), encoding="utf-8")
+        write_shoot(out, result, n, a.shot)
+        if a.curved:
+            print("(--curved は自宅のモニターの試し。世界が舞台の座標ではないので alignment は書かない)")
+        else:
+            write_stage_alignments(out, result)
         print("撮影記録の形:", out / "frames.jsonl", n, "コマ")
 
 

@@ -82,6 +82,8 @@ def main():
     check("録画が「保存済み」になる", t.get("saved") is True)
     check("iPad の送ったコマと Mac の記録が合う", t.get("sent") and abs(t.get("sent", 0) - s.get("frames", -1)) <= 2, f"送った {t.get('sent')}・Mac {s.get('frames')}・iPad が受けた応答 {t.get('macFrames')}")
     check("連番の欠けが 0", s.get("seq_missing") == 0)
+    cal = s.get("calibration") or {}
+    check("校正の電文が接続の直後と止める直前の 2 回届く", cal.get("messages") == 2 and cal.get("sessions") == 1, cal)
     check("長さが合う", abs(t.get("seconds", 0) - a.seconds) < 3, f"{t.get('seconds')} 秒")
     log = [json.loads(x) for x in (out / "ui_log.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
     check("正常の間は赤の知らせが出ない", len(log) > 20 and not any(r["alarm"].startswith("Mac") for r in log), f"記録 {len(log)} 行")

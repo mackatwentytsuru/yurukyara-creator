@@ -32,6 +32,12 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var wasAbove = false
     private var lastFlashTs = -100.0
     private var lastCalibrationJSON: String?
+    private var lastCalibrationRays = 0               // 最新の JSON のレイの本数(CAL1 の latestDots)
+    private var pushedCalibrationJSON: String?        // 最後にページへ渡した JSON
+    private var pushedAt = -100.0                     // その時刻(systemUptime)
+    private var goodCalibrationJSON: String?          // ページが「良い校正」(dots.good)と判定したときに渡してあった JSON。世界が変わる・やり直しで消す
+    private var arSessionId = UUID().uuidString   // ARKit の世界が変わるたびに作り直す(起動・resetTracking)。レンズの切り替えは世界が続くので同じ
+    var onCalibrationChanged: (() -> Void)?       // レイ・世界が変わった知らせ(PC へ CAL1 を送る側が受ける。どのスレッドからも呼ばれる)
     private var lastFloor: Float?
     private var thermalAtStart = ""
     private var thermalMaxRank = 0
@@ -111,9 +117,10 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         detectFlash(frame)
         if frameQueueSafeReset { frameQueueSafeReset = false; dots.reset() }
         if dotCalibEnabled, dots.process(frame), let json = dots.json() {
-            lock.lock(); lastCalibrationJSON = json; let ready = pageReady; lock.unlock()
+            lock.lock(); lastCalibrationJSON = json; lastCalibrationRays = Self.rayCount(json); let ready = pageReady; lock.unlock()
             if ready { pushCalibration() }
-            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { try? json.write(to: docs.appendingPathComponent("dot_rays.json"), atomically: true, encoding: .utf8) }
+            writeRaysFile()
+            onCalibrationChanged?()
         }
         lock.lock()
         guard pageReady else { lock.unlock(); return }
@@ -170,7 +177,9 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     /// 点の校正をやり直す
     func resetDots() {
-        lock.lock(); lastCalibrationJSON = nil; lock.unlock()
+        lock.lock(); lastCalibrationJSON = nil; lastCalibrationRays = 0; goodCalibrationJSON = nil; pushedCalibrationJSON = nil; lock.unlock()
+        writeRaysFile()
+        onCalibrationChanged?()
         frameQueueSafeReset = true
         webView.evaluateJavaScript("window.__arhost&&window.__arhost.onCalibReset&&window.__arhost.onCalibReset()", completionHandler: nil)
     }
@@ -194,13 +203,62 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     func setCalibration(_ cal: Calibration) {
         let arr: [[String: Any]] = cal.corners.map { ["face": $0.face, "id": $0.id, "origin": $0.rayOrigin.map { Double($0) }, "direction": $0.rayDirection.map { Double($0) }] }
         guard let data = try? JSONSerialization.data(withJSONObject: arr), let json = String(data: data, encoding: .utf8) else { return }
-        lock.lock(); lastCalibrationJSON = json; let ready = pageReady; lock.unlock()
+        lock.lock(); lastCalibrationJSON = json; lastCalibrationRays = Self.rayCount(json); let ready = pageReady; lock.unlock()
         if ready { pushCalibration() }
+        onCalibrationChanged?()
+    }
+
+    // MARK: - 校正の結果を PC へ(CAL1)・端末に残す
+
+    /// ARKit の世界が変わった(アプリの起動・resetTracking)。古いレイは別の世界の物なので捨て、世界の ID を作り直す。
+    /// レンズの切り替え(pause して run し直すだけ)は世界が続くので呼ばない。
+    func worldChanged() {
+        lock.lock(); arSessionId = UUID().uuidString; lastCalibrationJSON = nil; lastCalibrationRays = 0; goodCalibrationJSON = nil; pushedCalibrationJSON = nil; lock.unlock()
+        webView.evaluateJavaScript("window.__arhost&&window.__arhost.onCalibReset&&window.__arhost.onCalibReset()", completionHandler: nil)   // ページの古い校正も捨てる(別の世界の物)
+        frameQueueSafeReset = true
+        writeRaysFile()
+        onCalibrationChanged?()
+    }
+
+    /// CAL1 と dot_rays.json の中身: {"arSessionId":"…","rays":[…] か null,"accepted":true/false,"latestDots":最新のレイの本数}。レイが無くても世界の ID は送る。
+    /// rays は、ページが良い校正と判定した物があればそれ(accepted=true)。無ければ最新(accepted=false)。
+    /// 校正のあと、誤検出のレイだけが残った最新の JSON で、良い校正を上書きしないため(ページは「前の校正を保持」するので、Mac も同じにする)。
+    func calibrationPayload() -> String {
+        lock.lock()
+        let id = arSessionId, good = goodCalibrationJSON, latest = lastCalibrationJSON, n = lastCalibrationRays
+        lock.unlock()
+        return "{\"arSessionId\":\"\(id)\",\"rays\":\(good ?? latest ?? "null"),\"accepted\":\(good != nil),\"latestDots\":\(n)}"
+    }
+
+    private static func rayCount(_ json: String) -> Int {
+        guard let d = json.data(using: .utf8), let a = (try? JSONSerialization.jsonObject(with: d)) as? [Any] else { return 0 }
+        return a.count
+    }
+
+    private func writeRaysFile() {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        try? calibrationPayload().write(to: docs.appendingPathComponent("dot_rays.json"), atomically: true, encoding: .utf8)
+    }
+
+    /// 試験用(--test-calib-json): Documents の中のファイルから、校正のレイを読み込んだことにする(点の映像を見なくても CAL1 の経路を試す)。
+    /// ファイルは、レイの配列か、{"rays":[…]}。世界の ID はアプリの今の値を使う。
+    @discardableResult
+    func loadTestCalibration(fileName: String) -> Bool {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+              let data = try? Data(contentsOf: docs.appendingPathComponent((fileName as NSString).lastPathComponent)),
+              let obj = try? JSONSerialization.jsonObject(with: data) else { return false }
+        let rays: Any = (obj as? [String: Any])?["rays"] ?? obj
+        guard rays is [Any], let d = try? JSONSerialization.data(withJSONObject: rays), let json = String(data: d, encoding: .utf8) else { return false }
+        lock.lock(); lastCalibrationJSON = json; lastCalibrationRays = Self.rayCount(json); lock.unlock()
+        writeRaysFile()
+        onCalibrationChanged?()
+        return true
     }
 
     private func pushCalibration() {
         lock.lock(); let json = lastCalibrationJSON; lock.unlock()
         guard let json else { return }
+        lock.lock(); pushedCalibrationJSON = json; pushedAt = ProcessInfo.processInfo.systemUptime; lock.unlock()
         DispatchQueue.main.async { [weak self] in
             self?.webView.evaluateJavaScript("window.__arhost&&window.__arhost.onCalibration&&window.__arhost.onCalibration(\(json))", completionHandler: nil)
         }
@@ -222,6 +280,18 @@ final class ARMonitor: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         }
         if type == "status" {
             if let d = try? JSONSerialization.data(withJSONObject: body), let str = String(data: d, encoding: .utf8) { lock.lock(); pageStatus = str; lock.unlock() }
+            // ページが良い校正と判定している(dots.good)なら、そのとき渡してある JSON を覚える。
+            // 渡した直後(0.5 秒以内)の status は前の JSON の判定かもしれないので採らない(次の status で採る。悪い JSON なら good にならない)
+            if let dots = body["dots"] as? [String: Any], dots["good"] as? Bool == true {
+                lock.lock()
+                var changed = false
+                if let pushed = pushedCalibrationJSON, ProcessInfo.processInfo.systemUptime - pushedAt > 0.5, pushed != goodCalibrationJSON {
+                    goodCalibrationJSON = pushed
+                    changed = true
+                }
+                lock.unlock()
+                if changed { onCalibrationChanged?() }
+            }
             return
         }
         lock.lock(); if messages.count < 20 { messages.append(type) }; lock.unlock()

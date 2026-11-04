@@ -4,6 +4,8 @@
   python place/ios/tools/update_remote.py --device ipad           # 変わったファイルだけ送り、組み立てて入れる
   python place/ios/tools/update_remote.py --device ipad --rollback # 控えの版に戻す
   python place/ios/tools/update_remote.py --keep                  # いま入っている組み立てを控えにする
+  python place/ios/tools/update_remote.py --rx --check            # Mac の受け手(~/sample_work/rx/)の道具との差だけを見る(何も変えない)
+  python place/ios/tools/update_remote.py --rx                    # 変わった道具だけを Mac の rx へ写し、Mac の python3 で動くか確かめる
 
 Mac へは ssh(Tailscale)。送るのは変わったファイルだけなので、細い回線でも足りる。組み立てと署名は Mac の
 画面のセッションで動く(`open ipad_build.command`)。Mac の画面のロックが解けていないと署名で止まる。
@@ -30,6 +32,15 @@ IOS = Path(__file__).resolve().parents[1]
 SOURCES = ["project.yml", "RoomScan", "ARStage", "ShootLog", "CamProbe", "Shared", "ARSite"]
 BUILD_SCRIPT = IOS / "tools" / "ipad_build.command"
 DEVICES = {"ipad": "00008103-001959392279001E", "iphone": "00008101-000A4C9A2E45001E"}
+REPO = IOS.parents[1]
+RX_DEST = "sample_work/rx"
+# Mac の受け手の側の道具(名前 → 手元の場所)。pc_to_frames.py は dots_align.py と stage_layout.py を同じフォルダから読む
+RX_FILES = {
+    "pc_stream_receiver.py": REPO / "place" / "shootlog" / "pc_stream_receiver.py",
+    "pc_to_frames.py": REPO / "place" / "shootlog" / "pc_to_frames.py",
+    "dots_align.py": REPO / "place" / "shootlog" / "dots_align.py",
+    "stage_layout.py": REPO / "show" / "ue" / "stage_layout.py",
+}
 PATH_FIX = "export PATH=/opt/homebrew/bin:$HOME/.local/bin:$PATH; "
 
 
@@ -175,13 +186,69 @@ def install(udid, app):
     print("機器のアプリ:", so.strip())
 
 
+def rx_diff():
+    """手元と Mac の rx の道具のハッシュを比べる。戻り: (変わった名前の一覧, Mac に無い名前の一覧)。"""
+    script = ("import hashlib, json, os\n"
+              f"d = os.path.expanduser('~/{RX_DEST}')\n"
+              f"print(json.dumps({{n: hashlib.sha256(open(os.path.join(d, n), 'rb').read()).hexdigest() for n in {sorted(RX_FILES)!r} if os.path.isfile(os.path.join(d, n))}}))\n")
+    rc, so, se = ssh("python3 -", stdin=script.encode("utf-8"))
+    if rc:
+        raise SystemExit("Mac の rx を読めません: " + se[-300:])
+    remote = json.loads(so)
+    changed, missing = [], []
+    for n, path in sorted(RX_FILES.items()):
+        if n not in remote:
+            missing.append(n)
+        elif remote[n] != hashlib.sha256(path.read_bytes()).hexdigest():
+            changed.append(n)
+    return changed, missing
+
+
+def rx_update(check_only):
+    for n, path in RX_FILES.items():
+        if not path.is_file():
+            raise SystemExit(f"手元に無い: {path}")
+    rc, so, se = ssh("echo ok; pgrep -f '[p]c_stream_receiver.py' | wc -l")
+    if rc:
+        raise SystemExit("Mac へ ssh できません: " + se[-300:])
+    running = int(so.split()[1])
+    changed, missing = rx_diff()
+    print(f"Mac の受け手の道具(~/{RX_DEST}/): 変わった {changed or 'なし'}、Mac に無い {missing or 'なし'}")
+    print(f"動いている受け手: {running} 個(写しても、再起動するまで動いている受け手は古いコードのまま)")
+    if check_only or not (changed or missing):
+        print("差だけ表示しました(何も変えていません)" if check_only else "差はありません")
+        return
+    todo = changed + missing
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        for n in todo:
+            tar.add(RX_FILES[n], arcname=n)
+    # 一時の置き場に展開して、1 つずつ置き換える(途中で切れても、半端なファイルを置かない)
+    rc, _, se = ssh(f"set -e; D=~/{RX_DEST}; T=$(mktemp -d); tar -xf - -C $T; for f in $T/*; do mv -f $f $D/; done; rmdir $T", stdin=buf.getvalue())
+    if rc:
+        raise SystemExit("写せませんでした: " + se[-300:])
+    print(f"写した: {todo}")
+    # Mac の python3(numpy なし)で動くか
+    cmd = (f"cd ~/{RX_DEST} && python3 pc_to_frames.py --help >/dev/null && echo help_ok; "
+           "python3 -c 'import dots_align; print(\"dots_align_ok\", len(dots_align.DOTS))'; python3 pc_stream_receiver.py --help >/dev/null && echo receiver_help_ok")
+    rc, so, se = ssh(cmd)
+    print("Mac の python3 での確かめ:", so.strip().replace("\n", " / "))
+    if rc or "help_ok" not in so or "dots_align_ok 33" not in so:
+        raise SystemExit("Mac の python3 で動きません: " + se[-400:])
+    print("できました")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--device", choices=sorted(DEVICES), default="ipad")
     ap.add_argument("--check", action="store_true", help="更新できる状態かだけを見る")
     ap.add_argument("--keep", action="store_true", help="いまの組み立てを控えにする")
     ap.add_argument("--rollback", action="store_true", help="控えの版を入れる")
+    ap.add_argument("--rx", action="store_true", help="Mac の受け手の道具(pc_stream_receiver.py・pc_to_frames.py・dots_align.py・stage_layout.py)を更新する(--check なら差だけ)")
     a = ap.parse_args()
+    if a.rx:
+        rx_update(a.check)
+        return
     udid = DEVICES[a.device]
     if a.keep:
         rc, so, se = ssh(f"rm -rf ~/{KEEP}; mkdir -p ~/{KEEP}; cp -R ~/{DEST}/{APP} ~/{KEEP}/ && du -sh ~/{KEEP}/ShootLog.app")

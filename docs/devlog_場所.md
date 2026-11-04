@@ -204,3 +204,23 @@
 - つまずき: UE の映像の読み取りは 5680 幅の H264 で「No playable streams」(2840×620 は読める)。音の線があると音だけ進んで絵が出ない。起動の直後につなぐと接続の知らせを受け落とす(5 秒待つ)。Playwright の evaluate は最後の式が関数だと実行してしまう。起動の途中で失敗すると UE が残るので、必ず閉じる形にした。
 - 今ある LED の映像はキャラが出ずっぱりの版といない版だけ。`show_stage.json` の秒で組み直した(`rehearsal.py media`)。秒はファイルから読み、曲が変わっても追える。
 - UE ではピンホールの絵なので、本物の歪み・明るさ・スキャンの帯・追跡は確かめられない。キャラの顔が黒いのは L_Live の中だけ。
+
+## 2026-11-04 夜: 点の校正の結果を Mac のテイクから合成まで届かせた
+- 問題: iPad で点の校正をして録っても、結果が Mac に届かず(端末の Documents に書くだけ)、`build_track()` が止まる。もう 1 つ、`pc_to_frames` の K が 4K の画素のまま(`intrinsics_scale` は `multi_calib` しか読まない)で、`shoot_track` では焦点距離 2 倍・主点のずれ 967 px になる(旧版で実測)。
+- 直した: アプリに電文 `CAL1`(接続の直後・レイの更新・止める直前)と `arSessionId`(起動と resetTracking で作り直し、世界が変わったら古いレイを捨てる)、試験用の `--test-calib-json`、`stream_summary.json` に電池の始め・終わりと送った CAL1 の数。受け手が `calibration_rays.json` を書く。`dots_align.py`(標準ライブラリだけ。`ar_show.js` の solveDots の写し)→ `pc_to_frames` が alignment_A/B/C.json を書く。K は映像の画素にして `intrinsics_scale` を 1.0 に。
+- 測った(合成、`calib_handoff_selftest.py`): 位置 中央値 0.15 cm・向き 0.002°・横の画角 64.13°(28.73 mm)・主点が映像の画素で正しい・面ごとの残差 0.5〜0.8 cm。寄り 2 倍は 57.47 mm・34.78°。レイなしと世界の ID 違いははっきり失敗、レイの更新は最新が勝つ。`dots_align` は本物のページと yaw 0.0000°・位置 0.000 cm で一致。
+- 型の確認(Mac で署名なし、別フォルダ): 通った。iPad には入れていない・動かしていない。
+- 未確かめ: 実機で点を見せて校正 → 録る → Mac で直す → 合成の通し。resetTracking 以外(中断・再追跡)で世界が変わるか。Mac の `rx` に `dots_align.py` と `stage_layout.py` を置く作業(置き換えていない)。面が図面からずれていても、shoot_track の面ごとの残差には出ない(alignment の `face_residual_cm` で見る)。
+
+## 2026-11-04 夜 その 2: 校正の取りこぼしを塞いだ
+- 良い校正の上書き: ページが良いと判定した JSON を覚えて CAL1 に送る(accepted)。後の誤検出で Mac だけ壊れる問題を防ぐ。
+- `pc_to_frames.py`: そのテイクの校正が使えないとき、同じ世界の ID の別のテイクの校正を使う(世界の ID が違う物は使わない)。試験: 誤検出 3 本で終わったテイクが、accepted の別のテイクの校正で通る(位置 0.38 cm・向き 0.011°)。ID 違いは借りずに失敗する。
+- 超広角の固定カット(`uw_fixed_camera.py --shot`)が alignment_A/B/C.json も書く。alignment が無いと `build_track()` が止まることは試験で確認。通すと camera.json と位置 0.05 cm・画角 104.82° で一致(合成)。
+- `update_remote.py --rx`(Mac の受け手の道具の更新)を足した。**実行はしていない**(`--rx --check` だけ。差は pc_stream_receiver.py・pc_to_frames.py、Mac に無いのは dots_align.py・stage_layout.py)。別の確認用フォルダで、Mac の python3 で `--help`・`dots_align` の読み込みが通ることは確かめた。
+- `ue_link_defaults.json`: `project.yml` は optional で、Mac の組み立てフォルダ(place_ios)には置いてあり、`update_remote.py` の送る・消す対象の外なので iPad の組み立てでは困らない。新しい Mac の組み立てフォルダを作るときだけ要る(手で置く。中身は読んでいない)。
+- 未確かめ: 実機で、点の校正のあとのショーの映像への切り替えで accepted が保たれること(型の確認だけ)。固定カットの実映像。
+
+## 2026-11-04 午後: 校正を合成へ渡す実機の通しと、1 時間の連続の試験
+- 実機の通し(`calib_device_test.py`。iPad の本物の送り → Mac の受け手 → pc_to_frames → build_track。レイだけ合成): 点 33/33、残差 0.7 cm、横の画角 63.81°(fx 1542 を映像の画素で)、主点のずれ [-11.2, 3.1] px、537 コマ全部がカメラの動きになった。本物のボタンの経路では CAL1 が接続の直後と止める直前の 2 回届いた(`ui_roundtrip.py`)。点を本物のカメラで拾う所と、ページの判定(accepted)は、この試験では通っていない。
+- 1 時間の連続(iPad 固定、AR 30 fps + フル HD + 音、前の版): 3600 秒、ARKit 107,938 コマ、送った 107,861(99.93%)、受け手 107,948 コマ・29.94 fps・17.68 Mbps、連番の欠け 0、音の欠け 0(720,596 個)、符号化 平均 9.2 ms・最大 40.2 ms。熱は 2 分では平常のままだったが、1 時間のうちに serious まで上がった(critical には届かず)。録画は 1 時間 7.9 GB。電池は測れていない(記録を足したのは新しい版)。
+- 測りの注意: 端末の時計の補正で、見かけの遅れが途中で約 1.8 秒飛んだ。要約の遅れの中央値 1848 ms は本当の遅れではない。合成は ARFrame の時計を使うので影響しない。

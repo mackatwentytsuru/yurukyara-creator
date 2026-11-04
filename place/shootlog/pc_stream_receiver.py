@@ -4,12 +4,14 @@
 出力: stream.mjpg(JPEG を並べただけ。ffmpeg -f mjpeg -i stream.mjpg ... で動画にできる)、index.jsonl(1 コマ 1 行:
   seq・rec_frame(録画のコマ番号、録画外は -1)・ar_ts(ARFrame の時刻 = frames.jsonl の t)・sent_ms・recv_ms・w・h・flags・T・K・offset・length)、
   summary.json(受けたコマ数・fps・Mbps・欠けたコマ・見かけの遅れ(中央値・最大。端末と PC の時計のずれを含む))。
+校正(CAL1: "CAL1" / JSON の長さ u32 / UTF-8 の JSON {"arSessionId","rays","accepted","latestDots"}。accepted=true は、アプリのページが良い校正と判定した物)を受けたら、テイクのフォルダの calibration_rays.json に原子的に書く(最新が勝つ)。
 形は place/ios/ShootLog/PCStream.swift の冒頭の説明と同じ(ビッグエンディアン)。本番の録画は端末の中にあり、これは確認用。
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import shutil
 import json
 import struct
@@ -21,6 +23,7 @@ FLOATS = struct.Struct(">20f")           # T 16 + K 4
 AUDH = struct.Struct(">4sIIIHHdd")      # AUD1, pcmLen, seq, sampleRate, channels, bits, ptsHostSeconds, captureEpochMs
 PING = struct.Struct(">4sdI")            # PNG1, サーバー時刻 ms, 通し番号(端末へ)
 RCV = struct.Struct(">4sIII")           # RCV1, ディスクへ書いたコマ数, MB, 受け手のディスクの空き GB(16 バイト。毎秒、端末へ)
+CALH = struct.Struct(">4sI")            # CAL1, JSON の長さ(端末から。校正のレイ)
 PONG = struct.Struct(">4sddI")           # PON1, 同じサーバー時刻, 端末の時刻 ms, 通し番号(端末から)
 
 
@@ -44,6 +47,31 @@ class Recorder:
         self.bytes = 0
         self.connections = 0
         self.clock_samples: list[tuple[float, float]] = []   # (rtt_ms, offset_ms = 端末の時計 - PC の時計)
+        self.cal_messages = 0
+        self.cal_with_rays = 0
+        self.cal_sessions: list[str] = []      # 見た arSessionId(順に、重複なし)。2 つ以上 = テイクの間に ARKit の世界が変わった
+
+    def add_calibration(self, body: bytes) -> bool:
+        """CAL1 の JSON を calibration_rays.json に書く(一時ファイル → os.replace。最新が勝つ)。読めなければ False。"""
+        try:
+            msg = json.loads(body.decode("utf-8"))
+            session = str(msg["arSessionId"])
+        except (ValueError, KeyError, TypeError):
+            return False
+        rays = msg.get("rays")
+        if not isinstance(rays, list):
+            rays = None
+        self.cal_messages += 1
+        self.cal_with_rays += 1 if rays else 0
+        if session not in self.cal_sessions:
+            self.cal_sessions.append(session)
+        doc = {"format": "calibration-rays/1", "arSessionId": session, "rays": rays, "sessions": self.cal_sessions,
+               "accepted": bool(msg.get("accepted", False)), "latest_dots": msg.get("latestDots"),
+               "messages": self.cal_messages, "recv_ms": time.time() * 1000, "frames_at_receive": len(self.rows)}
+        tmp = self.out_dir / "calibration_rays.json.tmp"
+        tmp.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, self.out_dir / "calibration_rays.json")
+        return True
 
     def add(self, row: dict, jpeg: bytes, hevc: bool = False):
         if hevc:
@@ -89,6 +117,7 @@ class Recorder:
             "audio": self.audio_summary(),
             "keyframes": sum(1 for r in rows if r["flags"] & 4), "codec": rows[0].get("codec", "jpeg"),
             "recording_frames_in_stream": len(rec_rows), "connections": self.connections,
+            "calibration": {"messages": self.cal_messages, "with_rays": self.cal_with_rays, "sessions": len(self.cal_sessions)},
             "size": [rows[0]["w"], rows[0]["h"]],
         }
 
@@ -193,6 +222,15 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec
                 rec.audio_index.write(json.dumps(row) + "\n")
                 rec.audio_off += plen
                 rec.audio_rows.append(row)
+                continue
+            if magic == b"CAL1":
+                _, clen = CALH.unpack(magic + await reader.readexactly(CALH.size - 4))
+                if clen > 5_000_000:
+                    print("校正が大きすぎる。切る")
+                    break
+                body = await reader.readexactly(clen)
+                if not rec.add_calibration(body):
+                    print("校正(CAL1)の JSON が読めない。無視する", flush=True)
                 continue
             if magic == b"PON1":
                 _, echo, phone_ms, idx = PONG.unpack(magic + await reader.readexactly(PONG.size - 4))
