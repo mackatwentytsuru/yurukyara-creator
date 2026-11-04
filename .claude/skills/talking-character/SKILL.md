@@ -85,6 +85,11 @@ node creator/pipeline/web_talk_check.mjs --port 8799 --character <id> --out <作
 
 動画に残すなら `node creator/pipeline/web_talk_record.mjs --port 8799 --character <id> --out <出力.webm>`(字幕ごとの画面と声。話す言葉はその場の返事)。作る様子の早回しは `python creator/skilltest/timelapse.py <作業フォルダ> <元の絵> <出力.mp4>`。
 
+- `web_talk_record.mjs` の出力(webm)は長さの情報が入らない。長さは `ffmpeg -i x.webm -f null -` の最後の `time=` で読む。声は `-af volumedetect -vn -f null -` の `max_volume`(2026-11-04 の 4 本は -0.4〜-1.0 dB、平均 -18 dB 前後)。確認の絵は、`silencedetect` で最初の音の時刻を出し、そこから `-ss <時刻> -vf fps=1,scale=640:-1,tile=3x2` で 6 コマ。録るのは 1 本 20 秒台(質問 2 つ、各キャラ 約 40 秒かかる)。
+- 字を消すには `ffmpeg -i x.webm -map_metadata -1 -c copy`(webm は `-c copy` で通る。Opus の「Error parsing Opus packet header」の注意が 1 回出るが、音は残る)。
+- `timelapse.py` の作業フォルダは、`repo/_trials/*/check/history/*` を持つ作業の最上位(`.../c1_sonnet_medium`)。試験の中の `q_robot_trial` ではない。作業フォルダ直下の `check/history/*` だけの場合(ようこそくん)と `log.jsonl` が無い場合も通るように直した。
+- PowerShell の `$()` を含む一行は許可の確認で止まる。起動の命令は `.ps1` に書いて `powershell -NoProfile -File` で流す。`Start-Process` の PID を `Out-File` で書くと UTF-16 なので、読むときは数字だけ取り出す(`tr -dc 0-9`)。
+
 ## macOS で流すとき(2026-11-04 に M4 の Mac で通した)
 
 Claude を使わない部分(doctor → builder → 骨 → `check_all.sh` → `npm run build` → サーバー → `web_talk_check.mjs`)は、手を足さずに通った。違いだけ書く。

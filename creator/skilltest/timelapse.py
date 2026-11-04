@@ -42,7 +42,9 @@ def fit(image, w, h):
 def rounds_of(work):
     """検査の周ごとに、時刻・絵・結果の文を返す。古い順。"""
     out = []
-    for folder in sorted(glob.glob(os.path.join(work, "repo", "_trials", "**", "check", "history", "*"), recursive=True)):
+    folders = glob.glob(os.path.join(work, "repo", "_trials", "**", "check", "history", "*"), recursive=True)
+    folders += glob.glob(os.path.join(work, "check", "history", "*"))  # 作業フォルダ直下に検査の履歴がある場合
+    for folder in sorted(folders, key=os.path.basename):
         front = os.path.join(folder, "browser_front.png")
         txt = os.path.join(folder, "check.txt")
         if not (os.path.exists(front) and os.path.exists(txt)):
@@ -55,6 +57,8 @@ def rounds_of(work):
 
 def tool_count(work):
     n = 0
+    if not os.path.exists(os.path.join(work, "log.jsonl")):
+        return None
     with open(os.path.join(work, "log.jsonl"), encoding="utf-8", errors="replace") as f:
         for line in f:
             try:
@@ -100,7 +104,8 @@ def main():
                         "-r", str(FPS), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-map_metadata", "-1", args.out], check=True)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    print(f"書いた: {args.out}(検査 {len(rounds)} 周、道具の呼び出し {tool_count(args.work)} 回)")
+    n = tool_count(args.work)
+    print(f"書いた: {args.out}(検査 {len(rounds)} 周、" + (f"道具の呼び出し {n} 回)" if n is not None else "道具の記録なし)"))
 
 
 if __name__ == "__main__":
