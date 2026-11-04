@@ -12,6 +12,7 @@ import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
+import { createGazeRelay } from './gazeRelay.mjs';
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = join(WEB_ROOT, 'logs');
@@ -42,6 +43,14 @@ const shop = createShop();
 const stt = createStt();
 const sttLimiter = createLimiter({ file: join(LOG_DIR, 'stt_usage.json'), dailyCap: 3000, perMinute: 40 });
 stt.check().then((ok) => console.log(`聞き取り(サーバー): ${ok ? 'faster-whisper' : 'なし(pip install faster-whisper で使えます)'}`));
+
+// 視線の橋(床のカメラ → 客の向き)の UDP を受けて、入口のページ(?source=bridge)に渡す。GAZE_UDP_PORT があるときだけ。
+// 受けるのは自分の端末から(GAZE_UDP_HOST の既定 127.0.0.1)。カメラの機械が別なら、GAZE_UDP_HOST=0.0.0.0 にする。
+const gazeRelay = process.env.GAZE_UDP_PORT ? createGazeRelay({ port: Number(process.env.GAZE_UDP_PORT), host: process.env.GAZE_UDP_HOST ?? '127.0.0.1' }) : null;
+gazeRelay
+  ?.start()
+  .then((p) => console.log(`視線の受け口: UDP ${p}`))
+  .catch((e) => console.warn('視線の受け口を開けませんでした:', e.message));
 
 const json = (res, status, obj) => res.writeHead(status, { 'content-type': MIME['.json'] }).end(JSON.stringify(obj));
 
@@ -184,6 +193,19 @@ const handler = async (req, res) => {
         return createReadStream(file).pipe(res);
       }
       return json(res, 404, { error: '見つかりません' });
+    }
+    if (path.startsWith('/api/gaze')) {
+      if (!gazeRelay) return json(res, 404, { error: '視線の受け口は使っていません(GAZE_UDP_PORT)' });
+      if (req.method === 'GET' && path === '/api/gaze/now') return json(res, 200, gazeRelay.current());
+      if (req.method === 'GET' && path === '/api/gaze') return json(res, 200, gazeRelay.status());
+      if (req.method === 'GET' && path === '/api/gaze/points') return json(res, 200, gazeRelay.points());
+      if (req.method === 'POST' && path === '/api/gaze/aim') {
+        const r = gazeRelay.setAim(await readBody(req, 1024));
+        return r ? json(res, 200, r) : json(res, 400, { error: '向きの形が違います({az, el} 度 か {off: true})' });
+      }
+      if (req.method === 'POST' && path === '/api/gaze/mark') return json(res, 200, gazeRelay.mark());
+      if (req.method === 'POST' && path === '/api/gaze/unmark') return json(res, 200, gazeRelay.unmark((await readBody(req, 1024)).all === true));
+      return json(res, 405, { error: 'この方法は使えません' });
     }
     if (req.method === 'POST' && path === '/api/chat') return await handleChat(req, res);
     if (req.method === 'POST' && path === '/api/tts') {

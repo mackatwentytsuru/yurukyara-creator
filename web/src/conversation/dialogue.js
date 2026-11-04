@@ -37,8 +37,9 @@ export class Dialogue {
    * @param {(spec:string, ms:number) => (number[]|null)} deps.setGaze 'person' | 'away' | 'landmark:名前'
    * @param {(entry:object) => void} deps.onMetric
    */
-  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices }) {
-    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices });
+  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false }) {
+    // interview: インタビューの型(返事 2 文まで・台本にしない)で答えさせる(入口の LED の ?interview=1)
+    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview });
     this.history = [];
     this.abort = null;
     this.timers = [];
@@ -142,6 +143,7 @@ export class Dialogue {
       expressions: this.character.expressions,
       expressionHints: this.character.expressionHints,
       motions: this.motionChoices?.(this.character),
+      ...(this.interview ? { interview: true } : {}),
     };
 
     try {

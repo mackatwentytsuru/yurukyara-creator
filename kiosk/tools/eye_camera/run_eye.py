@@ -2,6 +2,8 @@
   python kiosk/tools/eye_camera/run_eye.py --seconds 30 --out run.jsonl                # camera_config のカメラ(stream1)
   python kiosk/tools/eye_camera/run_eye.py --source stream2 --seconds 30 --out run.jsonl   # 軽い方の映像
   python kiosk/tools/eye_camera/run_eye.py --file movie.mp4 --realtime --ptz dry         # 動画ファイル(カメラなし)。首は「命令を表示するだけ」
+視線の橋へ送る: --send 127.0.0.1:5331(会話側のサーバーの GAZE_UDP_PORT か、UE の 5321)--geometry gaze_geometry.json [--with-pixels(校正の記録のとき)]
+  python kiosk/tools/eye_camera/run_eye.py --seconds 36000 --send 127.0.0.1:5331 --geometry gaze_geometry.json --with-pixels
 首振り: --ptz off(既定。動かさない) / dry(動かす命令を表示だけ) / on(ONVIF で実際に動かす。動かしすぎない決まりは follow.py)
 出力: コマごとの JSONL(顔の位置・目の間隔・検出の時間)と、最後のまとめ。映像は保存しない。アドレス・アカウントは表示しない。
 """
@@ -16,6 +18,7 @@ import time
 import camera_config
 from detect import FaceDetector, FaceTracker
 from follow import Follower
+from gaze_bridge import GazeBridge, Geometry
 from onvif_ptz import OnvifError, OnvifPtz
 from stream import FrameReader, probe_size, raise_self_priority
 
@@ -35,6 +38,9 @@ def main() -> int:
     ap.add_argument("--ptz", choices=["off", "dry", "on"], default="off")
     ap.add_argument("--detect-width", type=int, default=0)
     ap.add_argument("--high-priority", action="store_true")
+    ap.add_argument("--send", default="", help="視線の橋の送り先 host:port(v1 の UDP)。空なら送らない")
+    ap.add_argument("--geometry", default="", help="gaze_geometry.json(カメラの置き場所・向き・キャラの目の位置。校正の結果)")
+    ap.add_argument("--with-pixels", action="store_true", help="v1 に目の中点と目の間隔の画素も付ける(校正の画面が点を記録するとき)")
     a = ap.parse_args()
 
     cfg = None
@@ -66,6 +72,12 @@ def main() -> int:
     det = FaceTracker(FaceDetector(detect_width=a.detect_width))  # 追跡 + 探索(遠い顔)
     reader = FrameReader(src, w, h, realtime=a.realtime, high_priority=a.high_priority)
     follower = Follower()
+    bridge = None
+    if a.send:
+        host, port = a.send.rsplit(":", 1)
+        g = Geometry.load(a.geometry or None)
+        g.width, g.height = w, h  # 画素の式は、実際の映像の大きさで
+        bridge = GazeBridge(g=g, sink=(host, int(port)), packet="v1", with_pixels=a.with_pixels)
     out = open(a.out, "w", encoding="utf-8") if a.out else None
     t0 = time.perf_counter()
     last, first_arrival = 0, None
@@ -82,6 +94,8 @@ def main() -> int:
             now = time.perf_counter()
             r.update(seq=last, t=round(arrived - first_arrival, 3), proc_ms=round((now - arrived) * 1000, 1))
             recs.append(r)
+            if bridge:
+                bridge.update(now, r, age_ms=r["proc_ms"])
             if out:
                 out.write(json.dumps(r, ensure_ascii=False) + "\n")
             act = follower.update(now, r["found"], r.get("cx", 0.5), r.get("cy", 0.5)) if a.ptz != "off" else None

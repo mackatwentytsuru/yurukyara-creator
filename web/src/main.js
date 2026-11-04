@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { createStage } from './scene.js';
 import { characterUrl, loadCharacter, motionChoices } from './character/index.js';
-import { MediapipeSource, SimSource, PoseSource } from './tracking/sources/index.js';
+import { MediapipeSource, SimSource, PoseSource, BridgeSource } from './tracking/sources/index.js';
 import { AttentionPicker } from './tracking/attention.js';
 import { describeScene } from './tracking/geometry.js';
 import { Speaker } from './conversation/speaker.js';
@@ -50,6 +50,7 @@ const app = {
 };
 window.__app = app; // 試験と開発の確認用
 if (IS_HEADSET) document.documentElement.classList.add('is-headset');
+if (params.get('led') === '1') document.documentElement.classList.add('is-led'); // 入口の LED: 顔にかぶる窓と操作の帯を隠す
 app.speaker = speaker;
 app.stage = stage;
 app.THREE = THREE;
@@ -90,6 +91,7 @@ const dialogue = new Dialogue({
   ui,
   setGaze,
   motionChoices,
+  interview: params.get('interview') === '1', // 入口のインタビューの型(返事 2 文まで)
   getContext: () => ({
     scene: sceneText(),
     character: { name: app.character.name, persona: app.persona },
@@ -238,6 +240,7 @@ function updatePrivacy() {
     camera: 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
     pose: 'カメラの映像は使っていません。この端末の位置だけで、あなたのいる方向を知っています。',
     sim: 'カメラは使っていません(マウスで人の位置を動かしています)。',
+    bridge: '床のカメラの機械が、あなたのいる向き(数字)だけをこの画面に送ります。映像は保存も、送信もしません。',
   };
   let text = texts[app.mode] ?? texts.sim;
   if (listener?.listening) text += listener.provider === 'server' ? ' 声は、この画面を配っている PC へ送って文字にします。音は保存しません。' : ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
@@ -368,6 +371,23 @@ function frame(rawMs) {
       ui.scene(t);
     }
   }
+}
+
+/* ---------- 入口の LED: 床のカメラの向きを、自分のサーバーから読む ---------- */
+// 視線の橋(別の機械でもよい)→ UDP → サーバー(GAZE_UDP_PORT)→ ここ。届くのは向きの数字だけ。こちらからは何も送らない(GET)。
+async function pollGaze(source) {
+  const res = await fetch('/api/gaze/now', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`視線の受け口が答えません (${res.status})。サーバーを GAZE_UDP_PORT 付きで起動してください`);
+  const g = await res.json();
+  if (g) source.receive(g);
+}
+function startGazePolling(source, everyMs = 66) {
+  const loop = async () => {
+    if (app.source !== source) return; // 入力を替えたら止まる
+    await pollGaze(source).catch(() => {});
+    setTimeout(loop, everyMs);
+  };
+  setTimeout(loop, everyMs);
 }
 
 /* ---------- 起動 ---------- */
@@ -584,10 +604,14 @@ async function boot() {
           ? new MediapipeSource({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV })
           : kind === 'pose'
             ? poseSource
-            : new SimSource({ element: $('stage'), getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV });
+            : kind === 'bridge'
+              ? new BridgeSource({ getFrame: frameInfo }) // 入口の LED: 床のカメラの向きを、視線の橋 → サーバーから受ける
+              : new SimSource({ element: $('stage'), getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV });
+      if (kind === 'bridge') await pollGaze(source); // 最初の 1 回で、受け口があるかを確かめる(無ければ理由を出す)
       await source.start();
       app.source = source;
       app.mode = kind;
+      if (kind === 'bridge') startGazePolling(source);
       $('gate').classList.add('hidden');
       updatePrivacy();
       if (IS_HEADSET) {
@@ -602,8 +626,17 @@ async function boot() {
     }
   }
   const wantPose = params.get('source') === 'pose' || IS_HEADSET; // AR(iPhone の殻アプリ)・VR(Quest)では、位置を外から受け取る
-  $('startCam').addEventListener('click', () => (wantPose ? startSource('pose', '準備しています…') : startSource('camera', 'カメラとモデルを準備しています…')));
+  const wantBridge = params.get('source') === 'bridge'; // 入口の LED: 床のカメラ(別の機械でもよい)の向きを、サーバー経由で受ける。この端末のカメラは使わない
+  $('startCam').addEventListener('click', () =>
+    wantBridge ? startSource('bridge', '床のカメラにつないでいます…') : wantPose ? startSource('pose', '準備しています…') : startSource('camera', 'カメラとモデルを準備しています…'),
+  );
   $('startSim').addEventListener('click', () => startSource('sim', ''));
+  if (wantBridge) {
+    $('startCam').textContent = 'はじめる';
+    document.querySelector('.gate .fine').textContent = 'この画面はカメラを使いません。床のカメラの機械から、あなたのいる向き(数字)だけを受け取ります。';
+  }
+  // 入口の LED は、人がボタンを押さない。?autostart=1 で、ゲートを飛ばして始める(音を出す許可は取れないので、口と字幕だけ)
+  if (params.get('autostart') === '1') $('startCam').click();
   if (wantPose) {
     $('startCam').textContent = IS_HEADSET ? 'はじめる(マイクを使います)' : 'はじめる';
     document.querySelector('.gate .fine').textContent = 'カメラの映像は使いません。この端末の位置だけで、あなたのいる方向を知ります。';

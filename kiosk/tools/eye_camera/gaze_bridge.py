@@ -7,6 +7,7 @@
   v1(既定。UE の入口キオスクが、すでに受けている形。viewer-tracker と同じ): {"v":1,"present":bool,"az":右が+(度),"el":上が+(度),"dist":m,"n":人数,"facing":0〜1,"seq":番号}
     UE の視線の受け口(SampleCharacterKit の sampleGazeDirector。既定のポート 5321)へ、そのまま送れる。az/el は「キャラの目から見た客の方向」(カメラからではない)なので、
     カメラが床にあっても、UE は「キャラの目の位置に カメラがある」ものとして扱え、UE 側の変更が要らない。
+    with_pixels=True のときは、いまのコマの目の中点と目の間隔の画素 "u","v_px","ipd_px" も足す(校正の点の記録用。v は版の名前なので v_px)。
   full(確かめ用): {"t","found","yaw_deg","pitch_deg","pos_m","ipd_px","age_ms"}
   見失ったら hold_s の間は最後の向きを送り続け、そのあと present=false。
 外部パラメータ(カメラの置き場所・向き)は、現地で測った値(または solvePnP の結果)で gaze_geometry.json に入れる。既定は仮の値(未測定)。
@@ -84,6 +85,7 @@ class GazeBridge:
     g: Geometry = field(default_factory=Geometry)
     sink: tuple | None = ("127.0.0.1", 5321)
     packet: str = "v1"  # "v1"(UE が受けている形)か "full"
+    with_pixels: bool = False  # v1 に、いまのコマの目の中点(u, v 画素)と目の間隔(画素)も付ける(校正の点を記録する受け口が使う)
     _seq: int = 0
     _yaw: float | None = None
     _pitch: float | None = None
@@ -98,6 +100,7 @@ class GazeBridge:
             u = det.get("eye_x", det["cx"]) * g.width
             v = det.get("eye_y", det["cy"]) * g.height
             pos = pixel_to_world(g, u, v, det["ipd_px"])
+            raw_px = (round(u, 1), round(v, 1), round(float(det["ipd_px"]), 2))
             yaw, pitch = gaze_angles(g.eye_pos, pos)
             if self._yaw is None:
                 self._yaw, self._pitch = yaw, pitch
@@ -109,6 +112,7 @@ class GazeBridge:
             self._last_seen = now
             found = True
         else:
+            raw_px = None
             found = self._yaw is not None and now - self._last_seen <= g.hold_s
         msg = {"t": round(now, 4), "found": bool(found), "age_ms": round(age_ms, 1)}
         if found:
@@ -116,8 +120,11 @@ class GazeBridge:
         self._seq += 1
         if self.packet == "v1":
             dist = float(np.linalg.norm(np.array(self._pos) - np.array(g.eye_pos))) if found and self._pos else 0.0
-            self._send({"v": 1, "present": bool(found), "az": round(self._yaw, 2) if found else 0.0, "el": round(self._pitch, 2) if found else 0.0,
-                        "dist": round(dist, 2), "n": 1 if found else 0, "facing": 1.0 if found else 0.0, "seq": self._seq})
+            v1 = {"v": 1, "present": bool(found), "az": round(self._yaw, 2) if found else 0.0, "el": round(self._pitch, 2) if found else 0.0,
+                  "dist": round(dist, 2), "n": 1 if found else 0, "facing": 1.0 if found else 0.0, "seq": self._seq}
+            if self.with_pixels and raw_px:
+                v1.update(u=raw_px[0], v_px=raw_px[1], ipd_px=raw_px[2])
+            self._send(v1)
         else:
             self._send(msg)
         return msg

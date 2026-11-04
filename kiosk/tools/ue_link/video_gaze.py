@@ -6,6 +6,10 @@
   calib: 仮想の客を床の数点に立たせ、各点のカメラの絵(同じ幾何で作った合成の絵)を検出 → 「自分を見ている」と感じる向き
          (= 本当の向き + 人のばらつき 1.5 度)を点にして gaze_calib.fit → 校正に使わない位置で、校正前後の誤差(度)を出す。
          python video_gaze.py calib --face <顔の絵> [--points 6] [--out calib.json]
+  stand: 仮想の客を床の 1 点に立たせ、その合成の絵を検出 → v1(画素つき)で送り続ける(校正の画面 kiosk/web/aim.html の通し用)
+         python video_gaze.py stand --face <顔の絵> --x 0.7 --z 1.6 [--seconds 6] [--port 5321]
+  truth: その点の本当の向き(度)。evaluate: 校正に使わない 25 点で、仮の値と渡した幾何の誤差を比べる
+         python video_gaze.py evaluate --face <顔の絵> --geometry fitted.json [--out eval.json]
 限界: 顔の絵は CG の 1 種類(本物の人・暗さ・逆光ではない)。合成の絵はカメラのレンズのゆがみ・ぶれを含まない。
 """
 from __future__ import annotations
@@ -102,7 +106,7 @@ def cmd_play(a) -> None:
     cap = cv2.VideoCapture(a.file)
     fps = cap.get(cv2.CAP_PROP_FPS) or FPS
     det = FaceTracker(FaceDetector())
-    bridge = GazeBridge(g=g, sink=("127.0.0.1", a.port), packet="v1")
+    bridge = GazeBridge(g=g, sink=("127.0.0.1", a.port), packet="v1", with_pixels=a.with_pixels)
     log = open(a.log, "w", encoding="utf-8") if a.log else None
     t0 = time.perf_counter()
     start_unix_ms = int(time.time() * 1000)
@@ -162,6 +166,61 @@ CAL_SPOTS = [(0.0, 2.0), (-0.7, 1.6), (0.7, 1.6), (-0.8, 3.0), (0.8, 3.0), (0.0,
 TEST_SPOTS = [(x, z) for z in (1.4, 1.9, 2.4, 2.9, 3.4) for x in (-0.9, -0.45, 0.0, 0.45, 0.9)]  # 校正に使わない 25 点
 
 
+def cmd_stand(a) -> None:
+    """仮想の客を床の 1 点に立たせ、そのカメラの絵(合成)を検出 → 視線の橋(v1・画素つき)で送り続ける(校正の画面の通しの試験用)"""
+    sp = FaceSprite(a.face)
+    gt = replace(TRUE)
+    g = load_geo(a.geometry, NOMINAL)
+    p = np.array([a.x, a.eye_h, a.z])
+    fr = sp.frame(gt, p, ipd_m=a.ipd or gt.ipd_m)
+    det = FaceTracker(FaceDetector())
+    bridge = GazeBridge(g=g, sink=("127.0.0.1", a.port), packet="v1", with_pixels=True)
+    t_end = time.perf_counter() + a.seconds
+    n = found = 0
+    while time.perf_counter() < t_end:
+        r = det.detect(fr)
+        bridge.update(time.perf_counter(), r)
+        n += 1
+        found += bool(r.get("found"))
+        time.sleep(1 / FPS)
+    ty, tp = gaze_angles(gt.eye_pos, p)
+    print(json.dumps({"spot": [a.x, a.eye_h, a.z], "frames": n, "found_rate": round(found / max(n, 1), 3),
+                      "true_az": round(ty, 2), "true_el": round(tp, 2)}, ensure_ascii=False))
+
+
+def cmd_truth(a) -> None:
+    """床の点に立つ客の、本当の向き(キャラの目から。度)。校正の通しで「人が合わせる向き」の元に使う"""
+    ty, tp = gaze_angles(TRUE.eye_pos, np.array([a.x, a.eye_h, a.z]))
+    print(json.dumps({"az": round(ty, 3), "el": round(tp, 3)}))
+
+
+def cmd_evaluate(a) -> None:
+    """校正に使わない 25 点(別の客)で、仮の値と、渡した幾何(校正の結果)の視線の誤差(度)を比べる"""
+    rng = np.random.default_rng(a.seed)
+    sp = FaceSprite(a.face)
+    det = FaceDetector()
+    gt, g0, g1 = replace(TRUE), replace(NOMINAL), load_geo(a.geometry, NOMINAL)
+    before, after = [], []
+    for x, z in TEST_SPOTS:
+        h = float(rng.uniform(1.45, 1.80))
+        ipd = gt.ipd_m * float(1 + rng.normal(0, 0.06))
+        p = np.array([x, h, z])
+        m = measure(sp, gt, p, ipd, det)
+        if not m:
+            continue
+        before.append(err_deg(g0, m, gt, p))
+        after.append(err_deg(g1, m, gt, p))
+    q = lambda xs, pr: round(float(np.percentile(xs, pr)), 2) if xs else None  # noqa: E731
+    res = {"test_points": len(before), "geometry": a.geometry,
+           "before_median_deg": round(statistics.median(before), 2), "before_p90_deg": q(before, 90),
+           "after_median_deg": round(statistics.median(after), 2), "after_p90_deg": q(after, 90),
+           "fitted": {"cam_pitch_deg": round(g1.cam_pitch_deg, 2), "eye_pos": [round(v, 3) for v in g1.eye_pos], "ipd_m": round(g1.ipd_m, 4)},
+           "true": {"cam_pitch_deg": gt.cam_pitch_deg, "eye_pos": gt.eye_pos, "ipd_m": gt.ipd_m}}
+    print(json.dumps(res, ensure_ascii=False, indent=1))
+    if a.out:
+        Path(a.out).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 def cmd_calib(a) -> None:
     rng = np.random.default_rng(a.seed)
     sp = FaceSprite(a.face)
@@ -216,13 +275,32 @@ def main() -> None:
     p.add_argument("--geometry", default="")
     p.add_argument("--port", type=int, default=5321)
     p.add_argument("--log", default="")
+    p.add_argument("--with-pixels", action="store_true", help="v1 に目の中点と目の間隔の画素を足す(校正の画面が点を記録するとき)")
+    st = sub.add_parser("stand")
+    st.add_argument("--face", required=True)
+    st.add_argument("--x", type=float, required=True)
+    st.add_argument("--z", type=float, required=True)
+    st.add_argument("--eye-h", type=float, default=1.66)
+    st.add_argument("--ipd", type=float, default=0.0)
+    st.add_argument("--seconds", type=float, default=6)
+    st.add_argument("--geometry", default="")
+    st.add_argument("--port", type=int, default=5321)
+    tr = sub.add_parser("truth")
+    tr.add_argument("--x", type=float, required=True)
+    tr.add_argument("--z", type=float, required=True)
+    tr.add_argument("--eye-h", type=float, default=1.66)
+    ev = sub.add_parser("evaluate")
+    ev.add_argument("--face", required=True)
+    ev.add_argument("--geometry", required=True)
+    ev.add_argument("--seed", type=int, default=5)
+    ev.add_argument("--out", default="")
     c = sub.add_parser("calib")
     c.add_argument("--face", required=True)
     c.add_argument("--points", type=int, default=6)
     c.add_argument("--seed", type=int, default=5)
     c.add_argument("--out", default="")
     a = ap.parse_args()
-    {"make": cmd_make, "play": cmd_play, "calib": cmd_calib}[a.cmd](a)
+    {"make": cmd_make, "play": cmd_play, "calib": cmd_calib, "stand": cmd_stand, "truth": cmd_truth, "evaluate": cmd_evaluate}[a.cmd](a)
 
 
 if __name__ == "__main__":

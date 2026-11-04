@@ -161,3 +161,10 @@ html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: n
   .dot { animation: none; }
   * { transition: none !important; }
 }
+
+/* 入口の LED(?led=1): 顔にかぶる「Claude の考え」と、操作の帯(よくある質問・入力欄)を隠す。字幕と注意書きは残す */
+html.is-led #thought,
+html.is-led #choices,
+html.is-led #composer,
+html.is-led .modes { display: none !important; }
+html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origin: top left; }

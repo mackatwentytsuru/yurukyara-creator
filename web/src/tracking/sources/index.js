@@ -21,6 +21,8 @@
 //   mediapipe: 端末のカメラ(端末の中だけで処理する)。画面(screen)の既定
 //   sim:       マウスの位置を人の位置にする。カメラなしの試し用
 //   pose:      外から位置を受け取る。AR(iPhone の殻アプリの ARKit)・VR(Quest の頭の位置)・殻の顔追跡
+//   bridge:    入口の LED。床のカメラの視線の橋(kiosk/tools/eye_camera/gaze_bridge.py)の向きを、サーバー(/api/gaze/now)から受ける
 export { MediapipeSource } from './mediapipeSource.js';
 export { SimSource } from './simSource.js';
 export { PoseSource } from './poseSource.js';
+export { BridgeSource, gazeToLocal } from './bridgeSource.js';

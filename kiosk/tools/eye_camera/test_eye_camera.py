@@ -263,3 +263,26 @@ class GazeV1PacketTest(unittest.TestCase):
         self.assertFalse(pkt["present"])
         self.assertEqual(pkt["az"], 0.0)
         rx.close()
+
+    def test_v1_with_pixels_adds_raw_pixels_only_when_seen(self):
+        import json
+        import socket
+
+        import gaze_bridge as gb
+
+        rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        rx.bind(("127.0.0.1", 0))
+        rx.settimeout(2)
+        g = gb.Geometry(ema=0.0)
+        b = gb.GazeBridge(g=g, sink=("127.0.0.1", rx.getsockname()[1]), packet="v1", with_pixels=True)
+        b.update(1.0, {"found": True, "eye_x": 0.25, "eye_y": 0.5, "cx": 0.25, "cy": 0.5, "ipd_px": 40.0})
+        pkt = json.loads(rx.recv(4096).decode())
+        self.assertEqual(pkt["v"], 1)  # 版の名前は変えない(画素の縦は v_px)
+        self.assertAlmostEqual(pkt["u"], 0.25 * g.width, places=1)
+        self.assertAlmostEqual(pkt["v_px"], 0.5 * g.height, places=1)
+        self.assertEqual(pkt["ipd_px"], 40.0)
+        b.update(1.1, {"found": False})  # 見失って hold の間: 向きは残るが、いまのコマの画素は無い
+        pkt = json.loads(rx.recv(4096).decode())
+        self.assertTrue(pkt["present"])
+        self.assertNotIn("u", pkt)
+        rx.close()
