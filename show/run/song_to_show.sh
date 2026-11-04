@@ -35,7 +35,10 @@ echo "== 口"
 python "$SHOW/audio/make_sing_curves.py" --lyrics "$JOB/lyrics.json" --vocals "$OUT/vocals.wav" --timeline "$OUT/timeline.json" --song-start "$SONG_START" --out "$JOB/sing.json"
 
 echo "== 動きと舞台の予定"
-python "$SHOW/motion/make_show_plan.py" --timeline "$OUT/timeline.json" --lyrics "$JOB/lyrics.json" --song-start "$SONG_START" --base-stage "$SHOW/show_stage.json" --out-plan "$JOB/plan.json" --out-stage "$JOB/stage.json"
+python "$SHOW/motion/make_show_plan.py" --timeline "$OUT/timeline.json" --lyrics "$JOB/lyrics.json" --song-start "$SONG_START" --base-stage "$SHOW/show_stage.json" --out-plan "$JOB/plan.json" --out-stage "$JOB/stage.json" --out-cues "$JOB/cues_plan.json"
+# 予定の cues(call_runs・landings・finale)を LED_CUES(手で書いた cues。無くてもよい)へ重ね、全編の道具へ渡す
+python -c "import json,os,sys;m=json.load(open(os.environ['LED_CUES'],encoding='utf-8')) if os.environ.get('LED_CUES') else {};m.update(json.load(open(sys.argv[1],encoding='utf-8')));json.dump(m,open(sys.argv[2],'w',encoding='utf-8'),ensure_ascii=False,indent=1)" "$JOB/cues_plan.json" "$JOB/cues.json"
+LED_CUES="$JOB/cues.json"
 cp -f "$JOB/stage.json" "$SHOW/show_stage.json"
 [ "${STOP_AFTER:-}" = "plan" ] && exit 0
 

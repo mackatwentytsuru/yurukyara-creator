@@ -19,6 +19,8 @@ SP3S, SP3L, SP3E = K + "Speak03_Excited_Start", K + "Speak03_Excited_Loop", K + 
 SP1S, SP1L, SP1E = K + "Speak01_Normal_Start", K + "Speak01_Normal_Loop", K + "Speak01_Normal_End"
 SING1, SING2, SING4 = K + "Idle81_Sing_NoMicrophone_Loop1", K + "Idle81_Sing_NoMicrophone_Loop2", K + "Idle81_Sing_NoMicrophone_Loop4"
 PEACE, WALK = K + "Idle88_DoublePeacePose", K + "Walk01"
+PEACE_SEC = 4.0  # PEACE の素材 0.3〜4.3 秒
+CALL_LINES = 4  # サビの 4 行目の頭で戻る。コール(ハイ)が入るのは 1〜3 行目の後だけ(4 行目の後は別の歌詞に差し替わる)
 WALK_CYCLE_SEC = 1.33
 WALK_SPEED = 0.867  # Walk01 の前へ進む速さ(m/s。移した後の腰の動きから測った値)。舞台の位置をこの速さで動かすと足が滑らない
 WALK_TURN_SEC = 0.2
@@ -53,6 +55,121 @@ def fill(clip, start, end, c0, c1, fade):
     return out
 
 
+def head_segments(section):
+    line = section["line"]
+    return [timed(BREATH, section["dark"]["start"], 0.0, 6.6, 0.4), timed(SP3S, line["start"] - 1.7, 0.0, 2.0, 0.5),
+            timed(SP3L, line["start"] + 0.3, 0.0, 5.0, 0.3), timed(SP3E, line["end"] - 0.45, 0.0, 0.6, 0.3)]
+
+
+def tail_segments(section):
+    """お辞儀から終わりまで(答えのせりふ・手を振る・静止)。"""
+    bow, listen, answer, outro, tail = (section[k] for k in ("bow", "listen", "answer", "outro", "tail"))
+    out = [timed(BOW, bow["start"], 0.0, bow["end"] - bow["start"], 0.5),
+           timed(LEAN, listen["start"], 0.0, 5.0, 0.6), timed(BREATH, listen["end"] - 2.0, 0.0, 2.0, 0.5),
+           timed(SP1S, answer["start"] - 0.4, 0.0, 2.0, 0.5)]
+    out += fill(SP1L, answer["start"] + 1.6, answer["end"] - 1.43, 0.0, 5.0, 0.3)
+    out += [timed(SP1E, answer["end"] - 1.43, 0.0, 1.43, 0.3), timed(WAVE, outro["start"], 0.0, 4.0, 0.5),
+            timed(BREATH, tail["start"], 0.0, 5.0, 0.5)]
+    return out
+
+
+def write_cues(path, cues):
+    note = "make_show_plan.py が作った。build_led_full.py --cues (LED_CUES) が読む。"
+    pathlib.Path(path).write_text(json.dumps({"_説明": note, **cues}, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def call_runs_for(choruses, at, beats):
+    """各サビの 1〜3 行目の行末から次の行の頭までにある拍の先頭 4 つ(足りなければ入る数だけ)。4 行目の後には入れない。"""
+    runs = []
+    for chorus in choruses:
+        for k in range(min(CALL_LINES - 1, len(chorus) - 1)):
+            lo, hi = at + chorus[k]["words"][-1][2], at + chorus[k + 1]["words"][0][1]
+            run = [b for b in beats if lo - 1e-6 <= b < hi - 1e-6][:4]
+            if run:
+                runs.append(run)
+    return runs
+
+
+def parts_plan(a, lyrics, section, beats, snap):
+    """part(サビの組)ごとに行き来を作る。前の部分の out_word の語で舞台へ跳び、サビの 4 行目の頭(最後の組は outro の頭)で LED へ戻る。"""
+    if not a.hop:
+        raise SystemExit("part のある歌詞は跳びで作る(--no-hop は使えない)")
+    at, lines = a.song_start, lyrics["lines"]
+    groups = []
+    for p in sorted({l["part"] for l in lines if "part" in l}):
+        mine = [l for l in lines if l.get("part") == p]
+        pre, chorus = ([l for l in mine if l.get("section") == k] for k in ("pre", "chorus"))
+        if not pre or len(chorus) < CALL_LINES:
+            raise SystemExit(f"part {p} に pre と chorus(4 行以上)が要る")
+        outro = [l for l in mine if l.get("section") == "outro"]
+        words = pre[-1]["words"]
+        out = snap(at + words[pre[-1].get("out_word", max(len(words) - 2, 0))][1])
+        groups.append({"pre": pre, "chorus": chorus, "outro": outro, "out": out, "head": at + chorus[0]["words"][0][1],
+                       "hop": hop.hop_times(out, beats), "stop": out + WALK_OUT_SEC})
+    last = groups[-1]
+    bow, line, tail = section["bow"], section["line"], section["tail"]
+    for g in groups:
+        if g is last:
+            g["back"] = snap(at + g["outro"][0]["words"][0][1]) if g["outro"] else snap(bow["start"])
+        else:
+            g["back"] = snap(at + g["chorus"][CALL_LINES - 1]["words"][0][1])
+    peace_at = snap(last["back"] - PEACE_SEC)
+    land_xy = hop.FORMS[a.hop_form]
+    walk_sec = WALK_TURN_SEC + math.hypot(STAGE_FRONT[0] - land_xy[0], STAGE_FRONT[1] - land_xy[1]) / (WALK_SPEED * 100.0)
+    segments, cursor, prev_back = head_segments(section), line["end"], section["enter"]["start"]
+    for g in groups:
+        g["stand_end"] = peace_at if g is last else g["back"]
+        g["front_walk"] = g["stand_end"] - walk_sec - 1.4
+        g["has_walk"] = g["front_walk"] > g["stop"] + 0.5
+        if not (prev_back < g["hop"]["takeoff"] < g["hop"]["land"] < g["hop"]["end"] < g["back"]):
+            raise SystemExit(f"跳び {g['out']:.2f} が前の戻り {prev_back:.2f} と戻り {g['back']:.2f} の間に入らない")
+        segments += fill(SING1, cursor, g["stop"], 0.5, 12.9, 0.4)
+        if g["has_walk"]:
+            segments += fill(SING4, g["stop"], g["front_walk"], 0.3, 9.2, 0.4)
+            segments += walk(g["front_walk"] + WALK_TURN_SEC, g["front_walk"] + walk_sec, exact=True)
+            segments += fill(SING2, g["front_walk"] + walk_sec, g["stand_end"], 0.3, 8.0, 0.4)
+        else:
+            segments += fill(SING4, g["stop"], g["stand_end"], 0.3, 9.2, 0.4)
+        cursor, prev_back = g["stand_end"], g["back"]
+    segments.append(timed(PEACE, peace_at, 0.3, 0.3 + PEACE_SEC, 0.5))
+    segments += fill(SING1, peace_at + PEACE_SEC, bow["start"], 0.5, 12.9, 0.4)
+    segments += tail_segments(section)
+    plan = {"from_sec": section["dark"]["start"], "to_sec": tail["end"], "free_face_sec": [[bow["start"], bow["end"]]]}
+    plan["segments"] = hop.insert_hops(segments, [g["hop"] for g in groups])
+    plan["foot_lock_sec"] = [[g["hop"]["land"], round(g["front_walk"] if g["has_walk"] else g["stand_end"], 4)] for g in groups]
+    pathlib.Path(a.out_plan).write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    stage = json.loads(pathlib.Path(a.base_stage).read_text(encoding="utf-8"))
+    sing = at + groups[0]["pre"][0]["words"][0][1]
+    starts = [section["enter"]["start"]] + [g["back"] for g in groups]
+    ends = [g["hop"]["takeoff"] for g in groups] + [tail["end"]]
+    stage["led_character"] = [[s, e] for s, e in zip(starts, ends)]
+    stage["flashes"] = [f for g in groups for f in ({"t": g["out"], "kind": "out"}, {"t": g["back"], "kind": "back"})]
+    stage["monitors"] = [{"on": sing - MONITOR_OPEN_LEAD, "off": sing + 4.5, "shots": [[sing - MONITOR_OPEN_LEAD, "face"]]}]
+    for g in groups:
+        off = min(g["head"] + 3.4, g["stop"] + SING4_SPIN_AT - 0.1)
+        stage["monitors"].append({"on": g["head"] - MONITOR_OPEN_LEAD, "off": off, "shots": [[g["head"] - MONITOR_OPEN_LEAD, "face"]]})
+    stage["monitors"].append({"on": peace_at - MONITOR_OPEN_LEAD, "off": last["back"], "shots": [[peace_at - MONITOR_OPEN_LEAD, "bust"]]})
+    path = []
+    for g in groups:
+        keys, lxy = hop.hop_path(g["hop"], a.hop_form)
+        path += keys
+        stand = STAGE_FRONT if g["has_walk"] else lxy
+        if g["has_walk"]:
+            walk_keys, _, _ = hop.walk_path(g["front_walk"], lxy, STAGE_FRONT, WALK_SPEED, WALK_TURN_SEC)
+            path += walk_keys
+        # 戻る秒まで立ち、戻ったら次の踏み切りの足元(LED の前)へ置き直す
+        path += [[g["back"], stand[0], stand[1], 0], [round(g["back"] + 0.05, 4), hop.START_XY[0], hop.START_XY[1], 0]]
+    stage["ar_path"] = path
+    stage["hops"] = [hop.stage_hop(g["hop"], hop.FORMS[a.hop_form]) for g in groups]
+    pathlib.Path(a.out_stage).write_text(json.dumps(stage, ensure_ascii=False, indent=2), encoding="utf-8")
+    if a.out_cues:
+        write_cues(a.out_cues, {"call_runs": call_runs_for([g["chorus"] for g in groups], at, beats),
+                                "landings": [g["hop"]["land"] for g in groups], "finale": peace_at})
+    text = "、".join(f"組{k + 1} 出る {g['out']:.2f} 踏み切り {g['hop']['takeoff']:.3f} 着地 {g['hop']['land']:.3f} 戻る {g['back']:.2f}" for k, g in enumerate(groups))
+    print(f"{text}。決め {peace_at:.2f}。動き {len(plan['segments'])} 本")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--timeline", required=True)
@@ -62,6 +179,7 @@ def main():
     ap.add_argument("--out-plan", required=True)
     ap.add_argument("--out-stage", required=True)
     ap.add_argument("--hop-form", default="left_front", choices=sorted(hop.FORMS), help="跳んで着地する場所の形")
+    ap.add_argument("--out-cues", help="全編の道具(build_led_full.py --cues)が読む cues json。part のある歌詞で call_runs・landings・finale を書く")
     ap.add_argument("--no-hop", dest="hop", action="store_false", help="跳ばずに前の形(足から現れて歩く)にする")
     a = ap.parse_args()
     timeline = json.loads(pathlib.Path(a.timeline).read_text(encoding="utf-8"))
@@ -72,6 +190,8 @@ def main():
     def snap(t):
         return min(beats, key=lambda b: abs(b - t))
 
+    if any("part" in l for l in lyrics["lines"]):
+        return parts_plan(a, lyrics, section, beats, snap)
     at = a.song_start
     lines = lyrics["lines"]
     pre = [line for line in lines if line.get("section") == "pre"]
@@ -89,8 +209,7 @@ def main():
     line = section["line"]
     bow, listen, answer, outro, tail = (section[k] for k in ("bow", "listen", "answer", "outro", "tail"))
 
-    segments = [timed(BREATH, section["dark"]["start"], 0.0, 6.6, 0.4), timed(SP3S, line["start"] - 1.7, 0.0, 2.0, 0.5),
-                timed(SP3L, line["start"] + 0.3, 0.0, 5.0, 0.3), timed(SP3E, line["end"] - 0.45, 0.0, 0.6, 0.3)]
+    segments = head_segments(section)
     hops = [hop.hop_times(t, beats) for t in (out_1, out_2)] if a.hop else []
     stop_walking = out_1 + WALK_OUT_SEC  # 跳ぶときは歩かず、この秒まで着地の場所で歌い続ける(Loop4 の秒は前と同じ)
     if a.hop:
@@ -108,12 +227,8 @@ def main():
         segments += fill(SING4, stop_walking, front_walk, 0.3, 9.2, 0.4)
         segments += walk(front_walk, front_walk + walk_sec)
     segments += fill(SING2, front_walk + walk_sec, peace_at, 0.3, 8.0, 0.4)
-    segments += [timed(PEACE, peace_at, 0.3, 4.3, 0.5), timed(BOW, bow["start"], 0.0, bow["end"] - bow["start"], 0.5),
-                 timed(LEAN, listen["start"], 0.0, 5.0, 0.6), timed(BREATH, listen["end"] - 2.0, 0.0, 2.0, 0.5),
-                 timed(SP1S, answer["start"] - 0.4, 0.0, 2.0, 0.5)]
-    segments += fill(SP1L, answer["start"] + 1.6, answer["end"] - 1.43, 0.0, 5.0, 0.3)
-    segments += [timed(SP1E, answer["end"] - 1.43, 0.0, 1.43, 0.3), timed(WAVE, outro["start"], 0.0, 4.0, 0.5),
-                 timed(BREATH, tail["start"], 0.0, 5.0, 0.5)]
+    segments.append(timed(PEACE, peace_at, 0.3, 4.3, 0.5))
+    segments += tail_segments(section)
     plan = {"from_sec": section["dark"]["start"], "to_sec": tail["end"], "free_face_sec": [[bow["start"], bow["end"]]], "segments": segments}
     if hops:
         plan["segments"] = hop.insert_hops(segments, hops)
@@ -145,6 +260,8 @@ def main():
                             [out_2, x1, y1, 0], [outro["start"], x1, y1, 0]]
         stage.pop("hops", None)
     pathlib.Path(a.out_stage).write_text(json.dumps(stage, ensure_ascii=False, indent=2), encoding="utf-8")
+    if a.out_cues and hops:
+        write_cues(a.out_cues, {"landings": [h["land"] for h in hops]})
     hop_text = "。跳び " + "、".join(f"踏み切り {h['takeoff']:.3f} 着地 {h['land']:.3f}" for h in hops) if hops else ""
     print(f"歌い出し {sing:.2f}、出る {out_1:.2f}、サビ {chorus_head:.2f}、前へ {front_walk:.2f}、戻る {back:.2f}、決め {peace_at:.2f}、もう一度出る {out_2:.2f}。動き {len(plan['segments'])} 本{hop_text}")
 

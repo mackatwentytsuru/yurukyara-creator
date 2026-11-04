@@ -165,6 +165,156 @@ def test_walk_moves_at_walk_speed():
     assert max(step) - min(step) < 0.01 * max(step)
 
 
+# ---- サビが 2 回ある曲(part のある歌詞)。偽の語の秒と 150 BPM の拍だけで確かめる。音も曲も使わない ----
+SONG_START = 39.0
+FLOW = [(1, "pre", 7, None), (1, "pre", 7, None), (1, "pre", 7, None), (1, "pre", 7, 3), (1, "chorus", 6, None), (1, "chorus", 6, None),
+        (1, "chorus", 6, None), (1, "chorus", 6, None), (1, "verse", 7, None), (1, "verse", 7, None), (1, "verse", 7, None), (1, "verse", 7, None),
+        (2, "pre", 7, None), (2, "pre", 6, 3), (2, "chorus", 6, None), (2, "chorus", 6, None), (2, "chorus", 6, None), (2, "chorus", 6, None),
+        (2, "outro", 7, None)]
+CHORUS_FIRST = (4, 14)  # FLOW の中で、各サビの最初の行の番号
+
+
+def fake_timeline():
+    beats = beats_at(150.0, 0.37, 700)
+    names = [("dark", 32, 36), ("enter", 36, 39), ("song", 39, 173), ("line", 41, 46.35), ("bow", 173, 178), ("listen", 178, 185),
+             ("answer", 185, 194), ("outro", 194, 198), ("tail", 198, 203)]
+    return {"sections": [{"id": k, "start": a, "end": b} for k, a, b in names], "beats": beats}
+
+
+def fake_lyrics(extra_after_call=False, with_part=True):
+    """偽の語の秒(曲の頭から)。語は 0.5 秒おき。サビの 1〜3 行目の後は 2.4 秒あく(4 拍と少し)、4 行目の後は 3.0 秒、ほかは 1.0 秒。
+    extra_after_call なら、サビの 4 行目の後に短い行を足す(4 行目の後の 3.0 秒の中に入れ、次の行の秒は動かさない)。"""
+    lines, t, seen = [], 10.0, {}
+    for part, sec, n, out_word in FLOW:
+        words = [["w", round(t + 0.5 * k, 3), round(t + 0.5 * k + 0.4, 3)] for k in range(n)]
+        lines.append({"section": sec, "mood": [], "words": words, **({"part": part} if with_part else {}),
+                      **({"out_word": out_word} if out_word is not None else {})})
+        seen[(part, sec)] = seen.get((part, sec), 0) + 1
+        end = words[-1][2]
+        t = end + (2.4 if sec == "chorus" and seen[(part, sec)] < 4 else 3.0 if sec == "chorus" else 1.0)
+        if extra_after_call and sec == "chorus" and seen[(part, sec)] == 4:
+            x = end + 0.6
+            lines.append({"section": "chorus", "mood": [], **({"part": part} if with_part else {}),
+                          "words": [["x", round(x, 3), round(x + 0.4, 3)], ["y", round(x + 0.5, 3), round(x + 0.9, 3)]]})
+    return {"lines": lines}
+
+
+def run_fake(lyrics, extra=()):
+    timeline = fake_timeline()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        (tmp / "t.json").write_text(json.dumps(timeline), encoding="utf-8")
+        (tmp / "l.json").write_text(json.dumps(lyrics), encoding="utf-8")
+        (tmp / "base.json").write_text((HERE.parent / "show_stage.json").read_text(encoding="utf-8"), encoding="utf-8")
+        subprocess.run([sys.executable, str(HERE / "make_show_plan.py"), "--timeline", str(tmp / "t.json"), "--lyrics", str(tmp / "l.json"),
+                        "--song-start", str(SONG_START), "--base-stage", str(tmp / "base.json"), "--out-plan", str(tmp / "plan.json"),
+                        "--out-stage", str(tmp / "stage.json"), "--out-cues", str(tmp / "cues.json"), *extra], check=True, capture_output=True)
+        read = lambda n: json.loads((tmp / n).read_text(encoding="utf-8"))  # noqa: E731
+        return timeline, read("plan.json"), read("stage.json"), read("cues.json")
+
+
+def test_two_round_trips_in_flow_order():
+    timeline, plan, stage, _ = run_fake(fake_lyrics())
+    assert [f["kind"] for f in stage["flashes"]] == ["out", "back", "out", "back"]
+    ts = [f["t"] for f in stage["flashes"]]
+    assert ts == sorted(ts) and len(stage["hops"]) == 2 and len(stage["led_character"]) == 3
+    lines = fake_lyrics()["lines"]
+    # 出る = 各 pre の最後の行の out_word 番目の語。戻る = 1 組はサビ 4 行目の頭、2 組は outro の頭(どちらも拍へ寄せる)
+    expect = [SONG_START + lines[3]["words"][3][1], SONG_START + lines[7]["words"][0][1],
+              SONG_START + lines[13]["words"][3][1], SONG_START + lines[18]["words"][0][1]]
+    for got, want in zip(ts, expect):
+        assert abs(got - want) <= 0.2 + 1e-6, (got, want)
+    assert [s["at_sec"] for s in plan["segments"]] == sorted(s["at_sec"] for s in plan["segments"])
+    assert len([s for s in plan["segments"] if s.get("hop")]) == 2
+    sing = {s["clip"].rsplit("_", 1)[-1] for s in plan["segments"] if "Sing" in s["clip"]}
+    assert {"Loop1", "Loop4", "Loop2"} <= sing
+    # 決め(PEACE)は 2 回目のサビの終わり = 最後の戻りの手前に終わる
+    peace = next(s for s in plan["segments"] if "DoublePeace" in s["clip"])
+    assert abs(peace["end_sec"] - ts[3]) <= 0.4 + 0.01 and peace["at_sec"] > ts[2]
+    assert [round(a, 3) for a, _ in plan["foot_lock_sec"]] == [round(h["land"], 3) for h in stage["hops"]]
+
+
+def test_hops_and_returns_on_beat_and_led_intervals_do_not_overlap():
+    timeline, plan, stage, _ = run_fake(fake_lyrics())
+    beats = timeline["beats"]
+    on_beat = lambda t: any(abs(b - t) < 1e-3 for b in beats)  # noqa: E731
+    for h in stage["hops"]:
+        assert on_beat(h["takeoff"]) and on_beat(h["land"]) and 0.5 <= h["land"] - h["takeoff"] <= 1.1
+    backs = [f["t"] for f in stage["flashes"] if f["kind"] == "back"]
+    assert all(on_beat(t) for t in backs)
+    led = stage["led_character"]
+    assert all(a < b for a, b in led) and all(led[i][1] < led[i + 1][0] for i in range(len(led) - 1))
+    for i, h in enumerate(stage["hops"]):
+        assert led[i][1] == h["takeoff"] and led[i + 1][0] == backs[i]
+        for t in (h["takeoff"] + 0.01, h["land"] + 0.5, backs[i] - 0.05):  # 舞台にいる間は LED のキャラが居ない
+            assert not on_led(stage, t), t
+        assert on_led(stage, backs[i] + 0.01) and on_led(stage, h["takeoff"] - 0.01)
+        # 踏み切りの前は LED の足元の前(2 回目も。戻った後に置き直す)。着地の後は着地の場所
+        assert ar_at(stage["ar_path"], h["takeoff"] - 0.01)[:2] == list(hop.START_XY)
+        assert [round(v, 3) for v in ar_at(stage["ar_path"], h["land"] + 0.02)[:2]] == [round(v, 3) for v in h["land_xy"]]
+    keys = [k[0] for k in stage["ar_path"]]
+    assert keys == sorted(keys)
+    for j in [s for s in plan["segments"] if s.get("hop")]:
+        assert not [s for s in plan["segments"] if j["at_sec"] < s["at_sec"] < j["end_sec"]]
+
+
+def test_call_runs_three_per_chorus_and_none_after_the_fourth_line():
+    timeline, _, stage, cues = run_fake(fake_lyrics())
+    runs, beats, lines = cues["call_runs"], timeline["beats"], fake_lyrics()["lines"]
+    assert len(runs) == 6 and all(len(r) == 4 and all(b in beats for b in r) for r in runs)
+    for first in CHORUS_FIRST:
+        mine = [r for r in runs if SONG_START + lines[first]["words"][-1][2] <= r[0] < SONG_START + lines[first + 3]["words"][0][1]]
+        assert len(mine) == 3  # 各サビ 3 組
+        for k, r in enumerate(mine):  # 行末から次の行の頭の間に収まる
+            assert r[0] >= SONG_START + lines[first + k]["words"][-1][2] - 1e-6 and r[-1] < SONG_START + lines[first + k + 1]["words"][0][1]
+        end4 = SONG_START + lines[first + 3]["words"][-1][2]  # 4 行目の後には入らない
+        assert not [r for r in runs if end4 - 1e-6 <= r[0] < end4 + 2.4]
+    assert cues["landings"] == [h["land"] for h in stage["hops"]]
+
+
+def test_short_gap_gives_fewer_than_four_beats():
+    lyrics = fake_lyrics()
+    gap = lyrics["lines"][6]["words"][0][1] - lyrics["lines"][5]["words"][-1][2]
+    shift = gap - 1.2  # サビ 2 行目の後だけ 1.2 秒に縮める(3 拍以下)。以降の行は同じだけ早める
+    for line in lyrics["lines"][6:]:
+        for w in line["words"]:
+            w[1] = round(w[1] - shift, 3)
+            w[2] = round(w[2] - shift, 3)
+    _, _, _, cues = run_fake(lyrics)
+    assert len(cues["call_runs"]) == 6 and min(len(r) for r in cues["call_runs"]) <= 3
+
+
+def test_extra_lines_after_the_fourth_line_change_nothing():
+    _, _, stage, cues = run_fake(fake_lyrics())
+    _, _, stage2, cues2 = run_fake(fake_lyrics(extra_after_call=True))
+    assert stage2["flashes"] == stage["flashes"] and stage2["led_character"] == stage["led_character"] and stage2["hops"] == stage["hops"]
+    assert cues2["call_runs"] == cues["call_runs"] and cues2["landings"] == cues["landings"]
+
+
+def test_lyrics_without_part_keep_the_old_form():
+    timeline = fake_timeline()
+    old = {"lines": [{"section": "pre", "words": [["a", 8.5, 0], ["b", 9.5, 0]]}, {"section": "pre", "words": [["c", 18.4, 0], ["d", 19.6, 0], ["e", 20.0, 0]]},
+                     {"section": "chorus", "words": [["f", 24.0, 0]]}, {"section": "chorus", "words": [["g", 34.4, 0]]}]}
+    _, plan, stage, _ = run_fake(old)
+    by = {s["id"]: s for s in timeline["sections"]}
+    assert stage["led_character"][2] == [by["outro"]["start"], by["tail"]["end"]] and len(stage["hops"]) == 2
+    assert [f["kind"] for f in stage["flashes"]] == ["out", "back", "out", "back"]
+    assert stage["flashes"][3]["t"] == by["outro"]["start"] and plan["foot_lock_sec"][1][1] == by["tail"]["end"]
+
+
+def test_lyrics_times_pass_part_through():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        src = {"lines": [{"part": 1, "section": "pre", "out_word": 1, "text": "あいう えお"}, {"part": 2, "section": "chorus", "text": "かき くけ"}]}
+        words = {"song": [{"words": [{"w": w, "s": 1.0 + i * 0.5, "e": 1.4 + i * 0.5} for i, w in enumerate(["あいう", "えお", "かき", "くけ"])]}]}
+        (tmp / "s.json").write_text(json.dumps(src, ensure_ascii=False), encoding="utf-8")
+        (tmp / "w.json").write_text(json.dumps(words, ensure_ascii=False), encoding="utf-8")
+        subprocess.run([sys.executable, str(HERE.parent / "audio" / "make_lyrics_times.py"), "--source", str(tmp / "s.json"), "--words", str(tmp / "w.json"),
+                        "--name", "song", "--out", str(tmp / "o.json")], check=True, capture_output=True)
+        out = json.loads((tmp / "o.json").read_text(encoding="utf-8"))
+        assert [l.get("part") for l in out["lines"]] == [1, 2] and out["lines"][0]["out_word"] == 1 and "out_word" not in out["lines"][1]
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

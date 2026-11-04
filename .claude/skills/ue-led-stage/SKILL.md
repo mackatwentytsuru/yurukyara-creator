@@ -386,3 +386,7 @@ description: Unreal Engine 5.8 で、複数の面の LED ウォールがある�
 - 着地の床の光: `cues` の `land_wave`(`life_sec` 0.25、`gap_px` 160、`gain` 0.5)で、白(暖色+金)をやめてピンク+青緑、足の真下を避け、0.25 秒で消える(`fx_layers._floor_wave`)。足の周りの明るさの山は 70.1→44.0(床 34)。測りは `measure_land.py`。
 - つまずき: Comp_MatteChar の透明は全面 255。マスクは 0 番のチャンネルを読む。
 - 未達: 靴の下の暗さ(足の下 2〜7 px / 横 40 px)は 59.1〜59.8 秒で平均 23.6%(目安 30%。同じ測りで第 5 版は 29.2%)。光を消したぶん横の床も暗くなり比が縮んだ。接地の影(composite.py CONTACT_SHADOW)を上げれば届く見込み(未試験)。
+
+## サビ 2 回の曲の予定(11-04、`show/motion/make_show_plan.py` の `parts_plan`)
+- 歌詞の `part` ごとに「出る(pre の out_word)→ 跳ぶ → サビ → 4 行目の頭(最後は outro の頭)で戻る」を作る。2 回目の踏み切りは LED の足元の前から始めるので、戻った 0.05 秒後に `ar_path` を `START_XY` へ置き直す。
+- `--out-cues` の `call_runs` は各サビ 1〜3 行目の行末から次の行の頭までの拍の先頭 4 つ(4 行目の後は入れない)。`song_to_show.sh` が `LED_CUES` へ重ねる。偽の秒の試験は `test_hop.py`(WAV の実測は未確認)。

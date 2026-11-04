@@ -4,6 +4,7 @@
 
 使い方: make_lyrics_times.py --source <歌詞の元.json> --words <measure_lyrics.py の json> --name <曲の名前> --out <lyrics.json>
 歌詞の元: {"lines": [{"section": "pre", "mood": [["sad", 0.2]], "text": "ずっと 夢/ゆめ みて た"}], "accents_after_last": [[秒, 秒, 名前, 重み]]}
+part(サビの組。1 か 2)と out_word(舞台へ出る語の番号)は、あれば出力へそのまま渡す。
 text は空白で区切り、「表記/読み」。読みが表記と同じなら /読み は省く。カタカナの読みは、ひらがなで書く。
 """
 import argparse
@@ -97,7 +98,7 @@ def main():
     for k, (i, j, c) in enumerate(flat):
         if j == 0:
             line = lines[i]
-            output["lines"].append({"section": line.get("section", ""), "mood": line.get("mood", []), "words": [], **({"out_word": line["out_word"]} if "out_word" in line else {})})
+            output["lines"].append({"section": line.get("section", ""), "mood": line.get("mood", []), "words": [], **{k: line[k] for k in ("part", "out_word") if k in line}})
         # 行の間の無音は語に含めない。声の大きさで口は閉じるが、読みの枠は語の長さの上限で切る
         end = min(ends[k], times[k] + weights[k] * mora_sec * 2.5)
         output["lines"][-1]["words"].append([c["reading"], round(times[k], 2), round(end, 2)])

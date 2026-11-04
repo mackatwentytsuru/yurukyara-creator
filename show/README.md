@@ -98,3 +98,8 @@ python show/composite/composite.py ... --exit <踏み切り> <現れきり> --ex
 - できている: LED 3 面に mp4 が映る、面の境目が絵の境目に合う、扉が左右に開く(静止と 5 秒の動き)、キャラが舞台に立つ。
 - キャラを隠すカットでは、床下へ動かしている(`Visibility` のトラックが効かないため。`docs/devlog_ショー.md`)。
 - キャラは骨で動く(`Move_Wave`)。顔の絵のコマを途中で変えるのは、まだ試していない。
+
+## 曲替え: サビが 2 回ある曲(11-04。歌詞の元の各行に `part`)
+- `make_lyrics_times.py` が `part`・`out_word` を歌詞に渡し、`make_show_plan.py` が `part` ごとに行き来を作る(出る = pre の `out_word` の語、戻る = サビ 4 行目の頭、最後の組は outro の頭。決めの PEACE は最後のサビの終わり)。`part` が無い歌詞は今までの形。
+- `--out-cues <json>` が `call_runs`(各サビ 1〜3 行目の後の 4 拍)・`landings`・`finale` を書き、`song_to_show.sh` が `LED_CUES` にして `build_led_full.py` へ渡す。試験は `python show/motion/test_hop.py`(偽の秒と 150 BPM の拍)。
+- 曲が長い(134 秒)ときは `song_to_show.sh` の 7 番目の引数(既定 43.4)と `show_script.json` の `song.len_sec` を替える。
