@@ -69,6 +69,11 @@ def main():
     # 取り込んだ材質の親はモーフ用の印が無く、-game で顔が既定の材質に戻る。顔の形が使える同じ見た目の材質に替える
     for index, material in enumerate(character_slots(mesh)):
         character.skeletal_mesh_component.set_material(index, material)
+    # 動きを流すと体の枠(bounds)の中心が足より 1.2 m 下へずれ、床に隠れたとみなされて描かれない(11-04 実測)。枠を広げ、骨も常に動かす
+    skin = character.skeletal_mesh_component
+    skin.set_editor_property("bounds_scale", 3.0)
+    skin.set_editor_property("visibility_based_anim_tick_option",
+                             unreal.VisibilityBasedAnimTickOption.ALWAYS_TICK_POSE_AND_REFRESH_BONES)
     character.set_actor_label(f"Character_{CHARACTER}")
     character.tags = [unreal.Name("LiveChar")]
     report.append(f"character {CHARACTER} at {standing[0]}")
