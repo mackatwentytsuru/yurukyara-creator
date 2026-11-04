@@ -400,6 +400,97 @@ def fuzz_material(name, rgb, out_dir, rough=0.95, sheen=1.0, sheen_tint=None, no
     return m
 
 
+GRADIENT_TEX_HEIGHT = 4096   # 濃淡の絵の縦の画素。毛の殻は色を「8 段縮めた絵」(縦 4096 → 16 段)から読むので、縦が段の細かさになる
+GRADIENT_TEX_WIDTH = 16      # 横は色が変わらないので細くてよい
+
+
+def fuzz_gradient_material(name, stops, out_dir, rough=0.95, sheen=1.0, sheen_tint=None, height=GRADIENT_TEX_HEIGHT):
+    """高さで色が変わる、毛足の材質(焼き色・おなかの帯など、色のやわらかい濃淡を 1 つの部品に持たせる)。
+    stops = [(v, (R, G, B)), …]。v は 0 = 下の端、1 = 上の端(height_uv の z0〜z1)。間はなめらかにつなぐ。
+    使う物には height_uv(ob, z0, z1) で UV を付ける。auto_uv は使わない(濃淡が繰り返される)。
+    なぜ要るか: ブラウザでは、頂点の色 Col は拡散の光にしか掛からず、明るさの持ち上げ(色の絵を発光に使う)と、
+    毛の殻の色(色の絵を 8 段縮めて読む)には掛からない。Col で付けた濃淡は、ほぼ消える(パンの試験で実測)。
+    胴を高さで切って材質を分けると、境が硬い帯になり、毛の殻が境で毛を短くして溝に見える(別の部品に見えた)。
+    ブラウザの毛の殻に数えられるよう、法線の絵(平ら)と sheen を持たせる。毛の見え方は殻が作るので、色の絵に粒は入れない。"""
+    import numpy as np
+    stops = sorted(stops)
+    vs = (np.arange(height)[::-1] + 0.5) / height          # 絵の上の行が v = 1
+    cols = np.zeros((height, 3), np.float32)
+    for i, v in enumerate(vs):
+        if v <= stops[0][0]:
+            c = stops[0][1]
+        elif v >= stops[-1][0]:
+            c = stops[-1][1]
+        else:
+            k = next(j for j in range(len(stops) - 1) if stops[j][0] <= v <= stops[j + 1][0])
+            (v0, c0), (v1, c1) = stops[k], stops[k + 1]
+            t = (v - v0) / max(v1 - v0, 1e-9)
+            t = t * t * (3 - 2 * t)
+            c = [c0[n] + (c1[n] - c0[n]) * t for n in range(3)]
+        cols[i] = c
+    col = np.repeat(cols[:, None, :], GRADIENT_TEX_WIDTH, 1)
+    nrm = np.zeros_like(col)
+    nrm[...] = (128, 128, 255)
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+    for arr, suffix in ((col, "_color.png"), (nrm, "_normal.png")):
+        h_, w_ = arr.shape[:2]
+        rgba = np.ones((h_, w_, 4), np.float32)
+        rgba[..., :3] = arr / 255.0
+        path = os.path.join(out_dir, name + suffix)
+        img = bpy.data.images.new(os.path.basename(path), w_, h_, alpha=False)
+        img.pixels = rgba[::-1].reshape(-1).tolist()
+        img.filepath_raw = path
+        img.file_format = "PNG"
+        img.save()
+        bpy.data.images.remove(img)
+        paths.append(path)
+    mid = stops[len(stops) // 2][1]
+    m = material(name, mid, rough=rough, spec=0.1, sheen=sheen, sheen_tint=sheen_tint)
+    nt = m.node_tree
+    b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    tc = nt.nodes.new("ShaderNodeTexImage")
+    tc.image = bpy.data.images.load(paths[0])
+    tc.image.colorspace_settings.name = "sRGB"
+    tc.extension = "EXTEND"
+    nt.links.new(tc.outputs["Color"], b.inputs["Base Color"])
+    tn = nt.nodes.new("ShaderNodeTexImage")
+    tn.image = bpy.data.images.load(paths[1])
+    tn.image.colorspace_settings.name = "Non-Color"
+    nm = nt.nodes.new("ShaderNodeNormalMap")
+    nm.inputs["Strength"].default_value = 0.1
+    nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
+    nt.links.new(nm.outputs["Normal"], b.inputs["Normal"])
+    return m
+
+
+def height_uv(ob, z0, z1, center=None):
+    """v = 高さ((z - z0) / (z1 - z0))、u = 体の周りの角度の UV を付ける(fuzz_gradient_material 用)。
+    u は、周りの長さと高さの比に合わせて何周か繰り返す(ブラウザの毛の殻は UV の長さで毛の太さを決めるので、
+    u と v の 1 の長さをそろえないと、毛が横に伸びる)。継ぎ目は背中(角度 ±180 度)。"""
+    me = ob.data
+    mw = ob.matrix_world
+    pts = [mw @ v.co for v in me.vertices]
+    if center is None:
+        xs, ys = [p.x for p in pts], [p.y for p in pts]
+        center = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+    r_max = max(math.hypot(p.x - center[0], p.y - center[1]) for p in pts)
+    wraps = max(1, round(2 * math.pi * r_max / max(z1 - z0, 1e-6)))
+    uv = me.uv_layers.new(name="UVMap") if not me.uv_layers else me.uv_layers.active
+    for poly in me.polygons:
+        us, vs = [], []
+        for li in poly.loop_indices:
+            p = pts[me.loops[li].vertex_index]
+            a = math.atan2(p.x - center[0], -(p.y - center[1]))      # 正面(-Y)が 0
+            us.append(wraps * (a / (2 * math.pi) + 0.5))
+            vs.append((p.z - z0) / (z1 - z0))
+        if max(us) - min(us) > wraps / 2:                             # 背中の継ぎ目をまたぐ面
+            us = [u + wraps if u < wraps / 2 else u for u in us]
+        for li, u, v in zip(poly.loop_indices, us, vs):
+            uv.data[li].uv = (u, v)
+    return ob
+
+
 def auto_uv(ob, tile=4.0):
     """立方体投影で UV を付け、tile 倍に繰り返す(毛足の画像が大きすぎず、細かく見えるように)。"""
     bpy.ops.object.select_all(action="DESELECT")

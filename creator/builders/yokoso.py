@@ -3,7 +3,6 @@
 使い方: blender -b -P creator/builders/yokoso.py -- <出力.blend> <作業フォルダ>
 作業フォルダには sash.png と sash.json を先に作っておく(creator/pipeline/t01_band_texture.py)。rig.json もここに書く。"""
 import json
-import math
 import os
 import sys
 
@@ -38,8 +37,9 @@ D = dict(
           (300, 367), (340, 374), (380, 377), (420, 374), (460, 366), (500, 350), (540, 325), (580, 288), (610, 230),
           (628, 120), (636, 6)],
     head_depth=0.95,
-    torso=[(500, 190), (560, 222), (600, 246), (630, 272), (660, 284), (700, 292), (780, 303), (860, 310), (940, 303),
+    torso=[(500, 190), (560, 222), (600, 248), (615, 262), (630, 286), (645, 302), (660, 310), (700, 306), (780, 303), (860, 310), (940, 303),
            (980, 288), (1020, 266), (1050, 236), (1070, 185), (1080, 90), (1082, 6)],
+    # 肩(py 600〜660)は、元の絵の輪郭の首から腕の上へまっすぐ下がる線に合わせた(細いと、腕の付け根の上に抜けが出た)
     torso_depth=0.85,
     arm_root=(400, 690), arm_tip=(188, 812), arm_r=86,
     foot_c=(473, 1150), foot_r=(116, 108, 82), foot_dx=149, leg_dx=139,
@@ -51,11 +51,7 @@ D = dict(
 
 
 TEXT_FILL = 0.92   # 面の曲がりで前の部分が見かけより長いので、字を少し大きく載せる
-
-
-def _arc_len(path, radius=0.25):
-    """帯の道の、面の上のおおよその長さ。"""
-    return sum(math.hypot(math.radians(a1 - a0) * radius, z1 - z0) for (a0, z0), (a1, z1) in zip(path, path[1:]))
+SASH_SEG = 240     # 帯の長さ方向の分け数(一周)
 
 
 def group(ob, bone):
@@ -90,7 +86,7 @@ def main():
         tx_, ty_ = D["arm_tip"]
         root = (X(CX + sx * (CX - rx_)), 0.0, Z(ry_))
         tip = (X(CX + sx * (CX - tx_)), 0.0, Z(ty_))
-        a = W.limb(name, [torso], root, tip, R(D["arm_r"]), R(D["arm_r"]) * 0.93, mat=green, flare=1.08)
+        a = W.limb(name, [torso], root, tip, R(D["arm_r"]), R(D["arm_r"]) * 0.93, mat=green, flare=1.2)   # 付け根を丸めたので、肩の上の抜けを太らせてふさぐ(1.08 では抜け 165 px)
         P.auto_uv(a, 7.0)
         group(a, name)
         arms[name] = a
@@ -128,16 +124,16 @@ def main():
     tx.image = bpy.data.images.load(WORK + "/sash.png")
     tx.image.colorspace_settings.name = "sRGB"
     nt.links.new(tx.outputs["Color"], b.inputs["Base Color"])
-    # 帯は前から背中へ回る 1 本。字は前の部分だけに載せ、残りは絵の端の地の色を伸ばす(tx.extension = EXTEND)
-    (a_top, z_top), (a_low, z_low) = path[0], path[-1]
-    back_path = [(92, z_low - 0.055), (125, z_low - 0.03), (180, (z_low + z_top) / 2), (232, z_top + 0.01)]
-    tx.extension = "EXTEND"
-    full_path = path + back_path
-    sash = W.wrap_band("sash", [torso], full_path, R(band["width_px"]), thick=0.006, clearance=0.008, mat=sash_m, seg=160, rows=10, taper=0.05, taper_min=0.55)
-    stretch = TEXT_FILL * _arc_len(full_path) / _arc_len(path)
-    uv = sash.data.uv_layers.active.data
-    for d in uv:
-        d.uv.x *= stretch
+    # 帯は、肩の上と背中を回って閉じた 1 本の輪。前の道(元の絵から測った)に、傾いた輪の式
+    # z = c + A sin(角度) + B cos(角度) を合わせ、肩の上・腰の横・背中をその続きにする。
+    # 前の版は、前の道の端から背中へ手で点を足した開いた帯で、肩の上が空き(端が斜めに切れて見えた)、
+    # 腰の横で道が急に下へ折れて、帯が胴から浮いてふくらんで見えた。
+    tx.extension = "EXTEND"   # 字は前の部分だけ。残りは絵の端の無地(t01 が端を無地にそろえる)を伸ばす
+    loop, fit_err = W.tilted_loop([torso], path)
+    sash = W.wrap_band("sash", [torso], loop, R(band["width_px"]), thick=0.006, clearance=0.005, mat=sash_m,
+                       seg=SASH_SEG, rows=10, closed=True, over=[arms["arm_R"]], under=[head, arms["arm_L"]])  # 肩の側(-X)の腕の付け根にかぶせ、頭と左腕の下にもぐる
+    W.band_text_uv(sash, loop, SASH_SEG, path[0][0], path[-1][0], TEXT_FILL)
+    print(f"BUILD sash fit_err_mm={fit_err * 1000:.1f} shoulder_z={loop[len(loop) // 4][1]:.3f} hip_z={loop[3 * len(loop) // 4][1]:.3f}")
     group(sash, "body")
 
     # --- 顔 ---

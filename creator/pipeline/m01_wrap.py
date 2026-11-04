@@ -79,9 +79,14 @@ def _resample(path, n, closed):
 
 
 def wrap_band(name, body, path, width, thick=0.008, clearance=0.002, mat=None, seg=96, rows=8, closed=False, axis=None,
-              smooth=2, taper=0.0, taper_min=0.6):
+              smooth=2, taper=0.0, taper_min=0.6, over=None, over_slope=0.8, over_max=0.03, over_pad=0.01, under=None):
     """体に巻く帯。path = [(角度, 高さ), …]。closed=True なら一周(path に最後の点を重ねて書かない)。
     断面はかまぼこ形(中央がふくらむ)。UV は u が帯の長さ、v が幅。
+    over: 帯がかぶさる部品(腕の付け根など)の一覧。帯はまず body の面に載り、over の中に入った所だけ、その面の外へ持ち上げ、
+    まわりは over_slope(持ち上げ ÷ 横の距離)の坂でつなぐ。持ち上げは over_max(m)まで。over_pad はさらに浮かす分(ブラウザの毛の殻が帯を突き抜けて、縁がぎざぎざに見えた)。たすきが肩で腕の付け根にかぶる形になる。
+    under: 帯が下にもぐる部品(頭・帯の上にかぶさる腕など)の一覧。帯の縁がその中に入る所だけ、帯の幅をその部品の外までに縮める
+    (見えない所なので見た目は変わらず、m03 の「深く埋まる点」が消える)。over で持ち上げきれなかった所も、同じく縮める。
+    over に入れずに body だけで巻くと、腕が帯を突き抜けて手前に出る。body に腕を入れると、横からの光線が腕の先に当たって帯が飛ぶ。
     taper: 両端のこの割合(0〜0.5)で、幅を taper_min 倍まで細める。肩や胴の端で帯の角が折れたり、頭や腕に刺さるのを防ぐ。"""
     bvh = body_bvh(body)
     axis = axis or _axis_of(body)
@@ -122,6 +127,10 @@ def wrap_band(name, body, path, width, thick=0.008, clearance=0.002, mat=None, s
         for j, (p, _, u) in enumerate(row):
             near, nor, _, _ = bvh.find_nearest(p)
             row[j] = (near, nor, u)
+    if over:
+        _drape_over(grid, over, over_slope, over_max, over_pad)
+    if over or under:
+        _trim_rows(grid, list(over or []) + list(under or []))
     if closed:                                   # 一周の帯の継ぎ目をふさぐ(最初と最後の列を同じ位置に)
         grid[-1] = [(p.copy(), n, u) for p, n, u in grid[0]]
     verts, faces, uvs = [], [], []
@@ -144,6 +153,140 @@ def wrap_band(name, body, path, width, thick=0.008, clearance=0.002, mat=None, s
     ob = _make(name, verts, faces, mat, (0, 0, 0), (0, 0, 0))
     _set_uv(ob, uvs)
     return ob
+
+
+def _inside_bvh(bvh, p):
+    d = Vector((0.27, 0.53, 0.80)).normalized()
+    start, count = p.copy(), 0
+    for _ in range(64):
+        hit = bvh.ray_cast(start, d, FAR * 2)[0]
+        if hit is None:
+            break
+        count += 1
+        start = hit + d * 1e-5
+    return count % 2 == 1
+
+
+def _drape_over(grid, over, slope, max_lift, pad):
+    """帯の点のうち、over の物の中に入った点を、法線の向きにその物の外まで持ち上げ、まわりを坂でつなぐ(テントのように)。
+    持ち上げは max_lift まで。法線の向きが腕の長さの向きに近いと、出口が腕の先になり、帯が腕全体にかぶさった(上限なしで起きた)。"""
+    bvhs = [body_bvh([o]) for o in over]
+    pts = [(k, j) for k in range(len(grid)) for j in range(len(grid[k]))]
+    lifted = []
+    for k, j in pts:
+        p, n, _ = grid[k][j]
+        for b in bvhs:
+            if _inside_bvh(b, p):
+                q = b.ray_cast(p + n * 1e-5, n, 1.0)[0]
+                if q is not None:
+                    lifted.append((p.copy(), min((q - p).length, max_lift) + pad))
+    if not lifted:
+        return
+    for k, j in pts:
+        p, n, u = grid[k][j]
+        lift = max(max(L - slope * (p - q).length, 0.0) for q, L in lifted)
+        if lift > 0:
+            grid[k][j] = (p + n * lift, n, u)
+
+
+def _trim_rows(grid, objs):
+    """帯の各列で、縁の点が objs の中に入っていたら、中心の点から外へ続く「外にある範囲」だけに、列の点を並べ直す。
+    範囲の端は二分法で部品の面に合わせる(行の間隔のままだと、縁が段になる)。中心の点が中にある列は触らない。"""
+    bvhs = [body_bvh([o]) for o in objs]
+
+    def inside(p):
+        return any(_inside_bvh(b, p) for b in bvhs)
+
+    for k, row in enumerate(grid):
+        pts = [p for p, _, _ in row]
+        flags = [inside(p) for p in pts]
+        c = len(row) // 2
+        if not any(flags) or flags[c]:
+            continue
+        lo = c
+        while lo > 0 and not flags[lo - 1]:
+            lo -= 1
+        hi = c
+        while hi < len(row) - 1 and not flags[hi + 1]:
+            hi += 1
+
+        def edge(a, b):                         # a は外、b は中
+            pa, pb = pts[a].copy(), pts[b].copy()
+            for _ in range(10):
+                m = (pa + pb) / 2
+                if inside(m):
+                    pb = m
+                else:
+                    pa = m
+            return pa
+        line = ([edge(lo, lo - 1)] if lo > 0 else []) + pts[lo:hi + 1] + ([edge(hi, hi + 1)] if hi < len(row) - 1 else [])
+        nrm = ([row[lo][1]] if lo > 0 else []) + [row[j][1] for j in range(lo, hi + 1)] + ([row[hi][1]] if hi < len(row) - 1 else [])
+        acc = [0.0]
+        for a, b in zip(line, line[1:]):
+            acc.append(acc[-1] + (b - a).length)
+        total = max(acc[-1], 1e-9)
+        new = []
+        seg = 0
+        for j in range(len(row)):
+            d = total * j / (len(row) - 1)
+            while seg < len(line) - 2 and acc[seg + 1] < d:
+                seg += 1
+            t = (d - acc[seg]) / max(acc[seg + 1] - acc[seg], 1e-9)
+            new.append((line[seg].lerp(line[seg + 1], min(max(t, 0.0), 1.0)), nrm[seg if t < 0.5 else seg + 1], row[j][2]))
+        grid[k] = new
+
+
+def tilted_loop(body, front, step=10.0, axis=None, tilt_back=None):
+    """たすき・ななめの帯を、閉じた 1 本の輪の道にする。front = 元の絵から測った前の道 [(角度, 高さ), …]。
+    前の道が載る体の面の点に、平面 z = c + a·x + b·y を合わせ、全周 (-180〜180 度) をその平面と体の面の交わりで返す。
+    肩の上・腰の横・背中が前の続きになるので、手で背中の点を足さなくてよい(足した道は、肩の上が空き、腰で急に折れた)。
+    tilt_back: 前後の傾き b を決め打ちする(None なら前の道から合わせる)。戻り値は (道, 前の道との高さのずれの二乗平均 m)。
+    wrap_band(..., closed=True) に渡す。"""
+    import numpy as np
+    bvh = body_bvh(body)
+    axis = axis or _axis_of(body)
+    P = []
+    for a, z in front:
+        loc, _ = _hit(bvh, axis, a, z)
+        P.append((loc.x - axis[0], loc.y - axis[1], z))
+    P = np.array(P)
+    if tilt_back is None:
+        A = np.stack([np.ones(len(P)), P[:, 0], P[:, 1]], 1)
+        c, a, b = np.linalg.lstsq(A, P[:, 2], rcond=None)[0]
+    else:
+        b = tilt_back
+        A = np.stack([np.ones(len(P)), P[:, 0]], 1)
+        c, a = np.linalg.lstsq(A, P[:, 2] - b * P[:, 1], rcond=None)[0]
+    err = float(np.sqrt(np.mean((c + a * P[:, 0] + b * P[:, 1] - P[:, 2]) ** 2)))
+    loop = []
+    for i in range(int(round(360 / step))):
+        ang = -180.0 + i * step
+        z = c
+        for _ in range(12):                      # 面の点の位置が高さで変わるので、数回まわして平面に載せる
+            loc, _ = _hit(bvh, axis, ang, z)
+            z = c + a * (loc.x - axis[0]) + b * (loc.y - axis[1])
+        loop.append((ang, float(z)))
+    return loop, err
+
+
+def band_text_uv(ob, loop, seg, a_start, a_end, fill=1.0):
+    """閉じた帯(wrap_band(closed=True))の UV の u を、角度 a_start〜a_end の部分に字の絵の 0〜fill が載るように付け直す。
+    u は面の上の長さで決める。範囲の外の u は 0 未満・1 より大きくなるので、絵の extension を EXTEND にして端の無地を伸ばす。"""
+    import numpy as np
+    samples = _resample(loop, seg, True)
+    nu = len(samples)
+    me = ob.data
+    nv = len(me.vertices) // 2 // nu
+    cen = [sum((me.vertices[k * nv + j].co for j in range(nv)), Vector()) / nv for k in range(nu)]
+    s = [0.0]
+    for p, q in zip(cen, cen[1:]):
+        s.append(s[-1] + (q - p).length)
+    ang = np.array([a for a, _ in samples])
+    s0, s1 = np.interp(a_start, ang, s), np.interp(a_end, ang, s)
+    uv = me.uv_layers.active.data
+    for li, loop_ in enumerate(me.loops):
+        k = (loop_.vertex_index % (nu * nv)) // nv
+        uv[li].uv.x = fill * (s[k] - s0) / (s1 - s0)
 
 
 def _set_uv(ob, per_vertex_uv):
@@ -275,11 +418,12 @@ def _inside_any(body, p):
     return False
 
 
-def limb(name, body, root, tip, r_root, r_tip, mat=None, bury=0.8, flare=1.2, n=24, rows=20, ry_scale=1.0):
+def limb(name, body, root, tip, r_root, r_tip, mat=None, bury=0.8, flare=1.2, n=24, rows=20, ry_scale=1.0, round_root=True):
     """体から生える部品。root→tip の線が体の面を出る所を測り、そこから r_root × bury だけ内側を付け根にする。
     面のすぐ近くだけを r_root × flare まで太らせ、肩の抜けをふさぐ。先は丸める。
     r_root と r_tip はほぼ同じにする(差が大きいと、くさび形に見える)。
     体に当たらない置き方、付け根が体の中に入らない置き方は、例外で止まる(浮いたまま仕上げない)。
+    round_root: 付け根の端も丸める(既定)。平らな端の縁が肩の丸みから角として出るのを防ぐ。
     戻り値の ob["pivot"] を、その部品の骨の位置に使う(骨が体の中にあれば、回しても付け根が開かない)。"""
     p_root, p_tip = Vector(root), Vector(tip)
     d = p_tip - p_root
@@ -305,6 +449,8 @@ def limb(name, body, root, tip, r_root, r_tip, mat=None, bury=0.8, flare=1.2, n=
         left = length - at
         if left < r_tip:                       # 先を丸める
             r *= math.sqrt(max(1.0 - (1.0 - left / r_tip) ** 2, 0.0025))
+        if round_root and at < r_root:         # 付け根も丸める。平らな端の縁が、肩の丸みから角として飛び出す(ようこそくんで起きた)
+            r *= math.sqrt(max(1.0 - (1.0 - at / r_root) ** 2, 0.04))
         pts.append(tuple(anchor + d * at))
         radii.append(r)
     ob = tube(name, pts, radii, mat=mat, n=n, ry_scale=ry_scale)
