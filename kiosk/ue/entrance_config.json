@@ -1,0 +1,47 @@
+{
+  "_": "入口の LED の UE のレベルの設定。キャラの差し替えは character の 1 か所(fbx と name)。build_entrance.py と entrance_runtime.py と道具が読む。",
+  "character": {
+    "name": "human_stand8",
+    "fbx": "work/キャラクターショー/人型の受け取り/kari_1105_final/human_stand8.fbx",
+    "_fbx": "未解決(11-05): UE の FBX の取り込み(Interchange・従来・最初のコマの姿勢)では、服(コルセット・ブーツ)が体の中に入り、スカートの裾が飛ぶ。Blender では正しい。README の「止まった所」",
+    "bones": {
+      "neck": "neck_01",
+      "head": "head",
+      "eye_l": "cc_base_l_eye",
+      "eye_r": "cc_base_r_eye",
+      "jaw": "cc_base_jawroot",
+      "upperarm_l": "upperarm_l",
+      "upperarm_r": "upperarm_r",
+      "lowerarm_l": "lowerarm_l",
+      "lowerarm_r": "lowerarm_r"
+    },
+    "arm_down_deg": 72,
+    "jaw_open_deg": 14
+  },
+  "content_root": "/Game/_Work_tmp/Entrance",
+  "level": "/Game/_Work_tmp/Entrance/L_Entrance_Interview",
+  "led": {
+    "width_cm": 236,
+    "height_cm": 300,
+    "bottom_cm": 0,
+    "window": [1180, 1500],
+    "_": "入口の LED の壁の箱(幅 236 × 高さ 300 cm)の比。本人の確認待ちの値。キャラは LED の面のすぐ奥に等身で立つ"
+  },
+  "camera_distance_cm": 520,
+  "udp": {
+    "host": "127.0.0.1",
+    "port": 5341,
+    "_": "1 行の JSON。視線は v1({\"v\":1,\"present\",\"az\",\"el\",\"dist\",...})。口は {\"mouth\":0〜1}"
+  },
+  "gaze": {
+    "head_share": 0.6,
+    "head_max_yaw": 35,
+    "head_max_pitch": 20,
+    "eye_max_yaw": 22,
+    "eye_max_pitch": 14,
+    "neck_share_of_head": 0.4,
+    "head_tau_s": 0.22,
+    "eye_tau_s": 0.06,
+    "lost_after_s": 1.5
+  }
+}
