@@ -58,6 +58,19 @@ def import_character():
     if lib.does_directory_exist(dest):
         lib.delete_directory(dest)
     t0 = time.time()
+    if c["fbx"].lower().endswith(".glb"):
+        # GLB(kiosk/ue/cc_fbx_to_glb.py で CC の FBX から作った物。骨とメッシュの枠が揃っている)は 5.8 の Interchange で入れる
+        task = unreal.AssetImportTask()
+        for k, v in (("filename", c["fbx"]), ("destination_path", dest), ("automated", True), ("save", True), ("replace_existing", True)):
+            task.set_editor_property(k, v)
+        tools.import_asset_tasks([task])
+        unreal.AssetRegistryHelpers.get_asset_registry().wait_for_completion()
+        say(f"import glb {time.time() - t0:.0f}s: " + ", ".join(list(task.get_editor_property("imported_object_paths"))[:8]))
+        mesh = find_skeletal_mesh(dest)
+        if mesh is None:
+            raise RuntimeError("GLB の取り込みで SkeletalMesh ができない")
+        lib.save_directory(dest, only_if_is_dirty=True, recursive=True)
+        return mesh
     # 従来の FBX の取り込みを使う(5.8 の Interchange は CC の FBX の骨の基準の姿勢を「無効」として、服の形が崩れた: コルセットが消える・裾が飛ぶ)
     unreal.SystemLibrary.execute_console_command(None, "Interchange.FeatureFlags.Import.FBX False")
     ui = unreal.FbxImportUI()

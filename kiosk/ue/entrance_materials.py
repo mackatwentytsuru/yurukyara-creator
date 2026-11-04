@@ -29,11 +29,28 @@ def _tex_param(m, name, x, y, default, sampler):
                  texture=unreal.load_asset(default), sampler_type=sampler)
 
 
+def _usage(m):
+    """骨つきメッシュ・形(モーフ)で使う印。無いと -game では材質が既定の物に落ちる(エディタなら自動で付くが、ゲームでは付かない)"""
+    changed = False
+    for k in ("used_with_skeletal_mesh", "used_with_morph_targets"):
+        if not m.get_editor_property(k):
+            m.set_editor_property(k, True)
+            changed = True
+    return changed
+
+
 def _master(root, name, kind):
     path = f"{root}/{name}"
+    if lib.does_asset_exist(path) and os.environ.get("ENTRANCE_REMAKE_MASTERS") == "1":
+        lib.delete_asset(path)  # 親の材質を作り直す(式を変えたとき)
     if lib.does_asset_exist(path):
-        return unreal.load_asset(path)
+        m = unreal.load_asset(path)
+        if _usage(m):
+            mel.recompile_material(m)
+            lib.save_loaded_asset(m, only_if_is_dirty=False)
+        return m
     m = tools.create_asset(name, root, unreal.Material, unreal.MaterialFactoryNew())
+    _usage(m)
     m.set_editor_property("two_sided", True)
     if kind != "opaque":
         m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
@@ -59,7 +76,12 @@ def _master(root, name, kind):
         lerp = _expr(m, unreal.MaterialExpressionLinearInterpolate, -450, -650)
         mel.connect_material_expressions(tc, "", lerp, "A")
         mel.connect_material_expressions(rc, "", lerp, "B")
-        mel.connect_material_expressions(rootmap, "R", lerp, "Alpha")
+        # 根元の絵は根元だけが白い。べき乗で根元の色を毛先の手前まで伸ばす(CC の見え方に寄せる。RootPower が小さいほど根元の色が長い)
+        rpow = _expr(m, unreal.MaterialExpressionScalarParameter, -900, -700, parameter_name="RootPower", default_value=0.35)
+        powr = _expr(m, unreal.MaterialExpressionPower, -650, -500)
+        mel.connect_material_expressions(rootmap, "R", powr, "Base")
+        mel.connect_material_expressions(rpow, "", powr, "Exp")
+        mel.connect_material_expressions(powr, "", lerp, "Alpha")
         lum = _expr(m, unreal.MaterialExpressionDesaturation, -600, -200)
         mel.connect_material_expressions(base, "RGB", lum, "")
         bright = _expr(m, unreal.MaterialExpressionScalarParameter, -600, -50, parameter_name="Brightness", default_value=2.2)
@@ -101,10 +123,13 @@ def _texture(textures, rel, role):
     if not rel:
         return None
     stem = os.path.splitext(os.path.basename(rel))[0].lower()
-    path = textures.get(stem) or textures.get(stem.replace(".", "_"))
+    path = textures.get(stem) or textures.get(stem.replace(".", "_")) or textures.get(stem.replace(".", "_").replace(" ", "_"))
     if not path:
         return None
     t = unreal.load_asset(path)
+    # 絵を直接取り込むと仮想テクスチャになることがある(親の材質の普通の絵の枠と合わず、材質が既定の白に落ちる)
+    if t.get_editor_property("virtual_texture_streaming"):
+        t.set_editor_property("virtual_texture_streaming", False)
     if role == "normal":
         t.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
         t.set_editor_property("srgb", False)
@@ -155,6 +180,25 @@ def rebuild(mesh, fbx_path, root, say, cc_json=None):
             if os.path.exists(src):
                 _import_file(src, hair_dir)
     textures = _find_textures(char_dir)
+    # GLB(絵を入れずに書き出した物)のときは、CC の説明ファイルが指す絵(色・法線・不透明度)を直接取り込む
+    want = []
+    for mi in mats.values():
+        for role in ("Base Color", "Normal", "Opacity"):
+            rel = ((mi.get("Textures") or {}).get(role) or {}).get("Texture Path")
+            if rel and os.path.splitext(os.path.basename(rel))[0].lower() not in textures:
+                src = os.path.normpath(os.path.join(base_dir, rel))
+                if os.path.exists(src) and src not in want:
+                    want.append(src)
+    if want:
+        tasks = []
+        for src in want:
+            t = unreal.AssetImportTask()
+            for k, v in (("filename", src), ("destination_path", f"{char_dir}/Tex"), ("automated", True), ("save", True), ("replace_existing", True)):
+                t.set_editor_property(k, v)
+            tasks.append(t)
+        tools.import_asset_tasks(tasks)
+        say(f"textures imported from the CC json: {len(want)}")
+        textures = _find_textures(char_dir)
     slots = mesh.get_editor_property("materials")
     count = 0
     for i, slot in enumerate(slots):
@@ -162,6 +206,7 @@ def rebuild(mesh, fbx_path, root, say, cc_json=None):
         info = mats.get(sname.lower())
         if any(sname.startswith(h) for h in HIDE):
             slot.set_editor_property("material_interface", masters["hidden"])
+            slots[i] = slot  # 配列の要素は写しなので、書き戻す
             count += 1
             continue
         if info is None:
@@ -203,6 +248,7 @@ def rebuild(mesh, fbx_path, root, say, cc_json=None):
             mel.set_material_instance_vector_parameter_value(inst, "Tint", unreal.LinearColor(0.01, 0.01, 0.012, 1))
         lib.save_loaded_asset(inst, only_if_is_dirty=False)
         slot.set_editor_property("material_interface", inst)
+        slots[i] = slot  # 配列の要素は写しなので、書き戻す
         count += 1
         say(f"material {sname}: {kind} base={'y' if base else 'n'} normal={'y' if normal else 'n'}")
     mesh.set_editor_property("materials", slots)

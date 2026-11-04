@@ -2,8 +2,12 @@
   "_": "入口の LED の UE のレベルの設定。キャラの差し替えは character の 1 か所(fbx と name)。build_entrance.py と entrance_runtime.py と道具が読む。",
   "character": {
     "name": "human_stand8",
-    "fbx": "work/キャラクターショー/人型の受け取り/kari_1105_final/human_stand8.fbx",
-    "_fbx": "未解決(11-05): UE の FBX の取り込み(Interchange・従来・最初のコマの姿勢)では、服(コルセット・ブーツ)が体の中に入り、スカートの裾が飛ぶ。Blender では正しい。README の「止まった所」",
+    "_": "差し替えはここだけ: source_fbx を新しい FBX に替え、name と glb を合わせて、cc_fbx_to_glb.py → build_entrance.py(README)",
+    "source_fbx": "work/キャラクターショー/人型の受け取り/kari_1105_final/human_stand8.fbx",
+    "cc_json": "work/キャラクターショー/人型の受け取り/kari_1105_final/human_stand8.json",
+    "fbx": "work_1105/entrance_char/human_stand8.glb",
+    "_fbx": "UE が読むのは GLB(CC の FBX は骨の枠がメッシュに対して 90° 回っていて、UE の FBX の取り込みでは服が体に埋まる。cc_fbx_to_glb.py で揃えた物)。.fbx を直接書けば従来の取り込み",
+    "bake_arm_down_deg": 42,
     "bones": {
       "neck": "neck_01",
       "head": "head",
@@ -15,7 +19,7 @@
       "lowerarm_l": "lowerarm_l",
       "lowerarm_r": "lowerarm_r"
     },
-    "arm_down_deg": 72,
+    "arm_down_deg": 0,
     "jaw_open_deg": 14
   },
   "content_root": "/Game/_Work_tmp/Entrance",
@@ -24,7 +28,10 @@
     "width_cm": 236,
     "height_cm": 300,
     "bottom_cm": 0,
-    "window": [1180, 1500],
+    "window": [
+      1180,
+      1500
+    ],
     "_": "入口の LED の壁の箱(幅 236 × 高さ 300 cm)の比。本人の確認待ちの値。キャラは LED の面のすぐ奥に等身で立つ"
   },
   "camera_distance_cm": 520,
