@@ -27,8 +27,10 @@ GAMMA = 2.2
 MIN_FLOOR = 0.02  # 灰色の床の明るさ(直線)がこれより暗い所は影を計算しない
 SHADOW_BLUR_SIGMA = 1.2
 SHADOW_STRENGTH = 0.85
-REFLECTION_STRENGTH = 0.65  # キャラの床の映り込み。本物の床が光らないなら下げる
-REFLECTION_FADE = 0.16  # 足から離れると消える長さ(キャラの身長に対する割合)
+REFLECTION_STRENGTH = 1.0  # キャラの床の映り込み(with−without に掛ける)。本物の床が光らないなら下げる(11-04 実測: 0.65 だと正解の約 0.3〜0.5 倍)
+REFLECTION_FADE = 4.0  # 足から離れると消える長さ(キャラの身長に対する割合)。with−without が元々足元だけなので長くてよい
+REFLECTION_SHADOW = 0.3  # 靴の下・広い影が映り込みを暗くする割合(1 で全部。0 で映り込みは影を受けない)
+REFLECTION_START = 0.002  # 靴のすぐ下で映り込みが立ち上がる長さ(身長に対する割合。靴の下の影は contact が担う)
 RIM_GAIN = 0.32  # LED の光がキャラの縁に回る強さ(直線)
 WIDE_SHADOW = 0.45  # 足元の広く柔らかい影の濃さ(直線)。1 つで調整する
 WIDE_SHADOW_SPAN = 2.8  # その影の幅(靴の幅の倍数)
@@ -158,7 +160,7 @@ def reflection_fade(alpha):
     tall = max(1.0, float(np.ptp(rows)))
     distance = np.maximum(np.arange(alpha.shape[0], dtype=np.float32) - rows[-1], 0.0)
     # 靴のすぐ下は影の中なので、映り込みは少し下から始める
-    start = 1.0 - np.exp(-((distance / max(3.0, tall * 0.03)) ** 2))
+    start = 1.0 - np.exp(-((distance / max(2.0, tall * REFLECTION_START)) ** 2))
     return (start * np.exp(-distance / (tall * REFLECTION_FADE)))[:, None, None]
 
 
@@ -205,8 +207,9 @@ def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0, nea
     shaded_plate = (plate ** GAMMA * shadow) ** (1.0 / GAMMA)
     reflection = REFLECTION_STRENGTH * np.clip(frames["with"] - frames["without"], -1.0, 1.0) * progress * reflection_fade(raw_alpha)
     reflection = reflection * (1.0 - raw_alpha)  # キャラの内側の差は色なので除く
-    floor = np.clip(shaded_plate + reflection, 0.0, 1.0)
-    floor = (floor ** GAMMA * contact) ** (1.0 / GAMMA)  # 靴の真下は映り込みごと暗くする
+    # 靴の真下の影は床を暗くする。映り込み(UE の正解では影に埋もれない)は REFLECTION_SHADOW の分だけ暗くする
+    floor = (np.clip(shaded_plate, 0.0, 1.0) ** GAMMA * contact) ** (1.0 / GAMMA)
+    floor = np.clip(floor + reflection * (1.0 - (1.0 - contact) * REFLECTION_SHADOW), 0.0, 1.0)
     light = glow * lifted * np.array(EXIT_GLOW_BGR, dtype=np.float32)
     return np.clip(character + (1.0 - alpha) * floor + light, 0.0, 1.0)
 
