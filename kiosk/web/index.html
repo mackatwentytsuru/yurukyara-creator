@@ -34,13 +34,14 @@
     </section>
 
     <form class="compose" id="compose" autocomplete="off">
-      <button class="mic" id="mic" type="button" disabled title="声での質問は、あとから足します(試作は文字だけ)" aria-label="声で話す(未接続)">声</button>
+      <button class="mic" id="mic" type="button" disabled title="声での質問は使えません(文字だけ)" aria-label="声で話す(未接続)">声</button>
       <input class="field" id="field" type="text" maxlength="200" placeholder="ここに入力して、送るを押してください" aria-label="質問" />
       <button class="send" id="send" type="submit">送る</button>
       <button class="staff" id="staff" type="button">スタッフを呼ぶ</button>
     </form>
     <p class="toast" id="toast" role="status" hidden></p>
   </main>
+  <script type="module" src="/kiosk/io.js"></script>
   <script type="module" src="/kiosk/kiosk.js"></script>
 </body>
 </html>

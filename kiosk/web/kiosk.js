@@ -7,6 +7,7 @@ const $ = (id) => document.getElementById(id);
 const stage = $('stage');
 const log = $('log');
 const field = $('field');
+const mic = $('mic');
 const send = $('send');
 const toast = $('toast');
 const SAMPLE_QUESTIONS = ['営業時間を教えてください', '入場料はいくらですか?', '行き方を教えてください', '今日のショーは何時からですか?', '写真を撮ってもいいですか?', '応援するには、どうしたらいいですか?'];
@@ -64,6 +65,8 @@ function resetConversation() {
   state.history = [];
   log.replaceChildren();
   state.io.tts?.stop?.();
+  state.io.stt?.stop?.();
+  mic.dataset.on = '';
   setMode('attract');
 }
 
@@ -151,15 +154,29 @@ $('staff').addEventListener('click', () => showToast('スタッフを呼びま�
 
 // 声の入力(あとから差し込む)。文字が届いたら、そのまま質問として送る
 if (state.io.stt) {
-  const mic = $('mic');
   mic.disabled = false;
   mic.title = '声で話す';
-  mic.addEventListener('click', () => {
+  mic.addEventListener('click', async () => {
+    if (state.io.stt.listening) {
+      state.io.stt.stop();
+      mic.dataset.on = '';
+      return showToast('聞くのをやめました', 2000);
+    }
     setMode('talk');
-    state.io.stt.start();
-    showToast('聞いています…', 2500);
+    try {
+      await state.io.stt.start();
+      mic.dataset.on = '1';
+      showToast('聞いています…', 2500);
+    } catch (err) {
+      showToast(`声が使えません(${err.message})。文字で入力してください`, 5000);
+    }
   });
-  state.io.stt.onText?.((text) => ask(text));
+  state.io.stt.onText?.((text) => {
+    state.io.tts?.stop?.(); // 話している途中で聞かれたら、前の返事は止める
+    field.value = '';
+    ask(text);
+  });
+  state.io.stt.onInterim?.((text) => (field.placeholder = text || 'ここに入力して、送るを押してください'));
 }
 
 // 待ち受けに戻る(触られないまま一定時間)

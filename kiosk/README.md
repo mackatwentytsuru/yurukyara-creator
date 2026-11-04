@@ -24,10 +24,14 @@ SHOP_MEMORY_FILE=../kiosk/memory/sample/venue.json node server/index.mjs     # �
 
 頭脳・店のデータのつなぎ口・決まりは、`web/server/` と `.claude/skills/shop-guide/` を使う(画面と試験で、同じ物)。
 
-## 声を足すとき
+## 声の入出力
 
-`window.KioskIO = { stt: { start(), stop(), onText(cb) }, tts: { speak(text) → Promise, stop() } }` を `kiosk.js` より前に置く。
-置けば、声のボタンが使え、返事が 1 文ずつ読み上げられる(ベンダーは本人の返事待ち。聞き取りの差し替え口は `web/src/conversation/listener.js` と同じ形)。
+`web/io.js` が `window.KioskIO` を作る(画面より先に読まれる)。聞き取りは既存の `Listener`、読み上げは `Speaker`(`/api/tts`、ElevenLabs)をそのまま使う(`/kiosk/conv/` で渡す)。
+
+- 聞き取り: ブラウザ内蔵(Web Speech)が使えればそれ、無ければサーバーの `/api/stt`。`?stt=server` で強制。声のボタンで始まり、もう一度押すと止まる。話している間の確定文字は捨てる(自分の声を聞き返さない)。
+- 読み上げ: 返事を 1 文ずつ。割り込み(新しい質問・待ち受けへ戻る)で止まる。鍵が無い・上限のときは音なしで字幕だけ。
+- `?voice=0` で声を付けない(文字だけ)。ベンダーを替えるときは、`io.js` の `createKioskIO` だけを差し替える。
+- 確認: サーバーを起動して `node kiosk/tools/io_smoke.mjs <アドレス>`(ヘッドレス Chrome。偽のマイク・偽の読み上げで、つなぎ込みだけを見る)。実機のマイク・実際の声は未確認。
 
 ## まだつながっていないもの
 

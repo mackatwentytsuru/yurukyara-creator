@@ -56,3 +56,14 @@ test('声の差し込み口: 何も無ければ文字だけ。形がそろった
   const io = { stt: { start() {} }, tts: { speak() {} } };
   assert.ok(resolveIO(io).stt && resolveIO(io).tts);
 });
+
+// 声の入出力(kiosk/web/io.js)が読む部品が、画面の道から渡される形で存在する(読み込めないと声のボタンが無効のままになる)
+import { existsSync as _exists, readFileSync as _read } from 'node:fs';
+test('声の入出力が読む部品がそろっている', () => {
+  const io = _read(new URL('../../kiosk/web/io.js', import.meta.url), 'utf8');
+  for (const m of io.matchAll(/from '\/kiosk\/conv\/([\w.]+)'/g)) {
+    assert.ok(_exists(new URL(`../src/conversation/${m[1]}`, import.meta.url)), `${m[1]} が無い`);
+  }
+  const html = _read(new URL('../../kiosk/web/index.html', import.meta.url), 'utf8');
+  assert.ok(html.indexOf('/kiosk/io.js') > 0 && html.indexOf('/kiosk/io.js') < html.indexOf('/kiosk/kiosk.js'), 'io.js は kiosk.js より前に読む');
+});
