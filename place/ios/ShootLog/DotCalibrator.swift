@@ -69,8 +69,8 @@ final class DotCalibrator {
             let a: Float = c ? 0.01 : 0.05
             base[i] = base[i] * (1 - a) + chroma[i] * a
         }
-        let total = cand.reduce(0) { $0 + ($1 ? 1 : 0) }
-        if total >= 800 {                // 合図
+        let candCells = cand.reduce(0) { $0 + ($1 ? 1 : 0) }
+        if candCells >= 800 {            // 合図
             if !inSync { syncStart = frame.timestamp }
             inSync = true
             inEvent = false
