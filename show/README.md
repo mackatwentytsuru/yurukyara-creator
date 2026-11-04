@@ -51,6 +51,8 @@ python show/composite/fake_phone.py <連番> <mp4>                 # 実写の�
 python show/composite/composite.py <連番の親> <実写> <出力の連番> --first 390 --last 600
 python show/composite/measure_comp.py <撮影フォルダ> <連番の親> <comp_config.json>   # 足と目印の画素の誤差、ロールの符号
 python show/composite/build_demo.py <連番の親> <実写> <合成の連番> <音> <出力 mp4>
+python show/composite/mix_final.py <合成の mp4 か連番> <実写の音> <show_mix.wav> <出力 mp4> --start <全編の秒>   # 実写の音(声と響き)と元の音を、ずれと伸びを測って混ぜ、-14 LUFS・-1 dBTP 以下で付ける。耳では未確認
+python show/composite/test_mix_final.py                           # 偽の実写音(遅れ・残響・雑音・0.1% 伸び)で誤差 10 ms 以内を確かめる
 python show/composite/lens_render.py <lens_calib の出力> --out-dir <出力> --width 1920   # 主点を真ん中に直して UE で描く大きさと ST マップ。render_comp と composite の --stmap へ
 python show/composite/focal_options.py <出力の jpg> --video <LED> --wav <音> --out-dir <作業>   # 焦点距離の案の表と 3 枚
 python show/composite/make_distort_sheet.py ...                  # 歪みあり・なしの比べ
