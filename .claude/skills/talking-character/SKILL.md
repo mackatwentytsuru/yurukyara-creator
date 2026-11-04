@@ -83,6 +83,8 @@ node creator/pipeline/web_talk_check.mjs --port 8799 --character <id> --out <作
 
 **お店のデータ**: `SHOP_DATA_FILE` を付けないと、見本の店(LED のあるショーの店)のデータで答えてしまう(試験で、パンのキャラが席の話をした)。データをもらっていないときは、上のように `creator/setup/shop_empty.json` を使う。知らないことを聞かれると、スタッフに渡す。データをもらったら、`web/server/shop/sample.json` と同じ形の JSON を作り、`SHOP_DATA_FILE` で渡す(手順は `shop-guide` スキル)。もらっていない営業時間や料金を作らない。
 
+**動きだけを確かめるときは、新しく声を作らない(声の生成は費用がかかる。本人の決まり、2026-11-04)。** 前に録った声(`web_talk_record.mjs` の出力の音、例 `video_1104/*_talk_*.webm` の音声)を使い回して、口と動きを見る。新しい声は、返事の中身や声そのものを確かめるときだけ。
+
 動画に残すなら `node creator/pipeline/web_talk_record.mjs --port 8799 --character <id> --out <出力.webm>`(字幕ごとの画面と声。話す言葉はその場の返事)。作る様子の早回しは `python creator/skilltest/timelapse.py <作業フォルダ> <元の絵> <出力.mp4>`。
 
 - `web_talk_record.mjs` の出力(webm)は長さの情報が入らない。長さは `ffmpeg -i x.webm -f null -` の最後の `time=` で読む。声は `-af volumedetect -vn -f null -` の `max_volume`(2026-11-04 の 4 本は -0.4〜-1.0 dB、平均 -18 dB 前後)。確認の絵は、`silencedetect` で最初の音の時刻を出し、そこから `-ss <時刻> -vf fps=1,scale=640:-1,tile=3x2` で 6 コマ。録るのは 1 本 20 秒台(質問 2 つ、各キャラ 約 40 秒かかる)。
