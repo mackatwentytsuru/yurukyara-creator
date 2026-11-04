@@ -134,6 +134,17 @@ def test_plan_on_real_timelines():
         print("  (曲の timeline が無いので、作った拍だけで確かめた)")
 
 
+def test_led_fade_and_reveal_share_one_short_window():
+    """LED が消えるのと舞台が現れるのは同じ 0.10〜0.15 秒(60p で 6 コマ以上、30p で 3 コマ以上)。"""
+    h = hop.hop_times(30.0, beats_at(150.17))
+    s = hop.stage_hop(h, hop.FORMS["left_front"])
+    assert s["led_fade"] == s["reveal"], s
+    a, b = s["reveal"]
+    assert 0.10 - 1e-6 <= b - a <= 0.15 + 1e-6, (a, b)
+    assert (b - a) * 60 >= 6 - 1e-6 and (b - a) * 30 >= 3 - 1e-6
+    assert h["takeoff"] <= a < b < h["land"]
+
+
 def test_walk_moves_at_walk_speed():
     keys, t1, t2 = hop.walk_path(10.0, (-100.0, 70.0), (150.0, 290.0), 0.867)
     speed = (((150 + 100) ** 2 + (290 - 70) ** 2) ** 0.5) / 100.0 / (t2 - t1)

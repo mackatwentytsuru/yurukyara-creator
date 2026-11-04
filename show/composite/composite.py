@@ -10,6 +10,8 @@
 実写にレンズの歪みがあるときは --stmap を渡す。色・透明・影の全部を、実写と同じ歪みにしてから重ねる。
 
 --exit 始め 終わり(コマ)を渡すと、その間はキャラが足から順に現れる(LED の中のキャラは同じ秒に足から消える)。
+跳ぶとき(本物の跳び)は --exit-fade を足す。足から現れる形と境目の光は、跳びの間に白い箱に見えたので使わず、
+透明だけで現れる(LED のキャラは同じ秒に、舞台のキャラへ横にずれながら薄れる。fx_plan.hop_shift_px)。
 
 使い方: python composite.py <連番の親フォルダ> <実写の動画> <出力の連番フォルダ> [--first コマ] [--last コマ] [--stmap stmap.npy] [--exit 始 終]
 """
@@ -201,6 +203,16 @@ def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0, nea
     return np.clip(character + (1.0 - alpha) * floor + light, 0.0, 1.0)
 
 
+def fade_in(plate, full, amount):
+    """舞台のキャラを透明だけで現す。キャラ・影・映り込みの全部を、実写と直線の色で混ぜる(途中で暗くならない)。"""
+    if amount >= 1.0:
+        return full
+    if amount <= 0.0:
+        return plate.copy()
+    linear = (1.0 - amount) * np.clip(plate, 0.0, 1.0) ** GAMMA + amount * np.clip(full, 0.0, 1.0) ** GAMMA
+    return linear ** (1.0 / GAMMA)
+
+
 def plate_reader(path, width, height, first):
     return subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{first / 30.0:.4f}", "-i", str(path), "-f", "rawvideo",
                              "-pix_fmt", "bgr24", "-"], stdout=subprocess.PIPE, stdin=subprocess.DEVNULL,
@@ -223,7 +235,10 @@ def main():
     parser.add_argument("--exit-land", type=int, help="ずらしが 0 になるコマ(着地)")
     parser.add_argument("--exit-hop", type=float, default=0.0, help="飛び出す弧の高さ(画素)")
     parser.add_argument("--stats", type=Path, help="コマごとの足の位置など(jsonl)")
-    parser.add_argument("--exit", nargs=2, type=int, metavar=("FIRST", "LAST"), help="足から順に現れるコマの範囲")
+    parser.add_argument("--exit", nargs=2, type=float, metavar=("FIRST", "LAST"), help="足から順に現れるコマの範囲(小数可)")
+    parser.add_argument("--exit-fade", action="store_true",
+                        help="跳ぶとき: 足から現れる形と境目の光を使わず、--exit の範囲で透明だけで現れる(直線の色で混ぜる)")
+    parser.add_argument("--exit-lift-from", type=float, help="ずらしが --exit-lift から減り始めるコマ(無ければ --exit の始め)")
     parser.add_argument("--foot-height", type=Path,
                         help="コマごとの足の床からの高さ(cm)の json {コマ: cm}。本物の跳びの間、靴の下の影を高さで消す(foot_heights.py)")
     args = parser.parse_args()
@@ -243,17 +258,24 @@ def main():
         frames = {name: read(args.root, name, index, table, args.crop_only) for name in PASSES}
         progress = 1.0
         if args.exit:
-            progress = float(np.clip((index - args.exit[0]) / max(1, args.exit[1] - args.exit[0]), 0.0, 1.0))
+            progress = float(np.clip((index - args.exit[0]) / max(1e-6, args.exit[1] - args.exit[0]), 0.0, 1.0))
+            if args.exit_fade:
+                progress = progress * progress * (3.0 - 2.0 * progress)  # LED の薄れ(fx_plan の smoothstep)と足して 1
         lift, air = 0.0, 0.0
+        lift_from = args.exit_lift_from if args.exit_lift_from is not None else (args.exit[0] if args.exit else 0.0)
         if args.exit and args.exit_lift > 0.0:
-            u = float(np.clip((index - args.exit[0]) / max(1, args.exit_land - args.exit[0]), 0.0, 1.0))
+            u = float(np.clip((index - lift_from) / max(1e-6, args.exit_land - lift_from), 0.0, 1.0))
             arc = 4.0 * u * (1.0 - u)  # 放物線。始めは LED の足の高さ、着地で 0
             lift = float(args.exit_lift * (1.0 - u) + args.exit_hop * arc)
             air = float(lift / max(args.exit_lift + args.exit_hop, 1.0))
             if index >= args.exit_land:  # 着いた直後は影が一段濃い(重さ)
                 air = -LAND_IMPACT * float(np.exp(-(index - args.exit_land) / 5.0))
         near = float(np.exp(-max(heights.get(index, 0.0), 0.0) / FOOT_NEAR_CM))
-        image = compose(plate, frames, progress, led.next() if led else None, lift, air, near)
+        colors = led.next() if led else None
+        if args.exit_fade:
+            image = fade_in(plate, compose(plate, frames, 1.0, colors, lift, air, near), progress)
+        else:
+            image = compose(plate, frames, progress, colors, lift, air, near)
         if stats:
             raw = frames["matte"].mean(axis=2)
             rows = np.where(raw.max(axis=1) > 0.5)[0]

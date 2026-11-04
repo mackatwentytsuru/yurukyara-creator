@@ -14,8 +14,11 @@ FADE_IN_SEC = 0.25
 FADE_OUT_SEC = 0.45  # 着地の沈みから次の動きへ戻る長さ
 AIR_TARGET_SEC = 0.8
 LAND_MIN_AFTER = 0.3  # fx_plan と同じ
-LED_FADE = (0.05, 0.30)  # LED のキャラは踏み切りのこの秒後から薄れ、この秒後に消える(跳び始めて消える)
-REVEAL_SEC = 0.25  # 舞台のキャラが現れきる長さ(踏み切りから)
+# 入れ替わり: LED のキャラが薄れるのと舞台のキャラが現れるのを、同じ 0.15 秒(60p で 9 コマ、30p で 4.5 コマ)に揃える。
+# LED の層は舞台のキャラへ横にずらしながら薄れる(fx_plan.hop_shift_px)ので、見る人の目からは 1 人のまま
+LED_FADE = (0.05, 0.20)  # LED のキャラは踏み切りのこの秒後から薄れ、この秒後に消える
+REVEAL_SEC = 0.15  # 舞台のキャラが透明だけで現れきる長さ。始めは LED_FADE[0](同じ秒)
+REVEAL_START = LED_FADE[0]
 KEY_STEP = 1.0 / 60.0  # 宙の間の位置のキーの間隔。どの読み手(なめらかに補う)でも一定の速さになる
 START_XY = (0.0, -130.0)  # LED の足元の前(中央の面 y=-140)
 FORMS = {"left_front": (-100.0, 70.0), "front": (0.0, 70.0)}  # 着地の場所 [x, y] cm
@@ -116,4 +119,4 @@ def stage_hop(h, land_xy, start_xy=START_XY):
     """show_stage.json の hops に書く 1 件(LED の薄れと合成の現れの秒)。"""
     return {"out": h["out"], "takeoff": h["takeoff"], "land": h["land"], "start_xy": list(start_xy), "land_xy": list(land_xy),
             "led_fade": [round(h["takeoff"] + LED_FADE[0], 4), round(h["takeoff"] + LED_FADE[1], 4)],
-            "reveal": [h["takeoff"], round(h["takeoff"] + REVEAL_SEC, 4)]}
+            "reveal": [round(h["takeoff"] + REVEAL_START, 4), round(h["takeoff"] + REVEAL_START + REVEAL_SEC, 4)]}
