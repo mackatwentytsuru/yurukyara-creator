@@ -8,13 +8,14 @@ import * as THREE from 'three';
  * - 対象は毛足の材質(色の絵と法線の絵と sheen を持つ物)。Blender で作った殻(alphaTest で抜く物)は隠す。
  * - 目・口・頬など、毛足でない部品と、色の違う毛の部品の周りは毛を短くする。埋もれて顔が消えたり、毛が混ざったりするのを防ぐ。
  *
- * character.json: "fur": { "layers": 12 }  省略できる値: length、hairWidth、tile、root、sheen、normal、flat、pile、cloud、gain、stray、strayReach、clear
+ * character.json: "fur": { "layers": 12 }  省略できる値: length、hairWidth、tile、root、sheen、normal、flat、pile、cloud、gain、stray、strayReach、clear、thin
  *   layers: 層の数。弱い GPU では減らす。length: 毛の長さ(既定はキャラの高さの 1.5%)。hairWidth: 毛 1 本の太さ(キャラの高さに対する割合)。tile: UV の 1 あたりの毛の模様の繰り返し(書けば hairWidth より優先)。
  *   look: 名前の付いた設定のまとまり(試しの設定で、既定ではない。判定の数字は creator/skilltest/結果表.md)。ほかの値を書くと、そちらが優先。
  *     "fleece" = 布の写真の房 + 半透明の毛先。"teddy"(Poly Haven Curly Teddy Natural)・"felt"(ambientCG Fabric034)= 面そのものに素材の法線・ラフネス・明暗を貼る + 殻の房。
  *   material: 素材の名前(assets/ の下のフォルダ)。surface: true で、面そのものに素材の法線・ラフネス・細かい明暗を貼る(色は元の絵のまま)。surfaceNormal・surfaceShade・surfaceFlat: その強さ。layers: 0 で殻なし(面だけ)。assetBase: 素材の置き場の URL(試し用)。
  *   soft: 毛先を半透明でぼかす幅(0 で切る)。輪郭と面の粒が画素で切れて砂に見えるのを防ぐ。rim: 真横を向いた面を明るくする強さ(毛は光を透かすので、輪郭が暗くならない)。tipAlpha: いちばん外の毛の濃さ。
  *   photo: true で、布の写真(assets/fleece、Poly Haven「Polar Fleece」CC0)の房を毛の高さと明暗に使う。photoRepeat: 写真 1 枚がキャラの高さの何倍か。photoHeight: 高さのうち写真の割合。photoContrast: 写真の明暗の強さ。photoNormal: 写真の法線の強さ。
+ *   thin: 薄い部品の毛を短くする目安(毛の長さの何倍の厚みまでを「薄い」とするか。既定 0 = 働かない。葉は 0.67 に縮んだがマントには効かず、sheen=0.0 の決まりのほうが効いたので既定は切った)。厚みが毛の長さの thin 倍より薄い部品は、その割合だけ毛を短くする(下限 0.2)。葉・マント・角の縁の針のような毛羽立ちを防ぐ。
  *   root: 根元の明るさ。normal: 毛足の法線の強さに掛ける値。flat: 色の絵の筋を消す割合(1 で一色)。pile: 毛 1 本ずつの明暗の強さ。cloud: ふわっとしたむらの強さ。gain: 毛の明るさに掛ける値。stray: 外へ飛び出す毛の層の数。strayReach: 飛び出す長さ(毛の長さの何倍か)。clear: 顔の部品から、毛を生やさない距離(毛の長さの何倍か)。
  */
 const FUR_TEXTURE_SIZE = 256;
@@ -28,6 +29,7 @@ const LENGTH_OF_HEIGHT = 0.015;
 const PATCH_KEEP_RADIUS = 0.3; // 当て布の絵の中心からの距離(絵の幅が 1)
 const CLEAR_FADE = 1.5; // 毛を生やさない範囲の外で、元の長さへ戻すまでの距離(毛の長さの何倍か)
 const PATCH_RENDER_ORDER = 100;
+const THIN_FLOOR = 0.2; // 薄い部品でも、毛の長さをこの割合より短くはしない
 const SHELL_LOOK = { soft: 0.08, rim: 0.25, tipAlpha: 0.5, stray: 2, strayReach: 0.5, photo: true, photoRepeat: 0.35, photoHeight: 0.5, photoContrast: 2.0 };
 // 素材の絵は assets/<素材>/<素材>_{detail,height,normal,rough}.jpg(1K、1 枚 300KB まで)。look の名前 → 設定。
 // fleece = 房の殻だけ(Poly Haven Polar Fleece)。teddy・felt = 面そのものに法線・ラフネス・明暗を貼り、さらに殻の房にも使う(面 + 殻)。写真 1 枚はキャラの高さの 0.35
@@ -175,6 +177,16 @@ function furLengthAttribute(mesh, facePoints, clear, fade) {
   return new THREE.BufferAttribute(out, 1);
 }
 
+/** 薄い部品(葉・マント・角)の毛の長さの倍率。部品の一番薄い向きの厚み(世界の座標の箱)が、毛の長さの k 倍より薄いと、その割合まで毛を短くする。
+ *  薄い縁に毛の長さがそのまま付くと、縁が針のように毛羽立つ。k が 0 なら働かない(倍率 1)。 */
+function thinFactor(mesh, length, k) {
+  if (!(k > 0)) return 1;
+  const box = new THREE.Box3().setFromObject(mesh);
+  const s = box.getSize(new THREE.Vector3());
+  const thickness = Math.min(s.x, s.y, s.z);
+  return THREE.MathUtils.clamp(thickness / (k * length), THIN_FLOOR, 1);
+}
+
 /** 1 層分の材質。元の材質を写し、ふくらませる処理と毛を抜く処理を足す。 */
 function layerMaterial(source, hairs, layer, cfg, photo) {
   const m = source.clone();
@@ -205,11 +217,12 @@ function layerMaterial(source, hairs, layer, cfg, photo) {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute float aFurLength;
+        attribute float aFurThin;
         varying float vFurLength;
         uniform float uFurOffset;`)
       .replace('#include <skinning_vertex>', `#include <skinning_vertex>
         vFurLength = aFurLength;
-        transformed += normalize(objectNormal) * uFurOffset * aFurLength;`);
+        transformed += normalize(objectNormal) * uFurOffset * aFurLength * aFurThin;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         varying float vFurLength;
@@ -280,6 +293,7 @@ export function applyFur(scene, options = {}) {
     stray: 4,
     strayReach: 0.8,
     clear: 0.6,
+    thin: 0,
     soft: 0,
     rim: 0,
     tipAlpha: 1,
@@ -388,6 +402,9 @@ export function applyFur(scene, options = {}) {
   let added = 0;
   for (const mesh of targets) {
     mesh.geometry.setAttribute('aFurLength', furLengthAttribute(mesh, avoidFor.get(mesh.material), clear, fade));
+    const thin = thinFactor(mesh, cfg.length, cfg.thin);
+    mesh.userData.furThin = thin;
+    mesh.geometry.setAttribute('aFurThin', new THREE.BufferAttribute(new Float32Array(mesh.geometry.attributes.position.count).fill(thin), 1));
     for (const material of layersOf.get(mesh.material)) {
       added += 1;
       const shell = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, material) : new THREE.Mesh(mesh.geometry, material);

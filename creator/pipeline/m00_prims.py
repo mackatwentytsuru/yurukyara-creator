@@ -381,7 +381,8 @@ FUZZ_NORMAL_GAIN = 0.4
 
 
 def fuzz_material(name, rgb, out_dir, rough=0.95, sheen=1.0, sheen_tint=None, normal_strength=0.8, grain=0.10, seed=7):
-    """毛足の画像(色+法線)と、縁の毛羽(シーン)を持つ材質。使う物には auto_uv(ob, tile) で UV を付ける。"""
+    """毛足の画像(色+法線)と、縁の毛羽(シーン)を持つ材質。使う物には auto_uv(ob, tile) で UV を付ける。
+    sheen > 0 の材質には、ブラウザが毛の殻を重ねる。薄い部品(葉・マント・角・薄い布)と白いフェルトは sheen=0.0 にして殻から外す(縁の針のような毛が出ない)。"""
     pc, pn = fuzz_images(rgb, out_dir, name, grain=grain, seed=seed)
     m = material(name, rgb, rough=rough, spec=0.1, sheen=sheen, sheen_tint=sheen_tint)
     nt = m.node_tree
