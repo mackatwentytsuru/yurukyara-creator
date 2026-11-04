@@ -1,0 +1,151 @@
+#!/usr/bin/env python
+"""跳ぶ動き(hop.py)と、make_show_plan.py が「出る」ごとに跳びを入れることの試験。素材の動きと GPU は要らない。
+曲の timeline が手元にあれば(今の曲と song1)それでも確かめる。無ければ作った拍だけで確かめる。
+
+動かし方: python show/motion/test_hop.py
+"""
+import json
+import pathlib
+import subprocess
+import sys
+import tempfile
+
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path[:0] = [str(HERE), str(HERE.parent / "live")]
+import hop  # noqa: E402
+from stage_path import ar_at, on_led  # noqa: E402  合成・リアルタイムと同じ読み方で確かめる
+
+TIMELINES = {"mc_try": pathlib.Path("work/ue_show/show_build/mc_try/audio/timeline.json"),
+             "song1": pathlib.Path("work/ue_show/show_build/song1/audio/timeline.json")}
+
+
+def beats_at(bpm, start=0.0, count=400):
+    return [round(start + i * 60.0 / bpm, 4) for i in range(count)]
+
+
+def test_times_land_on_beat_and_take_off_on_beat():
+    for bpm in (150.17, 128.0, 100.0, 175.0):
+        beats = beats_at(bpm, 0.37)
+        h = hop.hop_times(30.0, beats)
+        assert h["land"] in beats and h["takeoff"] in beats, bpm
+        assert h["land"] >= 30.0 + hop.LAND_MIN_AFTER - 1e-6
+        air = h["land"] - h["takeoff"]
+        assert 0.5 <= air <= 1.1, (bpm, air)
+        assert 0.75 < h["speed"] < 2.0, (bpm, h["speed"])
+        assert h["start"] < h["takeoff"] < h["land"] < h["end"]
+
+
+def test_path_moves_only_in_the_air_at_constant_speed():
+    beats = beats_at(150.17)
+    h = hop.hop_times(30.0, beats)
+    keys, land = hop.hop_path(h, "left_front")
+    assert land == hop.FORMS["left_front"]
+    before = ar_at(keys, h["takeoff"] - 0.3)
+    assert before[:2] == list(hop.START_XY)
+    after = ar_at(keys, h["land"] + 2.0)
+    assert after[:2] == list(land)
+    # 宙の間は一定の速さ(キーの上で測る)
+    step = [((b[1] - a[1]) ** 2 + (b[2] - a[2]) ** 2) ** 0.5 / (b[0] - a[0]) for a, b in zip(keys, keys[1:])]
+    assert max(step) - min(step) < 0.01 * max(step), (min(step), max(step))  # 秒と位置の丸めの分だけ
+    keys_f, land_f = hop.hop_path(h, "front")
+    assert land_f[0] == hop.START_XY[0]
+
+
+def test_insert_removes_overlaps_and_returns_to_the_dance():
+    beats = beats_at(150.17)
+    h = hop.hop_times(30.0, beats)
+    segs = [{"clip": "A", "at_sec": 20.0, "clip_from": 0.0, "clip_to": 20.0, "end_sec": 40.0, "fade_sec": 0.4},
+            {"clip": "W", "at_sec": 30.0, "clip_from": 0.0, "clip_to": 1.33, "end_sec": 31.33, "fade_sec": 0.45, "in_place": True},
+            {"clip": "B", "at_sec": 36.0, "clip_from": 0.0, "clip_to": 5.0, "end_sec": 41.0, "fade_sec": 0.4}]
+    out = hop.insert_hops(segs, [h])
+    names = [s["clip"] for s in out]
+    assert "W" not in names  # 跳びの間に始まる歩きは消える
+    # 跳びの間に始まる踊りの区切り(同じ踊りの続き)は、跳びの後にその続きから入る
+    seg2 = [segs[0], {"clip": "A2", "at_sec": round(h["start"] + 0.3, 4), "clip_from": 0.0, "clip_to": 12.0, "end_sec": 50.0, "fade_sec": 0.4}, segs[2]]
+    out2 = hop.insert_hops(seg2, [h])
+    k = next(i for i, s in enumerate(out2) if s.get("hop"))
+    assert out2[k + 1]["clip"] == "A2" and abs(out2[k + 1]["clip_from"] - (h["end"] - seg2[1]["at_sec"])) < 1e-3
+    starts = [s["at_sec"] for s in out]
+    assert starts == sorted(starts)
+    i = next(k for k, s in enumerate(out) if s.get("hop"))
+    assert out[i]["hold"] is True
+    follow = out[i + 1]
+    assert follow["clip"] == "A" and abs(follow["at_sec"] - h["end"]) < 1e-3  # 元の踊りの続きへ戻る
+    assert abs(follow["clip_from"] - (h["end"] - 20.0)) < 1e-3
+
+
+def run_plan(timeline_path, extra=()):
+    timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
+    by_id = {s["id"]: s for s in timeline["sections"]}
+    song = by_id["song"]
+    rel = lambda t: round(t - song["start"], 3)  # noqa: E731
+    lyrics = {"lines": [
+        {"section": "pre", "words": [["a", rel(song["start"] + 8.5), 0], ["b", rel(song["start"] + 9.5), 0]]},
+        {"section": "pre", "words": [["c", rel(song["start"] + 18.4), 0], ["d", rel(song["start"] + 19.6), 0], ["e", rel(song["start"] + 20.0), 0]]},
+        {"section": "chorus", "words": [["f", rel(song["start"] + 24.0), 0]]},
+        {"section": "chorus", "words": [["g", rel(song["start"] + 34.4), 0]]}]}
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        (tmp / "lyrics.json").write_text(json.dumps(lyrics), encoding="utf-8")
+        base = json.loads((HERE.parent / "show_stage.json").read_text(encoding="utf-8"))
+        (tmp / "base.json").write_text(json.dumps(base), encoding="utf-8")
+        subprocess.run([sys.executable, str(HERE / "make_show_plan.py"), "--timeline", str(timeline_path), "--lyrics", str(tmp / "lyrics.json"),
+                        "--song-start", str(song["start"]), "--base-stage", str(tmp / "base.json"), "--out-plan", str(tmp / "plan.json"),
+                        "--out-stage", str(tmp / "stage.json"), *extra], check=True, capture_output=True)
+        return (timeline, json.loads((tmp / "plan.json").read_text(encoding="utf-8")),
+                json.loads((tmp / "stage.json").read_text(encoding="utf-8")))
+
+
+def check_plan(timeline, plan, stage):
+    outs = [f["t"] for f in stage["flashes"] if f["kind"] == "out"]
+    hops = stage["hops"]
+    assert len(hops) == len(outs) == 2
+    jumps = [s for s in plan["segments"] if s.get("hop")]
+    assert len(jumps) == 2
+    # 着地から足を止める区間が、跳びごとに 1 つ
+    assert [round(a, 3) for a, _ in plan["foot_lock_sec"]] == [round(h["land"], 3) for h in hops]
+    starts = [s["at_sec"] for s in plan["segments"]]
+    assert starts == sorted(starts)
+    for h, out in zip(hops, outs):
+        assert abs(h["out"] - out) < 1e-3
+        assert h["land"] in timeline["beats"] and h["takeoff"] in timeline["beats"]
+        # 舞台のキャラは踏み切りで現れる(LED にいる区間の終わりが踏み切り)
+        assert any(abs(b - h["takeoff"]) < 1e-3 for _, b in stage["led_character"])
+        assert not on_led(stage, h["takeoff"] + 0.01)
+        # 着地の後、次に動くまでの 1 秒は同じ場所(足が滑らない)
+        p0, p1 = ar_at(stage["ar_path"], h["land"] + 0.02), ar_at(stage["ar_path"], h["land"] + 1.0)
+        assert abs(p0[0] - p1[0]) < 1e-6 and abs(p0[1] - p1[1]) < 1e-6
+        assert [round(v, 3) for v in p0[:2]] == [round(v, 3) for v in h["land_xy"]]
+        # 跳びの区間の中に、ほかの区間が始まらない
+        jump = next(s for s in jumps if abs(s["at_sec"] - (h["takeoff"] - hop.CLIP_TAKEOFF / s["speed"])) < 1e-3)
+        assert not [s for s in plan["segments"] if jump["at_sec"] < s["at_sec"] < jump["end_sec"]]
+
+
+def test_plan_on_real_timelines():
+    found = [p for p in TIMELINES.values() if p.exists()]
+    for path in found:
+        timeline, plan, stage = run_plan(path)
+        check_plan(timeline, plan, stage)
+        _, _, front = run_plan(path, ["--hop-form", "front"])
+        assert front["hops"][0]["land_xy"][0] == hop.START_XY[0]
+        _, plain, plain_stage = run_plan(path, ["--no-hop"])
+        assert "hops" not in plain_stage and not [s for s in plain["segments"] if s.get("hop")]
+    if not found:
+        print("  (曲の timeline が無いので、作った拍だけで確かめた)")
+
+
+def test_walk_moves_at_walk_speed():
+    keys, t1, t2 = hop.walk_path(10.0, (-100.0, 70.0), (150.0, 290.0), 0.867)
+    speed = (((150 + 100) ** 2 + (290 - 70) ** 2) ** 0.5) / 100.0 / (t2 - t1)
+    assert abs(speed - 0.867) < 1e-3
+    mid = [k for k in keys if t1 < k[0] < t2]
+    step = [((b[1] - a[1]) ** 2 + (b[2] - a[2]) ** 2) ** 0.5 / (b[0] - a[0]) for a, b in zip(mid, mid[1:])]
+    assert max(step) - min(step) < 0.01 * max(step)
+
+
+if __name__ == "__main__":
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    for t in tests:
+        t()
+        print("ok", t.__name__)
+    print(f"全部 {len(tests)} 件 合格")

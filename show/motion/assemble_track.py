@@ -5,7 +5,8 @@
 
 案の形: {"from_sec": 58, "to_sec": 82.4, "free_face_sec": [[始め, 終わり]], "segments": [ {"clip": 名前, "beat": 開始の拍(timeline の beats の番号), "beats": 拍数,
   "clip_from": 秒, "clip_to": 秒, "fade_beats": 1} ... ]}
-秒で置くときは "at_sec" と "speed"(既定 1)を書く。"beat" と "beats" を書けば、clip_from から clip_to までがその拍数にちょうど入る。
+秒で置くときは "at_sec" と "speed"(既定 1)を書く。"hold": true なら clip_to の後は最後の姿勢を保つ(跳びの後に使う)。
+"foot_lock_sec": [[始め, 終わり]] の間は、床に着いている足の水平の位置を止める(立ち位置が動かない間。足を上げれば動く)。"beat" と "beats" を書けば、clip_from から clip_to までがその拍数にちょうど入る。
 """
 import argparse
 import json
@@ -104,6 +105,65 @@ def time_beat(beats, t):
     return i + (t - beats[i]) / (beats[i + 1] - beats[i])
 
 
+FACE_RAMP_SEC = 0.4
+CONTACT_M = 0.02  # 足首がこの高さ(休みの高さから)より低いと、床に着いている
+CATCH_SEC = 0.15  # 足を上げたら、固定した位置から動きの位置へこの秒で戻る
+LOCK_EXIT_SEC = 0.3  # 固定の区間の終わりで、動きの位置へ戻す長さ
+
+
+class FootLock:
+    """plan の foot_lock_sec の間、床に着いている足の水平の位置を接地の始めの位置に止める(足が滑らない)。
+    足を上げている間は動きのとおり(踏み替えはそのまま出る)。高さは動きのまま。"""
+
+    def __init__(self, rest, spans):
+        self.rest = rest
+        self.spans = [(float(a), float(b)) for a, b in spans]
+        self.state = {}
+
+    def apply(self, pose, t):
+        span = next(((a, b) for a, b in self.spans if a <= t < b), None)
+        if span is None:
+            self.state = {}
+            return pose
+        out = dict(pose)
+        for side in ('left', 'right'):
+            target = np.array(pose[side], dtype=float)
+            st = self.state.setdefault(side, {'anchor': None, 'release': None, 'last': target.copy()})
+            down = target[1] - self.rest[f'{side}Foot'][1] < CONTACT_M
+            if down:
+                if st['anchor'] is None:
+                    st['anchor'] = st['last'][[0, 2]].copy()  # 今の出力の位置で止める(跳ばない)
+                st['release'] = None
+                xz = st['anchor']
+            else:
+                if st['anchor'] is not None:
+                    st['release'] = (st['anchor'], t)
+                    st['anchor'] = None
+                xz = target[[0, 2]]
+                if st['release'] is not None:
+                    base, t0 = st['release']
+                    xz = base + (xz - base) * smooth((t - t0) / CATCH_SEC)
+            k = smooth((span[1] - t) / LOCK_EXIT_SEC)  # 終わりの手前で動きの位置へ戻す
+            xz = target[[0, 2]] + (xz - target[[0, 2]]) * k
+            new = target.copy()
+            new[0], new[2] = xz
+            st['last'] = new
+            out[side] = new
+        return out
+
+
+
+
+def face_weight(free_face, t):
+    """顔の向きを限る強さ。free_face の間は 0、その出入りは FACE_RAMP_SEC でなめらかに。"""
+    weight = 1.0
+    for a, b in free_face:
+        if a <= t < b:
+            inside = min(t - a, b - t)
+            weight = min(weight, 1.0 - smooth(inside / FACE_RAMP_SEC))
+    return weight
+
+
 def make_segments(plan, clips, beats):
     out = []
     for s in plan['segments']:
@@ -121,6 +181,8 @@ def make_segments(plan, clips, beats):
             end = s.get('end_sec', start + (c1 - c0) / speed)
             fade = s.get('fade_sec', 0.4)
             clock = (lambda c0, speed, start: lambda t: c0 + (t - start) * speed)(c0, speed, start)
+        if s.get('hold'):  # 区間の後ろは最後の姿勢を保つ(跳びの後に素材の続きへ進まない)
+            clock = (lambda f, c0, c1: lambda t: min(max(f(t), c0), c1))(clock, c0, c1)
         out.append({'clip': clip, 'start': start, 'end': end, 'fade': fade, 'clock': clock, 'name': s['clip'], 'in_place': s.get('in_place', False)})
     return out
 
@@ -210,6 +272,7 @@ def main():
     legs = Legs(rest, parents)
     fix = BodyFix(rest, parents)
     free_face = plan.get('free_face_sec', [])  # 一礼のように、顔が下を向くのが正しい間
+    lock = FootLock(rest, plan.get('foot_lock_sec', []))  # 跳んで着地した後など、立ち位置が動かない間
     frames = []
     worst_reach = 0.0
     face_fix = 0.0
@@ -228,10 +291,15 @@ def main():
         if sing and f < len(sing['breath']):
             beat_phase = (time_beat(beats, t) % 1.0)
             pose = add_breath(pose, sing['breath'][f], sing['strength'][f], np.exp(-beat_phase * 5.0))
+        pose = lock.apply(pose, t)
         solved = legs.solve(pose)
         worst_reach = max(worst_reach, solved['reach_fail'])
-        if not any(a <= t < b for a, b in free_face):
-            face_fix = max(face_fix, fix.limit_face(solved['q'], solved['hips']))
+        weight = face_weight(free_face, t)
+        if weight > 0.0:
+            limited = dict(solved['q'])
+            face_fix = max(face_fix, fix.limit_face(limited, solved['hips']))
+            for bone in ('neck', 'head'):  # 限る間の出入りは FACE_RAMP_SEC で混ぜる(1 コマで顔が跳ばない)
+                solved['q'][bone] = limited[bone] if weight >= 1.0 else q_nlerp(solved['q'][bone], limited[bone], weight)
         frames.append(solved)
     push_most, push_frames = fix.fix_hands(frames)
     out = np.zeros((last - first, 3 + 4 * len(bones)), dtype=np.float32)

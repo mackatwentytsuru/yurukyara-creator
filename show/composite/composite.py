@@ -30,6 +30,7 @@ REFLECTION_FADE = 0.16  # 足から離れると消える長さ(キャラの身�
 RIM_GAIN = 0.32  # LED の光がキャラの縁に回る強さ(直線)
 CONTACT_SHADOW = 0.84  # 足が床に着く所の影の濃さ(直線。sRGB で約 40% 暗い)
 LAND_IMPACT = 0.1
+FOOT_NEAR_CM = 6.0  # 足がこの高さ(cm)上がると、靴の下の影が 1/e に薄れる
 GRADE_GAIN = 0.76  # キャラを背景になじませる明るさ(直線)
 GRADE_SATURATION = 0.88  # 同じ、彩度
 SOFT_SIGMA = 0.7  # 色と透明を少しぼかす画素(ギザつきを減らす。実写の甘さに近づける)
@@ -173,8 +174,8 @@ def soften_edge(character, alpha):
     return color * np.minimum(choked / np.maximum(soft, 1e-3), 1.0), choked
 
 
-def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0):
-    """lift: キャラを上へずらす画素。air: 宙にいる割合(0 で着地)。"""
+def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0, near=1.0):
+    """lift: キャラを上へずらす画素。air: 宙にいる割合(0 で着地)。near: 足が床に近い割合(1 床、0 高い。靴の下の影を消す)。"""
     raw_alpha = frames["matte"].mean(axis=2, keepdims=True)
     character = np.clip(frames["with"] - (1.0 - raw_alpha) * frames["without"], 0.0, 1.0) * np.clip(raw_alpha * 8.0, 0.0, 1.0)
     character, alpha = soften_edge(character, raw_alpha)
@@ -182,7 +183,7 @@ def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0):
     keep, glow = exit_mask(lifted, progress)
     shadow = shadow_ratio(frames["shadow_with"], frames["shadow_without"])[..., None]
     shadow = 1.0 - (1.0 - shadow) * progress
-    contact = 1.0 - (1.0 - contact_shadow(raw_alpha, air)) * progress
+    contact = 1.0 - (1.0 - contact_shadow(raw_alpha, air)) * progress * near
     # キャラの外の差は床の映り込みなので、色には入れない(下の reflection で足す)
     character = grade(character)
     if led_colors is not None:
@@ -223,7 +224,10 @@ def main():
     parser.add_argument("--exit-hop", type=float, default=0.0, help="飛び出す弧の高さ(画素)")
     parser.add_argument("--stats", type=Path, help="コマごとの足の位置など(jsonl)")
     parser.add_argument("--exit", nargs=2, type=int, metavar=("FIRST", "LAST"), help="足から順に現れるコマの範囲")
+    parser.add_argument("--foot-height", type=Path,
+                        help="コマごとの足の床からの高さ(cm)の json {コマ: cm}。本物の跳びの間、靴の下の影を高さで消す(foot_heights.py)")
     args = parser.parse_args()
+    heights = {int(k): float(v) for k, v in json.loads(args.foot_height.read_text(encoding="utf-8")).items()} if args.foot_height else {}
     args.out.mkdir(parents=True, exist_ok=True)
     table = np.load(args.stmap) if args.stmap else None
     sample = read(args.root, "with", args.first, table, args.crop_only)
@@ -248,11 +252,12 @@ def main():
             air = float(lift / max(args.exit_lift + args.exit_hop, 1.0))
             if index >= args.exit_land:  # 着いた直後は影が一段濃い(重さ)
                 air = -LAND_IMPACT * float(np.exp(-(index - args.exit_land) / 5.0))
-        image = compose(plate, frames, progress, led.next() if led else None, lift, air)
+        near = float(np.exp(-max(heights.get(index, 0.0), 0.0) / FOOT_NEAR_CM))
+        image = compose(plate, frames, progress, led.next() if led else None, lift, air, near)
         if stats:
             raw = frames["matte"].mean(axis=2)
             rows = np.where(raw.max(axis=1) > 0.5)[0]
-            row = {"frame": index, "lift": round(lift, 2), "progress": round(progress, 3)}
+            row = {"frame": index, "lift": round(lift, 2), "progress": round(progress, 3), "near": round(near, 3)}
             if rows.size:
                 near = int(max(rows[0], rows[-1] - np.ptp(rows) * 0.03))
                 cols = np.where(raw[near:rows[-1] + 1].max(axis=0) > 0.5)[0]
