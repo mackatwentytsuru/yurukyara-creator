@@ -87,7 +87,7 @@ HOST=0.0.0.0 PORT=8443 TLS_CERT=../place/.certs/192.168.x.x.crt TLS_KEY=../place
 
 Quest のブラウザで開いて、「はじめる」でマイクを許可し、「VR で見る」を押します。同じ `?character=<id>` で、GLB のキャラ(`rig`)も VRM も動きます。
 
-- **聞き取り**: Quest のブラウザには聞き取りの機能が無い報告があるので、声の区間をサーバーへ送って文字にします(`/api/stt`、faster-whisper。`pip install faster-whisper`)。音は文字にしたら消します。鍵は要りません。設定は `STT_MODEL`(既定 small)・`STT_DEVICE`(cpu)・`STT_THREADS`(4)・`STT_ENGINE=off`(使わない)。`base` は同じ録音の 5 区間とも「19時」が崩れたので、既定は small のまま(2026-11-04)。
+- **聞き取り**: Quest のブラウザには聞き取りの機能が無い報告があるので、声の区間をサーバーへ送って文字にします(`/api/stt`、faster-whisper。`pip install faster-whisper`)。音は文字にしたら消します。鍵は要りません。設定は `STT_MODEL`(既定 small)・`STT_DEVICE`(cpu)・`STT_THREADS`(4)・`STT_ENGINE=off`(使わない)。`base` は同じ録音の 5 区間とも「19時」が崩れたので、既定は small のまま(2026-11-04)。 PC が混んでいるときの CPU は字まで 40 秒を超えて使えなかったので、NVIDIA の GPU があれば `STT_DEVICE=cuda` を付ける(字まで中央値 0.3 秒。読み込みの最初の 1 回は除く)。
 - **聞き取りの遅れを測る**: `node web/scripts/stt-latency.mjs --port <番号> --mic 声.wav --out <フォルダ> --word <正しい言葉>`。声の区間が閉じた時刻を起点に、字が返るまで・返事の最初の文・最初の音・あいづちの音を、ページの中の時刻で出す。
 - **立ち位置**: キャラの正面 1.6m に立ちます。キャラは場所が決めた位置のままで、見ている人の原点をずらします(`src/vrStage.js`)。体で歩くか、スティックで歩きます。撮った部屋が無いときは、空と床を出します。
 - **文字**: ページの文字は VR の中で見えないので、状態・話した言葉・返事を、キャラの横の板に出します(`src/ui/vrPanel.js`)。トリガーで「こんにちは」と話しかけられます(マイクが使えないときの確かめに)。
