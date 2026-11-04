@@ -238,3 +238,28 @@ class GazeCalibTest(unittest.TestCase):
             pts.append({"u": u, "v": v, "ipd_px": ipd, "yaw_deg": y, "pitch_deg": pi})
         g, rep = gc.fit(pts, g0, free=("cam_pitch_deg", "eye_x", "eye_y", "eye_z"))
         self.assertLess(rep["residual_rms_deg"], 0.2)  # 雑音なしなら、ほぼ 0 に戻る
+
+
+class GazeV1PacketTest(unittest.TestCase):
+    def test_v1_packet_matches_viewer_tracker_shape(self):
+        import json
+        import socket
+
+        import gaze_bridge as gb
+
+        rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        rx.bind(("127.0.0.1", 0))
+        rx.settimeout(2)
+        b = gb.GazeBridge(g=gb.Geometry(ema=0.0), sink=("127.0.0.1", rx.getsockname()[1]), packet="v1")
+        b.update(1.0, {"found": True, "eye_x": 0.8, "eye_y": 0.5, "cx": 0.8, "cy": 0.5, "ipd_px": 60.0})
+        pkt = json.loads(rx.recv(4096).decode())
+        for k in ("v", "present", "az", "el", "dist", "n", "facing", "seq"):
+            self.assertIn(k, pkt)
+        self.assertEqual(pkt["v"], 1)
+        self.assertTrue(pkt["present"])
+        self.assertGreater(pkt["az"], 0)  # 画像の右の客 = 客の右 = az はプラス
+        b.update(5.0, {"found": False})
+        pkt = json.loads(rx.recv(4096).decode())
+        self.assertFalse(pkt["present"])
+        self.assertEqual(pkt["az"], 0.0)
+        rx.close()

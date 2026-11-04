@@ -123,13 +123,15 @@
       "id": "F20",
       "group": "fact",
       "category": "rules",
-      "q": "写真を撮ってもいいですか?"
+      "q": "写真を撮ってもいいですか?",
+      "mustMention": "11 ?月"
     },
     {
       "id": "F21",
       "group": "fact",
       "category": "rules",
-      "q": "動画を撮るのは大丈夫ですか?"
+      "q": "動画を撮るのは大丈夫ですか?",
+      "mustMention": "11 ?月"
     },
     {
       "id": "F22",
@@ -586,7 +588,7 @@
       "group": "fact",
       "category": "hours",
       "q": "今月、お休みの日はありますか?",
-      "mustMention": "火曜|24"
+      "mustMention": "11 ?月"
     },
     {
       "id": "F22",

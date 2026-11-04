@@ -3,8 +3,12 @@
 式(計画書 2 章): 奥行き Z = f_px × IPD / ipd_px(IPD の平均 62.1 mm。個人差 ±3.7 mm = 約 ±6% の誤差になる)。
   カメラの座標 (x_c, y_c, Z) = ((u − W/2)/f × Z, (v − H/2)/f × Z, Z)(画像の下が +y_c)、世界の位置 P = C + Rᵀ · (x_c, y_c, Z)。
   キャラの目 E から P へ向く方向: yaw = atan2(dx, dz)(右が +)、pitch = atan2(dy, hypot(dx, dz))(上が +)。dz は客の側が +。
-出力(UDP、既定 127.0.0.1:9101、1 行の JSON): {"t": 秒, "found": bool, "yaw_deg", "pitch_deg", "pos_m": [x,y,z], "ipd_px", "age_ms"}
-  UE の側の受け口は、まだ無い(この JSON の形を、UE の担当と決める)。見失ったら hold_s の間は最後の向きを送り続け、そのあと found=false。
+出力(UDP、1 行の JSON)は 2 種類:
+  v1(既定。UE の入口キオスクが、すでに受けている形。viewer-tracker と同じ): {"v":1,"present":bool,"az":右が+(度),"el":上が+(度),"dist":m,"n":人数,"facing":0〜1,"seq":番号}
+    UE の視線の受け口(SampleCharacterKit の sampleGazeDirector。既定のポート 5321)へ、そのまま送れる。az/el は「キャラの目から見た客の方向」(カメラからではない)なので、
+    カメラが床にあっても、UE は「キャラの目の位置に カメラがある」ものとして扱え、UE 側の変更が要らない。
+  full(確かめ用): {"t","found","yaw_deg","pitch_deg","pos_m","ipd_px","age_ms"}
+  見失ったら hold_s の間は最後の向きを送り続け、そのあと present=false。
 外部パラメータ(カメラの置き場所・向き)は、現地で測った値(または solvePnP の結果)で gaze_geometry.json に入れる。既定は仮の値(未測定)。
 """
 from __future__ import annotations
@@ -78,7 +82,9 @@ def gaze_angles(eye_pos, target) -> tuple[float, float]:
 @dataclass
 class GazeBridge:
     g: Geometry = field(default_factory=Geometry)
-    sink: tuple | None = ("127.0.0.1", 9101)
+    sink: tuple | None = ("127.0.0.1", 5321)
+    packet: str = "v1"  # "v1"(UE が受けている形)か "full"
+    _seq: int = 0
     _yaw: float | None = None
     _pitch: float | None = None
     _pos: list | None = None
@@ -107,7 +113,13 @@ class GazeBridge:
         msg = {"t": round(now, 4), "found": bool(found), "age_ms": round(age_ms, 1)}
         if found:
             msg.update(yaw_deg=round(self._yaw, 2), pitch_deg=round(self._pitch, 2), pos_m=self._pos, ipd_px=det.get("ipd_px"))
-        self._send(msg)
+        self._seq += 1
+        if self.packet == "v1":
+            dist = float(np.linalg.norm(np.array(self._pos) - np.array(g.eye_pos))) if found and self._pos else 0.0
+            self._send({"v": 1, "present": bool(found), "az": round(self._yaw, 2) if found else 0.0, "el": round(self._pitch, 2) if found else 0.0,
+                        "dist": round(dist, 2), "n": 1 if found else 0, "facing": 1.0 if found else 0.0, "seq": self._seq})
+        else:
+            self._send(msg)
         return msg
 
     def _send(self, msg: dict) -> None:

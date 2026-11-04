@@ -101,7 +101,7 @@ def main() -> None:
         stop.set()
 
     threading.Thread(target=send_loop, daemon=True).start()
-    bridge = GazeBridge(g=g, sink=("127.0.0.1", 19101))
+    bridge = GazeBridge(g=g, sink=("127.0.0.1", 19101), packet="full")
     rows, last = [], 0
     udp_t: list[tuple[float, dict]] = []
 
