@@ -182,3 +182,11 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - 舞台の予定を替えるときは環境変数 `SHOW_STAGE=<json のパス>`(`sim/` と `scout/rehearsal.py` が読む。既定は `show/show_stage.json`)。
 - `sim_ue.py` は機械名を書かない: 環境変数 `SIM_UE_HOST`(サブ機の ssh の名前)、`SIM_LOCK_SUB`・`SIM_LOCK_MAIN`(札の機械名)、`MACHINE_LOCK_TOOL` を渡す。`--where sub|main`。
 - カット 8 の 3 コマ目の真っ白の LED は不具合でなく、リハーサルの LED の映像に足した「出る・戻るの光(0.12 秒)」。`show_stage.json` の flashes の秒に当たる。
+
+## 受け手を Windows の PC で動かす(11-05 の夜の通しの試験)
+- 受け手(`pc_stream_receiver.py`)と記録を直す道具は標準ライブラリ+ffmpeg で、Windows でそのまま動く。台本は `place/shootlog/win/`(`start_receiver.ps1`・`fix_takes.ps1`・`allow_receiver_port.ps1`・`health.ps1`。**英語だけで書く**: 日本語入りの .ps1 は BOM 無しだと文字化けする)。端末なしの確認は `rx_probe.py`(`--seconds 150 --payload-kb 75` で本番と同じ 18.5 Mbps)。
+- 結果: 同じ材料を店の PC の受け手で受けて直した記録は、別の PC の受け手で直した記録と、カメラの位置が 0.0 cm の差で同じ。150 秒の送りは 4500/4500 コマ、受け手が突然落ちても約 0.5 秒を除いて残り、直せる。
+- **会場の Wi-Fi 越しは防火壁が止める見込み**: 受け手の PC の Wi-Fi が「パブリック」で python を許す規則が無いと、同じ回線の端末からの接続は止まる(Tailscale 越しは通った)。止まったら、本人が管理者で `allow_receiver_port.ps1` を 1 回(TCP 9100・同じ回線だけ)。
+- ssh の中で起動したプロセスは ssh を閉じると止まる(job に入る)。夜の試験は ssh をつないだまま。本番は画面のあるデスクトップで台本をダブルクリック。
+- Windows の cp932 の画面に、—(長いダッシュ)などは出せず `print` が落ちる。`sys.stdout.reconfigure(errors="replace")` を入れる。
+- PowerShell の癖(店の PC): `New-Item` と `powershell` の名前が動かないことがある。フォルダは `[System.IO.Directory]::CreateDirectory`、別の PowerShell は `$env:SystemRoot\System32\WindowsPowerShell1.0\powershell.exe`。
