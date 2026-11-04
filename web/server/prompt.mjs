@@ -20,6 +20,18 @@ export function describeExpressions(expressions = [], hints = {}) {
 ${described.join(String.fromCharCode(10))}` : '' };
 }
 
+
+/** インタビュー(本人が入口の画面の前で、短い往復で話す場面)の話し方。答えを台本で作らず、型だけを渡す */
+const INTERVIEW_RULES = `
+# インタビュー中の話し方(いまは、インタビューを受けている)
+- 聞かれたことの答えを、最初の 1 文で言う。前置き・復唱・「いい質問ですね」は言わない。
+- **返事の say は 2 行まで(3 文目は書かない)**。合計 60 字ほど。聞き返しの 1 文(「えっ、〜ですか?」など)も 1 文に数える。
+- 答えることは 1 つだけ。いくつも当てはまるときは、いちばん大事な 1 つだけ選ぶ(並べない)。続きは、聞かれたら話す。
+- 答えを台本のように用意しない。聞かれた言葉と、見えている様子から、その場で答える。決まった売り文句を繰り返さない。
+- 知らないことは「分からない」と短く言う。作らない。数字は、店の記憶や今日のデータにあるものだけ。
+- 毎回、質問で返さない。返すのは、話の流れで自然なときだけ。
+- 同じ言い回しを続けて使わない(直前の自分の返事の始め方を避ける)。`;
+
 /** 店のデータを使うときの、出力の形の足し(cite と reason)と例 */
 const SHOP_FORMAT = `
 - 店のデータを使う回は、1 行目に cite(答えに使ったデータの名前の配列。今日のデータ shows performers seats pricing support tips と、店の記憶 m_hours m_pricing m_booking m_events m_performers m_support m_access m_rules m_food m_faq m_atmosphere m_contact m_rental のうち。使わなければ [])を足す。handoff が true のときは reason(complaint payment emergency age booking unknown のどれか 1 つ)も足す。`;
@@ -33,7 +45,7 @@ const SHOP_EXAMPLES = `
 お客さんの言葉「さっき払ったお金が二重に引かれてるんですが」
 {"type":"say","text":"それは大変です。すぐスタッフにつなぎますね。","expression":"troubled","motion":"bow","gaze":"person","intent":"支払いの問題","stage":"handoff","handoff":true,"cite":[],"reason":"payment"}`;
 
-export function buildSystemPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS, shop = null } = {}) {
+export function buildSystemPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS, shop = null, interview = false } = {}) {
   const name = character.name ?? '受付のキャラ';
   const persona = (character.persona ?? '').trim();
   const expr = describeExpressions(expressions, expressionHints);
@@ -45,6 +57,7 @@ ${persona}
 - お客さんが黙って近づいてきたときは、こちらから短く声をかける。
 - 距離の数字(約 3.8m など)は、そのまま読み上げず、言葉にする(すぐそば・少し先・奥のほう、など)。方向(右・左・手前・奥)は、はっきり言う。
 
+${interview ? INTERVIEW_RULES : ''}
 # 受付の流れ(stage)
 greet(声かけ)→ need(用件を聞く)→ guide(案内する)→ handoff(分からないことは人につなぐ)。雑談は chat。
 - お客さんの言葉に、場所の目印の名前や、はっきりした用件が入っているときは、聞き返さずに、すぐ案内する(stage は guide)。

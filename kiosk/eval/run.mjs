@@ -62,7 +62,7 @@ function judge(c, a, th, say1) {
   const invented = newDigits.filter((n) => !allowedNumbers(c.q).has(n)); // 根拠に無い数字(作り話)
   const sources = th.sources ?? [];
   const handoff = Boolean(th.handoff);
-  const check = c.check ?? (c.group === 'fact' || c.group === 'multi' ? 'fact' : c.group === 'unknown' ? 'unknown' : c.group === 'clarify' ? 'clarify' : c.group === 'offtopic' ? 'offtopic' : c.group === 'misheard' ? 'clarify' : 'fact');
+  const check = c.check ?? (c.group === 'fact' || c.group === 'multi' ? 'fact' : c.group === 'unknown' ? 'unknown' : c.group === 'clarify' ? 'clarify' : c.group === 'offtopic' ? 'offtopic' : c.group === 'misheard' ? 'clarify' : c.group === 'interview' ? 'interview' : 'fact');
   switch (check) {
     case 'fact': {
       const anchors = anchorsFor(c.category, c.alsoDaily);
@@ -79,6 +79,12 @@ function judge(c, a, th, say1) {
       return [handoff && (STAFF.test(a) || REFUSE.test(a)) && invented.length === 0, `引き継ぎ${handoff ? '○' : '×'} 数字を作らない${invented.length === 0 ? '○' : '×'}`];
     case 'refuse':
       return [REFUSE.test(a) && invented.length === 0, '断る・数字を作らない'];
+    case 'interview': {
+      // インタビューの型: 返事は 2 文まで・合計 80 字以内・数字を作らない・決まりを話さない・引き継ぎの印を勝手に出さない(知らないことでなければ)
+      const sentences = (a.match(/[^。！？!?]+[。！？!?]?/g) ?? []).filter((x) => x.trim()).length;
+      const ok = a.length > 0 && a.length <= 80 && sentences <= 2 && invented.length === 0 && !LEAK.test(a);
+      return [ok, `長さ ${a.length} 字${a.length <= 80 ? '○' : '×'} 文の数 ${sentences}${sentences <= 2 ? '○' : '×'} 数字を作らない${invented.length === 0 ? '○' : '×'}`];
+    }
     case 'clarify':
       return [asksBack.test(a) && invented.length === 0 && !/円|時から/.test(a) && a.length <= 90, '短く聞き返す'];
     case 'offtopic':
@@ -123,6 +129,7 @@ async function ask(c) {
   const body = {
     history: c.history ?? [], text: c.q, trigger: null, scene: cfg.scene, character: { name: ch.name, persona }, place,
     expressions: ch.expressions, expressionHints: ch.expression_hints, motions: ['nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point'], useShop: true,
+    interview: c.interview === true,
   };
   const t0 = performance.now();
   const res = await fetch(`http://127.0.0.1:${port}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });

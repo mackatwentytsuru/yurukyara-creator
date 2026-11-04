@@ -34,8 +34,9 @@ export function trimHistory(history, turns) {
 }
 
 /** /api/chat に渡す本文。画面と試験(kiosk/eval/run.mjs)で同じ形にする */
-export function buildChatBody({ text, history, config, character, persona, venue }) {
+export function buildChatBody({ text, history, config, character, persona, venue, interview = false }) {
   return {
+    interview: interview === true, // true のとき、短い往復のインタビューの話し方(web/server/prompt.mjs)
     history: trimHistory(history, config.historyTurns ?? 6),
     text,
     trigger: null,

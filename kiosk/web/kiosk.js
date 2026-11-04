@@ -12,6 +12,8 @@ const send = $('send');
 const toast = $('toast');
 const SAMPLE_QUESTIONS = ['営業時間を教えてください', '入場料はいくらですか?', '行き方を教えてください', '今日のショーは何時からですか?', '写真を撮ってもいいですか?', '応援するには、どうしたらいいですか?'];
 
+// ?interview=1: 提出動画のインタビュー用。短い往復の話し方(返事は 2 文まで)にする
+const INTERVIEW = new URLSearchParams(location.search).get('interview') === '1';
 const state = { config: null, character: null, persona: '', venue: '', history: [], busy: false, lastActive: Date.now(), io: resolveIO(window.KioskIO) };
 
 function showToast(message, ms = 3500) {
@@ -82,7 +84,7 @@ async function ask(text) {
   let first = true;
   let thought = null;
   try {
-    const body = buildChatBody({ text, history: state.history, config: state.config, character: state.character, persona: state.persona, venue: state.venue });
+    const body = buildChatBody({ text, history: state.history, config: state.config, character: state.character, persona: state.persona, venue: state.venue, interview: INTERVIEW });
     const res = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
     const reader = res.body.getReader();

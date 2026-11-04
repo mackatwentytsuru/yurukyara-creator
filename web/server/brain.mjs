@@ -308,7 +308,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
 
   onEvent({ type: 'meta', brain: 'haiku', model: config.model });
   const shopPrompt = useShop ? { rules: loadRules(), data: renderShopData(snap) } : null;
-  const system = buildSystemPrompt({ character, place, expressions, expressionHints: body.expressionHints, motions, shop: shopPrompt });
+  const system = buildSystemPrompt({ character, place, expressions, expressionHints: body.expressionHints, motions, shop: shopPrompt, interview: body.interview === true });
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
     { role: 'user', content: buildUserTurn({ text, scene, trigger, shopNow: useShop ? renderShopNow(snap, nowMs) : '' }) },

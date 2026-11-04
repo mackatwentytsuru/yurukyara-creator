@@ -594,6 +594,76 @@
       "category": "hours",
       "q": "月曜日はやっていますか?",
       "mustMention": "お休み|休み|定休"
+    },
+    {
+      "id": "I01",
+      "group": "interview",
+      "category": "hours",
+      "q": "自己紹介をしてください",
+      "interview": true
+    },
+    {
+      "id": "I02",
+      "group": "interview",
+      "category": "hours",
+      "q": "ここはどんなお店ですか?",
+      "interview": true
+    },
+    {
+      "id": "I03",
+      "group": "interview",
+      "category": "hours",
+      "q": "見本のキャラは、普段どんなことをしているの?",
+      "interview": true
+    },
+    {
+      "id": "I04",
+      "group": "interview",
+      "category": "hours",
+      "q": "お店に来る前に知っておけたら嬉しいことって何?",
+      "interview": true
+    },
+    {
+      "id": "I05",
+      "group": "interview",
+      "category": "hours",
+      "q": "AI のあなたが、いちばん得意なことは?",
+      "interview": true
+    },
+    {
+      "id": "I06",
+      "group": "interview",
+      "category": "hours",
+      "q": "今日は何時まで開いていますか?",
+      "interview": true
+    },
+    {
+      "id": "I07",
+      "group": "interview",
+      "category": "hours",
+      "q": "どうやって私の方を見ているの?",
+      "interview": true
+    },
+    {
+      "id": "I08",
+      "group": "interview",
+      "category": "hours",
+      "q": "緊張してる?",
+      "interview": true
+    },
+    {
+      "id": "I09",
+      "group": "interview",
+      "category": "hours",
+      "q": "最後に一言、見ている人に伝えてください",
+      "interview": true
+    },
+    {
+      "id": "I10",
+      "group": "interview",
+      "category": "hours",
+      "q": "ステージの LED と、ここの画面は何が違うの?",
+      "interview": true
     }
   ]
 }

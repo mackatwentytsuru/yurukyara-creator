@@ -62,6 +62,7 @@ export function sanitizeChatBody(raw) {
     history,
     text,
     trigger,
+    interview: raw.interview === true,
     scene: str(raw.scene, LIMITS.scene),
     character: { name: str(character.name, LIMITS.name) || undefined, persona: str(character.persona, LIMITS.persona) },
     place: { name: str(place.name, LIMITS.name) || undefined, info: str(place.info, LIMITS.placeInfo), landmarks },
