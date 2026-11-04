@@ -7,6 +7,8 @@
 
 入力は stage_plates.py の出力(fg_mask・inner_mask・closed_clean・warp_open)。
 絵は秒(コマ番号)と 2 本の背景だけで決まる。光で隠さない。
+行き来は何回でもよい: events = [(開く秒, 閉じる「戻る」の秒 か None), ...]。閉じるは開くを逆に流す
+(close_sec の長さで、戻るの close_end 秒後に閉じきる)。背景は get(コマ) で読む(どのコマからでも同じ絵)。
 """
 from pathlib import Path
 
@@ -25,6 +27,7 @@ INNER_SEC = 1.05
 OUTER_SEC = 1.35
 FLOOR_SEC = 0.95
 FG_SEC = 1.0
+FULL_AGE = FG_SEC + 0.61  # この経過で開ききった絵になる(閉じるときはここから 0 へ戻す)
 RESIDUAL_FULL = 0.34  # 開ききったとき、開口の端に残る幕の幅の割合(上)
 RESIDUAL_FOOT = 0.17  # 同じ(足元)。開いた絵の、タッセルで留めた幕に近づける
 HALO_REACH = 61
@@ -50,9 +53,14 @@ def _read_mask(path, size, device):
 
 
 class StageOpen:
-    def __init__(self, closed, opened, plates_dir, open_t, fps, size, device, to_linear):
+    def __init__(self, closed, opened, plates_dir, events, fps, size, device, to_linear, close_sec=1.2, close_end=0.1):
         self.closed, self.opened = closed, opened
-        self.open_t, self.fps = open_t, fps
+        if isinstance(events, (int, float)):
+            events = [(float(events), None)]
+        self.events = sorted(events)
+        self.close_sec, self.close_end = close_sec, close_end
+        self.fps = fps
+        self.frame = 0
         self.width, self.height = size
         self.device = device
         plates = Path(plates_dir)
@@ -89,7 +97,7 @@ class StageOpen:
         self.warp_grid = torch.stack([u, v], dim=-1).unsqueeze(0)
 
     def _warped_open(self):
-        image = self.opened.next().unsqueeze(0)
+        image = self.opened.get(self.frame).unsqueeze(0)
         return F.grid_sample(image, self.warp_grid, mode="bicubic", padding_mode="border", align_corners=False)[0].clamp(min=0.0)
 
     def _sample_x(self, image, source_x):
@@ -126,10 +134,25 @@ class StageOpen:
         alpha = alpha * (edge > -feather)
         return color * shade, alpha
 
+    def age(self, t):
+        """開き始めからの経過(秒)。閉じている間は None。閉じる間は FULL_AGE から 0 へ戻る。"""
+        for open_t, back in reversed(self.events):
+            if t < open_t:
+                continue
+            if back is not None:
+                done = back + self.close_end
+                if t >= done:
+                    return None
+                if t >= done - self.close_sec:
+                    return min(t - open_t, FULL_AGE * (done - t) / self.close_sec)
+            return t - open_t
+        return None
+
     def next(self, frame):
-        closed = self.closed.next()
-        age = frame / self.fps - self.open_t
-        if age < 0.0:
+        self.frame = frame
+        closed = self.closed.get(frame)
+        age = self.age(frame / self.fps)
+        if age is None or age <= 0.0:
             return closed
         opened = self._warped_open()
         inner, outer, floor = ease(age / INNER_SEC), ease(age / OUTER_SEC), ease(age / FLOOR_SEC)

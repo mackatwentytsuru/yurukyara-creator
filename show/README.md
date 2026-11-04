@@ -59,6 +59,40 @@ python show/composite/make_distort_sheet.py ...                  # 歪みあり�
 # make_fake_shoot・make_chain_trial・make_calib_trial・fake_phone は試し専用
 ```
 
+## LED の全編を 1 行で作る(`run/build_led_full.py`、11-04)
+
+背景(閉じた緞帳・開いた世界)→ 計算の効果 → UE のキャラの層(透明つき・影・映り込み)→ 左右のアップ → 重ね → 原版 → 書き出し → 確認シート → 検査を、1 行で流す。秒は全部 timeline・stage・cues から読む(コードに秒は無い)。行き来は何回でもよい。
+
+```sh
+work/AI/venv-sep/Scripts/python.exe -X utf8 show/run/build_led_full.py \
+  --timeline <timeline.json> --stage show/show_stage.json --cues <cues.json> \
+  --closed <閉じた緞帳の png か動画> --open <開いた世界の png か動画> --plates <stage_plates.py の出力> \
+  --character sample_show60 --version sample3_3 --out <作業の置き場>
+```
+
+- 段: `bg`(動画の背景を継ぎ目の見えないループに)→ `ue`(UE の層を撮る)→ `post`(透明の割り戻し)→ `head`・`tail`(本編の外の待ち・同期のフラッシュ・黒。今の全編と同じブラウザの描画のキャラなし)→ `body`(重ね。20 秒ずつ区切る)→ `master`(頭 + 重ね + 尾の ProRes)→ `deliver`(LED 用 5680x1240 H.264 音あり、UE 用 2840x620 H.264 音なし)→ `sheet` → `check`(`check/check_led_full.py`)。
+- できた段は飛ばす。止まっても同じ 1 行で続きから。やり直しは `--redo <段>`、一部だけは `--stages <段>`。
+- 背景の差し替え: `--closed` か `--open` を替えるだけ。キャラの層と頭は使い回す(背景ごとに `body/<指紋>/`)。
+- キャラの撮り直し: `--character <資産名>`(層は `layers/<資産名>/`)。
+- 試し: `--scale 0.125 --every 4 --skip-ue`(小さな絵・間引き・キャラの層なし)。
+- 曲を替える 1 行(`run/song_to_show.sh`)の最後をこれにするには `LED_BUILDER=full LED_CLOSED=… LED_OPEN=… LED_PLATES=… LED_OUT=…`。
+- 校正の盤: timeline に `calib` の区間があれば `--calib-video` で差しこむ(`splice_calib.py`)。
+- 検査で今の全編と頭・尾を比べるときは `--compare-head <今の全編の mp4>`、ブラウザ版の枠と比べるときは `--ref-boxes <character_box.json>`(足 1212 の古い版なら `--ref-foot-shift -14`)。
+- 置き場の作業: `plan.json`(秒の全部)、`stages.json`(段ごとの秒と容量)、`check.json`、`出す物/`。同じ置き場で 2 本を並べて流さない。
+
+LED から舞台へ跳び出す(11-04。`motion/hop.py`):
+
+```sh
+python show/motion/make_show_plan.py ... [--hop-form left_front|front] [--no-hop]   # 「出る」ごとに跳びが自動で入る(既定 左手前)
+python show/motion/test_hop.py                                                     # 試験(今の曲と song1 の timeline があればそれでも)
+python show/motion/foot_heights.py --track <並べた動き> --vrm <.vrm> --start 54.8 --count 276 --out foot.json   # 合成の --foot-height
+python show/composite/composite.py ... --exit <踏み切り> <現れきり> --exit-lift 12 --exit-hop 0 --exit-land <宙の山> --foot-height foot.json
+```
+
+- 秒の決まり: 着地 = 「出る」の 0.3 秒後より後の最初の拍。踏み切り = その 2 拍前(0.8 秒に近い整数の拍)。動きは JumpForJoy の 1 回目の跳びを秒だけ縮めて使う。
+- stage の `hops` に踏み切り・着地・LED の薄れの秒が入る。`led_character` は踏み切りで終わり(舞台のキャラはそこから出る)、LED の絵(`led_plan.hop_extended`、`fx_plan.hop_at`)はキャラを薄れ終わりまで動いたまま残す。
+- 舞台の位置は宙の間だけ一定の速さで動き、着地した場所で歌い続ける。前へ歩くのは歩く動きと同じ 0.867 m/s。
+
 ## 今の状態
 
 - できている: LED 3 面に mp4 が映る、面の境目が絵の境目に合う、扉が左右に開く(静止と 5 秒の動き)、キャラが舞台に立つ。

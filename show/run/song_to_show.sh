@@ -44,5 +44,16 @@ TIMELINE="$OUT/timeline.json" SING="$JOB/sing.json" WORK="$JOB" bash "$SHOW/run/
 [ "${STOP_AFTER:-}" = "ue" ] && exit 0
 
 echo "== LED の全編"
+if [ "${LED_BUILDER:-}" = "full" ]; then
+  # 新しい作り方(背景・計算の層・UE のキャラの層・アップ・重ね・検査・書き出し)。秒は全部 timeline と stage から
+  # 要る環境変数: LED_CLOSED(閉じた緞帳)、LED_OPEN(開いた世界)、LED_PLATES(stage_plates.py の出力)、LED_OUT(作業の置き場)
+  # 任意: LED_CUES、LED_CHARACTER(UE のキャラの資産。既定 sample_show60)、PY_FX(torch と cv2 の入った python)
+  "${PY_FX:-work/AI/venv-sep/Scripts/python.exe}" -X utf8 "$SHOW/run/build_led_full.py" --timeline "$OUT/timeline.json" --stage "$SHOW/show_stage.json" \
+    ${LED_CUES:+--cues "$LED_CUES"} --closed "$LED_CLOSED" --open "$LED_OPEN" --plates "$LED_PLATES" \
+    --character "${LED_CHARACTER:-sample_show60}" --version "$VERSION" --out "$LED_OUT/$VERSION" \
+    ${SHOW_CALIB_VIDEO:+--calib-video "$SHOW_CALIB_VIDEO"}
+  echo "できた: $VERSION"
+  exit 0
+fi
 SHOW_CALIB_VIDEO="${SHOW_CALIB_VIDEO:-work/キャラクターショー/本番_1103/LEDに出す物/LED校正の頭_5680x1240.mov}" SHOW_WHO="$WHO" SHOW_DANCE_TRACK="$JOB/track_sample_show" SHOW_PLATE="$PLATE" bash "$SHOW/run/build_vrm_show.sh" "$VRM" "$VERSION" "$VERSION"
 echo "できた: $VERSION"

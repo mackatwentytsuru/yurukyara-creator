@@ -8,6 +8,7 @@ cues.json(任意。無い物は曲の構成から代用する):
   intro_hits:  [秒, ...]       電球が 1 つ灯る音(オルゴールの打点)。無ければ区間の中の拍
   call_runs:   [[秒 x 4], ...] コールの打点。電球が A → C へ走る。無ければ舞台にいる間の小節頭の 4 拍
   finale:      秒               最後の決め。無ければ最後の song の最後の小節頭
+  viewer_cm:   [x, y]           跳ぶときに LED のキャラを舞台のキャラへ重ねる、見る人(カメラ)の床の位置。無ければ会場の wide カメラ
 """
 import json
 import math
@@ -18,6 +19,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ue"))
 import led_plan  # noqa: E402  秒から作るキーはブラウザ版・UE 版と同じ式を使う
+import stage_layout  # noqa: E402  中央の面の寸法(跳ぶときの LED のずらし)
 
 CANVAS = (5680, 1240)
 ATTACK_FRAMES = 3  # iPhone は 30p。60p の 1 コマの光は写らない
@@ -33,6 +35,12 @@ LED_FADE_END = 0.42  # 「出る」のこの後(着地のあたり)で消える�
 LAND_MIN_AFTER = 0.3  # 着地は「出る」のこの後の最初の拍
 CLOSED_FX = 0.14  # 緞帳が閉じている間の、光の面と柱の残り(開くと 1)
 OPEN_FX_SEC = 0.8
+CURTAIN_CLOSE_SEC = 1.2  # 戻るときに緞帳が閉じる長さ
+CURTAIN_CLOSE_END = 0.1  # 「戻る」のこの後で閉じきる(閉じ始めは 戻る + END - SEC)
+LED_APPEAR_SEC = {"enter": 0.6, "back": 0.15}  # LED のキャラが現れる長さ。戻るは光の芯に隠れる
+BG_DARK_FLOOR = 0.0  # 暗転(dark)の頭の背景の明るさ。終わりで 1 へ
+BG_QUIET = 0.55  # 歌の外(前奏・一礼・答え)の背景の明るさ。歌で 1
+BG_SONG_RAMP_SEC = 1.2
 FINALE_DECAY_SEC = 2.2
 BULB_IDLE = 0.14
 RUN_DECAY_SEC = 0.35
@@ -95,6 +103,27 @@ def flow_order(bulbs, center_x):
     return out
 
 
+def hop_stage_xy(h, t):
+    """跳ぶ舞台のキャラの床の位置 (x, y) cm。踏み切りまで start、宙の間は一定の速さ(hop.hop_path と同じ)、着地から先は land。"""
+    a, b = float(h["takeoff"]), float(h["land"])
+    u = min(1.0, max(0.0, (t - a) / max(b - a, 1e-6)))
+    (x0, y0), (x1, y1) = h["start_xy"], h["land_xy"]
+    return x0 + (x1 - x0) * u, y0 + (y1 - y0) * u
+
+
+def hop_shift_px(h, t, viewer=None):
+    """LED の層を横にずらす画素(5680 の絵)。舞台のキャラの位置を、見る人の目から中央の面(y=B_Y)へ写した点の、踏み切りからの動き。
+    前へまっすぐ(x が動かない)で見る人が正面(x=0)なら 0。"""
+    vx, vy = (float(v) for v in (viewer or stage_layout.CAMERAS["wide"]["pos"][:2]))
+
+    def on_led(x, y):
+        return vx + (x - vx) * (vy - stage_layout.B_Y) / max(vy - y, 1.0)
+
+    cm_per_px = 2.0 * stage_layout.B_X_HALF / (stage_layout.B_PX_X1 - stage_layout.B_PX_X0)
+    x0, y0 = h["start_xy"]
+    return (on_led(*hop_stage_xy(h, t)) - on_led(x0, y0)) / cm_per_px
+
+
 class FxPlan:
     def __init__(self, timeline, stage, hits, cues=None, bulbs=None):
         self.timeline = timeline
@@ -124,12 +153,62 @@ class FxPlan:
         for a, b in spans:
             on_led = np.maximum(on_led, smoothstep((times - a) / 0.4) * smoothstep((b - times) / 0.4))
         self.on_stage = (1.0 - on_led) * self.gain
+        self.spans = spans
+        self.bg_level = np.array([self._bg_level(t) for t in times], dtype=np.float32)
         downbeats = np.array(timeline.get("downbeats", []), dtype=np.float64)
         self.breath = np.zeros(self.frames, dtype=np.float32)
         if downbeats.size >= 2:
             position = np.interp(times, downbeats, np.arange(downbeats.size))
             inside = (times >= downbeats[0]) & (times <= downbeats[-1])
             self.breath = (0.5 + 0.5 * np.cos(2.0 * np.pi * position)).astype(np.float32) * inside
+
+    def _bg_level(self, t):
+        """背景の絵に掛ける明るさ(0〜1)。待ちと同期は 0、暗転で上がり、歌で 1、歌の外は BG_QUIET、outro で消える。"""
+        now = led_plan.sections_at(self.timeline, t)
+        if not now or any(s["id"] in led_plan.PLATE_OFF for s in now):
+            return 0.0
+        level = BG_QUIET + (1.0 - BG_QUIET) * led_plan.song_amount(self.timeline, t, BG_SONG_RAMP_SEC)
+        for s in now:
+            if s["id"] == "dark":
+                level *= BG_DARK_FLOOR + (1.0 - BG_DARK_FLOOR) * float(smoothstep((t - s["start"]) / (s["end"] - s["start"])))
+            elif s["id"] == "outro":
+                level *= 1.0 - float(smoothstep((t - s["start"]) / (s["end"] - s["start"])))
+        return level
+
+    def body_range(self):
+        """重ねで描く範囲(秒)。会場が消える区間(待ち・同期・校正・尾)の外の、最初から最後まで。"""
+        live = [s for s in self.timeline["sections"] if s["id"] not in led_plan.PLATE_OFF]
+        return min(s["start"] for s in live), max(s["end"] for s in live)
+
+    def curtain_events(self):
+        """緞帳の [(開く秒, 閉じる「戻る」の秒 か None)]。出るで開き、次の戻るで閉じる。"""
+        out = []
+        for at in self.out_times:
+            back = [b for b in self.back_times if b > at]
+            out.append((at, back[0] if back else None))
+        return out
+
+    def led_character_level(self, t):
+        """LED のキャラの濃さ(0〜1)。LED にいる区間だけ出す。舞台にいる間は 0。
+        現れる: enter は LED_APPEAR_SEC["enter"]、戻るは ["back"] で上がる。出る: 出たあと遅れて薄れる(led_character_fade)。
+        跳ぶとき(stage の hops)は踏み切りから薄れる。"""
+        if self.hop_at(t) is not None:
+            return self.led_character_fade(t)
+        for at in self.out_times:
+            if at <= t <= at + LED_FADE_END:
+                return self.led_character_fade(t)
+        for a, b in self.spans:
+            if a <= t < b:
+                kind = "back" if any(abs(a - x) < 1e-6 for x in self.back_times) else "enter"
+                return float(smoothstep((t - a + 1.0 / self.fps) / LED_APPEAR_SEC[kind]))
+        return 0.0
+
+    def stage_character_present(self, t):
+        """舞台(AR)にキャラがいるか。出る秒の EXIT_START_BEFORE 手前で足から現れ、次の戻るで消える(stage の秒から)。"""
+        for at, back in self.curtain_events():
+            if at - EXIT_START_BEFORE <= t < (back if back is not None else self.frames / self.fps):
+                return True
+        return False
 
     def _build_hit_tracks(self):
         self.track = {name: np.zeros(self.frames, dtype=np.float32) for name in DECAY_SEC}
@@ -180,10 +259,9 @@ class FxPlan:
         """緞帳の開き具合(0 閉じ、1 開き)。出るで開き、戻るで閉じる。"""
         times = self.index / self.fps
         self.opened = np.zeros(self.frames, dtype=np.float32)
-        for at in self.out_times:
-            back = [b for b in self.back_times if b > at]
-            until = back[0] if back else self.frames / self.fps + 10.0
-            rise = smoothstep((times - at) / OPEN_FX_SEC) * smoothstep((until - times) / OPEN_FX_SEC + 1.0)
+        for at, back in self.curtain_events():
+            until = back + CURTAIN_CLOSE_END if back is not None else self.frames / self.fps + 10.0
+            rise = smoothstep((times - at) / OPEN_FX_SEC) * smoothstep((until - times) / CURTAIN_CLOSE_SEC)
             self.opened = np.maximum(self.opened, rise.astype(np.float32))
 
     def _landings(self):
@@ -197,8 +275,28 @@ class FxPlan:
             out.append(float(later[0]) if later.size else at + LAND_MIN_AFTER)
         return out
 
+    def hop_at(self, t):
+        """stage の hops(make_show_plan の跳び)で、t が踏み切りから薄れ終わりの 1 秒後までに入る 1 件。無ければ None。
+        跳ぶときの LED のキャラは止めずに動いたまま、跳び始めてから薄れる(層は薄れ終わりまで撮ってある)。"""
+        for h in self.stage.get("hops", []):
+            if float(h["takeoff"]) <= t <= float(h["led_fade"][1]) + 1.0:
+                return h
+        return None
+
+    def hop_led_shift_px(self, t):
+        """跳ぶ間、LED のキャラの層を横にずらす画素(5680 の絵の座標。+ が右)。舞台のキャラと見る人の目から重なるように。
+        見る人の位置は cues の viewer_cm [x, y](無ければ会場の wide カメラ)。跳びの外は 0。"""
+        h = self.hop_at(t)
+        if h is None:
+            return 0.0
+        return hop_shift_px(h, t, self.cues.get("viewer_cm"))
+
     def led_character_fade(self, t):
         """LED のキャラの濃さ(1 そのまま、0 消えた)。出る前後だけ下がる。"""
+        h = self.hop_at(t)
+        if h is not None:
+            a, b = (float(v) for v in h["led_fade"])
+            return 1.0 - float(smoothstep((t - a) / max(b - a, 1e-3)))
         for at in self.out_times:
             if at <= t <= at + LED_FADE_END + 1.0:
                 return 1.0 - float(smoothstep((t - (at + LED_FADE_START)) / (LED_FADE_END - LED_FADE_START)))
@@ -207,13 +305,17 @@ class FxPlan:
     def held_frame(self, frame):
         """「出る」の後で薄れている間に見せるコマ。層は出る秒で終わるので、最後のコマを保つ。"""
         t = frame / self.fps
+        if self.hop_at(t) is not None:
+            return frame
         for at in self.out_times:
             if at <= t <= at + LED_FADE_END + 1.0:
                 return int(round(at * self.fps)) - 1
         return frame
 
     def exit_progress(self, t):
-        """足から順に舞台へ移る進み。0 まだ、1 全部出た。出る秒の手前 EXIT_SEC から。"""
+        """足から順に舞台へ移る進み。0 まだ、1 全部出た。出る秒の手前 EXIT_SEC から。跳ぶとき(hops)は光の線を通さない(0)。"""
+        if self.stage.get("hops"):
+            return 0.0
         for at in self.out_times:
             if at - EXIT_START_BEFORE <= t <= at + 1.0:
                 return round(float(np.clip((t - (at - EXIT_START_BEFORE)) / EXIT_SEC, 0.0, 1.0)), 6)

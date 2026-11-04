@@ -77,8 +77,20 @@ def character_spans(timeline, stage):
     by_id = {s["id"]: s for s in timeline["sections"]}
     low = by_id["enter"]["start"] if "enter" in by_id else 0.0
     high = by_id["outro"]["end"] if "outro" in by_id else timeline["frames"] / timeline["fps"]
-    spans = [(max(float(a), low), min(float(b), high)) for a, b in stage["led_character"]]
+    spans = [(max(float(a), low), min(float(b), high)) for a, b in hop_extended(stage)]
     return [(a, b) for a, b in spans if a < b]
+
+
+def hop_extended(stage):
+    """led_character の終わりが跳び(stage の hops)の踏み切りなら、LED の絵ではキャラが薄れ終わるまで残す。
+    舞台の側(on_led)は踏み切りで切りかわる。hops が無ければ led_character のまま。"""
+    out = []
+    for a, b in stage["led_character"]:
+        for h in stage.get("hops", []):
+            if abs(float(b) - float(h["takeoff"])) < 1e-3:
+                b = max(float(b), float(h["led_fade"][1]))
+        out.append([a, b])
+    return out
 
 
 def show_range(timeline, stage):

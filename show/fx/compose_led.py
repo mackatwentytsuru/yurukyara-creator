@@ -7,9 +7,14 @@
 - 秒は全部 timeline と stage(と任意の cues)から読む。省くと LED にキャラがいる最初から最後まで。
 - キャラは 3838×1240 を横 1.48 倍。ファイル名は f.<全編のコマ番号>.png。
 - 左右のアップは monitor_rects の位置に等倍。枠と光る縁はここで描く。
+- 行き来は何回でもよい。LED のキャラは stage の led_character の区間だけ出す(舞台にいる間は層を読まない)。
+  緞帳は「出る」で開き、次の「戻る」で閉じる。
+- 背景の動画はコマ番号で読む(--bg-anchor の秒に動画の --bg-at 秒を見せる)。動画が尽きたら頭へ戻る
+  (継ぎ目は build_led_full.py が先に消す)。どのコマから描いても同じ絵なので、区切って描いてつなげられる。
 """
 import argparse
 import json
+import math
 import subprocess
 import sys
 import time
@@ -38,6 +43,7 @@ FRAME_THICK = 4.0
 FRAME_GLOW = 20.0
 FRAME_MARGIN = 72
 READ_AHEAD = 4
+SKIP_READ_MAX = 30  # 背景の動画で、このコマ数までの先は読み捨てて進む(開き直すより速い)
 EXIT_TOP_MARGIN = 20.0  # 頭の上まで抜けるための余り
 EXIT_LINE_SIGMA = 6.0  # 移る境目の光の線の太さ(半値幅で約 10 px。身長の 2.5%)
 EXIT_LINE = (0.42, 0.60, 0.60)  # 境目の光(直線)
@@ -79,27 +85,56 @@ def limiter_scale(bg_small, fx_small, cap):
     return low
 
 
-class Background:
-    """静止画か動画。--bg-center-src は、中央の面の中心が絵の真ん中にある仮の絵を x=2159 へ寄せるためだけに使う。"""
+def read_image(path, flags):
+    """日本語を含むパスも読める imread。cv2.imread は Windows で日本語のパスを読めず、黙って None を返す
+    (11-04、置き場が J:/…/キャラクターショー/ だと層が全部「無いコマ」になり、キャラとアップが消えた)。"""
+    data = np.fromfile(str(path), dtype=np.uint8)
+    return cv2.imdecode(data, flags) if data.size else None
 
-    def __init__(self, path, size, device, center_src=None, center_dst=2159.0, video_at=0.0, gain=1.0):
+
+def count_frames(path):
+    """動画のコマ数(パケットを数える)。"""
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets",
+                          "-of", "csv=p=0", str(path)], capture_output=True, text=True, stdin=subprocess.DEVNULL, check=True).stdout
+    return int(out.strip().split(",")[0])
+
+
+class Background:
+    """静止画か動画。--bg-center-src は、中央の面の中心が絵の真ん中にある仮の絵を x=2159 へ寄せるためだけに使う。
+    動画は get(コマ) で読む: 動画のコマ = (コマ - anchor_frame + video_at のコマ) を動画の長さで割った余り。"""
+
+    def __init__(self, path, size, device, center_src=None, center_dst=2159.0, video_at=0.0, gain=1.0, anchor_frame=0, fps=60):
         self.size, self.device, self.gain = size, device, gain
         self.process = None
         self.last = None
+        self.last_index = None
+        self.path, self.fps = path, fps
+        self.offset = int(round(video_at * fps)) - int(anchor_frame)
+        self.expected = None
+        self.opens = 0
         self.grid = self._warp_grid(size, center_src, center_dst) if center_src is not None else None
         self.black = torch.zeros(3, size[1], size[0], device=device)
         self.still = None
         if path is None:
             self.still = self.black
         elif Path(path).suffix.lower() in (".png", ".jpg", ".jpeg"):
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            image = read_image(path, cv2.IMREAD_COLOR)
             if image is None:
                 raise FileNotFoundError(path)
             self.still = self._prepare(torch.from_numpy(image[:, :, ::-1].copy()).to(device))
         else:
-            command = ["ffmpeg", "-v", "error", "-ss", str(video_at), "-i", str(path), "-vf",
-                       f"scale={size[0]}:{size[1]}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
-            self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+            self.length = count_frames(path)
+
+    def _open(self, index):
+        """動画を index のコマから読み始める。-stream_loop で尽きたら頭へ戻る。"""
+        if self.process:
+            self.process.kill()
+            self.process.wait()
+        command = ["ffmpeg", "-v", "error", "-stream_loop", "-1", "-ss", f"{index / self.fps:.6f}", "-i", str(self.path), "-vf",
+                   f"scale={self.size[0]}:{self.size[1]}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+        self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+        self.expected = index
+        self.opens += 1
 
     def _warp_grid(self, size, center_src, center_dst):
         """横だけを 2 つの直線で曲げる。左の部分と右の部分の倍率が変わる。"""
@@ -120,17 +155,25 @@ class Background:
             image = F.interpolate(image, size=(self.size[1], self.size[0]), mode="bicubic", align_corners=False)
         return to_linear(image[0].clamp(0.0, 1.0)) * self.gain
 
-    def next(self):
+    def get(self, frame):
         if self.still is not None:
             return self.still
-        count = self.size[0] * self.size[1] * 3
-        data = self.process.stdout.read(count)
-        if len(data) < count:  # 動画が尽きたら最後のコマを保つ
-            if self.last is None:
-                raise RuntimeError("背景の動画からコマが読めません")
+        index = (frame + self.offset) % self.length
+        if self.last is not None and self.last_index == index:
             return self.last
+        count = self.size[0] * self.size[1] * 3
+        ahead = (index - self.expected) % self.length if self.expected is not None else None
+        if ahead is None or ahead > SKIP_READ_MAX:
+            self._open(index)
+        else:
+            for _ in range(ahead):  # 間引きなどで少し先へ飛ぶときは、開き直さず読み捨てる
+                self.process.stdout.read(count)
+        data = self.process.stdout.read(count)
+        if len(data) < count:
+            raise RuntimeError(f"背景の動画からコマが読めません: {self.path} の {index}")
+        self.expected = (index + 1) % self.length
         array = np.frombuffer(data, dtype=np.uint8).reshape(self.size[1], self.size[0], 3)
-        self.last = self._prepare(torch.from_numpy(array.copy()).to(self.device))
+        self.last, self.last_index = self._prepare(torch.from_numpy(array.copy()).to(self.device)), index
         return self.last
 
     def close(self):
@@ -149,7 +192,7 @@ class Sequence:
 
     def _read(self, frame):
         path = self.folder / f"f.{frame:04d}.png"
-        return cv2.imread(str(path), cv2.IMREAD_UNCHANGED) if path.exists() else None
+        return read_image(path, cv2.IMREAD_UNCHANGED) if path.exists() else None
 
     def get(self, frame):
         if self.folder is None:
@@ -186,6 +229,24 @@ def character_layer(image, size, mode, tint, device):
     # bicubic は縁で行き過ぎて明るい線を作る。横 1.48 倍は直線の補間にする
     stack = F.interpolate(stack, size=(size[1], size[0]), mode="bilinear", align_corners=False)[0].clamp(0.0, 1.0)
     return choke_edge(stack[:3], stack[3])
+
+
+def shift_x(image, pixels):
+    """最後の軸(横)を pixels(小数可、+ が右)ずらす。はみ出した所は 0。2 つの整数のずらしを直線で混ぜる。"""
+    if abs(pixels) < 1e-3:
+        return image
+    base = math.floor(pixels)
+    frac = pixels - base
+
+    def whole(n):
+        out = torch.zeros_like(image)
+        if n >= 0:
+            out[..., n:] = image[..., :image.shape[-1] - n]
+        else:
+            out[..., :n] = image[..., -n:]
+        return out
+
+    return whole(base) * (1.0 - frac) + whole(base + 1) * frac
 
 
 def choke_edge(color, alpha):
@@ -275,11 +336,13 @@ def parse_args():
     parser.add_argument("--start", type=float, help="始めの秒。省くと LED にキャラがいる最初")
     parser.add_argument("--end", type=float, help="終わりの秒。省くと LED にキャラがいる最後")
     parser.add_argument("--bg", help="背景の静止画か動画。省くと黒")
-    parser.add_argument("--bg-at", type=float, default=0.0, help="背景の動画の、始めのコマの秒")
+    parser.add_argument("--bg-at", type=float, default=0.0, help="背景の動画の、--bg-anchor の秒に見せるコマの秒")
+    parser.add_argument("--bg-anchor", type=float, help="背景の動画の --bg-at を見せる全編の秒。省くと --start。区切って描くときは全部で同じ値")
+    parser.add_argument("--bg-envelope", action="store_true", help="背景に timeline の明るさの包絡を掛ける(暗転で上がる、歌の外は控えめ、outro で消える)")
     parser.add_argument("--bg-center-src", type=float, help="仮の絵の中心の割合(0〜1)を x=2159 へ寄せる")
     parser.add_argument("--bg-open", help="緞帳が開いた世界の静止画か動画。--bg は閉じた緞帳")
     parser.add_argument("--open-plates", help="stage_plates.py の出力のフォルダ")
-    parser.add_argument("--open-at", type=float, help="緞帳が開き始める秒。省くと範囲の中の最初の「出る」")
+    parser.add_argument("--open-at", type=float, help="緞帳を 1 回だけこの秒に開く(試し用)。省くと stage の全部の「出る」で開き「戻る」で閉じる")
     parser.add_argument("--open-bg-at", type=float, default=0.0, help="開いた世界の動画の、始めのコマの秒")
     parser.add_argument("--shadow-dir", help="足元の影の連番のフォルダ")
     parser.add_argument("--reflect-dir", help="床の映り込みの連番のフォルダ")
@@ -294,6 +357,7 @@ def parse_args():
     parser.add_argument("--hits", help="打点 [{t, band, strength}, ...]。省くと音から取る")
     parser.add_argument("--mean-cap", type=float, default=MEAN_CAP)
     parser.add_argument("--scale", type=float, default=1.0, help="試しの縮小(座標は 5680 のまま)")
+    parser.add_argument("--every", type=int, default=1, help="試しの間引き。N コマに 1 コマだけ描き、書き出しは fps/N")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--out", help=".mov(ProRes)か、%%04d の入った png の連番")
     parser.add_argument("--stats", help="コマごとの記録(jsonl)")
@@ -330,12 +394,18 @@ class Composer:
         self.plan = fx_plan.load_plan(args.timeline, args.stage, hits, args.cues, args.bulbs)
         self.size = (int(round(CANVAS[0] * args.scale)), int(round(CANVAS[1] * args.scale)))
         self.fx = None if args.no_fx else FxRenderer(self.plan, args.scale, self.device)
-        self.background = Background(args.bg, self.size, self.device, args.bg_center_src, self.plan.center_x, args.bg_at)
+        start, end = led_plan.show_range(self.plan.timeline, self.plan.stage)
+        self.start = args.start if args.start is not None else start
+        self.end = args.end if args.end is not None else end
+        anchor = int(round((args.bg_anchor if args.bg_anchor is not None else self.start) * self.plan.fps))
+        self.background = Background(args.bg, self.size, self.device, args.bg_center_src, self.plan.center_x, args.bg_at,
+                                     anchor_frame=anchor, fps=self.plan.fps)
         self.stage_open = None
         if args.bg_open:
-            opened = Background(args.bg_open, self.size, self.device, video_at=args.open_bg_at)
-            self.stage_open = StageOpen(self.background, opened, args.open_plates, self._open_time(args), self.plan.fps,
-                                        self.size, self.device, to_linear)
+            opened = Background(args.bg_open, self.size, self.device, video_at=args.open_bg_at, anchor_frame=anchor, fps=self.plan.fps)
+            events = [(args.open_at, None)] if args.open_at is not None else self.plan.curtain_events()
+            self.stage_open = StageOpen(self.background, opened, args.open_plates, events, self.plan.fps, self.size, self.device,
+                                        to_linear, fx_plan.CURTAIN_CLOSE_SEC, fx_plan.CURTAIN_CLOSE_END)
         self.shadow = Sequence(args.shadow_dir)
         self.reflect = Sequence(args.reflect_dir)
         self.y_grid = None
@@ -344,20 +414,10 @@ class Composer:
         self.mon_right = Sequence(args.mon_right) if args.mon_right else None
         self.tint = [float(v) for v in args.char_tint.split(",")]
         self.dither = make_dither(self.device, (self.size[1], self.size[0]))
-        start, end = led_plan.show_range(self.plan.timeline, self.plan.stage)
-        self.start = args.start if args.start is not None else start
-        self.end = args.end if args.end is not None else end
+        self.char_px = 0
+        self.exit_band_pct = None
         self.fps = self.plan.fps
         self.monitors = monitor_state(self.plan.stage, self.start - 1.0, self.end + 1.0, self.fps)
-
-    def _open_time(self, args):
-        if args.open_at is not None:
-            return args.open_at
-        start = args.start if args.start is not None else 0.0
-        later = [t for t in self.plan.out_times if t >= start]
-        if not later:
-            raise ValueError("範囲の中に「出る」がありません。--open-at を指定してください")
-        return later[0]
 
     def _layer(self, sequence, frame):
         image = sequence.get(frame)
@@ -381,20 +441,24 @@ class Composer:
         """LED のキャラは奥に残り、遅れて薄れる。体は隠さず、細い光の線だけが足から頭へ上がる。"""
         t = frame / self.fps
         self.exit_band_pct = None
-        fade = self.plan.led_character_fade(t)
+        self.char_px = 0
+        fade = self.plan.led_character_level(t)  # 舞台にいる間は 0。層を読まない
         if fade <= 0.0:
             return final, None
         shown = self.plan.held_frame(frame)
+        # 跳ぶ間は、舞台のキャラと見る人の目から重なるよう、層を横にずらしながら薄れる(1 人が前へ跳んだに見せる)
+        shift = self.plan.hop_led_shift_px(t) * self.size[0] / CANVAS[0]
         for layer in (self._layer(self.shadow, shown), self._layer(self.reflect, shown)):
             if layer is None:
                 continue
-            color, alpha = layer
+            color, alpha = shift_x(layer[0], shift), shift_x(layer[1], shift)
             final = final * (1.0 - alpha * fade) + color * fade
         char = self._layer(self.character, shown)
         if char is None:
             return final, None
-        color, alpha = char
+        color, alpha = shift_x(char[0], shift), shift_x(char[1], shift)
         alpha, color = alpha * fade, color * fade
+        self.char_px = int((alpha > 1.0 / 255.0).sum())
         final = final * (1.0 - alpha) + color
         line = self._exit_line(t)
         if line is None:
@@ -407,7 +471,10 @@ class Composer:
 
     def draw(self, frame):
         """このコマの絵(直線、3 × 高さ × 幅)と、キャラの透明。"""
-        background = self.stage_open.next(frame) if self.stage_open else self.background.next()
+        background = self.stage_open.next(frame) if self.stage_open else self.background.get(frame)
+        level = float(self.plan.bg_level[frame]) if self.args.bg_envelope else 1.0
+        if level < 1.0:
+            background = background * level
         if self.fx is not None:
             fx = self.fx.render(frame)
             small = (self.size[1] // LIMIT_DIV, self.size[0] // LIMIT_DIV)
@@ -440,10 +507,12 @@ class Composer:
 
     def run(self):
         first, last = int(round(self.start * self.fps)), int(round(self.end * self.fps))
-        writer = open_writer(self.args.out, self.size, self.fps, first) if self.args.out else None
+        every = max(1, self.args.every)
+        first = -(-first // every) * every  # 間引きのコマは全編のコマ番号で N の倍数にそろえる(区切りをまたいでも同じ)
+        writer = open_writer(self.args.out, self.size, self.fps / every, first) if self.args.out else None
         stats = open(self.args.stats, "w", encoding="utf-8") if self.args.stats else None
         began = time.time()
-        for frame in range(first, last):
+        for frame in range(first, last, every):
             t0 = time.perf_counter()
             with torch.no_grad():
                 final, alpha, scale = self.draw(frame)
@@ -454,9 +523,12 @@ class Composer:
                 row = frame_stats(frame, final, alpha, time.perf_counter() - t0)
                 row["limit"] = round(scale, 3)
                 row["exit_band_pct"] = self.exit_band_pct
+                row["char_px"] = self.char_px  # LED のキャラの透明が 0 でない画素の数(縮めた絵ならその画素で)
+                row["led_level"] = round(self.plan.led_character_level(frame / self.fps), 4)
+                row["stage_char"] = self.plan.stage_character_present(frame / self.fps)
                 stats.write(json.dumps(row) + "\n")
-            if (frame - first) % 120 == 0:
-                print(f"{frame} / {last}  {(time.time() - began) / max(1, frame - first + 1):.3f} 秒/コマ", flush=True)
+            if (frame - first) % (120 * every) == 0:
+                print(f"{frame} / {last}  {(time.time() - began) / max(1, (frame - first) // every + 1):.3f} 秒/コマ", flush=True)
         total = time.time() - began
         if writer:
             writer.stdin.close()
@@ -465,7 +537,8 @@ class Composer:
         if stats:
             stats.close()
         (self.stage_open or self.background).close()
-        print(json.dumps({"frames": last - first, "sec": round(total, 1), "sec_per_frame": round(total / max(1, last - first), 4),
+        count = len(range(first, last, every))
+        print(json.dumps({"frames": count, "sec": round(total, 1), "sec_per_frame": round(total / max(1, count), 4),
                           "hits_source": self.hits_source, "device": self.device}, ensure_ascii=False))
 
     def stills(self, seconds, folder):
@@ -477,7 +550,7 @@ class Composer:
                 final, alpha, scale = self.draw(frame)
                 row = frame_stats(frame, final, alpha, time.perf_counter() - t0)
                 data = (to_srgb(final).permute(1, 2, 0) * 255.0 + 0.5).to(torch.uint8).cpu().numpy()
-            cv2.imwrite(str(Path(folder) / f"s_{frame:05d}.png"), data[:, :, ::-1])
+            cv2.imencode(".png", data[:, :, ::-1])[1].tofile(str(Path(folder) / f"s_{frame:05d}.png"))
             row["limit"] = round(scale, 3)
             print(json.dumps(row))
 
