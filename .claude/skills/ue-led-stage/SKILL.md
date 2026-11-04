@@ -398,3 +398,14 @@ description: Unreal Engine 5.8 で、複数の面の LED ウォールがある�
 - 秒は `make_show_plan.py --out-cues` の `morphs`。コールの 4 打に置くと、歌詞の語と重ならない。人型のまま LED へ戻らないよう、戻りが組めないサビには変身を出さない。
 - `-ss` にコマの秒を小数 4 桁で渡すと、丸めでコマが 1 つ落ちることがある(`seek_seconds` で 0.25 コマ手前を指す)。
 - 判定の絵はキャラが縦 300 px 以上で写る大きさにする。全景の縮小では粒が読めない。
+
+## Fab の 2 素材を見本のマネキンで試し撮り(11-04。`work\epic\FabTest`、道具は `work\キャラクターショー\Fab_比べ_1104\`)
+- 5.8 で `CharacterBodyFX` の Niagara 16 本と `Character_Appearance_Dissolve` の `M_Appearance_1〜20` は全部読め、材質は `recompile_material` も通った(材質のコンパイルの失敗 0)。ログに出る Niagara のエラーは「Mesh distance field が無効」の 5 種だけ(プロジェクト設定。設定は変えていない)。
+- 溶ける材質に「溶け具合 0→1」のパラメータは無い。スカラーは `Emissive_Mult`(12〜5600)と、2・3・4 の `Height`、10・11 の `Offset_1/2` だけ。溶けは `Time` と位置で自動で循環する。
+- FabTest の `.uproject` に `MovieRenderPipeline` が無く `unreal.MoviePipelinePrimaryConfig` が無い → コマンドに `-EnablePlugins=MovieRenderPipeline` を付けると、設定ファイルを変えずに使える(ビルドも撮影も)。
+- Niagara の `User.SkeletalMesh` に `set_variable_actor` で渡しても粒が出なかった。**`NiagaraActor` をマネキンのアクターに `attach_to_actor` したら出た**(変数の指定も残したまま)。
+- 溶ける材質は、付属の静的 `SM_Mannequin`(骨つきと同じ大きさ・姿勢)に付けた。粒と一緒に当てるときは骨つきを `hidden_in_game` にして粒の元にする。
+- 露出: MANUAL、bias 0、太陽 3 lux・スポット 150 cd・点光 8 cd で暗い舞台に収まる(bias 8・太陽 600 lux は真っ白)。
+- 1 本のシーケンスに 8 カットをカメラカットで並べ、1920×1080・840 コマを 1 回で撮れた(撮影自体は 20 秒ほど)。舞台を X 方向に並べると、カメラの向こうに隣のカットが写る → **Y 方向に 2500 cm ずつ離す**。
+- 既にある資産と同じ名前で `create_asset` すると None が返る(`delete_asset` は禁止なので、名前に `_v5` のような版を付けて作り直す)。
+- 絵で見えたこと: `NS_Pixels` は人型の表面が黄→桃に光り、粒が上へ散る(「人が粒になる」に近い)。`NS_LightOrbs` は縁に光の玉。`NS_Glitter` は何も見えなかった(未解決)。溶ける材質は 2=青い結晶の塊、10=赤い輪が胴に出て消える、5=白い火花で穴が開く、12=緑の線の人型、が見えた(`Height` を 0→200 で動かした 2 は差が見えない)。
