@@ -35,6 +35,17 @@ def test_times_land_on_beat_and_take_off_on_beat():
         assert h["start"] < h["takeoff"] < h["land"] < h["end"]
 
 
+def test_tame_is_long_and_takeoff_stays_on_beat():
+    """溜め(素材の 0〜離陸)は TAME_SEC に伸び、素材の離陸は踏み切りの拍に来る。別の拍・2 回目でも同じ。"""
+    assert 0.45 <= hop.TAME_SEC <= 0.55 and hop.FADE_IN_SEC <= 0.15
+    for bpm, t in ((150.17, 30.0), (128.0, 41.3)):
+        h = hop.hop_times(t, beats_at(bpm, 0.37))
+        seg = hop.hop_segment(h)
+        (t0, c0), (t1, c1), (t2, c2) = seg["warp"]
+        assert abs((t1 - t0) - hop.TAME_SEC) < 1e-6 and c0 == 0.0 and c1 == hop.CLIP_TAKEOFF
+        assert t1 == h["takeoff"] and t0 == h["start"] and t2 == h["end"] and c2 == hop.CLIP_END
+
+
 def test_path_moves_only_in_the_air_at_constant_speed():
     beats = beats_at(150.17)
     h = hop.hop_times(30.0, beats)
@@ -117,7 +128,7 @@ def check_plan(timeline, plan, stage):
         assert abs(p0[0] - p1[0]) < 1e-6 and abs(p0[1] - p1[1]) < 1e-6
         assert [round(v, 3) for v in p0[:2]] == [round(v, 3) for v in h["land_xy"]]
         # 跳びの区間の中に、ほかの区間が始まらない
-        jump = next(s for s in jumps if abs(s["at_sec"] - (h["takeoff"] - hop.CLIP_TAKEOFF / s["speed"])) < 1e-3)
+        jump = next(s for s in jumps if abs(s["at_sec"] - (h["takeoff"] - hop.TAME_SEC)) < 1e-3)
         assert not [s for s in plan["segments"] if jump["at_sec"] < s["at_sec"] < jump["end_sec"]]
 
 

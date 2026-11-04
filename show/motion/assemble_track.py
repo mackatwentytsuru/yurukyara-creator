@@ -181,6 +181,9 @@ def make_segments(plan, clips, beats):
             end = s.get('end_sec', start + (c1 - c0) / speed)
             fade = s.get('fade_sec', 0.4)
             clock = (lambda c0, speed, start: lambda t: c0 + (t - start) * speed)(c0, speed, start)
+        if s.get('warp'):  # [[秒, 素材の秒], ...] の折れ線(溜めを遅く、宙から先を速くする)
+            wt, wc = [w[0] for w in s['warp']], [w[1] for w in s['warp']]
+            clock = (lambda wt, wc: lambda t: float(np.interp(t, wt, wc)))(wt, wc)
         if s.get('hold'):  # 区間の後ろは最後の姿勢を保つ(跳びの後に素材の続きへ進まない)
             clock = (lambda f, c0, c1: lambda t: min(max(f(t), c0), c1))(clock, c0, c1)
         out.append({'clip': clip, 'start': start, 'end': end, 'fade': fade, 'clock': clock, 'name': s['clip'], 'in_place': s.get('in_place', False)})

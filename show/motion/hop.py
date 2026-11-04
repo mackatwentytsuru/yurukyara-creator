@@ -10,7 +10,8 @@ JUMP = "Anim_KA_Idle66_JumpForJoy"
 CLIP_TAKEOFF = 0.35  # 素材の中で両足が床を離れる秒(measure: 足の一番低い所が 2 cm を超える)
 CLIP_LAND = 1.333  # 素材の中で着地する秒
 CLIP_END = 1.50  # 着地の沈みのいちばん下(1.467)の少し後。ここで止めて、次の動きへ混ぜて立ち上がる
-FADE_IN_SEC = 0.25
+FADE_IN_SEC = 0.12  # 前の踊りからの混ぜ。長いと溜めの沈みが混ざって浅くなる
+TAME_SEC = 0.50  # 溜め(素材の 0〜CLIP_TAKEOFF)を見せる長さ。踏み切りの拍の手前から遅く再生して伸ばす(0.45〜0.55)
 FADE_OUT_SEC = 0.45  # 着地の沈みから次の動きへ戻る長さ
 AIR_TARGET_SEC = 0.8
 LAND_MIN_AFTER = 0.3  # fx_plan と同じ
@@ -38,9 +39,9 @@ def hop_times(out_t, beats):
             beat = beats[i] - beats[i - 1]
         n = max(1, round(AIR_TARGET_SEC / beat))
         takeoff = beats[i - n] if i - n >= 0 else land - n * beat
-    speed = (CLIP_LAND - CLIP_TAKEOFF) / (land - takeoff)
-    start = takeoff - CLIP_TAKEOFF / speed
-    end = start + CLIP_END / speed
+    speed = (CLIP_LAND - CLIP_TAKEOFF) / (land - takeoff)  # 宙から後の速さ。溜めは別(TAME_SEC で遅く)
+    start = takeoff - TAME_SEC
+    end = takeoff + (CLIP_END - CLIP_TAKEOFF) / speed
     return {"out": out_t, "takeoff": round(takeoff, 4), "land": round(land, 4), "speed": round(speed, 5),
             "start": round(start, 4), "end": round(end, 4)}
 
@@ -48,6 +49,7 @@ def hop_times(out_t, beats):
 def hop_segment(h):
     """assemble_track.py の区間。hold で、区間の後ろは最後の姿勢を保つ(素材の 2 回目の跳びへ進まない)。"""
     return {"clip": JUMP, "at_sec": h["start"], "clip_from": 0.0, "clip_to": CLIP_END, "speed": h["speed"],
+            "warp": [[h["start"], 0.0], [h["takeoff"], CLIP_TAKEOFF], [h["end"], CLIP_END]],  # 溜めは遅く、踏み切りの拍で素材の離陸
             "end_sec": h["end"], "fade_sec": FADE_IN_SEC, "hold": True, "hop": True}
 
 

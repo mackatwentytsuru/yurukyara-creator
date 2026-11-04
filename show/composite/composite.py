@@ -30,7 +30,9 @@ SHADOW_STRENGTH = 0.85
 REFLECTION_STRENGTH = 0.65  # キャラの床の映り込み。本物の床が光らないなら下げる
 REFLECTION_FADE = 0.16  # 足から離れると消える長さ(キャラの身長に対する割合)
 RIM_GAIN = 0.32  # LED の光がキャラの縁に回る強さ(直線)
-CONTACT_SHADOW = 0.84  # 足が床に着く所の影の濃さ(直線。sRGB で約 40% 暗い)
+WIDE_SHADOW = 0.45  # 足元の広く柔らかい影の濃さ(直線)。1 つで調整する
+WIDE_SHADOW_SPAN = 2.8  # その影の幅(靴の幅の倍数)
+CONTACT_SHADOW = 0.84 # 足が床に着く所の影の濃さ(直線。sRGB で約 40% 暗い)
 LAND_IMPACT = 0.1
 FOOT_NEAR_CM = 6.0  # 足がこの高さ(cm)上がると、靴の下の影が 1/e に薄れる
 GRADE_GAIN = 0.76  # キャラを背景になじませる明るさ(直線)
@@ -139,7 +141,13 @@ def contact_shadow(alpha, air=0.0):
     ys, xs = np.mgrid[0:alpha.shape[0], 0:alpha.shape[1]].astype(np.float32)
     spread = max(5.0, tall * (0.022 + 0.02 * air))
     spot = np.exp(-(((xs - middle) / half) ** 4 + ((ys - bottom - tall * 0.008 - 1.0) / spread) ** 2))
-    return (1.0 - CONTACT_SHADOW * (1.0 - 0.75 * air) * spot)[..., None]
+    # 広く柔らかい楕円の影(靴の幅の約 2.8 倍)。体は後で上から重ねるので掛からない
+    wide_half = max(20.0, np.ptp(cols) * WIDE_SHADOW_SPAN / 2.0 * (1.0 + 0.3 * air))
+    wide_high = max(8.0, tall * 0.045)
+    wide = np.exp(-(((xs - middle) / wide_half) ** 2 + ((ys - bottom - wide_high * 0.3) / wide_high) ** 2))
+    tight = CONTACT_SHADOW * (1.0 - 0.75 * air) * spot
+    broad = WIDE_SHADOW * (1.0 - 0.75 * air) * wide
+    return ((1.0 - tight) * (1.0 - broad))[..., None]
 
 
 def reflection_fade(alpha):

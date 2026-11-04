@@ -223,6 +223,20 @@ class FxRenderer:
             return None
         legs = (self.x - plan.land_x).abs()
         reach = age * 3400.0
+        soft = plan.cues.get("land_wave")  # 跳びの着地: 白をやめて色、足の真下を避けて横へ、弱く短く(足元に影を見せる)
+        if soft:
+            life = float(soft.get("life_sec", 0.25))
+            if age > life:
+                return None
+            gap = float(soft.get("gap_px", 160.0))
+            side = smooth((legs - gap) / max(gap, 1.0))
+            crest = torch.exp(-((reach - legs) / 340.0) ** 2) * side
+            filled = smooth((reach - legs) / 700.0 + 0.5) * side
+            tall = 70.0 + 110.0 * min(age, 1.2)
+            bottom = torch.exp(-(CANVAS[1] - self.y) / tall)
+            fade = float(smooth(torch.tensor(age * plan.fps / 3.0 + 0.5))) * (1.0 - float(smooth(torch.tensor(age / life))))
+            gain = float(soft.get("gain", 0.5))
+            return (self.colors["pink"] * crest * 0.15 + self.colors["teal"] * filled * 0.11) * gain * bottom * fade * self.flash_mask
         filled = smooth((reach - legs) / 700.0 + 0.5)
         crest = torch.exp(-((reach - legs) / 340.0) ** 2)
         tall = 70.0 + 110.0 * min(age, 1.2)
