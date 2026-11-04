@@ -13,7 +13,8 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from s03_compare_core import norm_mask, silhouette  # noqa: E402
 
-FONT = r"C:\Windows\Fonts\meiryob.ttc"
+from fontpath import find_font  # noqa: E402
+FONT = find_font()
 
 
 def shape_numbers(base, m):

@@ -8,7 +8,8 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-FONT = r"C:\Windows\Fonts\meiryob.ttc"
+from fontpath import find_font  # noqa: E402
+FONT = find_font()
 JP = {"idle": "待つ", "talk": "話す", "wave": "手をふる", "nod": "うなずく", "bow": "おじぎ", "jump": "ジャンプ", "think": "考える", "sad": "しょんぼり"}
 
 

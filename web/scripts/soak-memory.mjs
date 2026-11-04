@@ -13,7 +13,7 @@ const CHECK_AT = [1, Math.round(TURNS / 3), Math.round((TURNS * 2) / 3), TURNS];
 const QUESTIONS = ['こんにちは', 'お手洗いはどこですか', '休憩スペースはどこ', '入口はどっち', 'ありがとう', '今日は何ができますか'];
 
 const browser = await chromium.launch({
-  executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required', '--js-flags=--expose-gc', '--enable-precise-memory-info'],
 });

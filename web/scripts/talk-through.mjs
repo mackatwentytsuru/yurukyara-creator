@@ -19,7 +19,7 @@ const GAP_MS = Number(arg('gap', 6500));
 
 const { chromium } = await import(pathToFileURL('repo/web/node_modules/playwright-core/index.mjs').href);
 const browser = await chromium.launch({
-  executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
 });

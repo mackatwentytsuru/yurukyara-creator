@@ -8,7 +8,8 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 LABELS = {0: "前", 45: "右前", 90: "右", 135: "右後", 180: "後ろ", 225: "左後", 270: "左", 315: "左前"}
-FONT = r"C:\Windows\Fonts\meiryob.ttc"
+from fontpath import find_font  # noqa: E402
+FONT = find_font()
 
 
 def main():

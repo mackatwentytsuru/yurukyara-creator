@@ -10,7 +10,8 @@ import sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-FONT = r"C:\Windows\Fonts\meiryob.ttc"
+from fontpath import find_font  # noqa: E402
+FONT = find_font()
 
 
 def main():

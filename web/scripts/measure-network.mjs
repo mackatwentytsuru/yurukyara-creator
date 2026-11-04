@@ -16,7 +16,7 @@ const conds = opt('--conds', '0,100,250:1000').split(',').map((s) => {
 const QUESTIONS = ['こんにちは', 'お手洗いはどこですか', '休憩スペースはどこ', '入口はどっち', 'ありがとう', '今日は何ができますか', 'ここは何のお店', 'はじめまして', '少し教えて'];
 
 const browser = await chromium.launch({
-  executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
 });

@@ -101,3 +101,13 @@ Blender の絵で質感を「確認済み」にしていたが、見る人が見
 - 失敗 3: 札が VRAM 不足で断られたのに、次の命令で GPU を試す比べを流してしまった(型を読む前に出力なしで止まった)。前にも同じ間違いをしたので、札の取得に失敗したら止まる形で書くようにした。
 - 聞き取りの時間: small・CPU 4 本で、3〜4 秒の声に 2.1〜4.1 秒(PC が混んでいる時間に測った)。話し終わり → 字 → 返事の最初の音は、まだ測っていない。
 
+## 11-04: 別の OS で動かした
+
+別の PC の macOS(M4)に、コミット済みの写しを置き、使う人と同じ順に流した。ようこそくん(`yokoso.py`)を builder から作り、`web_talk_check.mjs` まで通った。
+
+- 止まった所 1: 一覧の絵(`s01`〜`s04`)が `C:\Windows\Fonts\meiryob.ttc` 決め打ちで落ちた。→ `creator/pipeline/fontpath.py` で OS ごとに字体を探すようにした。
+- 止まった所 2: `web` の build が `place/web/` を読めず落ちた(写しに入れ忘れ)。リポジトリ全体なら入っている。→ 写す物に `place/web` を足した。コードは直していない。
+- 止まった所 3: `web/scripts` の 4 本(`audio-e2e`・`measure-network`・`soak-memory`・`talk-through`)が Windows の Chrome の場所を決め打ち。→ `CHROME_PATH` か `channel: 'chrome'` にした。Mac では流していない。
+- 止まった所 4: `check_all.sh` の終わりに「Terminated」が出た。→ `kill` と `wait` の出力を捨てた。
+- 止まった所 5(OS の差ではない): `check_all.sh` の ③ が `sash` の浮きで落ちた。第 5 引数に `sash` を渡すと全部 OK。`pk01_package.py` が書く character.json は `pk02_check_character.py` を通らない(口が atlas、`fur` なし)ので、pack は `characters/yokoso/character.json` に builder の GLB を入れて作った。
+- Mac で最初から通った所: `doctor.py`(Blender 5.2・Chrome を自動で見つけた)、`run_built.sh`(d_lantern 24 秒)、`b07_rig_groups.py`、`npm install`・`npm run build`、`web_talk_check.mjs`(仮の頭脳。口 0.58、表情 happy・think、動き wave・bow、problems なし)。

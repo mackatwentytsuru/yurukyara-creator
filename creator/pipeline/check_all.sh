@@ -49,7 +49,8 @@ if MSYS_NO_PATHCONV=1 node "$LOOK" "$PORT" "/trial/$NAME/character.json" --frame
 else
   say "⑥ NG 視線の回転が積み上がる"; tail -3 "$OUT/_look.txt" | tee -a "$LOG"; FAIL=1
 fi
-kill "$SRV" 2> /dev/null
+# 止めた時の「Terminated」の表示は、bash 以外の sh(Mac)で出るので、まとめて捨てる
+{ kill "$SRV"; wait "$SRV"; } 2> /dev/null
 
 [ "$FAIL" = 0 ] && say "全部 OK(見た目の合格ではない)" || say "落ちた検査あり"
 # 直すたびの様子を残す(動画の早回しと、試行錯誤の記録に使う)

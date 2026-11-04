@@ -83,6 +83,19 @@ node creator/pipeline/web_talk_check.mjs --port 8799 --character <id> --out <作
 
 動画に残すなら `node creator/pipeline/web_talk_record.mjs --port 8799 --character <id> --out <出力.webm>`(字幕ごとの画面と声。話す言葉はその場の返事)。作る様子の早回しは `python creator/skilltest/timelapse.py <作業フォルダ> <元の絵> <出力.mp4>`。
 
+## macOS で流すとき(2026-11-04 に M4 の Mac で通した)
+
+Claude を使わない部分(doctor → builder → 骨 → `check_all.sh` → `npm run build` → サーバー → `web_talk_check.mjs`)は、手を足さずに通った。違いだけ書く。
+
+- 場所: Blender は `/Applications/Blender.app/Contents/MacOS/Blender`、Chrome は `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`(どちらも `doctor.py` が見つけて `env.local.sh` に書く)。Homebrew の Blender は `/opt/homebrew/bin/blender` に出ることもある。
+- python3 は PIL と numpy が入っていれば、そのまま使える。無ければ作業フォルダの venv に入れる(全体に入れない)。ssh で入ると node が PATH に無いので、先に `export PATH=/opt/homebrew/bin:$HOME/.local/bin:$PATH`。
+- `timeout` コマンドは Mac に無い。時間切れが要るときは、中の道具(Playwright など)の時間切れに任せる。
+- 一覧の絵(`s01`〜`s04`)の日本語の見出しは `creator/pipeline/fontpath.py` が字体を探す(Windows の Meiryo、Mac の Hiragino Sans GB)。ここが `C:\Windows\Fonts` 決め打ちで、Mac では `OSError: cannot open resource` で落ちた。
+- `check_all.sh` の最後の「Terminated」の表示は、bash 以外の sh で出る。`{ kill; wait; } 2>/dev/null` でまとめて捨てている。
+- `check_all.sh` の ③ が `sash 浮き` で落ちるのは OS の差ではない。第 5 引数に体に付く部品の名前(`sash`)を渡すと通る。
+- `web/` の build は `place/web/` を読む(`../../place/web/...`)。リポジトリの一部だけを写すときは `place/web` も入れる。
+- ここまで偽物なし(Mac の実機で Blender と Chrome を動かした)。同じ builder のブラウザの正面の絵を Windows の絵と目で比べ、同じに見えた(数字では比べていない)。頭脳は仮の頭脳で試した。
+
 ## 6. Quest 3 でも話させる(頼まれたら)
 
 アプリのビルドは要らない。**同じキャラのまま、Quest のブラウザで VR に入って話せる。** GLB のキャラ(`rig`)も VRM も、`?character=<id>` を替えるだけ。詳しくは `web/README.md` の「Quest 3 で話す」。
