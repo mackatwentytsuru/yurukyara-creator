@@ -18,3 +18,6 @@ place/ios/ARSite/
 # キオスク: 本物の店の記憶(実名・出どころの URL を含む)と、それで試した結果は、公開のリポジトリに入れない
 kiosk/memory/private/
 kiosk/eval/results/private_*
+
+# キオスク: 見守りカメラの接続設定(アドレス・アカウント)は、公開のリポジトリに入れない
+kiosk/.secrets/
