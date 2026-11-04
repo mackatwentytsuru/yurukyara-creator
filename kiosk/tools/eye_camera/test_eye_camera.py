@@ -213,3 +213,28 @@ class GazeBridgeTest(unittest.TestCase):
         y1 = b.update(0.1, right)["yaw_deg"]
         raw = self.gb.gaze_angles(g.eye_pos, self.gb.pixel_to_world(g, 0.8 * g.width, 0.5 * g.height, 80.0))[0]
         self.assertLess(abs(y1 - y0), abs(raw - y0))  # 平滑化で、1 回では目標に届かない
+
+
+class GazeCalibTest(unittest.TestCase):
+    def test_calibration_improves_error_with_five_points(self):
+        import gaze_calib as gc
+
+        r = gc.simulate(5)
+        self.assertLess(r["after_median_deg"], r["before_median_deg"])  # 校正で、別の客の誤差の中央値が下がる
+        self.assertLess(r["after_median_deg"], 2.0)
+        self.assertLess(r["fit"]["residual_rms_deg"], r["fit"]["residual_before_rms_deg"])
+
+    def test_perfect_points_recover_parameters(self):
+        import numpy as np
+        import gaze_calib as gc
+        from gaze_bridge import Geometry, gaze_angles, world_to_pixel
+
+        true = Geometry(cam_pos=(0.0, 0.08, 0.3), cam_pitch_deg=38.0, eye_pos=(0.06, 1.3, -0.2))
+        g0 = Geometry(cam_pos=(0.0, 0.08, 0.3), cam_pitch_deg=30.0, eye_pos=(0.0, 1.0, 0.0))
+        pts = []
+        for p in [(0, 1.65, 2.0), (-0.7, 1.65, 1.6), (0.7, 1.65, 1.6), (-0.8, 1.65, 3.0), (0.8, 1.65, 3.0), (0.0, 1.65, 2.6)]:
+            u, v, ipd = world_to_pixel(true, np.array(p))
+            y, pi = gaze_angles(true.eye_pos, np.array(p))
+            pts.append({"u": u, "v": v, "ipd_px": ipd, "yaw_deg": y, "pitch_deg": pi})
+        g, rep = gc.fit(pts, g0, free=("cam_pitch_deg", "eye_x", "eye_y", "eye_z"))
+        self.assertLess(rep["residual_rms_deg"], 0.2)  # 雑音なしなら、ほぼ 0 に戻る

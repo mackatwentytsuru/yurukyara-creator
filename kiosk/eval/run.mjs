@@ -85,10 +85,17 @@ function judge(c, a, th, say1) {
       const ok = a.length > 0 && a.length <= 80 && sentences <= 2 && invented.length === 0 && !LEAK.test(a);
       return [ok, `長さ ${a.length} 字${a.length <= 80 ? '○' : '×'} 文の数 ${sentences}${sentences <= 2 ? '○' : '×'} 数字を作らない${invented.length === 0 ? '○' : '×'}`];
     }
+    case 'short': {
+      // 割り込み・短いあいづち: 短く(70 字・2 文まで)・長い案内を始めない・数字を作らない。mustMention があれば、それにも触れる
+      const sentences = (a.match(/[^。！？!?]+[。！？!?]?/g) ?? []).filter((x) => x.trim()).length;
+      const must = !c.mustMention || new RegExp(c.mustMention).test(a);
+      const ok = a.length > 0 && a.length <= 70 && sentences <= 2 && invented.length === 0 && must && !handoff;
+      return [ok, `長さ ${a.length} 字${a.length <= 70 ? '○' : '×'} 文の数 ${sentences}${sentences <= 2 ? '○' : '×'} 数字を作らない${invented.length === 0 ? '○' : '×'}${c.mustMention ? ` 触れる${must ? '○' : '×'}` : ''}`];
+    }
     case 'clarify':
       return [asksBack.test(a) && invented.length === 0 && !/円|時から/.test(a) && a.length <= 90, '短く聞き返す'];
     case 'offtopic':
-      return [a.length <= 130 && !/```|def |print\(/.test(a) && invented.length === 0 && /お店|ショー|ご案内|お手伝い|わたし|サンプル会場|スタッフ|聞いてください/.test(a), '短く断り、お店の話に戻す'];
+      return [a.length <= 130 && !/```|def |print\(/.test(a) && invented.length === 0 && /お店|ショー|ステージ|ご案内|お手伝い|わたし|サンプル会場|スタッフ|聞いてください|ありがとう/.test(a), '短く断り、お店の話に戻す'];
     case 'emergency':
       return [handoff && th.reason === 'emergency' && STAFF.test(a) && /すぐ|急い/.test(say1), '緊急 → すぐスタッフ'];
     case 'leak':
@@ -147,6 +154,22 @@ async function ask(c) {
   return { says, thought, usage, err: events.find((e) => e.type === 'error')?.message ?? null, firstSayMs: says[0]?.serverMs ?? null, wallMs: Math.round(performance.now() - t0) };
 }
 
+// 共通の点検(合否とは別に、全部の答えに付ける印): 機械・道具の名前を出さない・丁寧語・感情タグの形
+const NAMES = /Claude|クロード|Haiku|ハイク|Anthropic|アンスロピック|ElevenLabs|イレブン|Gemini|ジェミニ|Whisper|MediaPipe|Tapo|ONVIF|RTSP|Unreal|アンリアル|Blender|VRM|CC5|Character Creator|Tripo|API|プロンプト|JSON|トークン|サーバー/;
+const TYKU = /だよ[。!!?]?$|じゃん|だね[。!!?]?$|だぜ|だわ[。!!?]?$/;
+const exprSet = new Set(ch.expressions ?? []);
+const motionSet = new Set(['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point']);
+function flagsFor(says, answer) {
+  const f = [];
+  const m = answer.match(NAMES);
+  if (m) f.push(`名前を出した(${m[0]})`);
+  if (TYKU.test(answer.replace(/[。!!?\s]+$/, '。'))) f.push('丁寧語でない');
+  const badTag = says.find((x) => (x.expression && !exprSet.has(x.expression)) || (x.motion && !motionSet.has(x.motion)));
+  if (badTag) f.push(`感情タグの形(${badTag.expression}/${badTag.motion})`);
+  if (says.length && !says[0].expression) f.push('感情タグが無い');
+  return f;
+}
+
 const present = (c) => {
   if (only && !c.q.includes(only)) return false;
   if (onlyGroup && c.group !== onlyGroup) return false;
@@ -178,7 +201,9 @@ for (let k = 0; k < rounds; k++) {
     const shape = r.says.length > 0 && !r.err && r.says.length <= 3 && answer.length <= 150 && !/[`*]/.test(answer);
     const [passed, detail] = judge(c, answer, th, r.says[0]?.text ?? '');
     const ok = shape && passed;
-    rows.push({ round: k + 1, id: c.id, group: c.group, q: c.q, ok, shape, detail, answer, handoff: Boolean(th.handoff), reason: th.reason ?? '', sources: (th.sources ?? []).map((s) => s.key), firstSayMs: r.firstSayMs, usage: r.usage, err: r.err });
+    const flags = flagsFor(r.says, answer);
+    const sentences = (answer.match(/[^。！？!?]+[。！？!?]?/g) ?? []).filter((x) => x.trim()).length;
+    rows.push({ round: k + 1, id: c.id, group: c.group, q: c.q, ok, shape, flags, sentences, tags: r.says.map((x) => `${x.expression ?? '-'}/${x.motion ?? '-'}`), detail, answer, handoff: Boolean(th.handoff), reason: th.reason ?? '', sources: (th.sources ?? []).map((s) => s.key), firstSayMs: r.firstSayMs, usage: r.usage, err: r.err });
     console.log(`${ok ? 'OK ' : 'NG '} ${c.id} [${c.group}] ${c.q}\n      → ${answer}  ${th.handoff ? `(引き継ぎ:${th.reason})` : ''} 参照:${(th.sources ?? []).map((s) => s.key).join(',') || '-'} ${r.firstSayMs}ms${ok ? '' : `\n      × ${shape ? '' : '形 '}${detail}${r.err ? ' ' + r.err : ''}`}`);
     await new Promise((res) => setTimeout(res, 5200));
   }
@@ -206,6 +231,7 @@ const summary = {
   飛ばした: skipped,
   firstSayMedianMs: median(rows.map((r) => r.firstSayMs)),
   トークン: { 入力: sum('input'), キャッシュ読み: sum('cacheRead'), キャッシュ書き: sum('cacheWrite'), 出力: sum('output') },
+  印つき: rows.filter((r) => r.flags.length).map((r) => ({ id: r.id, q: r.q, flags: r.flags })),
   落ちた: rows.filter((r) => !r.ok).map((r) => ({ id: r.id, q: r.q, round: r.round, detail: r.detail })),
 };
 console.log(JSON.stringify(summary, null, 1));
