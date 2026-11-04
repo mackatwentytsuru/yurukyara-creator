@@ -23,6 +23,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from morph import morph_layer, smooth as smooth_step, state_at
+
 GAMMA = 2.2
 MIN_FLOOR = 0.02  # 灰色の床の明るさ(直線)がこれより暗い所は影を計算しない
 SHADOW_BLUR_SIGMA = 1.2
@@ -87,13 +89,18 @@ def exit_mask(alpha, progress):
     return keep, np.exp(-((ys - front) / width) ** 2)
 
 
+def seek_seconds(frame):
+    """-ss に渡す秒。コマの秒を小数 4 桁に丸めると、コマの秒より大きくなって、そのコマが落ちることがある(2.6667 > 80/30)。1/4 コマ手前から読む。"""
+    return f"{max(frame - 0.25, 0.0) / 30.0:.4f}"
+
+
 class LedLight:
     """LED の映像から、左右の面の色を読む(後ろから当たる光)。全編の秒に合わせて順に読む。"""
 
     def __init__(self, path, start_frame):
         self.size = LED_PROBE[0] * LED_PROBE[1] * 3
         self.process = subprocess.Popen(
-            ["ffmpeg", "-v", "error", "-ss", f"{start_frame / 30.0:.4f}", "-i", str(path), "-vf",
+            ["ffmpeg", "-v", "error", "-ss", f"{seek_seconds(start_frame)}", "-i", str(path), "-vf",
              f"scale={LED_PROBE[0]}:{LED_PROBE[1]}:flags=area", "-f", "rawvideo", "-pix_fmt", "bgr24", "-"],
             stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
 
@@ -209,37 +216,55 @@ def soften_edge(character, alpha):
     return color * np.minimum(choked / np.maximum(soft, 1e-3), 1.0), choked
 
 
-def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0, near=1.0):
-    """lift: キャラを上へずらす画素。air: 宙にいる割合(0 で着地)。near: 足が床に近い割合(1 床、0 高い。靴の下の影を消す)。"""
+def character_layer(frames, progress, led_colors, lift):
+    """キャラの色(かぶせ済み)・透明と、境目の光・影に使う元の透明。変身の A と B で同じ作りを 2 回使う。"""
     raw_alpha = frames["matte"].mean(axis=2, keepdims=True)
     character = np.clip(frames["with"] - (1.0 - raw_alpha) * frames["without"], 0.0, 1.0) * np.clip(raw_alpha * 8.0, 0.0, 1.0)
     base_color = character
     character, alpha = soften_edge(character, raw_alpha)
     lifted = lift_up(alpha, lift)[..., None] if lift > 0.0 else alpha
     keep, glow = exit_mask(lifted, progress)
-    shadow = shadow_ratio(frames["shadow_with"], frames["shadow_without"])[..., None]
-    shadow = 1.0 - (1.0 - shadow) * progress
-    contact = 1.0 - (1.0 - contact_shadow(raw_alpha, air)) * progress * near
-    # キャラの外の差は床の映り込みなので、色には入れない(下の reflection で足す)
+    # キャラの外の差は床の映り込みなので、色には入れない(compose の reflection で足す)
     character = grade(character)
     if led_colors is not None:
         character = rim_light(character, alpha, led_colors)
     if lift > 0.0:
         character = lift_up(character, lift)
-    character = character * keep
-    alpha = lifted * keep
-    shaded_plate = (plate ** GAMMA * shadow) ** (1.0 / GAMMA)
+    return {"color": character * keep, "alpha": lifted * keep, "raw_alpha": raw_alpha, "base_color": base_color,
+            "lifted": lifted, "glow": glow}
+
+
+def floor_reflection(layer, plate, progress):
+    """床の映り込み(キャラを足の線で反転した形)。床の明るさに比例し、キャラの外だけ。"""
+    raw_alpha = layer["raw_alpha"]
     rows = np.where(raw_alpha.max(axis=1) > 0.5)[0]
     if rows.size:
-        reflection = mirror_reflection(base_color, raw_alpha, int(rows[-1]), float(max(1, np.ptp(rows)))) * progress
+        reflection = mirror_reflection(layer["base_color"], raw_alpha, int(rows[-1]), float(max(1, np.ptp(rows)))) * progress
     else:
         reflection = np.zeros_like(plate)
     floor_mask = np.clip(plate.mean(axis=2, keepdims=True) ** GAMMA / 0.1, 0.0, 1.0)  # 映り込みは床の明るさに比例(暗い床・床の外の黒では出さない)
-    reflection = reflection * (1.0 - raw_alpha) * floor_mask
+    return reflection * (1.0 - raw_alpha) * floor_mask
+
+
+def compose(plate, frames, progress=1.0, led_colors=None, lift=0.0, air=0.0, near=1.0, morph=None):
+    """lift: キャラを上へずらす画素。air: 宙にいる割合(0 で着地)。near: 足が床に近い割合(1 床、0 高い。靴の下の影を消す)。
+    morph: (別の姿の frames, 進み 0〜1)。frames の姿から別の姿へ、粒子になって変わる(morph.py)。影は frames の姿のまま、映り込みだけなだらかに移す。"""
+    layer = character_layer(frames, progress, led_colors, lift)
+    character, alpha, raw_alpha = layer["color"], layer["alpha"], layer["raw_alpha"]
+    shadow = shadow_ratio(frames["shadow_with"], frames["shadow_without"])[..., None]
+    shadow = 1.0 - (1.0 - shadow) * progress
+    contact = 1.0 - (1.0 - contact_shadow(raw_alpha, air)) * progress * near
+    shaded_plate = (plate ** GAMMA * shadow) ** (1.0 / GAMMA)
+    reflection = floor_reflection(layer, plate, progress)
+    if morph is not None:
+        other = character_layer(morph[0], progress, led_colors, lift)
+        character, alpha = morph_layer(character, alpha, other["color"], other["alpha"], morph[1])
+        mixed = float(smooth_step(morph[1]))
+        reflection = reflection * (1.0 - mixed) + floor_reflection(other, plate, progress) * mixed
     # 靴の真下の影は床を暗くする。映り込み(UE の正解では影に埋もれない)は REFLECTION_SHADOW の分だけ暗くする
     floor = np.clip(shaded_plate, 0.0, 1.0) ** GAMMA * contact
     floor = np.clip(floor + reflection * (1.0 - (1.0 - contact) * REFLECTION_SHADOW), 0.0, 1.0) ** (1.0 / GAMMA)
-    light = glow * lifted * np.array(EXIT_GLOW_BGR, dtype=np.float32)
+    light = layer["glow"] * layer["lifted"] * np.array(EXIT_GLOW_BGR, dtype=np.float32)
     return np.clip(character + (1.0 - alpha) * floor + light, 0.0, 1.0)
 
 
@@ -254,7 +279,7 @@ def fade_in(plate, full, amount):
 
 
 def plate_reader(path, width, height, first):
-    return subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{first / 30.0:.4f}", "-i", str(path), "-f", "rawvideo",
+    return subprocess.Popen(["ffmpeg", "-v", "error", "-ss", seek_seconds(first), "-i", str(path), "-f", "rawvideo",
                              "-pix_fmt", "bgr24", "-"], stdout=subprocess.PIPE, stdin=subprocess.DEVNULL,
                             bufsize=width * height * 3)
 
@@ -279,6 +304,9 @@ def main():
     parser.add_argument("--exit-fade", action="store_true",
                         help="跳ぶとき: 足から現れる形と境目の光を使わず、--exit の範囲で透明だけで現れる(直線の色で混ぜる)")
     parser.add_argument("--exit-lift-from", type=float, help="ずらしが --exit-lift から減り始めるコマ(無ければ --exit の始め)")
+    parser.add_argument("--morphs", type=Path, help="cues の json({\"morphs\": [{start, end, to: human|anime}]})。その間、粒子になって別の姿へ変わる(morph.py)。--alt-root が要る")
+    parser.add_argument("--alt-root", type=Path, help="別の姿(人型)の Comp_BeautyWith の連番の親フォルダ。色だけ差し替える(透明・影・床は --root のまま)")
+    parser.add_argument("--show-start", type=float, default=0.0, help="コマ 0 の全編の秒(--morphs の秒を読むため)")
     parser.add_argument("--foot-height", type=Path,
                         help="コマごとの足の床からの高さ(cm)の json {コマ: cm}。本物の跳びの間、靴の下の影を高さで消す(foot_heights.py)")
     args = parser.parse_args()
@@ -290,6 +318,9 @@ def main():
     reader = plate_reader(args.plate, width, height, args.first)
     led = LedLight(args.led_video, args.led_start) if args.led_video else None
     stats = open(args.stats, "w", encoding="utf-8") if args.stats else None
+    morphs = json.loads(args.morphs.read_text(encoding="utf-8")).get("morphs", []) if args.morphs else []
+    if morphs and not args.alt_root:
+        raise SystemExit("--morphs には --alt-root(人型の連番)が要る")
     for index in range(args.first, args.last):
         raw = reader.stdout.read(width * height * 3)
         if len(raw) < width * height * 3:
@@ -312,10 +343,21 @@ def main():
                 air = -LAND_IMPACT * float(np.exp(-(index - args.exit_land) / 5.0))
         near = float(np.exp(-max(heights.get(index, 0.0), 0.0) / FOOT_NEAR_CM))
         colors = led.next() if led else None
+        look = state_at(morphs, args.show_start + index / 30.0) if morphs else ("anime", None)
+        other = None
+        if look[0] != "anime":
+            other = {**frames, "with": read(args.alt_root, "with", index, table, args.crop_only)}
+        extra = {}
+        if look[0] == "human":
+            frames, other = other, None
+        elif look[0] == "morph":
+            ends = {"anime": frames, "human": other}
+            frames, other = ends[look[1]], ends[look[2]]
+            extra = {"morph": (other, look[3])}
         if args.exit_fade:
-            image = fade_in(plate, compose(plate, frames, 1.0, colors, lift, air, near), progress)
+            image = fade_in(plate, compose(plate, frames, 1.0, colors, lift, air, near, **extra), progress)
         else:
-            image = compose(plate, frames, progress, colors, lift, air, near)
+            image = compose(plate, frames, progress, colors, lift, air, near, **extra)
         if stats:
             raw = frames["matte"].mean(axis=2)
             rows = np.where(raw.max(axis=1) > 0.5)[0]

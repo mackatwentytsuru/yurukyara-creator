@@ -59,7 +59,7 @@ def place_character(builder, config, report):
     if config.get("character"):
         # 取り込んだ材質と同じ見た目の、顔の形が使える材質にする(試しのキャラの顔の材質を当てない)
         component = character.skeletal_mesh_component
-        for index, material in enumerate(character_slots(mesh)):
+        for index, material in enumerate(character_slots(mesh, config.get("character_material"))):
             component.set_material(index, material)
         scale = float(config.get("character_scale", 1.0))
         character.set_actor_scale3d(vec(scale, scale, scale))

@@ -315,6 +315,42 @@ def test_lyrics_times_pass_part_through():
         assert [l.get("part") for l in out["lines"]] == [1, 2] and out["lines"][0]["out_word"] == 1 and "out_word" not in out["lines"][1]
 
 
+def test_morphs_use_first_and_third_call_and_end_before_returning_to_led():
+    timeline, _, stage, cues = run_fake(fake_lyrics())
+    lines = fake_lyrics()["lines"]
+    morphs, runs = cues["morphs"], cues["call_runs"]
+    assert [m["to"] for m in morphs] == ["human", "anime", "human", "anime"]
+    for chorus in range(2):  # 各サビの 1 組目で人型へ、3 組目でアニメへ。始めの打から終わりの打まで
+        for slot, m in zip((0, 2), morphs[chorus * 2:chorus * 2 + 2]):
+            run = runs[chorus * 3 + slot]
+            assert m["start"] == run[0] and m["end"] == run[-1] and m["end"] - m["start"] > 0.5
+    words = [(SONG_START + w[1], SONG_START + w[2]) for line in lines for w in line["words"]]
+    for m in morphs:  # 歌詞の語と重ならない
+        assert not [1 for a, b in words if m["start"] < b and a < m["end"]], m
+    backs = [f["t"] for f in stage["flashes"] if f["kind"] == "back"]
+    for chorus in range(2):  # LED へ戻る前に、アニメへ戻り終わる
+        assert morphs[chorus * 2 + 1]["end"] < backs[chorus] - 1e-6
+    assert morphs == sorted(morphs, key=lambda m: m["start"]) and all(a["end"] < b["start"] for a, b in zip(morphs, morphs[1:]))
+
+
+def test_no_morphs_without_part():
+    old = {"lines": [{"section": "pre", "words": [["a", 8.5, 0], ["b", 9.5, 0]]}, {"section": "pre", "words": [["c", 18.4, 0], ["d", 19.6, 0], ["e", 20.0, 0]]},
+                     {"section": "chorus", "words": [["f", 24.0, 0]]}, {"section": "chorus", "words": [["g", 34.4, 0]]}]}
+    assert "morphs" not in run_fake(old)[3]
+
+
+def test_short_gap_drops_a_morph_pair_only_when_it_cannot_return():
+    lyrics = fake_lyrics()
+    gap = lyrics["lines"][6]["words"][0][1] - lyrics["lines"][5]["words"][-1][2]
+    shift = gap - 1.2  # サビ 2 行目の後を縮める。3 組目(アニメへ戻る)は無事なので 4 つのまま
+    for line in lyrics["lines"][6:]:
+        for w in line["words"]:
+            w[1] = round(w[1] - shift, 3)
+            w[2] = round(w[2] - shift, 3)
+    morphs = run_fake(lyrics)[3]["morphs"]
+    assert [m["to"] for m in morphs] == ["human", "anime", "human", "anime"]
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

@@ -78,16 +78,33 @@ def write_cues(path, cues):
     pathlib.Path(path).write_text(json.dumps({"_説明": note, **cues}, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
-def call_runs_for(choruses, at, beats):
-    """各サビの 1〜3 行目の行末から次の行の頭までにある拍の先頭 4 つ(足りなければ入る数だけ)。4 行目の後には入れない。"""
-    runs = []
+def call_runs_by_chorus(choruses, at, beats):
+    """サビごとに、1〜3 行目の行末から次の行の頭までにある拍の先頭 4 つ(足りなければ入る数だけ。拍が無ければ None)。4 行目の後には入れない。"""
+    out = []
     for chorus in choruses:
+        runs = []
         for k in range(min(CALL_LINES - 1, len(chorus) - 1)):
             lo, hi = at + chorus[k]["words"][-1][2], at + chorus[k + 1]["words"][0][1]
-            run = [b for b in beats if lo - 1e-6 <= b < hi - 1e-6][:4]
-            if run:
-                runs.append(run)
-    return runs
+            runs.append([b for b in beats if lo - 1e-6 <= b < hi - 1e-6][:4] or None)
+        out.append(runs)
+    return out
+
+
+def call_runs_for(choruses, at, beats):
+    return [run for runs in call_runs_by_chorus(choruses, at, beats) for run in runs if run]
+
+
+def morphs_for(choruses, at, beats):
+    """変身の秒。各サビの 1 行目の後のコールの打(始めの打から終わりの打まで)で人型へ、3 行目の後のコールで アニメへ戻る。
+    戻りが組めないサビは、人型のまま LED へ戻らないよう、変身を出さない。打が 2 つ未満なら組めない。"""
+    out = []
+    for runs in call_runs_by_chorus(choruses, at, beats):
+        if len(runs) < CALL_LINES - 1:
+            continue
+        go, back = runs[0], runs[CALL_LINES - 2]
+        if go and back and len(go) >= 2 and len(back) >= 2:
+            out += [{"start": go[0], "end": go[-1], "to": "human"}, {"start": back[0], "end": back[-1], "to": "anime"}]
+    return out
 
 
 def parts_plan(a, lyrics, section, beats, snap):
@@ -164,7 +181,8 @@ def parts_plan(a, lyrics, section, beats, snap):
     stage["hops"] = [hop.stage_hop(g["hop"], hop.FORMS[a.hop_form]) for g in groups]
     pathlib.Path(a.out_stage).write_text(json.dumps(stage, ensure_ascii=False, indent=2), encoding="utf-8")
     if a.out_cues:
-        write_cues(a.out_cues, {"call_runs": call_runs_for([g["chorus"] for g in groups], at, beats),
+        choruses = [g["chorus"] for g in groups]
+        write_cues(a.out_cues, {"call_runs": call_runs_for(choruses, at, beats), "morphs": morphs_for(choruses, at, beats),
                                 "landings": [g["hop"]["land"] for g in groups], "finale": peace_at})
     text = "、".join(f"組{k + 1} 出る {g['out']:.2f} 踏み切り {g['hop']['takeoff']:.3f} 着地 {g['hop']['land']:.3f} 戻る {g['back']:.2f}" for k, g in enumerate(groups))
     print(f"{text}。決め {peace_at:.2f}。動き {len(plan['segments'])} 本")

@@ -50,7 +50,7 @@ def build(args, frames_dir):
               "glow_candela": GLOW_CANDELA, "glow_color": colors, "glow_keys": keys, "markers_xy": MARKERS_XY,
               "roll_test_deg": ROLL_TEST_DEG, "roll_test_frames": ROLL_TEST_FRAMES,
               "emerge_sec": EMERGE_SEC, "emerge_from_y": EMERGE_FROM_Y,
-              "character": args.character, "character_scale": args.character_scale,
+              "character": args.character, "character_material": args.character_material, "character_scale": args.character_scale,
               "stage": json.loads(args.stage.read_text(encoding="utf-8")) if args.stage else None,
               "resolution": [camera["render_w"], camera["render_h"]] if camera else [1920, 1080]}
     config_path = LOGS / "comp_config.json"
@@ -90,6 +90,7 @@ def main():
     parser.add_argument("--passes", nargs="*", default=list(LEVEL_OF))
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--character", help="import_motion_glb.py で入れた名前。全編の動きと同じ時刻で動く。無ければ試しのキャラ")
+    parser.add_argument("--character-material", help="キャラの全部の枠をこの 1 つの材質にする(撮る色のパスだけ)。standin(代役の銀色)か /Game/... の材質。変身の「別の姿」の撮り分け用")
     parser.add_argument("--character-scale", type=float, default=1.0)
     parser.add_argument("--stage", type=Path, help="show_stage.json。舞台の上の動きと LED にいる間")
     parser.add_argument("--truth", type=Path, help="正解のカメラの json(試しだけ)。無ければ実写の代わりと目印のパスは撮らない")
