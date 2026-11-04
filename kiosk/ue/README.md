@@ -25,6 +25,19 @@ python kiosk/ue/entrance_talk.py --server http://127.0.0.1:<会話サーバー> 
 - **キャラの差し替え**(例: 次の版の FBX): `entrance_config.json` の `character` の `source_fbx`・`cc_json`・`fbx`(GLB の置き場)・`name` を替え → 上の 1 行目と 2 行目(`ENTRANCE_REIMPORT=1`)。骨の名前が同じなら、ほかは変えない。
 - 親の材質の式を変えたときは `ENTRANCE_REMAKE_MASTERS=1` を付けて組む。
 
+## 別の機械(HDMI で LED に出す機械)で動かす
+組んだ機械から、次の物だけを写す(ショーのプロジェクトの写しがあっても、別のフォルダにする。ショーのアセットは使わない):
+```
+<先>\HackShow\HackShow.uproject, Config\                 ← プロジェクトの殻
+<先>\HackShow\Content\_Work_tmp\Entrance\             ← 入口のレベル一式(約 460 MB。エンジンの基本の形のほかは参照しない)
+<先>\kiosk_ue\  ← py\・entrance_config.json・entrance_talk.py・gaze_to_ue.py
+<先>\tools\ue_link\haruka_wav.ps1                         ← entrance_talk.py が ../tools/ue_link から読む
+<先>\start_entrance_ue.cmd                                ← このフォルダの物(エンジンの場所・解像度・窓の位置を先頭で直す)
+```
+- 起動は `start_entrance_ue.cmd`(PowerShell 7 が無くても動く。`-game -windowed -ForceRes -EntranceKiosk -EnablePython -NoSound`、DDC は `-ddc=InstalledNoZenLocalFallback -LocalDataCachePath=<保存先>`)。初回はシェーダーとテクスチャの組み立てで長い(11-05 に別の機械で、起動から受け口が動くまで約 3.6 分。首 ±19°・目 ±13°・顎が動き、正常に閉じた)。窓が画面より大きいとはみ出すので、LED を別の画面にして `WINX/WINY` で置く。
+- 会話サーバーと `gaze_to_ue.py`・`entrance_talk.py` は同じ機械で動かす(UE の受け口は 127.0.0.1 だけを聞く)。`entrance_talk.py` は numpy が要る。
+- 画面のある利用者のセッションで起動する(ssh の中から起動しても窓は出ない。1 回きりの予約タスクを Interactive で使う)。
+
 ## 確かめた事(11-05)
 - 人型(CC の FBX・骨 124 本)が、服(コルセット・手袋・ブーツ・スカート)を着た姿で、腕を下ろして縦長の窓に等身で立つ。
 - 視線 az=+30° で首と頭が 17〜18°、目が 12〜13° 客の右へ。el=−10° で下へ。口の値 1 で顎が開く(向きの正負は合っている)。毎コマの受け口は約 260 回/秒。
