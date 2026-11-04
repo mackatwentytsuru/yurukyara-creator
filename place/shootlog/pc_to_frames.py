@@ -21,6 +21,7 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -70,7 +71,7 @@ def calibrate(rx: Path, out: Path) -> dict:
     """受け手の calibration_rays.json → alignment_A/B/C.json。meta に書く calibration_source を返す。使えないときは理由を出して alignment を書かない。
     このテイクの校正が使えないとき(レイなし・点不足・残差超え)は、同じ世界の ID の別のテイクの校正を使う。"""
     def fail(reason: str, **extra) -> dict:
-        print(f"校正: 使えない — {reason}。alignment は書かない(合成には撮影記録の 4 隅か、点の校正をやり直した録り直しが要る)")
+        print(f"校正: 使えない({reason})。alignment は書かない(合成には撮影記録の 4 隅か、点の校正をやり直した録り直しが要る)")
         for face in "ABC":     # 前の実行の点の校正の alignment が残っていると、黙って古い校正を使ってしまう
             f = out / f"alignment_{face}.json"
             try:
@@ -110,6 +111,9 @@ def calibrate(rx: Path, out: Path) -> dict:
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):   # Windows の cp932 の画面で、表示できない文字があっても落ちない
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rx", required=True)
     ap.add_argument("--out", required=True)
