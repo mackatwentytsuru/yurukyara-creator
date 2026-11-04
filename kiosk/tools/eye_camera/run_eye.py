@@ -87,10 +87,10 @@ def main() -> int:
             act = follower.update(now, r["found"], r.get("cx", 0.5), r.get("cy", 0.5)) if a.ptz != "off" else None
             if act:
                 actions += 1
-                print(f"[首] t={r['t']:.1f}s {act.kind} pan={act.pan:+.2f} tilt={act.tilt:+.2f} {act.duration:.2f}s", flush=True)
+                print(f"[首] t={r['t']:.1f}s {act.kind} pan={act.pan:+.2f} tilt={act.tilt:+.2f} ", flush=True)
                 if ptz:
                     try:
-                        ptz.home() if act.kind == "home" else ptz.move(act.pan, act.tilt, act.duration)
+                        ptz.home() if act.kind == "home" else ptz.nudge(act.pan, act.tilt)
                     except OnvifError as e:
                         print("[首] 失敗: " + camera_config.mask(str(e), cfg), flush=True)
     finally:

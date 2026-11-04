@@ -10,7 +10,7 @@ from pathlib import Path
 import camera_config as cc
 from fake_onvif import FakeCamera
 from follow import Follower, FollowConfig
-from onvif_ptz import MAX_SPEED, OnvifError, OnvifPtz, ws_security
+from onvif_ptz import MAX_STEP, OnvifError, OnvifPtz, ws_security
 
 
 class ConfigTest(unittest.TestCase):
@@ -63,8 +63,8 @@ class FollowTest(unittest.TestCase):
         a = self.feed(Follower(), 0, 2, 1.0, 0.0)[0][1]
         self.assertGreater(a.pan, 0)  # 顔が右 → 右へ
         self.assertGreater(a.tilt, 0)  # 顔が上 → 上へ
-        self.assertLessEqual(a.pan, FollowConfig().max_speed)
-        self.assertLessEqual(a.duration, FollowConfig().burst_s)
+        self.assertLessEqual(a.pan, FollowConfig().max_step)
+        self.assertLessEqual(a.tilt, FollowConfig().max_step)
 
     def test_waits_after_move_and_respects_limit(self):
         f = Follower()
@@ -110,18 +110,18 @@ class OnvifTest(unittest.TestCase):
         self.ptz.discover()
         self.assertEqual(self.ptz.profile, "profile_1")
         self.assertTrue(self.ptz.ptz_url.startswith(f"http://127.0.0.1:{self.cam.port}/"))  # 実機の内側アドレスは使わない
-        self.ptz.move(5.0, -5.0, 9.0)
+        self.ptz.nudge(5.0, -5.0)
         self.ptz.stop()
         self.ptz.home()
         self.assertEqual(self.ptz.status(), {"pan": 0.25, "tilt": -0.1})
         ops = [c[0] for c in self.cam.calls]
-        for op in ("ContinuousMove", "Stop", "GotoHomePosition", "GetStatus"):
+        for op in ("RelativeMove", "Stop", "GotoHomePosition", "GetStatus"):
             self.assertIn(op, ops)
         self.assertEqual(self.cam.auth_failures, 0)
-        body = next(b for o, b in self.cam.calls if o == "ContinuousMove")
-        self.assertIn(f'x="{MAX_SPEED:.3f}"', body)  # 速度は上限で切られる
-        self.assertIn(f'y="-{MAX_SPEED:.3f}"', body)
-        self.assertIn("PT1.00S", body)  # 動かす秒数も上限で切られる
+        body = next(b for o, b in self.cam.calls if o == "RelativeMove")
+        self.assertIn(f'x="{MAX_STEP:.3f}"', body)  # 1 回の量は上限で切られる
+        self.assertIn(f'y="-{MAX_STEP:.3f}"', body)
+        self.assertNotIn("Timeout", body)  # Tapo は Timeout つきの命令に壊れた返事を返した(実機)
 
     def test_wrong_password_is_refused_without_leaking(self):
         bad = OnvifPtz("127.0.0.1", self.cam.port, "u", "WRONG")
@@ -143,9 +143,20 @@ class OnvifTest(unittest.TestCase):
         finally:
             cam.close()
 
+    def test_broken_reply_becomes_onvif_error(self):
+        import socket, threading
+        srv = socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(1)
+        def serve():
+            c, _ = srv.accept(); c.recv(4096); c.sendall(b"POST /x\x00garbage\x00"); c.close()
+        threading.Thread(target=serve, daemon=True).start()
+        p = OnvifPtz("127.0.0.1", srv.getsockname()[1], "u", "p")
+        with self.assertRaises(OnvifError):
+            p.sync_clock()
+        srv.close()
+
     def test_move_before_discover_fails_clearly(self):
         with self.assertRaises(OnvifError):
-            self.ptz.move(0.1, 0, 0.3)
+            self.ptz.nudge(0.1, 0)
 
 
 if __name__ == "__main__":

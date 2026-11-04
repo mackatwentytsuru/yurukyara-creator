@@ -1,11 +1,14 @@
 """ONVIF の首振り(PTZ)の最小のクライアント。標準ライブラリだけ。WS-Security の UsernameToken(PasswordDigest)で認証する。
-動かすのは ContinuousMove だけ。**必ず Timeout を付け、速度を上限で切り、Stop を送れる**(カメラが勝手に動き続けないように)。
-Tapo C200 は ONVIF Profile S(ポート 2020)。メーカーの説明では、操作できる範囲は機種と相手ソフトによって違うので、実機で確かめるまで「動く」とは言わない。
+動かすのは RelativeMove(決まった量だけ動いて止まる)。**1 回の量を上限で切る**ので、命令が途中で途切れても動き続けない。
+Tapo C200(ONVIF Profile S、ポート 2020)での実機の確認(2026-11-04): RelativeMove は 0.05・0.1・0.2 で、量どおりに動いた(GetStatus の位置と、映像の中の顔の動きの両方)。
+  目安: 位置の 1.0 = 約 35°(垂直。顔が 0.2 動くと画面の高さの約 0.18、垂直の画角 40.8° から約 7.4° = 37°/単位)。
+  ContinuousMove に Timeout を付けると、カメラが壊れた返事(BadStatusLine)を返して失敗した。Timeout なしの ContinuousMove は動くが、Stop を送るまで動き続けるので使わない。
 """
 from __future__ import annotations
 
 import base64
 import hashlib
+import http.client
 import os
 import re
 import urllib.request
@@ -19,8 +22,7 @@ NS = {
     "tptz": "http://www.onvif.org/ver20/ptz/wsdl",
     "tt": "http://www.onvif.org/ver10/schema",
 }
-MAX_SPEED = 0.3  # -1〜1 の速度の上限(これより速くは送らない)
-MAX_TIMEOUT_S = 1.0  # 1 回の動きの最長(これを超えて動き続けさせない)
+MAX_STEP = 0.1  # 1 回の相対移動の上限(位置の単位。約 3.5°)
 
 
 class OnvifError(RuntimeError):
@@ -56,8 +58,8 @@ def envelope(body: str, header: str = "") -> bytes:
     ).encode()
 
 
-def clamp_speed(v: float) -> float:
-    return max(-MAX_SPEED, min(MAX_SPEED, float(v)))
+def clamp_step(v: float) -> float:
+    return max(-MAX_STEP, min(MAX_STEP, float(v)))
 
 
 class OnvifPtz:
@@ -77,8 +79,8 @@ class OnvifPtz:
                 xml = r.read()
         except urllib.error.HTTPError as e:
             raise OnvifError(f"ONVIF が {e.code} を返しました(カメラのアカウント・時刻のずれを確かめてください)") from None
-        except OSError as e:
-            raise OnvifError(f"ONVIF につながりません({type(e).__name__})") from None
+        except (OSError, http.client.HTTPException) as e:  # カメラが壊れた返事(BadStatusLine)を返すことがある
+            raise OnvifError(f"ONVIF につながりません・返事が壊れています({type(e).__name__})") from None
         root = ET.fromstring(xml)
         fault = root.find(".//s:Fault", NS)
         if fault is not None:
@@ -114,15 +116,13 @@ class OnvifPtz:
         if not self.profile:
             raise OnvifError("先に discover() を呼んでください")
 
-    def move(self, pan: float, tilt: float, duration_s: float) -> None:
-        """首を pan/tilt の速度(-1〜1 を上限で切る)で duration_s 秒だけ動かす。Timeout をカメラにも渡す"""
+    def nudge(self, pan: float, tilt: float) -> None:
+        """首を、いまの位置から pan/tilt(位置の単位。1 回の量は上限で切る)だけ動かす。動いたら止まる"""
         self._need_profile()
-        d = max(0.05, min(MAX_TIMEOUT_S, float(duration_s)))
         self._call(
             self.ptz_url,
-            f"<tptz:ContinuousMove><tptz:ProfileToken>{_esc(self.profile)}</tptz:ProfileToken>"
-            f'<tptz:Velocity><tt:PanTilt x="{clamp_speed(pan):.3f}" y="{clamp_speed(tilt):.3f}"/></tptz:Velocity>'
-            f"<tptz:Timeout>PT{d:.2f}S</tptz:Timeout></tptz:ContinuousMove>",
+            f"<tptz:RelativeMove><tptz:ProfileToken>{_esc(self.profile)}</tptz:ProfileToken>"
+            f'<tptz:Translation><tt:PanTilt x="{clamp_step(pan):.3f}" y="{clamp_step(tilt):.3f}"/></tptz:Translation></tptz:RelativeMove>',
         )
 
     def stop(self) -> None:
