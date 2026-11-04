@@ -11,6 +11,7 @@ sys.path[:0] = [HERE, os.path.join(HERE, "..", "ue")]
 
 import unreal  # noqa: E402
 
+from character_materials import character_slots  # noqa: E402
 from ue_helpers import MATERIAL_DIR, SHOW_ROOT, assets, get_or_create, save, vec, write_report  # noqa: E402
 
 SOURCE_LEVEL = f"{SHOW_ROOT}/L_Comp"
@@ -63,7 +64,11 @@ def main():
             standing = (actor.get_actor_location(), actor.get_actor_rotation())
             actors.destroy_actor(actor)
     character = actors.spawn_actor_from_class(unreal.SkeletalMeshActor, *standing)
-    character.skeletal_mesh_component.set_skinned_asset_and_update(load_character_mesh())
+    mesh = load_character_mesh()
+    character.skeletal_mesh_component.set_skinned_asset_and_update(mesh)
+    # 取り込んだ材質の親はモーフ用の印が無く、-game で顔が既定の材質に戻る。顔の形が使える同じ見た目の材質に替える
+    for index, material in enumerate(character_slots(mesh)):
+        character.skeletal_mesh_component.set_material(index, material)
     character.set_actor_label(f"Character_{CHARACTER}")
     character.tags = [unreal.Name("LiveChar")]
     report.append(f"character {CHARACTER} at {standing[0]}")
