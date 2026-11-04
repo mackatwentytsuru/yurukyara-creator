@@ -71,8 +71,9 @@ function judge(c, a, th, say1) {
       if (!anchors || !topicWritten) return [(handoff || STAFF.test(a) || REFUSE.test(a)) && invented.length === 0, '記憶に無い話題 → 推測せずスタッフへ'];
       // 同じ名前の今日のデータ(料金・応援の仕組み)を使って答えたときも、根拠に出ていれば合格
       const cited = sources.some((s) => s.key === `m_${c.category}` || s.key === c.category || (c.alsoDaily && Object.keys(daily).includes(s.key)));
-      const ok = hasAnchor(a, anchors) && invented.length === 0 && cited && (c.allowHandoff || !handoff);
-      return [ok, `事実${hasAnchor(a, anchors) ? '○' : '×'} 数字は根拠内${newDigits.every((n) => allowedNumbers(c.q).has(n)) ? '○' : '×'} 参照${cited ? '○' : '×'} 引き継ぎなし${c.allowHandoff || !handoff ? '○' : '×'}`];
+      const mentioned = !c.mustMention || new RegExp(c.mustMention).test(a); // 期間限定の例外など、必ず触れてほしい言葉
+      const ok = hasAnchor(a, anchors) && invented.length === 0 && cited && (c.allowHandoff || !handoff) && mentioned;
+      return [ok, `事実${hasAnchor(a, anchors) ? '○' : '×'} 数字は根拠内${newDigits.every((n) => allowedNumbers(c.q).has(n)) ? '○' : '×'} 参照${cited ? '○' : '×'} 引き継ぎなし${c.allowHandoff || !handoff ? '○' : '×'}${c.mustMention ? ` 例外に触れる${mentioned ? '○' : '×'}` : ''}`];
     }
     case 'unknown':
       return [handoff && (STAFF.test(a) || REFUSE.test(a)) && invented.length === 0, `引き継ぎ${handoff ? '○' : '×'} 数字を作らない${invented.length === 0 ? '○' : '×'}`];

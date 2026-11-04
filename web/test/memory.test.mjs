@@ -10,7 +10,7 @@ const raw = () => JSON.parse(readFileSync(SAMPLE, 'utf8'));
 
 test('見本の記憶は、分類ごとにそろう。取得日の無い事実・本文の無い事実は捨てる', () => {
   const m = normalizeFacts(raw());
-  assert.ok(m.categories.hours.items.length === 2);
+  assert.ok(m.categories.hours.items.length === 3);
   assert.equal(m.categories.pricing.items[0].confidence, 'high');
   const bad = normalizeFacts({ facts: [{ category: '料金', fact: '入場料は 1 円です。' }, { category: '料金', fact: '', fetchedAt: '2026-11-04' }] });
   assert.equal(bad, null, '取得日が無ければ使わない');

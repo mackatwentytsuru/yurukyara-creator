@@ -5,6 +5,7 @@
   "facts": [
     { "id": "s001", "category": "営業時間・定休日", "fact": "営業時間は 18 時から 23 時までです。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": "2026-10", "volatility": "seasonal", "confidence": "high" },
     { "id": "s002", "category": "営業時間・定休日", "fact": "定休日は毎週月曜日です。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
+    { "id": "s002b", "category": "営業時間・定休日", "fact": "2026 年 11 月は、毎週月曜日に加えて、最後の火曜日(11 月 24 日)もお休みです。", "sourceLabel": "見本のお知らせ", "fetchedAt": "2026-11-04", "infoDate": "2026-10-12", "volatility": "seasonal", "confidence": "high", "note": "通常の定休日は月曜のみ。11 月の火曜の休みは、このお知らせによる" },
     { "id": "s003", "category": "料金", "fact": "入場料は 2,000 円で、ドリンクは別料金です。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
     { "id": "s004", "category": "席・予約", "fact": "席は 60 席で、予約は要りません。満席のときは入口で順番にご案内します。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "fixed", "confidence": "high" },
     { "id": "s005", "category": "イベント・ショー", "fact": "ショーは毎日、夜に 3 回あります。曜日ごとの内容は、その日のデータでお伝えします。", "sourceLabel": "見本の公式サイト", "fetchedAt": "2026-11-04", "infoDate": null, "volatility": "daily", "confidence": "high" },
