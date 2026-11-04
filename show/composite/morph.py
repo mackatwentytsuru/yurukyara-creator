@@ -20,8 +20,12 @@ SEED = 20261104
 CELL = 3  # 塊の一辺(画素。1920 幅)
 WINDOW = 0.42  # 1 つの塊が変わりきるのに使う進みの幅(小さいほど、塊ごとのずれが大きい)
 PARTICLES_PER_CELL = 2
-SIZES = np.array([2, 3, 4, 5])
-SIZE_WEIGHTS = np.array([0.25, 0.35, 0.25, 0.15])
+SIZES = np.array([2, 3, 4, 5, 6])  # 直径の目安(画素、1920 幅)。実際は 2〜6 の間で小数にばらす
+SIZE_WEIGHTS = np.array([0.30, 0.30, 0.20, 0.13, 0.07])
+OUT = (0.04, 0.16)  # 体の中心から外へ出る距離(身長に対する割合)
+FAR_FRACTION = 0.16  # 遠くまで離れて薄れる粒の割合
+FAR = (0.30, 0.50)  # その粒の離れる距離(身長に対する割合)
+HEAD_HOLD = 0.0  # 頭と肩の塊が変わるのを遅らせる量(順への足し。1.0 で頭が浮き、0.3 でも頭と胴の差 0.503、0.0 で 0.219 に減った)
 RISE = (0.05, 0.22)  # 舞い上がる高さ(身長に対する割合の範囲)
 DRIFT = 0.12  # 横に流れる幅(身長に対する割合)
 ORDER_WEIGHTS = (0.62, 0.26, 0.07, 0.12)  # 順を決める: 中心からの距離・なめらかなノイズ・塊ごとのノイズ・高さ
@@ -66,32 +70,31 @@ def _value_noise(x, y, spacing, salt):
     return top * (1 - fy) + bottom * fy
 
 
-def _splat(shape, xs, ys, sizes, alphas, colors):
-    """粒を四角に描き足す。戻りは (透明の合計, 色×透明の合計)。重なっても色は元の色の平均なので明るくならない。"""
+def _splat(shape, xs, ys, sizes, alphas, colors, seeds):
+    """粒を丸く(縁をぼかし、粒ごとに少し楕円・向きがちがう)描き足す。戻りは (透明の合計, 色×透明の合計)。
+    重なっても色は元の色の平均なので明るくならない。sizes は直径(画素、小数)。"""
     height, width = shape
-    idx, wts = [], []
-    for size in (2, 3, 4, 5):
-        pick = sizes == size
-        if not pick.any():
-            continue
-        x, y, a = xs[pick], ys[pick], alphas[pick]
-        for oy in np.arange(size) - (size - 1) / 2.0:
-            for ox in np.arange(size) - (size - 1) / 2.0:
-                px, py = x + ox, y + oy
-                x0, y0 = np.floor(px).astype(np.int64), np.floor(py).astype(np.int64)
-                fx, fy = px - x0, py - y0
-                for dx, dy, w in ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy)):
-                    ix, iy = x0 + dx, y0 + dy
-                    ok = (ix >= 0) & (ix < width) & (iy >= 0) & (iy < height)
-                    idx.append((iy * width + ix)[ok])
-                    wts.append(np.stack([(a * w)[ok], np.nonzero(pick)[0][ok].astype(np.float32)]))
+    ang = seeds[0] * np.pi
+    asp = 1.0 + 0.45 * seeds[1]  # 楕円の細長さ(1〜1.45)
+    ca, sa = np.cos(ang), np.sin(ang)
+    rad = sizes / 2.0
+    reach = int(np.ceil(rad.max() * asp.max())) + 1 if len(sizes) else 1
+    x0, y0 = np.floor(xs).astype(np.int64), np.floor(ys).astype(np.int64)
+    idx, wts, own = [], [], []
+    ids = np.arange(len(sizes))
+    for oy in range(-reach, reach + 1):
+        for ox in range(-reach, reach + 1):
+            ix, iy = x0 + ox, y0 + oy
+            dx, dy = ix + 0.5 - xs, iy + 0.5 - ys
+            rx, ry = (dx * ca + dy * sa) / asp, (-dx * sa + dy * ca) * asp
+            w = smooth((rad - np.sqrt(rx * rx + ry * ry) + 0.5) / 1.4)  # 縁は約 1.4 画素でぼける
+            ok = (w > 0) & (ix >= 0) & (ix < width) & (iy >= 0) & (iy < height)
+            idx.append((iy * width + ix)[ok]), wts.append((alphas * w)[ok]), own.append(ids[ok])
     total = np.zeros(height * width, np.float32)
     color = np.zeros((height * width, 3), np.float32)
     if not idx:
         return total.reshape(height, width), color.reshape(height, width, 3)
-    index = np.concatenate(idx)
-    weight = np.concatenate([w[0] for w in wts])
-    owner = np.concatenate([w[1] for w in wts]).astype(np.int64)
+    index, weight, owner = np.concatenate(idx), np.concatenate(wts), np.concatenate(own)
     total = np.bincount(index, weight, height * width).astype(np.float32)
     for c in range(3):
         color[:, c] = np.bincount(index, weight * colors[owner, c], height * width)
@@ -115,8 +118,8 @@ def morph_layer(a_color, a_alpha, b_color, b_alpha, p):
         return a_color * (1 - p) + b_color * p, a_alpha * (1 - p) + b_alpha * p
     top, bottom, left, right = rows.min(), rows.max(), cols.min(), cols.max()
     tall = float(bottom - top + 1)
-    margin_top, margin_side = int(tall * 0.4) + 8, int(tall * 0.25) + 8
-    y0, y1 = max(0, top - margin_top) // CELL * CELL, min(height, bottom + 12)
+    margin_top, margin_side = int(tall * 0.6) + 8, int(tall * 0.6) + 8
+    y0, y1 = max(0, top - margin_top) // CELL * CELL, min(height, bottom + int(tall * 0.3) + 12)
     x0, x1 = max(0, left - margin_side) // CELL * CELL, min(width, right + margin_side + 1)
     y1, x1 = y0 + (y1 - y0) // CELL * CELL, x0 + (x1 - x0) // CELL * CELL
     cy, cx = (y1 - y0) // CELL, (x1 - x0) // CELL
@@ -142,7 +145,8 @@ def morph_layer(a_color, a_alpha, b_color, b_alpha, p):
     fine = (_value_noise(xc, yc, 16.0, 1) + 0.5 * _value_noise(xc, yc, 8.0, 2)) / 1.5
     white = _hash(np.floor(xc / CELL), np.floor(yc / CELL), 3)
     wr, wn, ww, wh = ORDER_WEIGHTS
-    order = (wr * radius + wn * fine + ww * white + wh * (np.clip(v, -0.5, 0.5) + 0.5)) / sum(ORDER_WEIGHTS)
+    head = np.exp(-(((v + 0.40) / 0.15) ** 2)) * np.exp(-((u / 0.22) ** 2))  # 頭と肩のあたり(体の上 10〜25%)
+    order = (wr * radius + wn * fine + ww * white + wh * (np.clip(v, -0.5, 0.5) + 0.5) + HEAD_HOLD * head) / sum(ORDER_WEIGHTS)
     LAST_ORDER_RANGE[:] = [float(order[body].min()), float(np.percentile(order[body], 2)), float(np.percentile(order[body], 98)), float(order[body].max())]
     order = np.clip((order - ORDER_SPAN[0]) / (ORDER_SPAN[1] - ORDER_SPAN[0]), 0.0, 1.0)
     q = np.clip((p - order * (1.0 - WINDOW)) / WINDOW, 0.0, 1.0)
@@ -158,28 +162,35 @@ def morph_layer(a_color, a_alpha, b_color, b_alpha, p):
     # 粒
     sel = np.nonzero(body & (q > 0.0) & (q < 1.0))
     gy, gx = sel
-    particles_x, particles_y, particles_size, particles_alpha, particles_color = [], [], [], [], []
+    particles_x, particles_y, particles_size, particles_alpha, particles_color, particles_seed = [], [], [], [], [], []
     for k in range(PARTICLES_PER_CELL):
         salt = 10 + k * 17
         qq = q[sel]
         jitter = (_hash(gx + x0 // CELL, gy + y0 // CELL, salt) - 0.5) * 0.16
         qk = np.clip(qq + jitter * np.sin(np.pi * qq), 0.0, 1.0)
-        rise = tall * (RISE[0] + (RISE[1] - RISE[0]) * _hash(gx + x0 // CELL, gy + y0 // CELL, salt + 1))
-        drift = tall * DRIFT * (_hash(gx + x0 // CELL, gy + y0 // CELL, salt + 2) - 0.5)
-        phase = _hash(gx + x0 // CELL, gy + y0 // CELL, salt + 3)
+        hs = lambda off: _hash(gx + x0 // CELL, gy + y0 // CELL, salt + off)
+        rise = tall * (RISE[0] + (RISE[1] - RISE[0]) * hs(1))
+        drift = tall * DRIFT * (hs(2) - 0.5)
+        phase = hs(3)
+        far = hs(5) < FAR_FRACTION
+        norm = np.maximum(np.hypot(u[sel], v[sel]), 0.05)
+        out = tall * np.where(far, FAR[0] + (FAR[1] - FAR[0]) * hs(6), OUT[0] + (OUT[1] - OUT[0]) * hs(6))
         h = np.sin(np.pi * qk)
         swirl = tall * 0.025 * np.sin(2 * np.pi * (qk * 1.5 + phase))
-        px = xc[sel] + (drift + swirl) * h - x0
-        py = yc[sel] - rise * h - y0
-        pick = _hash(gx + x0 // CELL, gy + y0 // CELL, salt + 4)
-        size = SIZES[np.searchsorted(np.cumsum(SIZE_WEIGHTS), pick).clip(0, len(SIZES) - 1)]
+        px = xc[sel] + (drift + swirl) * h + out * (u[sel] / norm) * h - x0
+        py = yc[sel] - rise * h + out * (v[sel] / norm) * h * 0.6 - y0 - np.where(far, 0.25 * out, 0.0) * h
+        pick = hs(4)
+        base = SIZES[np.searchsorted(np.cumsum(SIZE_WEIGHTS), pick).clip(0, len(SIZES) - 1)]
+        size = np.clip(base + (hs(7) - 0.5) * 1.6, 2.0, 6.0).astype(np.float32)
         alpha = smooth(qk / 0.1) * (1.0 - smooth((qk - 0.9) / 0.1)) * (1.0 - 0.45 * h) * cell_a[sel].clip(0, 1)
+        alpha = alpha * np.where(far, 1.0 - 0.6 * h, 1.0)  # 遠くへ行く粒は離れるほど薄れる
         mix = smooth((qk - 0.3) / 0.4)[:, None]
         color = straight_a[sel] * (1.0 - mix) + straight_b[sel] * mix
+        particles_seed.append(np.stack([hs(8), hs(9)]).astype(np.float32))
         particles_x.append(px), particles_y.append(py), particles_size.append(size)
         particles_alpha.append(alpha.astype(np.float32)), particles_color.append(color.astype(np.float32))
     total, color_sum = _splat((y1 - y0, x1 - x0), np.concatenate(particles_x), np.concatenate(particles_y), np.concatenate(particles_size),
-                              np.concatenate(particles_alpha), np.concatenate(particles_color))
+                              np.concatenate(particles_alpha), np.concatenate(particles_color), np.concatenate(particles_seed, axis=1))
     particle_alpha = np.minimum(total, 1.0)
     particle_color = color_sum / np.maximum(total, 1e-6)[..., None] * particle_alpha[..., None]  # 色 = 重みつき平均 × 透明(元の色より明るくならない)
     particle_alpha = particle_alpha[..., None]

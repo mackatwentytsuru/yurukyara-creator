@@ -323,7 +323,7 @@ def test_morphs_use_first_and_third_call_and_end_before_returning_to_led():
     for chorus in range(2):  # 各サビの 1 組目で人型へ、3 組目でアニメへ。始めの打から終わりの打まで
         for slot, m in zip((0, 2), morphs[chorus * 2:chorus * 2 + 2]):
             run = runs[chorus * 3 + slot]
-            assert m["start"] == run[0] and m["end"] == run[-1] and m["end"] - m["start"] > 0.5
+            assert m["start"] == run[0] and m["end"] > run[-1] and m["end"] - m["start"] > 0.5  # 終わりは 4 打目の 1 拍後
     words = [(SONG_START + w[1], SONG_START + w[2]) for line in lines for w in line["words"]]
     for m in morphs:  # 歌詞の語と重ならない
         assert not [1 for a, b in words if m["start"] < b and a < m["end"]], m

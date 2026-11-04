@@ -94,16 +94,28 @@ def call_runs_for(choruses, at, beats):
     return [run for runs in call_runs_by_chorus(choruses, at, beats) for run in runs if run]
 
 
+def morph_end(last, hi, beats):
+    """終わりの打の 1 拍後(4 打で 4 拍ぶんの長さ)。次の行の語の頭(hi)を超えるなら、その少し手前で切る。"""
+    nxt = [b for b in beats if b > last + 1e-6]
+    end = nxt[0] if nxt else last + 0.4
+    return min(end, hi - MORPH_MARGIN) if end > hi - MORPH_MARGIN else end
+
+
+MORPH_MARGIN = 0.05
+
+
 def morphs_for(choruses, at, beats):
-    """変身の秒。各サビの 1 行目の後のコールの打(始めの打から終わりの打まで)で人型へ、3 行目の後のコールで アニメへ戻る。
-    戻りが組めないサビは、人型のまま LED へ戻らないよう、変身を出さない。打が 2 つ未満なら組めない。"""
+    """変身の秒。各サビの 1 行目の後のコールで人型へ、3 行目の後のコールで アニメへ戻る。始めは 4 打の頭、終わりは 4 打目の 1 拍後
+    (次の行の語の頭を超えるなら手前で切る)。戻りが組めないサビは、人型のまま LED へ戻らないよう、変身を出さない。打が 2 つ未満なら組めない。"""
     out = []
-    for runs in call_runs_by_chorus(choruses, at, beats):
+    for chorus, runs in zip(choruses, call_runs_by_chorus(choruses, at, beats)):
         if len(runs) < CALL_LINES - 1:
             continue
         go, back = runs[0], runs[CALL_LINES - 2]
         if go and back and len(go) >= 2 and len(back) >= 2:
-            out += [{"start": go[0], "end": go[-1], "to": "human"}, {"start": back[0], "end": back[-1], "to": "anime"}]
+            hi = lambda k: at + chorus[k + 1]["words"][0][1]
+            out += [{"start": go[0], "end": morph_end(go[-1], hi(0), beats), "to": "human"},
+                    {"start": back[0], "end": morph_end(back[-1], hi(CALL_LINES - 2), beats), "to": "anime"}]
     return out
 
 
