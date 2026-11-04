@@ -58,19 +58,22 @@ class FrameReader:
         self._t = threading.Thread(target=self._run, daemon=True)
         self._t.start()
 
-    def _read_exact(self, n: int) -> bytes | None:
-        buf = bytearray()
-        while len(buf) < n:
-            chunk = self.proc.stdout.read(n - len(buf))
-            if not chunk:
+    def _read_frame(self, n: int):
+        """n バイトをコピーを増やさず 1 つの領域へ読む(1080p は 1 コマ 6 MB。コピーが多いと 15 fps に追いつかない)"""
+        buf = bytearray(n)
+        view = memoryview(buf)
+        got = 0
+        while got < n:
+            k = self.proc.stdout.readinto(view[got:])
+            if not k:
                 return None
-            buf += chunk
-        return bytes(buf)
+            got += k
+        return buf
 
     def _run(self):
         size = self.w * self.h * 3
         while True:
-            raw = self._read_exact(size)
+            raw = self._read_frame(size)
             if raw is None:
                 break
             arrived = time.perf_counter()
