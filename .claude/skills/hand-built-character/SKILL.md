@@ -113,6 +113,7 @@ description: キャラの絵(正面と横の 2 枚など)から、Blender の Py
 - `expressions` は表情ボタンの名前。`morphs` は、表情の名前 → シェイプキーの重み(キーは model.glb にある名前)。
 - `look.bone` は体を向ける骨、`look.eyes` は黒目の骨(無ければ省く)。口は `mouth.kind = "morph"` と `mouth.morph`(口を開くキー)が要る。
 - **pack を作ったら、必ず `python creator/pipeline/pk02_check_character.py <pack>` を通す**(最上位のキー、モーフの名前、骨の名前、動きのファイルを機械で確かめ、外れた所を ERROR で出す)。`OK` が出るまで直す。ブラウザで確かめる前に、ここで落ちる誤りが多い(入れ子にした、`mouth.kind` を書き忘れた、`expressions` が空)。
+- `pk01_package.py` は、model.glb の骨とモーフを読んで character.json を書く(11-04 に直した)。`mouth_open` があれば `mouth.kind: "morph"`・`blink`・`morphs`・`look.eyes` を自動で書き、既定で `"fur": {}`(使わないなら `--no-fur`)。顔の表(`face/face_atlas.json`)は無くてもよい。出力は手直しなしで `pk02` を通る(`characters/robo`・`yokoso` の GLB で OK を確認)。`mouth_open` が無く atlas だけのときは atlas の口で書き、WARN を出す(`pk02` は通らない)。
 
 ## 試験で見つかった知識(スキルだけで作らせた作業役が、足りないと書いた物)
 
