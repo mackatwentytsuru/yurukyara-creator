@@ -20,6 +20,7 @@ from stage_path import ar_at, on_led  # noqa: E402
 
 FONT = r"C:\Windows\Fonts\YuGothB.ttc"
 SHEET_W = 1800
+NOTE2 = "キャラの顔が黒いのは、この下見の中だけの不具合"      # 呼び出し側で差し替えられる(仮想 iPad のカット案は別の注意を書く)
 TILE_W = (SHEET_W - 360) // 4
 TILE_H = TILE_W * 9 // 16
 BAR_H = 68
@@ -107,7 +108,7 @@ def make_sheet(a, cuts, fx_table, lens_jp):
         rows.append(row)
     head = text_bar(SHEET_W, 100, "撮影カットの候補(UE のリハーサル)番号で選んでください", 58, back=(60, 20, 60))
     note = text_bar(SHEET_W, 76, "左: 上から見た図 橙=カメラの歩く線 桃=キャラ 水色=LED", 54, fill=(200, 200, 200))
-    note2 = text_bar(SHEET_W, 76, "キャラの顔が黒いのは、この下見の中だけの不具合", 54, fill=(255, 150, 150))
+    note2 = text_bar(SHEET_W, 76, NOTE2, 54, fill=(255, 150, 150))
     sheet = Image.new("RGB", (SHEET_W, 252 + sum(r.height + 8 for r in rows)), (0, 0, 0))
     sheet.paste(head, (0, 0))
     sheet.paste(note, (0, 100))
