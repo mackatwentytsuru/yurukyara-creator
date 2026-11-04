@@ -24,8 +24,8 @@ test('見本データは、6 つの部が全部そろい、更新時刻が今日
 });
 
 test('日本時間の取り出しと、HH:MM の読み取り', () => {
-  assert.deepEqual(jstParts(Date.parse('2026-11-03T18:30:00+09:00')), { date: '2026-11-03', hm: '18:30', minutes: 1110 });
-  assert.deepEqual(jstParts(Date.parse('2026-11-03T16:05:00Z')), { date: '2026-11-04', hm: '01:05', minutes: 65 });
+  assert.deepEqual(jstParts(Date.parse('2026-11-03T18:30:00+09:00')), { date: '2026-11-03', hm: '18:30', minutes: 1110, weekday: '火', jp: '2026 年 11 月 3 日(火曜日)' }); // 2026-11-03 は火曜日(文化の日)
+  assert.deepEqual(jstParts(Date.parse('2026-11-03T16:05:00Z')), { date: '2026-11-04', hm: '01:05', minutes: 65, weekday: '水', jp: '2026 年 11 月 4 日(水曜日)' }); // UTC の火曜 16:05 = 日本時間の水曜 01:05(日付と曜日が進む)
   assert.equal(parseWhen('9:05', '2026-11-03'), Date.parse('2026-11-03T09:05:00+09:00'));
   assert.equal(parseWhen('2026-11-03T10:00:00+09:00', 'x'), Date.parse('2026-11-03T10:00:00+09:00'));
   assert.equal(parseWhen('きのう', '2026-11-03'), null);
@@ -73,7 +73,7 @@ test('店のデータの文: 部の名前の印と更新時刻が付き、デー
 });
 
 test('「いま」の文: 次のショーと残り分、上演中、古い情報の注意', () => {
-  assert.match(renderShopNow(snap, NOW), /現在 18:30.*次のショー: 19:00 オープニングステージ\(あと 30 分\)/);
+  assert.match(renderShopNow(snap, NOW), /現在 .*18:30.*次のショー: 19:00 オープニングステージ\(あと 30 分\)/);
   assert.doesNotMatch(renderShopNow(snap, NOW), /古い可能性/);
   const during = Date.parse('2026-11-03T20:10:00+09:00');
   assert.match(renderShopNow(snap, during), /いま上演中: 20:00〜20:40 ナギとソラのデュオ.*次のショー: 21:15/);

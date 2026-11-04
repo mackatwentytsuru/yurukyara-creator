@@ -55,7 +55,9 @@ const num = (v) => (Number.isFinite(v) && v >= 0 && v < 100_000 ? Math.round(v) 
 export function jstParts(ms) {
   const f = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const p = Object.fromEntries(f.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
-  return { date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
+  // 曜日は、日本時間のその日の正午(UTC では 03:00)の曜日。日付の文字から作る(端末の時刻帯に左右されない)
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][new Date(`${p.year}-${p.month}-${p.day}T03:00:00Z`).getUTCDay()];
+  return { date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, minutes: Number(p.hour) * 60 + Number(p.minute), weekday: wd, jp: `${Number(p.year)} 年 ${Number(p.month)} 月 ${Number(p.day)} 日(${wd}曜日)` };
 }
 
 const toMinutes = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
@@ -212,8 +214,8 @@ export function renderMemory(mem) {
 /** お客さんの発言と一緒に渡す、「いま」の情報(時刻・次のショー・古い情報)。毎回変わるのでシステム指示には入れない */
 export function renderShopNow(snap, nowMs) {
   const t = jstParts(nowMs);
-  if (!snap) return `【店のいま】現在 ${t.hm}。店のデータは取れていない。`;
-  const L = [`現在 ${t.hm}(日本時間)`];
+  if (!snap) return `【店のいま】現在 ${t.jp} ${t.hm}。店のデータは取れていない。`;
+  const L = [`現在 ${t.jp} ${t.hm}(日本時間)`];
   const shows = snap.sections.shows?.items ?? [];
   const now = t.minutes;
   const playing = shows.find((x) => x.end && toMinutes(x.start) <= now && now < toMinutes(x.end));
