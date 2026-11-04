@@ -49,7 +49,7 @@ class FrameReader:
                 cmd += ["-rtsp_transport", "tcp"]
         if realtime:
             cmd += ["-re"]  # ファイルを実時間で流す(試験用)
-        cmd += (extra_in_args or []) + ["-i", source, "-an", "-pix_fmt", "bgr24", "-f", "rawvideo", "-"]
+        cmd += (extra_in_args or []) + ["-i", source, "-an", "-fps_mode", "passthrough", "-pix_fmt", "bgr24", "-f", "rawvideo", "-"]
         self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0, creationflags=ABOVE_NORMAL if high_priority else 0)
         self._lock = threading.Lock()
         self._latest = None  # (seq, perf_counter での到着時刻, フレーム)
