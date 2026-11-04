@@ -120,6 +120,42 @@
       ],
       "parts": [],
       "evidence": "11-03 p4: 輪郭 0.98、検査 全部 OK。既定の見た目で 同じキャラ 3・3、色 3・3。毛足 0・2 で質感は数えない。結果表の 11-03 の節"
+    },
+    {
+      "name": "花と葉(オリジナル、s_flower)",
+      "status": "未確認",
+      "bodies": [],
+      "textures": [],
+      "head_ratios": [],
+      "parts": [],
+      "evidence": "11-04 新しい題材(スキルだけ、Sonnet medium、新しい鍵)。判定は補助でなく正式の組 Codex terra・medium と GLM 5.3-flash(DeepSeek が上限 429 のため組を替えた)。 工程 15/15、検査 8 周で最後は全部 OK、輪郭 0.968。同じキャラ 3・3、色 3・3、毛足 0・3 ×、花と葉 0・3 ×(Codex が全部いいえ)。部分が通っていないので parts は空、形の類型にも入れない。結果表の 11-04 の節"
+    },
+    {
+      "name": "マント(オリジナル、t_cape)",
+      "status": "未確認",
+      "bodies": [],
+      "textures": [],
+      "head_ratios": [],
+      "parts": [],
+      "evidence": "11-04 新しい題材(スキルだけ、Sonnet medium、新しい鍵)。判定は補助でなく正式の組 Codex terra・medium と GLM 5.3-flash(DeepSeek が上限 429 のため組を替えた)。 工程 15/15、検査 全部 OK(履歴は 1 件)、輪郭 0.965。同じキャラ 3・3、色 3・3、毛足 0・3 ×、マント 0・2 ×。部分が通っていないので parts は空、形の類型にも入れない。結果表の 11-04 の節"
+    },
+    {
+      "name": "角と尾(オリジナル、u_horn)",
+      "status": "未確認",
+      "bodies": [],
+      "textures": [],
+      "head_ratios": [],
+      "parts": [],
+      "evidence": "11-04 新しい題材(スキルだけ、Sonnet medium、新しい鍵)。判定は補助でなく正式の組 Codex terra・medium と GLM 5.3-flash(DeepSeek が上限 429 のため組を替えた)。 工程 15/15、検査 11 周で最後は全部 OK、輪郭 0.968。同じキャラ 3・3、色 3・3、毛足 0・3 ×、角と尾 0・1 ×。部分が通っていないので parts は空、形の類型にも入れない。結果表の 11-04 の節"
+    },
+    {
+      "name": "胸の文字のはっぴ(オリジナル、v_happi)",
+      "status": "未確認",
+      "bodies": [],
+      "textures": [],
+      "head_ratios": [],
+      "parts": [],
+      "evidence": "11-04 新しい題材(スキルだけ、Sonnet medium、新しい鍵)。判定は補助でなく正式の組 Codex terra・medium と GLM 5.3-flash(DeepSeek が上限 429 のため組を替えた)。 工程 14/15(検査 ④ 抜けが NG のまま、11 か所 3723 px)、検査 10 周、輪郭 0.942。同じキャラ 3・3、色 3・3、毛足 0・3 ×、胸の文字 0・2 ×。検査が全部 OK でないので数えない。結果表の 11-04 の節"
     }
   ]
 }
