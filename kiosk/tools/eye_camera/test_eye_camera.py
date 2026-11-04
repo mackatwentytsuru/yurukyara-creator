@@ -161,3 +161,55 @@ class OnvifTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GazeBridgeTest(unittest.TestCase):
+    def setUp(self):
+        import gaze_bridge as gb
+
+        self.gb = gb
+        self.g = gb.Geometry()
+
+    def test_pixel_world_round_trip(self):
+        import numpy as np
+
+        for p in ([0.0, 1.6, 2.0], [0.8, 1.4, 3.0], [-0.7, 1.8, 1.5]):
+            u, v, ipd = self.gb.world_to_pixel(self.g, np.array(p))
+            back = self.gb.pixel_to_world(self.g, u, v, ipd)
+            self.assertLess(float(np.linalg.norm(back - np.array(p))), 1e-6)
+
+    def test_gaze_direction_signs(self):
+        g = self.g
+        yaw, pitch = self.gb.gaze_angles(g.eye_pos, (0.0, 2.0, 2.0))  # 目と同じ高さの正面
+        self.assertAlmostEqual(yaw, 0.0, places=6)
+        self.assertAlmostEqual(pitch, 0.0, places=6)
+        self.assertGreater(self.gb.gaze_angles(g.eye_pos, (1.0, 2.0, 2.0))[0], 0)  # 右
+        self.assertGreater(self.gb.gaze_angles(g.eye_pos, (0.0, 2.5, 2.0))[1], 0)  # 上
+        self.assertLess(self.gb.gaze_angles(g.eye_pos, (0.0, 1.5, 2.0))[1], 0)  # 下
+
+    def test_person_on_right_of_image_is_on_world_right(self):
+        import numpy as np
+
+        _, hi, _ = None, None, None
+        p = self.gb.pixel_to_world(self.g, self.g.width * 0.8, self.g.height * 0.5, 80.0)
+        self.assertGreater(float(p[0]), 0)  # 画像の右 = 客から見て右(カメラは客の側を向く。画像の右 = +x)
+
+    def test_bridge_holds_then_drops_and_ema(self):
+        g = self.gb.Geometry(ema=0.0, hold_s=0.5)
+        b = self.gb.GazeBridge(g=g, sink=None)
+        det = {"found": True, "cx": 0.5, "cy": 0.4, "eye_x": 0.5, "eye_y": 0.4, "ipd_px": 80.0}
+        m1 = b.update(1.0, det)
+        self.assertTrue(m1["found"])
+        self.assertIn("yaw_deg", m1)
+        self.assertTrue(b.update(1.3, {"found": False})["found"])  # 0.3 秒は、最後の向きを保つ
+        self.assertFalse(b.update(1.7, {"found": False})["found"])  # 0.5 秒を超えたら、見失い
+
+    def test_ema_smooths_a_jump(self):
+        g = self.gb.Geometry(ema=0.8)
+        b = self.gb.GazeBridge(g=g, sink=None)
+        left = {"found": True, "eye_x": 0.2, "eye_y": 0.5, "cx": 0.2, "cy": 0.5, "ipd_px": 80.0}
+        right = dict(left, eye_x=0.8, cx=0.8)
+        y0 = b.update(0.0, left)["yaw_deg"]
+        y1 = b.update(0.1, right)["yaw_deg"]
+        raw = self.gb.gaze_angles(g.eye_pos, self.gb.pixel_to_world(g, 0.8 * g.width, 0.5 * g.height, 80.0))[0]
+        self.assertLess(abs(y1 - y0), abs(raw - y0))  # 平滑化で、1 回では目標に届かない

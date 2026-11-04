@@ -14,7 +14,7 @@ import sys
 import time
 
 import camera_config
-from detect import FaceDetector
+from detect import FaceDetector, FaceTracker
 from follow import Follower
 from onvif_ptz import OnvifError, OnvifPtz
 from stream import FrameReader, probe_size, raise_self_priority
@@ -63,7 +63,7 @@ def main() -> int:
 
     if a.high_priority:
         raise_self_priority()
-    det = FaceDetector(detect_width=a.detect_width)
+    det = FaceTracker(FaceDetector(detect_width=a.detect_width))  # 追跡 + 探索(遠い顔)
     reader = FrameReader(src, w, h, realtime=a.realtime, high_priority=a.high_priority)
     follower = Follower()
     out = open(a.out, "w", encoding="utf-8") if a.out else None
