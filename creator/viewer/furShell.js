@@ -10,7 +10,9 @@ import * as THREE from 'three';
  *
  * character.json: "fur": { "layers": 12 }  省略できる値: length、hairWidth、tile、root、sheen、normal、flat、pile、cloud、gain、stray、strayReach、clear
  *   layers: 層の数。弱い GPU では減らす。length: 毛の長さ(既定はキャラの高さの 1.5%)。hairWidth: 毛 1 本の太さ(キャラの高さに対する割合)。tile: UV の 1 あたりの毛の模様の繰り返し(書けば hairWidth より優先)。
- *   look: 名前の付いた設定のまとまり。"fleece" = 布の写真の房 + 半透明の毛先(試しの設定で、既定ではない。判定の数字は creator/skilltest/結果表.md)。ほかの値を書くと、そちらが優先。
+ *   look: 名前の付いた設定のまとまり(試しの設定で、既定ではない。判定の数字は creator/skilltest/結果表.md)。ほかの値を書くと、そちらが優先。
+ *     "fleece" = 布の写真の房 + 半透明の毛先。"teddy"(Poly Haven Curly Teddy Natural)・"felt"(ambientCG Fabric034)= 面そのものに素材の法線・ラフネス・明暗を貼る + 殻の房。
+ *   material: 素材の名前(assets/ の下のフォルダ)。surface: true で、面そのものに素材の法線・ラフネス・細かい明暗を貼る(色は元の絵のまま)。surfaceNormal・surfaceShade・surfaceFlat: その強さ。layers: 0 で殻なし(面だけ)。assetBase: 素材の置き場の URL(試し用)。
  *   soft: 毛先を半透明でぼかす幅(0 で切る)。輪郭と面の粒が画素で切れて砂に見えるのを防ぐ。rim: 真横を向いた面を明るくする強さ(毛は光を透かすので、輪郭が暗くならない)。tipAlpha: いちばん外の毛の濃さ。
  *   photo: true で、布の写真(assets/fleece、Poly Haven「Polar Fleece」CC0)の房を毛の高さと明暗に使う。photoRepeat: 写真 1 枚がキャラの高さの何倍か。photoHeight: 高さのうち写真の割合。photoContrast: 写真の明暗の強さ。photoNormal: 写真の法線の強さ。
  *   root: 根元の明るさ。normal: 毛足の法線の強さに掛ける値。flat: 色の絵の筋を消す割合(1 で一色)。pile: 毛 1 本ずつの明暗の強さ。cloud: ふわっとしたむらの強さ。gain: 毛の明るさに掛ける値。stray: 外へ飛び出す毛の層の数。strayReach: 飛び出す長さ(毛の長さの何倍か)。clear: 顔の部品から、毛を生やさない距離(毛の長さの何倍か)。
@@ -26,23 +28,29 @@ const LENGTH_OF_HEIGHT = 0.015;
 const PATCH_KEEP_RADIUS = 0.3; // 当て布の絵の中心からの距離(絵の幅が 1)
 const CLEAR_FADE = 1.5; // 毛を生やさない範囲の外で、元の長さへ戻すまでの距離(毛の長さの何倍か)
 const PATCH_RENDER_ORDER = 100;
+const SHELL_LOOK = { soft: 0.08, rim: 0.25, tipAlpha: 0.5, stray: 2, strayReach: 0.5, photo: true, photoRepeat: 0.35, photoHeight: 0.5, photoContrast: 2.0 };
+// 素材の絵は assets/<素材>/<素材>_{detail,height,normal,rough}.jpg(1K、1 枚 300KB まで)。look の名前 → 設定。
+// fleece = 房の殻だけ(Poly Haven Polar Fleece)。teddy・felt = 面そのものに法線・ラフネス・明暗を貼り、さらに殻の房にも使う(面 + 殻)。写真 1 枚はキャラの高さの 0.35
 const FUR_LOOKS = {
-  fleece: { soft: 0.08, rim: 0.25, tipAlpha: 0.5, stray: 2, strayReach: 0.5, photo: true, photoRepeat: 0.35, photoHeight: 0.5, photoContrast: 2.0 },
+  fleece: { ...SHELL_LOOK, material: 'fleece' },
+  teddy: { ...SHELL_LOOK, material: 'curly_teddy_natural', surface: true },
+  felt: { ...SHELL_LOOK, material: 'fabric034', surface: true },
 };
-const PHOTO_FILES = { detail: 'fleece_detail.jpg', height: 'fleece_height.jpg', normal: 'fleece_normal.jpg' };
+const SURFACE_DEFAULTS = { surfaceNormal: 0.6, surfaceShade: 2.0, surfaceFlat: 0.95 }; // 面そのものに貼るときの法線の強さ・明暗の強さ・色の絵の筋を消す割合(殻の flat と同じ)
 
-/** 布の写真を読む。読み終わる前は灰色 1 色なので、撮るときは読み終わりを待つ。 */
-function loadPhoto() {
+/** 布の写真を読む。読み終わる前は灰色 1 色なので、撮るときは読み終わりを待つ。ラフネスは面に貼るときだけ読む。 */
+function loadPhoto(material, withRough, assetBase) {
   const loader = new THREE.TextureLoader();
-  const load = (name, srgb = false) => {
-    const tex = loader.load(new URL(`./assets/fleece/${name}`, import.meta.url).href);
+  const base = assetBase ?? new URL('./assets', import.meta.url).href;
+  const load = (kind, srgb = false) => {
+    const tex = loader.load(`${base}/${material}/${material}_${kind}.jpg`);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.anisotropy = 4;
     if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   };
-  return { detail: load(PHOTO_FILES.detail), height: load(PHOTO_FILES.height), normal: load(PHOTO_FILES.normal) };
+  return { detail: load('detail'), height: load('height'), normal: load('normal'), rough: withRough ? load('rough') : null };
 }
 
 /** 毛の高さの画像を作る。乱数は固定し、毎回同じ見た目にする。 */
@@ -280,11 +288,15 @@ export function applyFur(scene, options = {}) {
     photoHeight: 0.6,
     photoContrast: 2.5,
     photoNormal: 0.5,
+    material: 'fleece',
+    surface: false,
+    assetBase: null,
+    ...SURFACE_DEFAULTS,
     ...(FUR_LOOKS[options.look] ?? {}),
     ...options,
   };
   const hairs = makeHairHeights();
-  const photo = cfg.photo ? loadPhoto() : null;
+  const photo = cfg.photo || cfg.surface ? loadPhoto(cfg.material, cfg.surface, cfg.assetBase) : null;
   const targets = [];
   const faceParts = [];
   scene.traverse((o) => {
@@ -302,7 +314,7 @@ export function applyFur(scene, options = {}) {
     return out;
   };
   // 半透明の毛は奥行きを書かないので、頬の当て布は毛のあとに描く(先に描くと、毛に削られて輪郭が崩れる)
-  if (cfg.soft > 0) faceParts.filter((o) => o.material?.transparent).forEach((o) => { o.renderOrder = PATCH_RENDER_ORDER; });
+  if (cfg.soft > 0 && cfg.layers > 0) faceParts.filter((o) => o.material?.transparent).forEach((o) => { o.renderOrder = PATCH_RENDER_ORDER; });
   const faceChunks = faceParts.map(faceKeepPoints);
   // 色の違う毛の部品の境目でも毛を短くする(青とクリームの毛が混ざって汚れて見えるのを防ぐ)
   const furChunks = targets.map((m) => ({ material: m.material, points: worldPositions(m) }));
@@ -327,22 +339,50 @@ export function applyFur(scene, options = {}) {
     const layerCfg = { ...cfg, tile: cfg.tile ?? lengthPerUv / repeatLength, photoTile };
     base.sheen = cfg.sheen;
     base.sheenRoughness = Math.max(base.sheenRoughness, 0.8);
-    if (photo) {
-      const normal = photo.normal.clone();
-      normal.repeat.set(photoTile, photoTile);
-      normal.needsUpdate = true;
-      base.normalMap = normal;
+    const repeated = (src) => {
+      const tex = src.clone();
+      tex.repeat.set(photoTile, photoTile);
+      tex.needsUpdate = true;
+      return tex;
+    };
+    if (photo && cfg.surface) {
+      // 面そのもの: 素材の法線・ラフネス・細かい明暗を貼る(色は元の絵のまま。明暗は掛けるだけ)
+      base.normalMap = repeated(photo.normal);
+      base.normalScale.set(cfg.surfaceNormal, cfg.surfaceNormal);
+      base.roughnessMap = repeated(photo.rough);
+      base.roughness = 1;
+      const surf = { uSurfDetail: { value: photo.detail }, uSurfTile: { value: photoTile }, uSurfShade: { value: cfg.surfaceShade }, uSurfFlat: { value: cfg.surfaceFlat } };
+      base.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, surf);
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', `#include <common>
+            uniform sampler2D uSurfDetail;
+            uniform float uSurfTile;
+            uniform float uSurfShade;
+            uniform float uSurfFlat;`)
+          .replace('#include <map_fragment>', `#include <map_fragment>
+            float surfTint = 1.0 + uSurfShade * (texture2D(uSurfDetail, vMapUv * uSurfTile).r * 2.0 - 1.0);
+            diffuseColor.rgb = mix(diffuseColor.rgb, textureLod(map, vMapUv, 8.0).rgb * diffuse, uSurfFlat) * surfTint;`)
+          .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+            totalEmissiveRadiance = mix(totalEmissiveRadiance, textureLod(map, vMapUv, 8.0).rgb * emissive, uSurfFlat) * surfTint;`);
+      };
+      base.customProgramCacheKey = () => 'fur-surface';
+    } else if (photo && cfg.photoNormal > 0) {
+      base.normalMap = repeated(photo.normal);
       base.normalScale.set(cfg.photoNormal, cfg.photoNormal);
     } else {
       base.normalScale.multiplyScalar(cfg.normal);
     }
+    const stray = cfg.layers > 0 ? cfg.stray : 0;
     const layers = [];
-    for (let k = 1; k <= cfg.layers; k += 1) layers.push(layerMaterial(base, hairs, k / cfg.layers, layerCfg, photo));
+    for (let k = 1; k <= cfg.layers; k += 1) layers.push(layerMaterial(base, hairs, k / cfg.layers, layerCfg, cfg.photo ? photo : null));
     // 外へ飛び出す毛: まばらな層を毛の長さの外まで足す。輪郭に細かいはみ出しが出る
-    for (let k = 1; k <= cfg.stray; k += 1) layers.push(layerMaterial(base, hairs, 1 + (k / cfg.stray) * cfg.strayReach, layerCfg, photo));
-    // 土台の面は根元の明るさにそろえる(毛の根元が見える所が、明るく浮かないように)
-    base.color.multiplyScalar(cfg.root);
-    base.emissiveIntensity *= cfg.root;
+    for (let k = 1; k <= stray; k += 1) layers.push(layerMaterial(base, hairs, 1 + (k / stray) * cfg.strayReach, layerCfg, cfg.photo ? photo : null));
+    // 土台の面は根元の明るさにそろえる(毛の根元が見える所が、明るく浮かないように)。殻がないとき(layers: 0)は元の明るさのまま
+    if (layers.length) {
+      base.color.multiplyScalar(cfg.root);
+      base.emissiveIntensity *= cfg.root;
+    }
     layersOf.set(base, layers);
   }
   let added = 0;
