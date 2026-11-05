@@ -190,3 +190,8 @@ description: iPhone で動画を撮りながら、コマごとのカメラの位
 - ssh の中で起動したプロセスは ssh を閉じると止まる(job に入る)。夜の試験は ssh をつないだまま。本番は画面のあるデスクトップで台本をダブルクリック。
 - Windows の cp932 の画面に、—(長いダッシュ)などは出せず `print` が落ちる。`sys.stdout.reconfigure(errors="replace")` を入れる。
 - PowerShell の癖(店の PC): `New-Item` と `powershell` の名前が動かないことがある。フォルダは `[System.IO.Directory]::CreateDirectory`、別の PowerShell は `$env:SystemRoot\System32\WindowsPowerShell1.0\powershell.exe`。
+
+## 2 台(iPad と iPhone)を同時に受ける(11-05)
+- **受け手に 2 台がつなぐと、2 台目が来た時に 1 台目のテイクを閉じて、1 台目が切れていた**(`--split-takes` は「前のテイクは次のつなぎで閉じる」作りだった。直す前は 1 台目が 90 コマ=3 秒で止まった)。直し: まだつながっているテイクは閉じない(つながりが切れた物だけ、次のつなぎで閉じる)。端末の IP をテイクの summary.json の `peer` に書く。`rx_probe.py` を 2 本同時に流して、両方 書けることを確かめる(店の PC でも 2 台分 36 Mbps を 600/600 コマ)。
+- 2 台の時刻合わせ: 端末ごとの時計のずれ(PC の時計との差)、LED の映像との照合(`show/composite/sync_by_led.py`)、LED の暗転・フラッシュを 2 台の映像から探す `sync_pair.py`(合成で誤差 0.001 秒、`sync_pair_selftest.py`)。専用のタイムコードは無い。
+- 帯域: 1 台 約 19 Mbps(映像 17.7〜18.5+音 0.77)。受け手の PC が Wi-Fi だと、端末 → ルーター → PC と空中を 2 回通るので、必要な空きは 2 倍。電波が弱い(RSSI −76)と足りない恐れ。有線か 5 GHz にする。

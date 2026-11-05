@@ -47,6 +47,7 @@ class Recorder:
         self.bytes = 0
         self.connections = 0
         self.clock_samples: list[tuple[float, float]] = []   # (rtt_ms, offset_ms = 端末の時計 - PC の時計)
+        self.peer = ""                          # つないだ端末の IP(2 台のとき、どのテイクがどの端末かの目印)
         self.cal_messages = 0
         self.cal_with_rays = 0
         self.cal_sessions: list[str] = []      # 見た arSessionId(順に、重複なし)。2 つ以上 = テイクの間に ARKit の世界が変わった
@@ -116,7 +117,7 @@ class Recorder:
             "latency_corrected_ms": corrected, "clock": clock,
             "audio": self.audio_summary(),
             "keyframes": sum(1 for r in rows if r["flags"] & 4), "codec": rows[0].get("codec", "jpeg"),
-            "recording_frames_in_stream": len(rec_rows), "connections": self.connections,
+            "recording_frames_in_stream": len(rec_rows), "connections": self.connections, "peer": self.peer,
             "calibration": {"messages": self.cal_messages, "with_rays": self.cal_with_rays, "sessions": len(self.cal_sessions)},
             "size": [rows[0]["w"], rows[0]["h"]],
         }
@@ -202,6 +203,7 @@ async def ack_loop(writer: asyncio.StreamWriter, rec: Recorder, stop: asyncio.Ev
 async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec: Recorder, first: bytes | None = None):
     rec.connections += 1
     peer = writer.get_extra_info("peername")
+    rec.peer = str(peer[0]) if peer else ""
     print("つながった:", peer)
     stop = asyncio.Event()
     pinger = asyncio.create_task(ping_loop(writer, stop))
@@ -262,7 +264,8 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, rec
 
 async def main_async(a):
     # --split-takes: つなぐごとに take_001、take_002 … に分ける(アプリの録画ボタンが送りの開始・終了になる)
-    state = {"rec": Recorder(Path(a.out) / "take_001") if a.split_takes else Recorder(Path(a.out)), "n": 1, "used": False}
+    state = {"rec": Recorder(Path(a.out) / "take_001") if a.split_takes else Recorder(Path(a.out)), "n": 1, "used": False, "all": [], "open": set()}
+    state["all"].append(state["rec"])
 
     async def on_connect(r, w):
         try:
@@ -278,15 +281,21 @@ async def main_async(a):
             return
         if a.split_takes:
             if state["used"]:
-                state["rec"].close()
+                # 前のテイクは、つながりが切れていれば閉じる。**まだつながっている端末(2 台目が来たとき)の記録は閉じない**
+                for old in state["all"]:
+                    if old not in state["open"]:
+                        old.close()
                 state["n"] += 1
                 state["rec"] = Recorder(Path(a.out) / f"take_{state['n']:03d}")
+                state["all"].append(state["rec"])
             state["used"] = True
             print("テイク:", state["rec"].out, flush=True)
         rec = state["rec"]
+        state["open"].add(rec)
         try:
             await handle(r, w, rec, first)
         finally:
+            state["open"].discard(rec)
             if a.split_takes:
                 rec.checkpoint()
 
@@ -325,7 +334,8 @@ async def main_async(a):
             await asyncio.Event().wait()
     finally:
         server.close()
-        state["rec"].close()
+        for old in state["all"]:
+            old.close()
         print(json.dumps(state["rec"].summary(), ensure_ascii=False))
 
 
