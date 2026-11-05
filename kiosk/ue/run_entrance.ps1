@@ -12,7 +12,8 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cfg = Get-Content (Join-Path $here 'entrance_config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $env:UE_PYTHONPATH = Join-Path $here 'py'
 if ($Log) { $env:ENTRANCE_LOG = $Log }
-$a = @("`"$Project`"", $cfg.level, '-game', '-windowed', "-ResX=$ResX", "-ResY=$ResY", "-WinX=$WinX", "-WinY=$WinY", '-ForceRes',
+$level = if ($cfg.variant -eq 'autosetup') { $cfg.autosetup.level } else { $cfg.level }  # 設定の variant で Auto Setup 版 / GLB 版(予備)
+$a = @("`"$Project`"", $level, '-game', '-windowed', "-ResX=$ResX", "-ResY=$ResY", "-WinX=$WinX", "-WinY=$WinY", '-ForceRes',
        '-EntranceKiosk', '-EnablePython', '-NoSound', '-nosplash', '-log')
 if ($Ddc) { $a += '-ddc=InstalledNoZenLocalFallback'; $a += "-LocalDataCachePath=$Ddc" }
 $p = Start-Process -FilePath $Engine -ArgumentList $a -PassThru

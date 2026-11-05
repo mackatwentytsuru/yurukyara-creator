@@ -81,7 +81,7 @@ class Entrance:
     def __init__(self):
         u = CFG["udp"]
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((u["host"], int(u["port"])))
+        self.sock.bind((u["host"], int(os.environ.get("ENTRANCE_UDP_PORT", u["port"]))))  # 同じ機械で 2 つ目を試すときは別の番号
         self.sock.setblocking(False)
         self.log_path = os.environ.get("ENTRANCE_LOG")
         self.comp = None
@@ -97,6 +97,8 @@ class Entrance:
         self.frames = 0
         self.last_status = 0.0
         self.speaking = False
+        # 確かめの写真(任意): ENTRANCE_SHOTS="8,20" なら、起動の何秒後に HighResShot(Saved/Screenshots へ)。窓を前に出さずに撮れる
+        self.shots = sorted(float(x) for x in os.environ.get("ENTRANCE_SHOTS", "").split(",") if x.strip())
         self.sign = {"yaw": -1.0, "pitch": -1.0, "jaw": float(os.environ.get("ENTRANCE_JAW_SIGN", "1"))}
 
     def write(self, rec):
@@ -117,6 +119,7 @@ class Entrance:
 
     def setup(self, comp):
         self.comp = comp
+        self.t_setup = time.time()
         loc = lambda n: tup(comp.get_bone_location_by_name(n, CS))  # noqa: E731
         head, el, er = loc(B["head"]), loc(B["eye_l"]), loc(B["eye_r"])
         mid = tuple((a + b) / 2 for a, b in zip(el, er))
@@ -127,13 +130,16 @@ class Entrance:
         # 前が世界の +X(カメラの方)を向くように、部品を回す
         yaw = -math.degrees(math.atan2(f[1], f[0]))
         comp.set_relative_rotation(unreal.Rotator(0.0, 0.0, yaw), False, False)
-        # 腕を下ろす(T の姿勢 → 体の横)
+        # 腕を下ろす(T の姿勢 → 体の横)。Auto Setup 版(部品の印 EntranceVariant_autosetup)は autosetup の値
+        tags = [str(t) for t in comp.component_tags]
+        self.variant = "autosetup" if "EntranceVariant_autosetup" in tags else "glb"
+        arm_down = (CFG.get("autosetup", {}) if self.variant == "autosetup" else CFG["character"]).get("arm_down_deg", 0)
         for side in ("l", "r"):
             ua, la = B[f"upperarm_{side}"], B[f"lowerarm_{side}"]
             d = norm(tuple(b - a for a, b in zip(loc(ua), loc(la))))
             best = None
             for s in (1.0, -1.0):
-                q = qaxis(f, s * CFG["character"]["arm_down_deg"])
+                q = qaxis(f, s * arm_down)
                 z = qrot(q, d)[2]
                 if best is None or z < best[0]:
                     best = (z, q)
@@ -141,7 +147,7 @@ class Entrance:
             comp.set_bone_rotation_by_name(ua, to_rot(qmul(best[1], cur)), CS)
         self.ref = [(k, comp.get_bone_transform_by_name(B[k], CS)) for k in ("neck", "head", "jaw", "eye_l", "eye_r")]  # 親から子の順
         self.eye_mid_h = mid[2]
-        self.write({"kind": "setup", "forward": [round(c, 3) for c in f], "yaw": round(yaw, 1), "eye_z_cm": round(mid[2], 1),
+        self.write({"kind": "setup", "variant": self.variant, "forward": [round(c, 3) for c in f], "yaw": round(yaw, 1), "eye_z_cm": round(mid[2], 1),
                     "bones": comp.get_num_bones()})
 
     # ---- 毎コマ ----
@@ -200,6 +206,10 @@ class Entrance:
             self.speaking = False
             self.write({"kind": "mouth_end"})
         self.apply()
+        if self.shots and now - self.t_setup > self.shots[0]:  # 秒は人型が見つかってから
+            self.shots.pop(0)
+            unreal.SystemLibrary.execute_console_command(self.comp.get_world(), "HighResShot 1")
+            self.write({"kind": "shot"})
         self.frames += 1
         if now - self.last_status > 1.0:
             self.last_status = now

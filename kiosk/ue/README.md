@@ -14,7 +14,19 @@
 | `gaze_to_ue.py` | 会話サーバーの視線の受け口(`/api/gaze/now`。校正の画面の「狙い」も含む)→ UE へ v1 |
 | `run_ue_pass.py` `calib_flow_pass.py` `compose_ue_pass.py` | 通しの録画(① 録画の客を追う ② 4 往復で口 ③ 床の 6 点の校正 ④ 校正後に同じ録画を追う)と、1 本の動画への合成 |
 
-## 動かし方
+## Auto Setup 版(既定。11-05 から)
+本人の決まり「CC5 → UE は Reallusion の Auto Setup だけ。材質は手作りしない」に合わせ、人型は FBX のまま Auto Setup(`unreal.CCFbxFactory`)で取り込む。設定の `variant` が `autosetup`(既定)なら Auto Setup 版のレベル `L_Entrance_Interview_AS`、`glb` なら予備の GLB 版(下の手作りの材質)。
+```
+UnrealEditor.exe <HackShow.uproject> -nullrhi -unattended -nosplash -nosound -abslog=<ログ> -ExecutePythonScript=kiosk/ue/autosetup_import.py   # 取り込み(約 6 分。ENTRANCE_REIMPORT=1 で取り込み直し)
+UnrealEditor-Cmd.exe <HackShow.uproject> -run=pythonscript -script=kiosk/ue/build_entrance.py -unattended -nullrhi                             # レベル(約 30 秒)
+```
+- 前提: プロジェクトに `Plugins/RLPlugin`(Auto Setup)と、Auto Setup の親の材質の置き場 `Content/CC_Shaders` がある。**`CC_Shaders` が無いと Auto Setup は止まらずに、材質を作らないまま「完了」と出す**(取り込んだ FBX の素の材質のまま)。
+- 髪: Auto Setup は髪の 4 枚のうち 2 枚(絵の組を分け合う側)に Root・Flow・ORM の既定の絵(Black など)を入れる。`autosetup_import.py` が、同じ組の髪の材質に入った絵を差し込む(絵の口だけ。新しい材質は作らない。報告に前後を書く)。
+- 腕は CC の T の姿勢から `autosetup.arm_down_deg` 下ろす。露出は `autosetup.exposure_bias`(レベルの後処理)。
+- 別の機械へは、上の物に加えて `Plugins/RLPlugin`・`Content/CC_Shaders`・`Content/_Work_tmp/Entrance/Chars_AutoSetup`・`BP_EntranceChar_AS`・`L_Entrance_Interview_AS` を写す。`start_entrance_ue.cmd` の `LEVEL` で版を選ぶ(既定は Auto Setup 版)。
+- 同じ機械で 2 つ目を試すときは `ENTRANCE_UDP_PORT` で受け口の番号を替える。`ENTRANCE_SHOTS="20,32"` で、人型が見つかってからの秒で HighResShot を撮る(窓を前に出さない)。
+
+## 動かし方(GLB 版。予備)
 ```
 blender -b --factory-startup -P kiosk/ue/cc_fbx_to_glb.py                                                     # FBX → GLB(約 1 分。設定の source_fbx → fbx)
 UnrealEditor-Cmd.exe <HackShow.uproject> -run=pythonscript -script=kiosk/ue/build_entrance.py -unattended -nullrhi   # 組む(約 4 分。キャラを替えたら ENTRANCE_REIMPORT=1)
@@ -50,5 +62,6 @@ python kiosk/ue/entrance_talk.py --server http://127.0.0.1:<会話サーバー> 
 - 材質: `SkeletalMesh.materials` の要素は写しなので、書き換えたら配列へ書き戻す。親の材質に「骨つきメッシュ・形で使う」の印が無いと、`-game` では既定の白い材質に落ちる(エディタでは自動で付くので気づきにくい)。直接取り込んだ絵が仮想テクスチャになると、親の材質の絵の枠と合わない。
 
 ## 未(正直に)
-- 髪が灰色に見える(CC の根元 → 毛先の色が出ていない。根元の絵の当たり方の確認が要る)。手袋も灰色。スカートの薄布(シフォン)に穴が見える所がある。
+- Auto Setup 版でも髪が灰色に写る(材質の Root/End の色は CC の値どおり。頂点の色の取り込みか描き方の問題か、未確認)。全体が明るく、肌が白っぽい(露出を下げても写真ではあまり変わらなかった)。
+- GLB 版: 髪が灰色に見える(CC の根元 → 毛先の色が出ていない。根元の絵の当たり方の確認が要る)。手袋も灰色。スカートの薄布(シフォン)に穴が見える所がある。
 - 本物の人の顔・店の明るさ・レンズのゆがみ・HDMI の LED の実機での見え方は未確認。会場のシミュレーターの入口の LED に映した見え方は撮っていない。

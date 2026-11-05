@@ -22,6 +22,17 @@
     "arm_down_deg": 0,
     "jaw_open_deg": 14
   },
+  "variant": "autosetup",
+  "_variant": "どちらの人型でレベルを組むか: autosetup = Reallusion の Auto Setup で取り込んだ FBX(材質も Auto Setup の物)/ glb = 予備(Blender で GLB に変え、材質を手作り)",
+  "autosetup": {
+    "folder": "/Game/_Work_tmp/Entrance/Chars_AutoSetup",
+    "level": "/Game/_Work_tmp/Entrance/L_Entrance_Interview_AS",
+    "blueprint": "BP_EntranceChar_AS",
+    "_": "取り込みは autosetup_import.py(プロジェクトの Plugins に RLPlugin が要る)。骨は CC の UE5 の骨(GLB 版と同じ名前)。腕は CC の基準の姿勢から arm_down_deg 下ろす",
+    "arm_down_deg": 70,
+    "exposure_bias": -0.5,
+    "_exposure": "Auto Setup の肌・髪は GLB 版の手作りの材質より明るく写る。レベルの露出だけで合わせる(材質は Auto Setup のまま)"
+  },
   "content_root": "/Game/_Work_tmp/Entrance",
   "level": "/Game/_Work_tmp/Entrance/L_Entrance_Interview",
   "led": {

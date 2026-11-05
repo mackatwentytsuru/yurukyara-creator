@@ -6,6 +6,8 @@ set RESX=1180
 set RESY=1500
 set WINX=0
 set WINY=0
+rem Auto Setup version (materials by Reallusion Auto Setup). Backup GLB version: /Game/_Work_tmp/Entrance/L_Entrance_Interview
+if "%LEVEL%"=="" set LEVEL=/Game/_Work_tmp/Entrance/L_Entrance_Interview_AS
 set UE_PYTHONPATH=%ROOT%\kiosk_ue\py
 if "%ENTRANCE_LOG%"=="" set ENTRANCE_LOG=%ROOT%\rt.jsonl
-start "" "%ENGINE%" "%ROOT%\HackShow\HackShow.uproject" /Game/_Work_tmp/Entrance/L_Entrance_Interview -game -windowed -ResX=%RESX% -ResY=%RESY% -WinX=%WINX% -WinY=%WINY% -ForceRes -EntranceKiosk -EnablePython -NoSound -nosplash -notraceserver -trace=none -ddc=InstalledNoZenLocalFallback -LocalDataCachePath=work/ue_ddc -abslog=%ROOT%\ue_game.log
+start "" "%ENGINE%" "%ROOT%\HackShow\HackShow.uproject" %LEVEL% -game -windowed -ResX=%RESX% -ResY=%RESY% -WinX=%WINX% -WinY=%WINY% -ForceRes -EntranceKiosk -EnablePython -NoSound -nosplash -notraceserver -trace=none -ddc=InstalledNoZenLocalFallback -LocalDataCachePath=work/ue_ddc -abslog=%ROOT%\ue_game.log

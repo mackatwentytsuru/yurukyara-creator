@@ -22,6 +22,8 @@ sys.path.insert(0, HERE)
 import entrance_materials  # noqa: E402
 CFG = json.load(open(os.path.join(HERE, "entrance_config.json"), encoding="utf-8"))
 ROOT = CFG["content_root"]
+VARIANT = os.environ.get("ENTRANCE_VARIANT", CFG.get("variant", "glb"))
+EXPOSURE = CFG["autosetup"].get("exposure_bias", 1.0) if VARIANT == "autosetup" else 1.0  # 露出(レベルの後処理。材質は触らない)  # autosetup = Auto Setup の人型(autosetup_import.py で取り込み済み)/ glb = 予備
 REPORT = os.environ.get("ENTRANCE_REPORT", os.path.join(os.getcwd(), "entrance_build_report.txt"))
 lib = unreal.EditorAssetLibrary
 tools = unreal.AssetToolsHelpers.get_asset_tools()
@@ -141,9 +143,9 @@ def surface(name, parent, rgb, rough=0.85):
     return mi
 
 
-def character_blueprint(mesh):
+def character_blueprint(mesh, name="BP_EntranceChar"):
     """PoseableMesh を 1 つ持つ BP(ゲーム中に Python が骨を直接置く。アニメの BP は使わない)"""
-    path = f"{ROOT}/BP_EntranceChar"
+    path = f"{ROOT}/{name}"
     sds = unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
     lib_sd = unreal.SubobjectDataBlueprintFunctionLibrary
     comp = None
@@ -156,7 +158,7 @@ def character_blueprint(mesh):
     else:
         factory = unreal.BlueprintFactory()
         factory.set_editor_property("parent_class", unreal.Actor)
-        bp = tools.create_asset("BP_EntranceChar", ROOT, unreal.Blueprint, factory)
+        bp = tools.create_asset(name, ROOT, unreal.Blueprint, factory)
     if comp is None:
         root = sds.k2_gather_subobject_data_for_blueprint(bp)[0]
         handle, fail = sds.add_new_subobject(unreal.AddNewSubobjectParams(
@@ -166,7 +168,7 @@ def character_blueprint(mesh):
         sds.rename_subobject(handle, unreal.Text("Body"))
         comp = lib_sd.get_object(lib_sd.get_data(handle))
     comp.set_skinned_asset_and_update(mesh)
-    comp.set_editor_property("component_tags", ["EntranceBody"])
+    comp.set_editor_property("component_tags", ["EntranceBody", "EntranceVariant_" + VARIANT])
     unreal.BlueprintEditorLibrary.compile_blueprint(bp)
     lib.save_loaded_asset(bp, only_if_is_dirty=False)
     say(f"blueprint {bp.get_path_name()} body {comp.get_class().get_name()}")
@@ -187,8 +189,9 @@ def open_level(path):
     return levels, actors
 
 
-def build_level(bp, parent, bp_mesh=None):
-    levels, actors = open_level(CFG["level"])
+def build_level(bp, parent, bp_mesh=None, level_path=None):
+    level_path = level_path or CFG["level"]
+    levels, actors = open_level(level_path)
     cube = unreal.load_asset("/Engine/BasicShapes/Cube.Cube")
 
     def box(label, center, size_cm, mi):
@@ -246,7 +249,7 @@ def build_level(bp, parent, bp_mesh=None):
     s = ppv.get_editor_property("settings")
     for k, v in (("override_auto_exposure_method", True), ("auto_exposure_method", unreal.AutoExposureMethod.AEM_MANUAL),
                  ("override_auto_exposure_apply_physical_camera_exposure", True), ("auto_exposure_apply_physical_camera_exposure", False),
-                 ("override_auto_exposure_bias", True), ("auto_exposure_bias", float(os.environ.get("ENTRANCE_EXPOSURE", "1.0"))),
+                 ("override_auto_exposure_bias", True), ("auto_exposure_bias", float(os.environ.get("ENTRANCE_EXPOSURE", EXPOSURE))),
                  ("override_vignette_intensity", True), ("vignette_intensity", 0.25),
                  ("override_motion_blur_amount", True), ("motion_blur_amount", 0.0)):
         try:
@@ -271,19 +274,30 @@ def build_level(bp, parent, bp_mesh=None):
     start.set_actor_label("PlayerStart_behind_camera")
     say(f"camera x={d} z={cz} hfov={hfov:.2f}")
     levels.save_current_level()
-    say("level saved " + CFG["level"])
+    say("level saved " + level_path)
 
 
 def main():
     if not lib.does_directory_exist(ROOT):
         lib.make_directory(ROOT)
-    mesh = import_character()
-    describe_mesh(mesh)
-    if os.environ.get("ENTRANCE_KEEP_MATERIALS") != "1":
-        say(f"materials rebuilt: {entrance_materials.rebuild(mesh, CFG['character']['fbx'], ROOT, say, CFG['character'].get('cc_json'))} slots")
+    say(f"variant {VARIANT}")
+    if VARIANT == "autosetup":
+        a = CFG["autosetup"]
+        folder = f"{a['folder']}/{CFG['character']['name']}"
+        mesh = find_skeletal_mesh(folder) if lib.does_directory_exist(folder) else None
+        if mesh is None:
+            raise RuntimeError("Auto Setup の人型が無い(先に autosetup_import.py): " + folder)
+        describe_mesh(mesh)  # 材質は Auto Setup の物のまま(作り直さない)
+        bp_name, level_path = a["blueprint"], a["level"]
+    else:
+        mesh = import_character()
+        describe_mesh(mesh)
+        if os.environ.get("ENTRANCE_KEEP_MATERIALS") != "1":
+            say(f"materials rebuilt: {entrance_materials.rebuild(mesh, CFG['character']['fbx'], ROOT, say, CFG['character'].get('cc_json'))} slots")
+        bp_name, level_path = "BP_EntranceChar", CFG["level"]
     parent = surface_material()
-    bp = character_blueprint(mesh)
-    build_level(bp, parent, mesh)
+    bp = character_blueprint(mesh, bp_name)
+    build_level(bp, parent, mesh, level_path)
     say("BUILD_OK")
 
 
