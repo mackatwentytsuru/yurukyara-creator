@@ -74,7 +74,8 @@ def fit(points: list[dict], g0: Geometry, free: tuple = PARAMS, prior_sd: dict |
 
 
 def save(g: Geometry, path: str) -> None:
-    json.dump({"width": g.width, "height": g.height, "hfov_deg": g.hfov_deg, "cam_pos": list(g.cam_pos), "cam_pitch_deg": g.cam_pitch_deg, "eye_pos": list(g.eye_pos), "ipd_m": g.ipd_m, "ema": g.ema, "hold_s": g.hold_s},
+    json.dump({"width": g.width, "height": g.height, "hfov_deg": g.hfov_deg, "cam_pos": list(g.cam_pos), "cam_pitch_deg": g.cam_pitch_deg, "eye_pos": list(g.eye_pos), "ipd_m": g.ipd_m, "ema": g.ema, "hold_s": g.hold_s,
+               "image_rot180": g.image_rot180, "ue_cam_h_m": g.ue_cam_h_m, "ue_cam_dz_m": g.ue_cam_dz_m},  # 映像の向きと UE の変換は校正で変えないが、消さない
               open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
 

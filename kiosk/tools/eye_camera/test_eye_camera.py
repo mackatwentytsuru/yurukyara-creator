@@ -190,9 +190,40 @@ class GazeBridgeTest(unittest.TestCase):
     def test_person_on_right_of_image_is_on_world_right(self):
         import numpy as np
 
-        _, hi, _ = None, None, None
-        p = self.gb.pixel_to_world(self.g, self.g.width * 0.8, self.g.height * 0.5, 80.0)
-        self.assertGreater(float(p[0]), 0)  # 画像の右 = 客から見て右(カメラは客の側を向く。画像の右 = +x)
+        # 11-05 直し: 客の方を向いた普通のカメラ(鏡ではない)では、画像の右 = 客から見て左(−x)、画像の上 = 高い所。
+        g = self.g
+        p = self.gb.pixel_to_world(g, g.width * 0.8, g.height * 0.5, 80.0)
+        self.assertLess(float(p[0]), 0)
+        u_lo, v_lo, _ = self.gb.world_to_pixel(g, np.array([0.0, 1.2, 2.0]))
+        u_hi, v_hi, _ = self.gb.world_to_pixel(g, np.array([0.0, 1.8, 2.0]))
+        self.assertLess(v_hi, v_lo)  # 高い人ほど画像の上
+        u_r, _, _ = self.gb.world_to_pixel(g, np.array([0.5, 1.5, 2.0]))
+        self.assertLess(u_r, g.width / 2)  # 客から見て右の人は、画像の左
+        # 画像を 180° 回した設定(Tapo の反転)では、両方とも逆
+        g2 = self.gb.Geometry(image_rot180=True)
+        u_r2, _, _ = self.gb.world_to_pixel(g2, np.array([0.5, 1.5, 2.0]))
+        self.assertGreater(u_r2, g2.width / 2)
+        for q in ([0.0, 1.6, 2.0], [0.8, 1.4, 3.0]):
+            back = self.gb.pixel_to_world(g2, *self.gb.world_to_pixel(g2, np.array(q)))
+            self.assertLess(float(np.linalg.norm(back - np.array(q))), 1e-6)
+
+    def test_ue_angles_put_the_point_on_the_gaze_line(self):
+        import math
+
+        import numpy as np
+
+        g = self.gb.Geometry(ue_cam_h_m=2.3, ue_cam_dz_m=-0.59)
+        self.assertEqual(self.gb.to_ue_angles(self.gb.Geometry(), 12.0, -5.0), (12.0, -5.0))  # 既定は変えない
+        head = np.zeros(3)
+        cam = np.array([0.0, -0.59, 2.3])  # (右, 上, 前)
+        d = float(np.linalg.norm(cam))
+        for az, el in ((0.0, 0.0), (20.0, -8.0), (-30.0, 10.0)):
+            a2, e2 = self.gb.to_ue_angles(g, az, el)
+            pt = cam + np.array([d * math.tan(math.radians(a2)), d * math.tan(math.radians(e2)), 0.0])
+            v = pt - head
+            self.assertAlmostEqual(math.degrees(math.atan2(v[0], v[2])), az, places=4)
+            self.assertAlmostEqual(math.degrees(math.atan2(v[1], math.hypot(v[0], v[2]))), el, places=4)
+        self.assertGreater(self.gb.to_ue_angles(g, 0.0, 0.0)[1], 13.0)  # 目の高さの客 = カメラ(下)より上
 
     def test_bridge_holds_then_drops_and_ema(self):
         g = self.gb.Geometry(ema=0.0, hold_s=0.5)
@@ -257,7 +288,7 @@ class GazeV1PacketTest(unittest.TestCase):
             self.assertIn(k, pkt)
         self.assertEqual(pkt["v"], 1)
         self.assertTrue(pkt["present"])
-        self.assertGreater(pkt["az"], 0)  # 画像の右の客 = 客の右 = az はプラス
+        self.assertLess(pkt["az"], 0)  # 画像の右の客 = 客から見て左(カメラは客を向く。鏡ではない)= az はマイナス
         b.update(5.0, {"found": False})
         pkt = json.loads(rx.recv(4096).decode())
         self.assertFalse(pkt["present"])
