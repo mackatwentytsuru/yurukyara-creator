@@ -158,3 +158,10 @@ description: アニメ調のキャラクターを Character Creator 5(CC5)で作
 
 - Blender で頭の UV や肌の絵を作る時は、必ず `-b --factory-startup` で起動する。通常の起動では利用者のアドオンが背景で初期化される(1 回の観察)。
 - Blender 5.2 では `mesh.uv_layers.clear()` が効かなかった。`while len(mesh.uv_layers) > 0` で `remove` を繰り返すと空にできた(1 回の実測)。
+
+## 3e. Headshot の校正と、髪・衣装の付け直し(2026-11-05、1 回の実測)
+- 頭の絵に描いた眉が残っていると、Headshot 3 の Mesh 型の Start Head Generation で「Failed to calibrate the camera」が出た。眉ありで 9 回(CC5 の起動し直しの後も)失敗し、同じ状態で目と眉の両方を消した頭は 1 回で通った。眉を残したいときは、頭を付けた後の絵で足す道を考える(未確認)。
+- 元の頭(prop)の材質は `/workflow/material/load_texture` で絵を差し替えられなかった(材質がメッシュに無いと返る)。
+- 前に CC5 へ取り込んだ髪・衣装は、CC の体の先頭 14,164 点が版をまたいで同じ番号なので、前の体 → 今の人物の書き出し(rest)へ Surface Deform で位置だけ移せた。合わせる先は「今の人物」の書き出しにする(包んだ直後の書き出しとは胴 3.2 cm・足先 14 cm 姿勢が違った)。
+- 13 点を Create > Accessory で入れ、絵を入れ直し、重み Default / Dress / Gloves / Shoes、髪は頭の骨 → hair、小物は骨に付けた。ブーツの足の骨の曲げは、前の体の 28° に対して今の体では 8°(足がもともとつま先下がり。計算の見込み)。Shoes の重みの呼び出しは時間切れを返したが、終わっていた。
+- 書き出した FBX(UE5 向け)は、Blender で読むと骨と体の向きが別に読まれ、骨を回すと体が崩れて見える(Blender の読み方の問題で、FBX の誤りではないと見ている。未確認)。休めの姿勢の描画は正しく、全身の確かめに使える。
