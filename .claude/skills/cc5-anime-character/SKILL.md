@@ -155,3 +155,6 @@ description: アニメ調のキャラクターを Character Creator 5(CC5)で作
 - Mesh to Head の窓はドック(独立した窓ではない)。道具で窓を探すときは、題のある独立した窓だけでなくドックも探す。Attach to Body の後には「Generate Character」の窓が必ず出るので、待つ処理で止めない。
 - 生成の窓の既定: 色・法線とも From Source Mesh、Apply Head Color to Body オン、Body Type Current、No Mask、2048。Keep Neck Shape オン・Keep Head Size オフは REFINE の窓にある(既定のまま同じ値だった)。
 - 結果: 頭の形・耳・鼻・唇は付き、包んだ体の首に残っていた元の絵の線は頭の色で消えた。目の穴がアニメの大きさのため、CC5 の目玉が小さく見え、目じりに赤い肉の色が見えた。絵を消しても、まつげと眉の盛り上がった形は顔に残った。
+
+- Blender で頭の UV や肌の絵を作る時は、必ず `-b --factory-startup` で起動する。通常の起動では利用者のアドオンが背景で初期化される(1 回の観察)。
+- Blender 5.2 では `mesh.uv_layers.clear()` が効かなかった。`while len(mesh.uv_layers) > 0` で `remove` を繰り返すと空にできた(1 回の実測)。
