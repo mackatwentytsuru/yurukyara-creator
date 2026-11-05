@@ -159,3 +159,8 @@ Headshot 3 に入れる絵は、使う人が自分で用意する(撮るか、�
 - 「Failed to reparent rig goal」が手と足の 4 件出るのは通常。取り込みの失敗と見なさない(1 回の実測。両手・両足)。
 
 - 全身の 4 方向(正面・斜め 45°・真横・背面)は、`/camera/frame` の代わりに Preview Camera の `SetWorldView(位置, 視線, 上)` で撮る。距離 957 cm、高さ 87 cm、上は (0,0,1)。撮り終えたら `/camera/frame front` に戻す。人物は動かさない(撮影の道具の記録による。絵の確かめは未確認)。
+
+## UE5 向け FBX を公式の設定で書き出し直すと何が変わるか(2026-11-05、1 回の実測)
+- スクリプトから指定できたのは、Target Tool Preset=UE5(骨も UE5)、FBX Options=Mesh(動きなし)、Embed Textures=OFF、Export JSON=ON、Delete Hidden Mesh=ON、SubD 1。書き出しの窓の項目そのものは、外から押せなかった。Add Reference Pose の A-Pose と、独立した Texture Preset は指定できなかった(Texture Preset は UE5 指定に任せた形で、窓の選択値と同じかは未確認)。
+- 以前の書き出し(同じ設定から A-Pose だけ違う)と読み比べた結果、骨 124 本・メッシュ 19 個・頂点数・モーフ数・身長・json の項目(5,202 個)は同じで、体の面だけが約 4% 減った(Delete Hidden Mesh の分)。ポーズは T ポーズのまま(上腕が水平から 0.7° 以内)で、A-Pose の基準ポーズは入らなかった。A-Pose が要るなら、窓を人が押すか、UE 側のリターゲットで合わせる必要がある(UE への取り込みは未確認)。
+- 書き出しの呼び出しは HTTP 504 で戻るが裏では書き続ける。横の json ができて、FBX の大きさが止まるまで待つ。終わったかは FBX・json のサイズと更新時刻で見る。
