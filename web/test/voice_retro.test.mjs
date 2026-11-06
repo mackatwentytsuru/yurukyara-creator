@@ -91,6 +91,84 @@ test('声が取れないとき: 話し始めに「文字送り」と知らせ、
   }
 });
 
+/** その時刻のまま何フレームか進めた、口の開き(なめらかにする分が落ち着いた値) */
+function mouthAt(sp, setNow, ms) {
+  setNow(ms);
+  let v = 0;
+  for (let i = 0; i < 10; i++) v = sp.level();
+  return v;
+}
+
+test('声が無いときの口: 「ピッ」の小さな音の大きさに頼らず、文字が出ている間は大きく開き、句読点の間と話し終わりで閉じる(合わせ②で 0.69 → 0.33 に下がった件)', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{}', { status: 503 });
+  try {
+    const sp = new Speaker();
+    const { ctx, oscs } = fakeAudio();
+    sp.ctx = ctx;
+    // 本物の分析器と同じく、「ピッ」が鳴っている間は小さな四角い波(大きさ 0.06)を返す
+    sp.analyser = { getFloatTimeDomainData: (buf) => buf.forEach((_, i) => (buf[i] = i % 2 ? 0.06 : -0.06)) };
+    sp.buf = new Float32Array(64);
+    let now = 470; // 口の動きの波が大きくなる所(0.52 秒ごろ)に、文字の出始めを合わせる(どこから始めても 0.35〜0.70 の間で動く)
+    sp.clock = () => now;
+    const setNow = (ms) => (now = ms);
+    const done = sp.enqueue('やあ、げんき。', {});
+    for (let i = 0; i < 50 && !sp.fakeUntil; i++) await new Promise((r) => setTimeout(r, 5));
+    assert.ok(sp.fakeUntil > 0, '文字送りの予定ができた');
+    assert.ok(oscs.length > 0 && sp.sources.size === 0, '「ピッ」は鳴らすが、口の音の大きさの元(sources)には入れない');
+    const start = 470 + 30; // 音の時計の 30ms 先から文字が出る
+    const { steps, totalMs } = crawlSchedule('やあ、げんき。');
+    // 文字が出ている間: 口は 0.35 以上で開け閉めし、いちばん大きい所は 0.6 を超える(前は「ピッ」の音から作って 0.33 どまり)
+    let max = 0;
+    for (let ms = start + 1; ms < start + steps[2].atMs; ms += 5) {
+      const v = mouthAt(sp, setNow, ms);
+      assert.ok(v >= 0.34, `${ms - start}ms で ${v}`);
+      max = Math.max(max, v);
+    }
+    assert.ok(max > 0.6, `口のいちばん大きい所 ${max}`);
+    // 「、」で止まる間は閉じる
+    assert.ok(mouthAt(sp, setNow, start + steps[2].atMs + 80) < 0.05, '句読点の間は閉じる');
+    // 次の字からまた開く
+    assert.ok(mouthAt(sp, setNow, start + steps[3].atMs + 10) >= 0.34, '次の字で開く');
+    // 話し終わり(最後の「。」から先)は閉じる
+    assert.ok(mouthAt(sp, setNow, start + totalMs + 20) < 0.05, '話し終わりで閉じる');
+    // 割り込まれたら、「ピッ」も止めて、話していない扱いにする
+    sp.stop();
+    assert.equal(sp.retroNodes.size, 0);
+    assert.equal(sp.speaking, false);
+    assert.equal(mouthAt(sp, setNow, start + 100), 0);
+    void done; // 止めた文の約束は、そのまま置いておく(待たない)
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('音を切っている(retro = false)・音がまだ使えないときも、口は同じ予定で動く', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{}', { status: 404 });
+  try {
+    for (const withAudio of [true, false]) {
+      const sp = new Speaker();
+      if (withAudio) {
+        sp.ctx = fakeAudio().ctx;
+        sp.analyser = { getFloatTimeDomainData: (buf) => buf.fill(0) };
+        sp.buf = new Float32Array(8);
+        sp.retro = false;
+      }
+      let now = 650;
+      sp.clock = () => now;
+      const done = sp.enqueue('うん', {});
+      for (let i = 0; i < 50 && !sp.fakeUntil; i++) await new Promise((r) => setTimeout(r, 5));
+      assert.ok(mouthAt(sp, (ms) => (now = ms), 650 + 30 + 20) >= 0.34, withAudio ? '音を切っていても口は動く' : 'タップの前でも口は動く');
+      assert.equal(sp.retroNodes.size, 0, '「ピッ」は鳴らさない');
+      sp.stop();
+      void done;
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('音がまだ使えない(タップの前)ときも、文字送りは順番に進む', async () => {
   const realFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response('{}', { status: 404 });

@@ -4,9 +4,11 @@
 // - 出力の大きさ(RMS)から口の開きを作る
 // - stop() で、取得も再生も止める(割り込まれたとき)
 // - 声が使えないとき(鍵なし・上限・公開のリンク)は、レトロ RPG 風の「ピッ」と文字送りで話す(retroVoice.js)。音を切っていれば文字送りだけ
+//   このときの口は、文字送りの予定で動かす(文字が出ている間は開け閉めし、句読点の間と話し終わりで閉じる)。
+//   「ピッ」の音の大きさからは作らない: 小さい音なので、口が半分しか開かなかった(11-06 合わせ②の話す試験で 0.69 → 0.33)。
 import { getVoiceKey } from './voiceKey.js';
 import { DEFAULT_VOICE_ID, describeElevenError, fetchElevenPcm } from './elevenDirect.js';
-import { RETRO, crawlSchedule, scheduleRetro, voiceFor } from './retroVoice.js';
+import { RETRO, crawlSchedule, isPause, scheduleRetro, voiceFor } from './retroVoice.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const SERVER_TTS_OFF = new Set([404, 405, 429, 501, 503]); // サーバーに声が無い・上限: この画面の間は聞きに行かない
@@ -18,7 +20,10 @@ export class Speaker {
     this.buf = null;
     this.nextTime = 0;
     this.wallNext = 0; // 音が使えないときの、画面の時計での次の文の始まり(ms)
-    this.sources = new Set();
+    this.sources = new Set(); // 声(読み上げ・あいづち)の音。口の開きはこの音の大きさから作る
+    this.retroNodes = new Set(); // 「ピッ」の発振器。鳴っている間は話している扱い。口の開きには使わない
+    this.quiet = []; // 文字送りの中で口を閉じる時間 [始め, 終わり](this.clock の ms)。句読点の間など
+    this.clock = () => performance.now(); // 画面の時計(試験で差し替える)
     this.aborts = new Set();
     this.chain = Promise.resolve();
     this.pending = 0;
@@ -111,23 +116,45 @@ export class Speaker {
   }
 
   get speaking() {
-    return this.pending > 0 || this.sources.size > 0 || performance.now() < this.fakeUntil;
+    return this.pending > 0 || this.sources.size > 0 || this.retroNodes.size > 0 || this.clock() < this.fakeUntil;
   }
 
-  /** 口の開き(0〜1)。毎フレーム呼ぶ */
+  /** 口の開き(0〜1)。毎フレーム呼ぶ。声があれば音の大きさから、声が無ければ文字送りの予定から作る */
   level() {
     let target = 0;
+    const now = this.clock();
     if (this.analyser && this.sources.size) {
       this.analyser.getFloatTimeDomainData(this.buf);
       let sum = 0;
       for (const v of this.buf) sum += v * v;
       target = clamp(Math.sqrt(sum / this.buf.length) * 6, 0, 1);
-    } else if (performance.now() < this.fakeUntil) {
-      const t = performance.now() / 1000;
+    } else if (now < this.fakeUntil && !this._isQuiet(now)) {
+      const t = now / 1000;
       target = 0.35 + 0.35 * Math.abs(Math.sin(t * 9)) * (0.6 + 0.4 * Math.sin(t * 2.3));
     }
     this._level += (target - this._level) * 0.5;
     return this._level;
+  }
+
+  /** 文字送りの中で、口を閉じている時間か(過ぎた分は捨てる) */
+  _isQuiet(now) {
+    if (this.quiet.length && this.quiet[0][1] <= now) this.quiet = this.quiet.filter(([, to]) => to > now);
+    return this.quiet.some(([from, to]) => from <= now && now < to);
+  }
+
+  /**
+   * 声が無い文の口の予定: 文字が出始めてから出終わるまで動かし、句読点で止まる間と、出始めるまでは閉じる。
+   * @param {number} startMs 文字が出始める時刻(this.clock の ms)
+   */
+  _mouthForCrawl(startMs, steps, totalMs) {
+    const now = this.clock();
+    if (startMs > now) this.quiet.push([now, startMs]);
+    for (const [k, s] of steps.entries()) {
+      if (!isPause(s.ch)) continue;
+      const next = k + 1 < steps.length ? steps[k + 1].atMs : totalMs;
+      this.quiet.push([startMs + s.atMs, startMs + next]);
+    }
+    this.fakeUntil = Math.max(this.fakeUntil, startMs + totalMs);
   }
 
   /**
@@ -301,20 +328,19 @@ export class Speaker {
       baseMs = Math.max(0, (startAt - now) * 1000);
       if (this.retro && this.analyser) {
         for (const osc of scheduleRetro(this.ctx, this.analyser, steps, this.retroVoice, startAt)) {
-          this.sources.add(osc);
-          osc.onended = () => this.sources.delete(osc);
+          this.retroNodes.add(osc);
+          osc.onended = () => this.retroNodes.delete(osc);
         }
-      } else {
-        this.fakeUntil = Math.max(this.fakeUntil, performance.now() + baseMs + totalMs); // 音なし: 文字が出ている間だけ口を動かす
       }
     } else {
       // 音がまだ使えない(タップの前): 画面の時計で順番に並べる
-      const nowMs = performance.now();
+      const nowMs = this.clock();
       const startMs = Math.max(nowMs + 30, this.wallNext);
       this.wallNext = startMs + durMs;
       baseMs = startMs - nowMs;
-      this.fakeUntil = Math.max(this.fakeUntil, startMs + totalMs);
     }
+    // 口は、音を鳴らしても切っていても同じ予定で動かす(文字が出ている間だけ)
+    this._mouthForCrawl(this.clock() + baseMs, steps, totalMs);
     this._later(() => epoch === this.epoch && onStart?.(performance.now(), info), baseMs);
     for (const s of steps) this._later(() => epoch === this.epoch && onCrawl?.(s.shown), baseMs + s.atMs);
     return baseMs + durMs;
@@ -341,11 +367,20 @@ export class Speaker {
       }
     }
     this.sources.clear();
+    for (const osc of this.retroNodes) {
+      try {
+        osc.stop();
+      } catch {
+        // もう止まっている
+      }
+    }
+    this.retroNodes.clear();
     for (const id of this.timers) clearTimeout(id);
     this.timers.clear();
     this.nextTime = 0;
     this.wallNext = 0;
     this.fakeUntil = 0;
+    this.quiet = [];
     this.pending = 0;
     this.chain = Promise.resolve();
     this._level = 0;

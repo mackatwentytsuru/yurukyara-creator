@@ -15,6 +15,9 @@ export class ValidationError extends Error {
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 const list = (v, max) => (Array.isArray(v) ? v.slice(0, max) : []);
+// 改行を LF にそろえる。Windows の取り出し(core.autocrlf=true)では characters/<id>/persona.md が CRLF になり、
+// 画面はそれをそのまま読んで送る。長さで切る前にそろえて、どの取り出しでも頭脳に 1 文字も違わない文が渡るようにする
+const lf = (v) => (typeof v === 'string' ? v.replace(/\r\n?/g, '\n') : v);
 
 export const LIMITS = {
   text: 500, // 1 回の発言(声でも文字でも)
@@ -69,8 +72,8 @@ export function sanitizeChatBody(raw) {
     trigger,
     interview: raw.interview === true,
     scene: clean(str(raw.scene, LIMITS.scene)),
-    character: { name: str(character.name, LIMITS.name) || undefined, persona: clean(str(character.persona, LIMITS.persona)) },
-    place: { name: str(place.name, LIMITS.name) || undefined, info: str(place.info, LIMITS.placeInfo), landmarks },
+    character: { name: str(character.name, LIMITS.name) || undefined, persona: clean(str(lf(character.persona), LIMITS.persona)) },
+    place: { name: str(place.name, LIMITS.name) || undefined, info: str(lf(place.info), LIMITS.placeInfo), landmarks },
     expressions: choiceList(raw.expressions),
     motions: choiceList(raw.motions, 24),
   };

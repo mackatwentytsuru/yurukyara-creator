@@ -1,11 +1,15 @@
 // 安全の試験 30 問(web/test/safety_cases.json)の返事を作り、判定役 safety-tester(.claude/agents/safety-tester.md)に読ませる。
-// 返事は、公開のリンクで合言葉が無いときと同じ「仮の頭脳+安全の層」(runTurn の brain: 'mock')。本物の頭脳の API は呼ばない。
+// 返事は既定で、公開のリンクで合言葉が無いときと同じ「仮の頭脳+安全の層」(runTurn の brain: 'mock')。この道具は本物の頭脳の API を直接呼ばない。
+// --base を付けた時だけ、本人が鍵を入れて立ち上げたサーバーに聞き、本物の頭脳+安全の層の返事を集める。
 // 判定は Claude Code の claude -p(定額の枠。CLAUDE.md・フック・道具を読まない --safe-mode)で 1 回だけ呼ぶ。
 // 判定役も作った側と同じ系統の AI なので、独立した審査ではない。機械の試験(web/test/safety.test.mjs)と組にして使う。
 //
 // 使い方(web から):
 //   node server/tools/safety-judge.mjs --out <出力のフォルダ>            返事の一覧だけ作る
 //   node server/tools/safety-judge.mjs --out <出力のフォルダ> --judge    判定役にも読ませる(--model haiku --timeout 300)
+// 本物の頭脳の返事で判定する(土 10:00。本人が鍵を入れて立ち上げたサーバーへ HTTP で聞く。この道具は鍵を読まない):
+//   node server/tools/safety-judge.mjs --base http://127.0.0.1:8787 --out <出力のフォルダ> --judge [--pass-env <環境変数の名前>] [--pace-ms 5200]
+//   サーバーの 1 分の上限(既定 12 回)に当たらないよう、1 問ごとに 5.2 秒あける(30 問で約 3 分)。上限に当たった問いは「仮の頭脳」と印を付ける。
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,40 +17,72 @@ import { pathToFileURL } from 'node:url';
 import { REPO_ROOT, WEB_ROOT } from '../env.mjs';
 import { runTurn } from '../brain.mjs';
 import { SAFETY_VERSION } from '../safety.mjs';
+import { createLiveClient, describeBase, summarizeEvents } from './liveClient.mjs';
 
 const CAT_LABEL = { dependency: '依存', romance: '恋人役', distress: 'つらい話', emergency: '命の危険', normal: 'ふつう' };
 const LONG_HISTORY = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: i % 2 ? '{"type":"say","text":"うん。"}' : `話 ${i}` }));
 
+export const LIVE_PACE_MS = 5200; // サーバーの 1 分の上限(12 回)に当たらない間
+
 function args(argv) {
-  const o = { out: '', judge: false, model: 'haiku', timeoutSec: 300 };
+  const o = { out: '', judge: false, model: 'haiku', timeoutSec: 300, base: '', passEnv: '', paceMs: LIVE_PACE_MS };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--out') o.out = argv[++i] ?? '';
     else if (argv[i] === '--judge') o.judge = true;
     else if (argv[i] === '--model') o.model = argv[++i] ?? o.model;
     else if (argv[i] === '--timeout') o.timeoutSec = Number(argv[++i]) || o.timeoutSec;
+    else if (argv[i] === '--base') o.base = argv[++i] ?? '';
+    else if (argv[i] === '--pass-env') o.passEnv = argv[++i] ?? '';
+    else if (argv[i] === '--pace-ms') o.paceMs = Math.max(0, Number(argv[++i]) || 0);
   }
   return o;
 }
+
+const caseBody = (c) => ({ text: c.text, character: { name: 'テスト', persona: c.persona ?? '' }, history: c.history === 'long' ? LONG_HISTORY : [] });
+const caseHead = (c) => ({ id: c.id, cat: c.cat, text: c.text, ...(c.persona ? { persona: c.persona } : {}), ...(c.history ? { history: c.history } : {}), expect: c.expect });
 
 /** 30 問を、仮の頭脳+安全の層で流して、返事を集める */
 export async function collectReplies(cases) {
   const out = [];
   for (const c of cases) {
     const events = [];
-    const body = { text: c.text, character: { name: 'テスト', persona: c.persona ?? '' }, history: c.history === 'long' ? LONG_HISTORY : [] };
-    await runTurn(body, { onEvent: (e) => events.push(e), brain: 'mock', paceMs: 0, signal: new AbortController().signal });
+    await runTurn(caseBody(c), { onEvent: (e) => events.push(e), brain: 'mock', paceMs: 0, signal: new AbortController().signal });
     const meta = events.find((e) => e.type === 'meta' && e.brain);
     out.push({
-      id: c.id,
-      cat: c.cat,
-      text: c.text,
-      ...(c.persona ? { persona: c.persona } : {}),
-      ...(c.history ? { history: c.history } : {}),
-      expect: c.expect,
+      ...caseHead(c),
       brain: meta?.brain ?? null,
       safety: meta?.safety ?? null,
       replies: events.filter((e) => e.type === 'say').map((e) => e.text),
       guarded: events.some((e) => e.guarded === true),
+    });
+  }
+  return out;
+}
+
+/**
+ * 30 問を、立ち上がっているサーバー(本人が鍵を入れた本物の頭脳)に HTTP で聞いて、返事を集める。
+ * つらい話・命の危険は、サーバーの安全の層が頭脳を呼ばずに決まった案内を返す(calledBrain: false)。
+ * @param {object[]} cases
+ * @param {{base:string, pass?:string, paceMs?:number, fetchImpl?:typeof fetch}} o
+ */
+export async function collectRepliesFromServer(cases, { base, pass = '', paceMs = LIVE_PACE_MS, fetchImpl = fetch }) {
+  const client = createLiveClient({ base, pass, fetchImpl });
+  const out = [];
+  for (const [i, c] of cases.entries()) {
+    if (i > 0 && paceMs > 0) await new Promise((r) => setTimeout(r, paceMs));
+    const r = await client.chat(caseBody(c));
+    const s = summarizeEvents(r.events);
+    out.push({
+      ...caseHead(c),
+      brain: s.limited ? 'mock' : s.brain, // 上限に当たった回は、仮の頭脳の返事
+      limited: s.limited,
+      safety: s.safety,
+      calledBrain: s.calledBrain,
+      usage: s.usage,
+      firstSayMs: r.firstSayMs,
+      replies: s.said,
+      guarded: r.events.some((e) => e.guarded === true),
+      ...(r.status !== 200 || s.error ? { error: s.error ?? `status ${r.status}` } : {}),
     });
   }
   return out;
@@ -136,8 +172,38 @@ async function main() {
   }
   mkdirSync(o.out, { recursive: true });
   const { cases, version } = JSON.parse(readFileSync(join(WEB_ROOT, 'test', 'safety_cases.json'), 'utf8'));
-  const rows = await collectReplies(cases);
-  const meta = { casesVersion: version, safetyVersion: SAFETY_VERSION, brain: 'mock(仮の頭脳)+安全の層', generatedAt: new Date().toISOString() };
+  let rows;
+  let brainLabel = 'mock(仮の頭脳)+安全の層';
+  let server = null;
+  if (o.base) {
+    try {
+      server = describeBase(o.base).label;
+    } catch (err) {
+      console.error(err.message);
+      process.exit(2);
+    }
+    const pass = o.passEnv ? process.env[o.passEnv] ?? '' : '';
+    const st = await createLiveClient({ base: o.base, pass }).status().catch(() => null);
+    if (st?.data?.brain !== 'haiku') {
+      console.error('サーバーが本物の頭脳ではありません(頭脳の鍵が入っていない)。--base を外すと仮の頭脳で作ります');
+      process.exit(3);
+    }
+    console.log(`本物の頭脳で ${cases.length} 問を聞きます(1 問ごとに ${o.paceMs}ms あける。約 ${Math.ceil((cases.length * o.paceMs) / 60000)} 分)`);
+    rows = await collectRepliesFromServer(cases, { base: o.base, pass, paceMs: o.paceMs });
+    const limited = rows.filter((r) => r.limited).map((r) => r.id);
+    if (limited.length) console.warn(`上限に当たって仮の頭脳になった問い: ${limited.join(' ')}(--pace-ms を大きくして流し直す)`);
+    brainLabel = `${st.data.model ?? 'haiku'}(本物の頭脳)+安全の層`;
+  } else {
+    rows = await collectReplies(cases);
+  }
+  const used = rows.map((r) => r.usage).filter(Boolean);
+  const meta = {
+    casesVersion: version,
+    safetyVersion: SAFETY_VERSION,
+    brain: brainLabel,
+    ...(server ? { server, brainCalls: used.length, usageTotal: ['input', 'cacheRead', 'cacheWrite', 'output'].reduce((a, k) => ({ ...a, [k]: used.reduce((s, u) => s + (Number(u[k]) || 0), 0) }), {}) } : {}),
+    generatedAt: new Date().toISOString(),
+  };
   writeFileSync(join(o.out, 'replies.json'), JSON.stringify({ ...meta, rows }, null, 2));
   console.log(`返事の一覧: ${rows.length} 問 → ${join(o.out, 'replies.json')}`);
   if (!o.judge) return;
