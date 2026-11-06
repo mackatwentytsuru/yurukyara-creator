@@ -1,7 +1,9 @@
 // 数と記憶の置き場。Upstash の Redis(REST)があればそこ、無ければ関数の中のメモリ(1 台の中だけ。消えてもよい物だけ)。
 // どちらも同じ 4 つの呼び方: get / set(期限つき)/ del / incr(期限つき)。
+// Vercel の上で Upstash が無い時は、関数の中のメモリへ落とさない(台ごとに 0 から数え直すので、上限が守れない)。
+// どの呼び方も失敗する「置き場なし」を返し、会話は counter-unavailable(本物の頭脳を止める)、記憶は 503 になる。
 
-/** 関数の中のメモリ。Vercel では呼び出しの間に消えることがある(試験と、置き場が無いときの代わり) */
+/** 関数の中のメモリ。Vercel では呼び出しの間に消えることがある(試験と、手元の PC の代わり) */
 export function createMemoryStore({ now = Date.now } = {}) {
   const items = new Map();
   const alive = (key) => {
@@ -31,6 +33,14 @@ export function createMemoryStore({ now = Date.now } = {}) {
       return value;
     },
   };
+}
+
+/** 置き場なし(Vercel の上で Upstash をつないでいない時)。どの呼び方も失敗する = 止める方へ倒す */
+export function createUnavailableStore() {
+  const fail = async () => {
+    throw new Error('置き場がつながっていません');
+  };
+  return { kind: 'none', get: fail, set: fail, del: fail, incr: fail };
 }
 
 /** Upstash の REST(1 回 1 命令)。鍵は Authorization の見出しだけに入れ、記録に出さない */
@@ -70,6 +80,7 @@ let shared = null;
 /** 設定から置き場を選ぶ。同じ関数の中では 1 つを使い回す */
 export function storeFor(cfg, { fetchImpl } = {}) {
   if (cfg.redisUrl && cfg.redisToken) return createRedisStore({ url: cfg.redisUrl, token: cfg.redisToken, fetchImpl });
+  if (cfg.onVercel) return createUnavailableStore();
   shared ??= createMemoryStore();
   return shared;
 }

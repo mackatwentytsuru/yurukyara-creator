@@ -6,20 +6,24 @@ const num = (v, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) => {
   return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
 };
 
+const text = (v) => String(v ?? '').trim(); // 画面に貼った時の前後の空白・改行を落とす(画面の側も trim する)
+
 /** @param {Record<string, string|undefined>} env */
 export function readConfig(env = process.env) {
   return {
-    // 合言葉。空なら「合言葉なし」= だれでも仮の頭脳だけ(本物の頭脳は使わない)
-    passphrase: env.DEMO_PASSPHRASE ?? '',
+    // 合言葉。空なら「合言葉なし」= だれでも仮の頭脳だけ(本物の頭脳は使わない)。短すぎる時も本物は使わない(gate.mjs)
+    passphrase: text(env.DEMO_PASSPHRASE),
     // 本物の頭脳の鍵があるか(値そのものは持ち歩かない)
-    hasBrainKey: Boolean(env.ANTHROPIC_API_KEY),
+    hasBrainKey: Boolean(text(env.ANTHROPIC_API_KEY)),
     // 本物の頭脳を呼ぶ回数の上限(1 日・全体)と、接続元ごとの 1 分の上限。超えたら仮の頭脳に替える
     dailyCap: num(env.DEMO_DAILY_CAP, 300, { min: 0, max: 100000 }),
     perMinute: num(env.DEMO_PER_MINUTE, 10, { min: 1, max: 600 }),
     // 本文の大きさの上限(バイト)。これより大きい物は読まずに断る
     maxBodyBytes: num(env.DEMO_MAX_BODY_BYTES, 32768, { min: 1024, max: 262144 }),
     // 数を数える置き場(Upstash の Redis の REST)。Vercel の画面からつなぐと KV_REST_API_* の名前で入る
-    redisUrl: env.UPSTASH_REDIS_REST_URL ?? env.KV_REST_API_URL ?? '',
-    redisToken: env.UPSTASH_REDIS_REST_TOKEN ?? env.KV_REST_API_TOKEN ?? '',
+    redisUrl: text(env.UPSTASH_REDIS_REST_URL ?? env.KV_REST_API_URL),
+    redisToken: text(env.UPSTASH_REDIS_REST_TOKEN ?? env.KV_REST_API_TOKEN),
+    // Vercel の上で動いているか(Vercel が配りに入れる環境変数で見分ける)。Upstash が無い時に、関数の中のメモリへ落とさないため
+    onVercel: Boolean(env.VERCEL || env.VERCEL_ENV || env.VERCEL_URL || env.VERCEL_REGION),
   };
 }
