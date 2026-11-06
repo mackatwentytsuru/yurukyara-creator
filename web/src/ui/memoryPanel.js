@@ -54,6 +54,12 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
   let timer = null;
 
   const say = (t) => (status.textContent = t);
+  // 出していた番号と、のこり時間の知らせを止める(全部わすれた後に、古い番号や「受け取りました」を残さない。CRITux 19)
+  const clearCode = () => {
+    clearInterval(timer);
+    timer = null;
+    codeOut.textContent = '';
+  };
   const render = (data) => {
     notice.textContent = data.notice ?? '';
     list.replaceChildren(
@@ -94,7 +100,7 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
   );
   claimBtn.addEventListener('click', () =>
     run(async () => {
-      const r = await claimCode(codeIn.value);
+      const r = await claimCode(codeIn.value, { pass: pass.value }); // 公開では受け取りにも合言葉が要る(札の欄か、会話の合言葉)
       codeIn.value = '';
       render(r);
       say('受け取りました。前の端末の続きから話せます');
@@ -103,9 +109,9 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
   forgetBtn.addEventListener('click', () =>
     run(async () => {
       await forgetAll();
-      render(await ensureKey()); // 新しい空の合鍵で始め直す
-      codeOut.textContent = '';
+      clearCode();
       say('全部わすれました');
+      render(await ensureKey()); // 新しい空の合鍵で始め直す
     }),
   );
 
@@ -118,12 +124,21 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
     root,
     ready,
     refresh: () => run(refresh),
-    /** 会話のイベントを渡す。覚えた・消したの知らせが来たら、一覧を読み直す */
+    /**
+     * 会話のイベントを渡す。覚えた・消したの知らせが来たら、一覧を読み直す。
+     * 会話の「わすれて」で消えた時(サーバーの印 via: 'chat')は、出していた番号と「受け取りました」などの古い知らせも消す(CRITux 19)。
+     * 印の無い {type:'memory', forgotten:true} は、引き出しを開いた時の読み直し(main.js)なので、番号と知らせはそのまま
+     */
     onChatEvent(ev) {
-      if (ev?.type === 'memory') {
-        if (ev.forgotten) run(async () => render(await ensureKey()));
-        else run(refresh);
+      if (ev?.type !== 'memory') return;
+      if (ev.via === 'chat' && Object.hasOwn(ev, 'forgotten')) {
+        clearCode();
+        say(ev.forgotten ? '全部わすれました' : '');
       }
+      if (Object.hasOwn(ev, 'forgotten')) run(async () => render(await ensureKey()));
+      else run(refresh);
     },
+    /** 合鍵を確かめて(消えていれば作り直し)、一覧を読み直す。番号と知らせはそのまま(引き出しを開いた時など) */
+    resync: () => run(async () => render(await ensureKey())),
   };
 }

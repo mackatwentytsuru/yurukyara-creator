@@ -69,10 +69,11 @@ test('長さの上限は、改行をそろえてから数える(CRLF でも同�
   assert.ok(!b.includes('\r'));
 });
 
-test('場所の説明も LF にそろえる(古い Mac の CR だけの改行も)。文の中身は変えない', () => {
+test('場所の説明は、どの改行(CRLF・LF・古い Mac の CR だけ)でも同じ 1 行の文にする(11-07 F6: 指示文の中に見出しを作らせない)。文の中身は変えない', () => {
   const body = (info) => sanitizeChatBody({ text: 'x', place: { info } }).place.info;
-  assert.equal(body('入口は右。\r\nお手洗いは左。'), '入口は右。\nお手洗いは左。');
-  assert.equal(body('入口は右。\rお手洗いは左。'), '入口は右。\nお手洗いは左。');
+  assert.equal(body('入口は右。\r\nお手洗いは左。'), '入口は右。 お手洗いは左。');
+  assert.equal(body('入口は右。\rお手洗いは左。'), '入口は右。 お手洗いは左。');
+  assert.equal(body('入口は右。\nお手洗いは左。'), '入口は右。 お手洗いは左。');
   assert.equal(body('改行なし'), '改行なし');
   assert.deepEqual(systemFor('- 一人称は「ぼく」。', { info: 'A\r\nB' }), systemFor('- 一人称は「ぼく」。', { info: 'A\nB' }));
 });

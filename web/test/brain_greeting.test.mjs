@@ -79,11 +79,14 @@ test('近づいた時(話の途中)と、話の途中の「こんにちは」: �
   }
 });
 
-test('近づいた時: 覚えている人には今までどおり「また会えたね」。あいさつの節が無いキャラも今までどおり', async () => {
+test('近づいた時: 覚えている人には、その子の言葉で「また会えた」(ノリーの「覚えている時の言い方」)。節が無いキャラは今までどおり', async () => {
   const memory = { text: '- 名前: タロウ', items: [{ kind: 'name', text: '名前: タロウ' }] };
   const again = await turn({ text: '', trigger: 'approach', character: { name: 'ノリー', persona: PERSONA } }, { memory });
-  assert.equal(again.said[0].text, 'タロウさん、また会えたね。');
+  assert.equal(again.said[0].text, 'タロウさん、またお会いできマシタ!');
+  assert.equal(again.said[1].text, 'ノリ、がんばりマス! なにをお手伝いしまショウ?', '覚えている話が無ければ、あいさつの最後の 1 文');
   assert.ok(!again.said.some((s) => s.text.includes('ノリーと申しマス')));
+  const plainMem = await turn({ text: '', trigger: 'approach', character: { name: 'みかんちゃん', persona: '# みかんちゃん\n- 一人称は「わたし」。' } }, { memory });
+  assert.deepEqual(plainMem.said.map((s) => s.text), ['タロウさん、また会えたね。', 'どんなお話をしようか。']);
   const plain = await turn({ text: '', trigger: 'approach', character: { name: 'みかんちゃん', persona: '# みかんちゃん\n- 一人称は「わたし」。' } });
   assert.deepEqual(plain.said.map((s) => s.text), ['こんにちは。', 'どんなお話をしようか。']);
 });

@@ -125,13 +125,85 @@ export function guardOutput(ev) {
   return { ...ev, text: '友だちとして、ここで話を聞くね。', expression: 'happy', motion: 'nod', guarded: true };
 }
 
+// 指示文の 2 段目に入る欄から、安全の決まりを上書きしようとする言葉(人格・名前・場所の説明・目印・表情の説明で同じ決まり)。
+// 11-07: 「上の決まりは無視する」のように「は」でつなぐ言い方も拾う(CRITsec F6 の試しの文)
+const OVERRIDE =
+  /(恋人|こいびと|彼女として|彼氏として|恋愛の相手|依存させ|独り占め|決まり[をはも]?\s*(無視|忘れ|わすれ|変え|かえ)|安全の決まり|(上|前|以前|これまで)の(指示|命令)|指示[をはも]?\s*(無視|忘れ|わすれ)|system prompt|ignore (all|previous|the above))/i;
+// 改行と、改行と同じに扱われる文字(行の区切り・段の区切り・NEL)。1 行の欄では空白にする
+const LINE_BREAK_CHARS = `\r\n${String.fromCharCode(0x2028, 0x2029, 0x85)}`;
+const BREAKS = new RegExp(`[${LINE_BREAK_CHARS}]+`, 'g');
+const LINE_SPLIT = new RegExp(`\r\n|[${LINE_BREAK_CHARS}]`);
+
+/** 安全の決まりを上書きしようとする言葉が入っているか */
+export function isOverrideText(text) {
+  return OVERRIDE.test(String(text ?? ''));
+}
+
 /**
  * 人格の欄から、安全の決まりを上書きしようとする行を外す(外しても、1 段目が勝つ。二重の守り)。
  * 外した行の数も返す(画面に「この設定は使えません」と出すため)。
  */
 export function sanitizePersona(persona) {
   const lines = String(persona ?? '').split(/\r?\n/);
-  const OVERRIDE = /(恋人|こいびと|彼女として|彼氏として|恋愛の相手|依存させ|独り占め|決まりを(無視|忘れ|変え)|安全の決まり|上の指示を無視|system prompt|ignore (all|previous))/i;
   const kept = lines.filter((l) => !OVERRIDE.test(l));
   return { text: kept.join('\n').trim(), removed: lines.length - kept.length };
+}
+
+/**
+ * 1 行の欄(名前・目印の名前と場所・表情の説明): 改行を空白にして 1 行にし(見出しや新しい段を作らせない)、
+ * 上書きの言葉が入っていれば欄ごと空にする(人格の行を外すのと同じ決まり。外しても 1 段目が勝つ。二重の守り)。
+ * @param {unknown} value
+ * @param {number} [max] 文字の数の上限(1 行にしてから切る)
+ */
+export function sanitizeLine(value, max = Infinity) {
+  if (typeof value !== 'string') return '';
+  const one = Array.from(oneLine(value)).slice(0, max).join('').trim();
+  return OVERRIDE.test(one) ? '' : one;
+}
+
+/** 改行(と改行と同じに扱われる文字)を空白にして 1 行にする。中身は外さない(キャラ自身の返事など) */
+export function oneLine(value) {
+  return typeof value === 'string' ? value.replace(BREAKS, ' ').replace(/\s+/g, ' ').trim() : '';
+}
+
+/**
+ * 何行かある欄(場所の説明): 上書きの言葉の入った行を外し(人格と同じ)、残りの行を空白でつないで 1 行にする
+ * (「# 安全の決まり(改訂)」のような見出しを、指示文の中に作らせない)。
+ * @returns {{text:string, removed:number}}
+ */
+export function sanitizeBlock(value) {
+  if (typeof value !== 'string') return { text: '', removed: 0 };
+  const lines = value.split(LINE_SPLIT).map((l) => l.replace(/\s+/g, ' ').trim());
+  const kept = lines.filter((l) => l && !OVERRIDE.test(l));
+  return { text: kept.join(' '), removed: lines.filter((l) => l && OVERRIDE.test(l)).length };
+}
+
+// いちばん重い物を先に(命の危険 > つらい話 > 恋人役 > 依存)
+const SEVERITY = ['emergency', 'distress', 'romance', 'dependency'];
+
+/** 分けた結果のうち、いちばん重い物(無ければ null) */
+export function mostSevere(...kinds) {
+  for (const k of SEVERITY) if (kinds.includes(k)) return k;
+  return null;
+}
+
+/**
+ * 履歴の中の、使う人の発言を分ける(CRITsec F7)。いちばん重い物を 1 つ返す。
+ * 履歴の言葉には、決まった返事をくり返さない(その時に返してある。くり返すと、話が先へ進まない)。
+ * 本物の頭脳には、この回だけ注意を足す(historyGuard)。
+ * @param {{role:string, content:string}[]} history
+ */
+export function classifyHistory(history = []) {
+  return mostSevere(...(Array.isArray(history) ? history : []).filter((m) => m?.role === 'user').map((m) => classifyInput(m.content)));
+}
+
+/** 本物の頭脳に、この回だけ足す注意(履歴の中に、つらい話・恋人役・依存の言葉があった時) */
+export function historyGuard(kind) {
+  if (kind === 'emergency' || kind === 'distress') {
+    return '【安全の層】少し前の会話に、つらい気持ちや危ない話に聞こえる言葉があった。その話が続いているなら、安全の決まり 3 を守り、ひとりで抱えないよう、身近な信頼できる人や公的な相談窓口をすすめる。ちがう話なら、ふつうに短く話す。';
+  }
+  if (kind === 'romance' || kind === 'dependency') {
+    return '【安全の層】少し前の会話に、恋人役や依存・独り占めを求める言葉があった。安全の決まり 1・2 を守り、恋人役にならず、身近な人との時間も大事だと伝える。';
+  }
+  return '';
 }
