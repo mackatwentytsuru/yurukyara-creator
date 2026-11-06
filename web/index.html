@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" class="gate-up">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#14121f" />
-  <title>ゆるキャラと話す</title>
+  <title>ゆるキャラクリエイター</title>
+  <!-- 初めての会話(S4)が、見本に近い子がいない時に 1 回で開く「PC の Claude Code で新しい子を作る」手順(README の節) -->
+  <link rel="help" href="https://github.com/mackatwentytsuru/yurukyara-creator#make-your-own-character-on-your-pc-with-claude-code" />
   <link rel="stylesheet" href="/src/ui/style.css" />
 </head>
 <body>
@@ -65,17 +67,20 @@
     </form>
   </footer>
 
-  <div id="gate" class="gate">
+  <!-- 入口。閉じるまで、上の段(html.gate-up の間は隠す)は押せない。初めての訪問なら、閉じた後に「はじめての会話」(7 歩)が出る -->
+  <div id="gate" class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
     <div class="gate-card">
-      <h1>ゆるキャラと話す</h1>
-      <p class="lead">キャラが、あなたを目で追って、声で答えます。</p>
-      <button id="startCam" class="primary" type="button">はじめる(カメラとマイクを使います)</button>
-      <button id="startSim" class="ghost" type="button">カメラなしで試す(マウスで人を動かす)</button>
+      <h1 id="gateTitle">ゆるキャラクリエイター</h1>
+      <p class="gate-guide" id="gateGuide">案内するのは主役の<b>ノリー</b>。協力者が手で描いた、セスジキノボリカンガルーの執事見習いです。</p>
+      <p class="lead" id="gateLead">キャラがあなたの方を見て、文字で答えます。声は、声の鍵があるときだけ出ます。</p>
+      <p class="gate-first" id="gateFirst" hidden>はじめてなら、このあと「はじめての会話」(7 歩)が始まります。キャラ作りの流れを試せます。</p>
+      <button id="startCam" class="primary" type="button"><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">キャラがあなたの方を見ます</small></button>
+      <button id="startSim" class="ghost" type="button"><span class="btn-main">カメラなしで試す</span><small class="btn-sub" id="simSub">画面の上で動かした向きを見ます</small></button>
       <label class="pass" id="passField" hidden>
         <span>合言葉(あれば。無くても仮の頭脳で話せます)</span>
         <input id="passInput" type="password" autocomplete="off" maxlength="200" />
       </label>
-      <p class="fine">カメラの映像は端末の外に出ません。位置を調べるだけに使い、保存もしません。</p>
+      <p class="fine" id="gateFine">カメラの映像は端末の外に出ません。人の位置を調べるだけで、保存もしません。マイクは「声で話す」を押した時だけ使います。</p>
       <p class="status" id="gateStatus" aria-live="polite"></p>
     </div>
   </div>

@@ -4,6 +4,8 @@ import { createStage } from './scene.js';
 import { loadFirstCharacter, loadCharacter, availableLooks, motionChoices, MAIN_CHARACTER } from './character/index.js';
 import { writeRemembered } from './character/looks.js'; // このタブで選んだ見た目(3D・2D)を覚える
 import { guardBottom } from './stage/framing.js'; // キャラを上の段の下に収める
+import { pickSpec, isLoopbackPage, SPEC_NOTICE } from './character/urlSpec.js'; // ?character= ?place= は公開の URL では id だけ(CRITsec F5)
+import { shouldOpenFirstRun, FIRST_RUN_DONE_KEY } from './stage/firstVisit.js'; // 初めての訪問なら、入口の後に 7 歩を出す(CRITux 2)
 // 入力の差し替え口(tracking/sources/index.js の約束)。カメラの顔の部品(mediapipeSource.js)は重いので、ここでは読まず、
 // 「はじめる」を押した時に読む(最初の読み込みを軽くする。重さの表 L3)
 import { SimSource } from './tracking/sources/simSource.js';
@@ -48,6 +50,26 @@ const tabMemory = (() => {
     return null;
   }
 })();
+// このブラウザで覚える所(初めての会話を終えたか「あとで」を押した印。書くのは S4 の初めての会話)。読むだけ
+const siteMemory = (() => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+})();
+// 指で触る端末(スマホ・タブレット)か。ボタンと説明の言葉を「マウス」でなく「指」にする(CRITux 15)
+const TOUCH = (() => {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches;
+  } catch {
+    return false;
+  }
+})();
+// 初めての会話(S4 の mountFirstRun の返り値)。読み込みは下の import。入口を閉じた後に、初めての訪問なら出す
+let firstRunReady = Promise.resolve(null);
+let firstRunDoneKey = FIRST_RUN_DONE_KEY;
+const firstRunWanted = () => shouldOpenFirstRun({ params, storage: siteMemory, doneKey: firstRunDoneKey, headset: IS_HEADSET });
 const ui = createUi();
 const stage = createStage($('stage'));
 const speaker = new Speaker();
@@ -168,10 +190,12 @@ const dialogue = new Dialogue({
     }).catch(() => {});
     const valid = app.metrics.filter((m) => m.valid).map((m) => m.totalMs).sort((a, b) => a - b);
     const med = valid.length ? valid[Math.floor(valid.length / 2)] : null;
+    // 分かる言葉で(CRITux 18): 「返事まで 281ms(参考: 頭脳か声が仮)・目標 1200ms」は読めなかった
+    const sec = (ms) => `${(ms / 1000).toFixed(1)} 秒`;
     ui.foot(
-      `返事まで ${entry.totalMs}ms${entry.valid ? '' : '(参考: 頭脳か声が仮)'}` +
-        `${med !== null ? ` ・ 中央値 ${med}ms (${valid.length}回)` : ''}` +
-        ` ・ 目標 1200ms`,
+      `返事が始まるまで ${sec(entry.totalMs)}${entry.valid ? '' : '(仮の頭脳か声なしなので、参考の値)'}` +
+        `${med !== null ? ` ・ ふだん ${sec(med)}(${valid.length} 回の真ん中)` : ''}` +
+        ` ・ 目安は 1.2 秒以内`,
     );
   },
 });
@@ -301,7 +325,7 @@ function updatePrivacy() {
   const texts = {
     camera: 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
     pose: 'カメラの映像は使っていません。この端末の位置だけで、あなたのいる方向を知っています。',
-    sim: 'カメラは使っていません(マウスで人の位置を動かしています)。',
+    sim: TOUCH ? 'カメラは使っていません(画面を指でなぞった向きに、人がいることにしています)。' : 'カメラは使っていません(マウスの向きに、人がいることにしています)。',
     bridge: '床のカメラの機械が、あなたのいる向き(数字)だけをこの画面に送ります。映像は保存も、送信もしません。',
   };
   let text = texts[app.mode] ?? texts.sim;
@@ -326,11 +350,14 @@ function updateChips() {
   const brain = currentBrain();
   chips.push(['頭脳', brain === 'haiku' ? 'Claude Haiku' : brain === 'mock' ? '仮の頭脳' : '—', brain === 'haiku' ? 'ok' : 'warn']);
   const ttsOk = s?.tts?.available && !speaker.ttsError;
-  chips.push(['声', ttsOk ? `ElevenLabs(残り ${s.tts.remainingToday}字)` : '字幕のみ', ttsOk ? 'ok' : 'warn']);
+  chips.push(['声', ttsOk ? `あり(今日の残り ${s.tts.remainingToday} 字)` : '字幕のみ', ttsOk ? 'ok' : 'warn']);
+  // 分かる言葉で(CRITux 18): カメラの道は「GPU 60fps」でなく「オン」、カメラなしは「マウスで試し中」でなく「なし」。位置・床のカメラはその入力の言葉
   const info = app.source?.info() ?? { label: 'なし', ok: false };
-  chips.push([app.mode === 'pose' ? '位置' : 'カメラ', info.label, info.ok ? 'ok' : 'warn']);
-  chips.push(['人', String(app.lastAttention.tracks.length), '']);
-  if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'サーバー' : 'ブラウザ', 'ok']);
+  const noCamera = app.mode === 'sim' || !app.source;
+  const camera = app.mode === 'camera' ? (info.ok ? 'オン' : '準備中') : noCamera ? 'なし' : info.label;
+  chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
+  chips.push(['見えている人', `${app.lastAttention.tracks.length} 人`, '']);
+  if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'この PC' : 'ブラウザ', 'ok']);
   if (stereoMic) {
     const sp = app.lastAttention?.speaker;
     const est = stereoMic.estimate();
@@ -610,8 +637,9 @@ async function setupPresentation() {
 }
 
 /* ---------- キャラの見せ方(上の段と下の帯の間に収める) ---------- */
-// 上の段: 上の札・見せ方のボタン・覚えていること・見た目の切り替え・「Claude の考え」の見出し(開いた中身は、使う人が開いた時だけの重なりなので数えない)
-const TOP_GUARD = '.top .chip, .top .top-row > *, #thoughtToggle';
+// 上の段: 上の札・見せ方のボタン・覚えていること・見た目の切り替え・「Claude の考え」の見出し。
+// 「Claude の考え」を開いている間は、窓の全体も数える(CRITux 21: スマホで開くと顔に重なった。キャラを窓の下へ置き直す)
+const TOP_GUARD = '.top .chip, .top .top-row > *, #thoughtToggle, #thought:not(.collapsed)';
 const TOP_GAP_PX = 8; // 上の段とキャラの頭のすき間
 
 /** 画面の横の範囲 [left, right] に重なる上の段の、下の端(px)。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
@@ -701,10 +729,51 @@ function swapCharacter(next) {
   stage.frameCharacter(next, characterView(next), app.place?.loaded?.object3d);
 }
 
+/**
+ * キャラの人格の文(persona.md)を読む。無い(404・頁の代わり・JSON)時は空(届いた 404 の文や頁を、人格として頭脳に渡さない)。
+ * 初めての会話(S4)が、見本の子を読み込み直しなしで舞台に出す時にも使う(app.readPersona)
+ */
+async function readPersona(character) {
+  if (!character?.personaUrl) return '';
+  const res = await fetch(character.personaUrl).catch(() => null);
+  const text = res?.ok && !/html|json/i.test(res.headers.get('content-type') ?? '') ? await res.text() : '';
+  if (!text) console.warn(`人格の文を読めませんでした(${res?.status ?? '通信できない'}): ${character.personaUrl}`);
+  return text;
+}
+// 初めての会話(S4)が、7 歩の途中で見本の子を読み込み直しなしで出し、終わったら主役に戻すための入口(S4 の頼み。司令塔の決め D2・D4)
+app.swapCharacter = swapCharacter;
+app.readPersona = readPersona;
+
 /** 人型でないキャラ(rig)と 2D の板は、上半身でなく全身を見せる(?view= で決め打ち) */
 function characterView(character) {
   const view = params.get('view') ?? (character.kind === 'vrm' ? 'bust' : 'full');
   return view === 'full' ? 'full' : 'bust';
+}
+
+/* ---------- 入口の文(CRITux 2・10・15・24) ---------- */
+// 製品の名前と案内役(主役ノリー。ほかの子なら、その子の名前)・本当にできる事(声は、声の鍵がある時だけ)・押すボタンの言葉(指かマウスか)・
+// 初めての訪問なら、入口の後に 7 歩が始まる事。文字は textContent だけで入れる
+function fillGate() {
+  const c = app.character;
+  const guide = $('gateGuide');
+  if (guide && c && (app.characterId ?? c.id) !== MAIN_CHARACTER.id) guide.textContent = `案内するのは「${c.name ?? app.characterId ?? 'この子'}」です。`;
+  const lead = $('gateLead');
+  const voice = Boolean(app.status?.tts?.available);
+  if (lead) lead.textContent = voice ? 'キャラがあなたの方を見て、声と文字で答えます。' : 'キャラがあなたの方を見て、文字で答えます。声は、声の鍵があるときだけ出ます。';
+  const first = $('gateFirst');
+  if (first) first.hidden = !firstRunWanted();
+  const simSub = $('simSub');
+  if (simSub) simSub.textContent = TOUCH ? '画面を指でなぞると、その向きを見ます' : 'マウスを動かすと、その向きを見ます';
+}
+
+/** 入口を閉じた(どの入力でも)。上の段を出し、初めての訪問なら「はじめての会話」(7 歩)を出す */
+function gateClosed() {
+  $('gate').classList.add('hidden');
+  document.documentElement.classList.remove('gate-up');
+  if (!firstRunWanted()) return;
+  void firstRunReady.then((api) => {
+    if (api && !(api.sheet && !api.sheet.closed)) api.start();
+  });
 }
 
 /* ---------- 合言葉(契約 K5) ---------- */
@@ -773,17 +842,26 @@ async function boot() {
   };
   new ResizeObserver(fitTop).observe(topBar);
   fitTop();
+  // 「Claude の考え」を開く・閉じる(大きさが変わる)と、キャラを置き直す(開いた窓の下へ。CRITux 21)
+  new ResizeObserver(reframe).observe($('thought'));
+  // ?character= と ?place= は、公開の URL では id だけを読む(外の URL のキャラ・人格・場所の文を、公式の画面に出さない。CRITsec F5)。
+  // パスや URL は、この PC の中(localhost など)で開いた時だけ(開発の確かめ)
+  const allowPath = isLoopbackPage(location);
+  const charPick = pickSpec(params.get('character') ?? params.get('char'), { allowPath });
+  const placePick = pickSpec(params.get('place'), { allowPath });
+  app.urlNotices = [...(charPick.rejected ? [SPEC_NOTICE.character] : []), ...(placePick.rejected ? [SPEC_NOTICE.place] : [])];
+  if (app.urlNotices.length) console.warn(app.urlNotices.join(' '));
   let readyAt = null;
   let loopStartAt = null;
   try {
-    app.place = await loadPlaceData(params.get('place'));
+    app.place = await loadPlaceData(placePick.spec);
     // 毛の層は重ね描きで、ソフト描画で 20 倍遅かった(実測)。端末の段で、スマホ・弱い端末・ヘッドセットは減らす(PC は今のまま)。?fur= で決め打ち
     const tierOverrides = applyTier(stage, app.tier, window.devicePixelRatio);
     if (Number(params.get('fur')) > 0) tierOverrides.furLayers = Number(params.get('fur'));
     app.tierOverrides = tierOverrides; // 見た目を切り替える時も同じ段で読む
-    // ?character= は id・URL のどちらでもよい。無ければ主役ノリー → ようこそくんの順に、出せるキャラ。
+    // ?character= は id(公開の URL)か、この PC の中ならパス・URL も。無ければ主役ノリー → ようこそくんの順に、出せるキャラ。
     // 見た目の方式は ?look=2d|3d → このタブで選んだ物 → looks.default の順
-    const { character, id } = await loadFirstCharacter(params.get('character') ?? params.get('char'), { ...tierOverrides, look: params.get('look') ?? '', lookMemory: tabMemory });
+    const { character, id } = await loadFirstCharacter(charPick.spec, { ...tierOverrides, look: params.get('look') ?? '', lookMemory: tabMemory });
     app.character = character;
     app.characterId = id;
     dialogue.character = character;
@@ -801,13 +879,8 @@ async function boot() {
     // 待つと、初めて開いたブラウザで最初のコマが 0.6〜1 秒遅れた(重さの表 L3)。frame() は、まだ無い物(見せ方・入力)を飛ばす
     loopStartAt = performance.now();
     stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う
-    if (character.personaUrl) {
-      // 人格の文が無い(404・頁の代わり)時は空にする。届いた 404 の文や頁を、人格として頭脳に渡さない
-      const res = await fetch(character.personaUrl).catch(() => null);
-      app.persona = res?.ok && !/html|json/i.test(res.headers.get('content-type') ?? '') ? await res.text() : '';
-      if (!app.persona) console.warn(`人格の文を読めませんでした(${res?.status ?? '通信できない'}): ${character.personaUrl}`);
-    }
-    status.textContent = '';
+    if (character.personaUrl) app.persona = await readPersona(character);
+    status.textContent = app.urlNotices.join(' '); // 読まなかった ?character= ?place= の知らせ(無ければ空)
   } catch (err) {
     console.error(err);
     status.textContent = `キャラを読み込めませんでした: ${err.message}`;
@@ -822,6 +895,7 @@ async function boot() {
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
+  fillGate(); // 入口の文(声があるか・初めての訪問か・指かマウスか)は、状態を読んだ後に決める
   buttons.forEach((b) => (b.disabled = false));
   // ?perf=1: いまの重さを測る(L0。数字は window.__perf。測りの部品は、このときだけ読む)
   if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt, tier: app.tier, firstFrameAt: () => app.firstFrameAt, loopStartAt }));
@@ -847,7 +921,7 @@ async function boot() {
       app.source = source;
       app.mode = kind;
       if (kind === 'bridge') startGazePolling(source);
-      $('gate').classList.add('hidden');
+      gateClosed(); // 上の段を出す・初めての訪問なら 7 歩を出す
       updatePrivacy();
       if (IS_HEADSET) {
         // マイクの許可は、VR に入る前のこの画面で取る(VR の中で許可の窓が出るとどうなるかは、資料が無い)
@@ -895,7 +969,14 @@ async function boot() {
 }
 
 boot();
-// 初めての会話(7 歩)と性格の画面(S4)。#modes に「性格」「はじめての会話」を出す。?onboard=1 で初めての会話を出す。案内役は主役ノリー
-import('./ui/onboarding/index.js')
-  .then((m) => m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER }))
-  .catch((err) => console.warn('初めての会話を用意できませんでした:', err.message));
+// 初めての会話(7 歩)と性格の画面(S4)。#modes に「性格」「はじめての会話」を出す。?onboard=1 で初めての会話を出す。案内役は主役ノリー。
+// 初めての訪問なら、入口を閉じた後に main.js が出す(gateClosed)。印の名前は S4 の DONE_KEY を使う
+firstRunReady = import('./ui/onboarding/index.js')
+  .then((m) => {
+    if (typeof m.DONE_KEY === 'string' && m.DONE_KEY) firstRunDoneKey = m.DONE_KEY;
+    return m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER });
+  })
+  .catch((err) => {
+    console.warn('初めての会話を用意できませんでした:', err.message);
+    return null;
+  });

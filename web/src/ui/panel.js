@@ -25,6 +25,109 @@ const REASON_LABEL = {
   unknown: '分からないこと',
 };
 
+/* ---------- 「表情と動き」の言葉(点検 CRITux 9: happy / bow / person のような中の名前を出さない) ---------- */
+// 名前は動きの意図(K2。web/src/character/intent.js)の 7 つの表情と動き、rig のキャラの動きのファイルの名前
+const EXPRESSION_WORDS = Object.freeze({
+  neutral: 'ふつう',
+  happy: 'うれしい',
+  surprised: 'びっくり',
+  sad: 'かなしい',
+  angry: 'ぷんぷん',
+  relaxed: 'のんびり',
+  think: '考え中',
+  thinking: '考え中',
+});
+const MOTION_WORDS = Object.freeze({
+  none: '動きなし',
+  idle: 'じっと待つ',
+  talk: '話す',
+  nod: 'うなずく',
+  bow: 'おじぎ',
+  wave: '手をふる',
+  think: '考える',
+  tilt: '首をかしげる',
+  shake: '首をふる',
+  shrug: '肩をすくめる',
+  point: '指さす',
+  jump: 'はねる',
+  sad: 'しょんぼり',
+});
+
+/** 視線の指定(person・away・landmark:<名前>)を、画面の言葉に */
+function gazeWords(gaze) {
+  const g = typeof gaze === 'string' ? gaze.trim() : '';
+  if (!g || g === 'person' || g === 'user') return 'あなたを見る';
+  if (g === 'away') return 'よそを見る';
+  if (g.startsWith('landmark:') && g.length > 'landmark:'.length) return `${g.slice('landmark:'.length)}を見る`;
+  return '見る先は同じ';
+}
+
+/**
+ * 返事の 1 文の表情・動き・視線を、日本語の 1 行にする。知らない名前は、中の名前を出さずに「この子の表情」などにする。
+ * @param {{expression?: string, motion?: string, gaze?: string}} ev
+ * @returns {string} 例「うれしい・おじぎ・あなたを見る」
+ */
+export function actWords(ev = {}) {
+  const e = typeof ev.expression === 'string' ? ev.expression.trim().toLowerCase() : '';
+  const m = typeof ev.motion === 'string' ? ev.motion.trim().toLowerCase() : '';
+  const expr = e ? EXPRESSION_WORDS[e] ?? 'この子の表情' : 'ふつう';
+  const motion = m ? MOTION_WORDS[m] ?? 'この子の動き' : '動きなし';
+  return `${expr}・${motion}・${gazeWords(ev.gaze)}`;
+}
+
+/* ---------- 字幕の流れ(点検 CRITux 12: 話し終わった後も、返事の全部を読めるように) ---------- */
+/**
+ * 字幕に出す物を決める(DOM は触らない。createUi が描く)。会話の側(Dialogue)の呼び方はそのまま受ける:
+ *   say(文) → caption('' か 文) → caption(文字送りの途中)… → 次の say … → caption(null, ms)(話し終わり) / caption(null)(取り消し・次の会話)
+ * - 話している間: 前の文(小さく)+ 今の文。文が入れ替わっても、前の文は消えない
+ * - 話し終わり(null と待つ時間): 返事の全部を残す(前は 1.2 秒で消え、最後の 1 文しか読めなかった)。次の会話が始まるまで消さない
+ * - 取り消し(null だけ)・使う人の言葉・ほかの知らせ(聞き返しなど): 返事を片づけて、その文を出す
+ * @returns {{say(text: string): void, caption(text: string|null|undefined, hideAfterMs?: number, kind?: string): object, readonly phase: string}}
+ *   caption の返す物: { hide: true, afterMs } / { reply: true, prev, current, settled } / { text, kind }
+ */
+export function createCaptionFlow() {
+  let done = []; // この返事の、話し終えた文
+  let full = null; // 話している文(全部)
+  let phase = 'idle'; // idle | reply | settled
+  const reset = () => {
+    done = [];
+    full = null;
+    phase = 'idle';
+  };
+  return {
+    get phase() {
+      return phase;
+    },
+    /** 返事の 1 文を話し始めた(ui.say) */
+    say(text) {
+      if (full !== null) done.push(full);
+      full = String(text ?? '');
+      phase = 'reply';
+    },
+    caption(text, hideAfterMs = 0, kind = '') {
+      const t = typeof text === 'string' ? text : '';
+      if (kind === 'user') {
+        reset();
+        return t ? { text: t, kind: 'user' } : { hide: true, afterMs: hideAfterMs };
+      }
+      if (text == null || (t === '' && phase !== 'reply')) {
+        // 話し終わり: 返事の全部を残す
+        if (hideAfterMs > 0 && phase !== 'idle' && full !== null) {
+          phase = 'settled';
+          return { reply: true, prev: '', current: [...done, full].join(''), settled: true };
+        }
+        reset();
+        return { hide: true, afterMs: hideAfterMs };
+      }
+      // 返事の文(全部か、文字送りの途中)。今の文の頭と同じなら返事の続き
+      if (phase === 'reply' && full !== null && full.startsWith(t)) return { reply: true, prev: done.join(''), current: t, settled: false };
+      // ほかの知らせ(聞き返しなど)
+      reset();
+      return { text: t, kind };
+    },
+  };
+}
+
 export function createUi() {
   const caption = $('caption');
   const els = {
@@ -57,15 +160,30 @@ export function createUi() {
     caption.hidden = true;
     badge.hidden = true; // 参照した情報の札は、返事の字幕と一緒に消える
   };
+  const flow = createCaptionFlow(); // 返事の文を足して見せ、話し終わった後も全部を残す
+  const span = (className, text) => Object.assign(document.createElement('span'), { className, textContent: text });
   const setCaption = (text, hideAfterMs = 0, kind = '') => {
     clearTimeout(captionTimer);
-    if (!text) {
-      if (hideAfterMs > 0) captionTimer = setTimeout(hideCaption, hideAfterMs);
+    const v = flow.caption(text, hideAfterMs, kind);
+    if (v.hide) {
+      if (v.afterMs > 0) captionTimer = setTimeout(hideCaption, v.afterMs);
       else hideCaption();
       return;
     }
-    caption.textContent = text;
-    caption.className = `caption ${kind}`.trim();
+    if (v.reply) {
+      if (!v.prev && !v.current) {
+        hideCaption(); // 1 文目の文字送りの始まり(まだ 1 字も無い)
+        return;
+      }
+      // 文字は textContent だけで入れる(前の文は小さく、今の文は大きく。話し終わった後は全部を同じ大きさで)
+      caption.replaceChildren(...(v.prev ? [span('cap-prev', v.prev)] : []), ...(v.current ? [span('cap-now', v.current)] : []));
+      caption.className = `caption reply${v.settled ? ' settled' : ''}`;
+      caption.hidden = false;
+      caption.scrollTop = caption.scrollHeight; // 長い時は、今の文が見えるように
+      return;
+    }
+    caption.textContent = v.text;
+    caption.className = `caption ${v.kind}`.trim();
     caption.hidden = false;
   };
 
@@ -125,7 +243,8 @@ export function createUi() {
     },
     say(ev) {
       replyParts.push(ev.text);
-      actParts.push(`${ev.expression} / ${ev.motion} / ${ev.gaze}`);
+      flow.say(ev.text); // 字幕: この文を話し始めた(前の文は残す)
+      actParts.push(actWords(ev)); // 中の名前(happy / bow / person)でなく、日本語で
       els.reply.textContent = replyParts.join('');
       mirror?.({ reply: replyParts.join(''), error: '' });
       els.act.replaceChildren(...actParts.flatMap((t, i) => (i ? [document.createElement('br'), document.createTextNode(t)] : [document.createTextNode(t)])));
