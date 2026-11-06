@@ -14,7 +14,7 @@ npm versions are the ones locked in [`web/package-lock.json`](web/package-lock.j
 | MediaPipe Face Landmarker model (`face_landmarker.task`, float16, version 1) | 1 | See the model cards (Face Mesh V2 and Blendshape V2) 【確かめ待ち】 | Google · https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker | Where faces are and how wide mouths open. `npm ci` downloads it from Google's model storage; it is not stored in this repository |
 | Vite (a small module-preload helper ends up in the built files) | 8.3.5 | MIT | © 2019–present VoidZero Inc. and Vite contributors · https://github.com/vitejs/vite | Loading the app's code chunks |
 
-The built files do not yet carry these licence notices themselves (checked in `web/dist/` on 2026-11-07). They must be added before the public link goes live 【確かめ待ち】.
+The build carries these notices: `vite build` writes `licenses.txt` next to the page (name, version, licence and licence text of each part inside the build, including Vite's small loader helpers, and the full Apache 2.0 text), and each JavaScript file that contains these parts starts with a one-line comment pointing to it (checked in `web/dist/` on 2026-11-07; `node --test web/api/_test/build_licenses.test.mjs`). On the public link it will be at `/licenses.txt` 【確かめ待ち】.
 
 ## 2. Services called over the network
 
@@ -75,7 +75,7 @@ These are used for the fur and cloth looks in the browser. Poly Haven and ambien
 ## 日本語の要約
 
 - **ブラウザで動く部品**(組み立てで中に入る): three(MIT)、@pixiv/three-vrm とその仲間(MIT)、@mediapipe/tasks-vision(Apache-2.0)、顔のモデル `face_landmarker.task`(Google の配布物。使用条件はモデルカードで確かめる【確かめ待ち】。`npm ci` で取り、リポジトリには入れない)、Vite の小さな読み込みの部品(MIT)。
-- 組み立てた中身には、まだこの表示が入っていません。公開のリンクを開く前に入れます【確かめ待ち】。
+- 組み立て(`vite build`)が、ページの隣に `licenses.txt`(中に入った部品ごとの名前・版・ライセンスと本文。Vite の小さな読み込みの部品も含む。Apache 2.0 は全文)を置き、部品の入った JS の頭に、その場所を示す 1 行の注を足します(2026-11-07 に `web/dist/` で確かめた。`node --test web/api/_test/build_licenses.test.mjs`)。公開のリンクでは `/licenses.txt` で読めます【確かめ待ち】。
 - **外のサービス**: Claude API(鍵がある時だけ)、ElevenLabs(自分の鍵を入れた時だけ)、ブラウザの音声認識、Vercel と Upstash(公開のリンクだけ【確かめ待ち】)。
 - **自分の PC で動かす物**: Node.js、faster-whisper と Whisper の small の型(MIT。手元のサーバーだけ)、Blender 5.2(GPL。道具として使うだけで、作った物は作った人の物)、Python と NumPy・Pillow・SciPy・OpenCV・segno。
 - **作る・試す時だけ使う物**: Vite、playwright-core(Apache-2.0)、iwer(MIT)。
