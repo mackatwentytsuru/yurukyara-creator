@@ -52,7 +52,16 @@
 
 公開の関数は、新しい部品を足していない(Node の標準の `fetch`・`crypto`・`Request`/`Response` だけ)。部品を足したい流れは、S6 の札に書く。
 
+## 配り方(Vercel)
+
+- プロジェクトの Root Directory は `web`。設定は `web/vercel.json`(組み立ては `npm ci` → `npm run build`、出力は `dist`、関数は `api/*.mjs` で 30 秒まで)。
+- 画面のコードは `web/` の外(`creator/viewer/`・`characters/`)も読む。Vercel の「Include source files outside of the Root Directory in the Build Step」を切らない(2020 年 8 月 27 日より後に作ったプロジェクトは最初から入っている。Vercel の説明による)。
+- Vercel は `dist` だけを配る。手元のサーバーのように `characters/` を直接は配らないので、`web/vite.config.js` が組み立ての時に `characters/<id>/` の決まった種類のファイルを `dist/characters/<id>/` へ写す(`_` で始まる試しのキャラ・隠しファイル・VRM・説明の文は写さない)。
+- 環境変数は配りの前に入れる。変えた値は、次の配り(Redeploy)からだけ効く(Vercel の説明による)。
+- 古い配りの URL は、Deployment Protection の Standard Protection(本番の名前以外を守る)で守る。
+
 ## 確かめた事・確かめていない事
 
 - 確かめた: `node --test api/_test/api.test.mjs` 11 件(わざと壊すと落ちる事も)。手元の PC で `chat.mjs` の `POST` を鍵なしで 5 回呼び、仮の頭脳で 2 文返った(読み込み 10ms、呼び出し 0〜17ms。Vercel の上の時間ではない)。
+- 確かめた(11/6 21:33。組み立ての出力の時刻): `node --test api/_test/build_characters.test.mjs` 2 件。`npx vite build` で `dist/characters/` に作例 5 体の 50 ファイルが入り、試しのキャラと VRM は入らない。
 - 確かめていない: Vercel の上で動くか・関数の時間(本物の頭脳の待ちを含む)・Upstash へのつなぎ。鍵が入った後に 1 回だけ流して測る。
