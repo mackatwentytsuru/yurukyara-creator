@@ -151,7 +151,7 @@ describe('鍵の見張り(check-secrets)', () => {
 describe('鍵の見張り: リポジトリの中だけを見る(CLAUDE_PROJECT_DIR)', () => {
   const proj = tmp('yc-in-');
   const outside = tmp('yc-out-'); // リポジトリの外(作業の板やメモの代わり)
-  const terms = put(proj, 'terms.local.txt', '# 試験の語\nひみつ村\ncs:SHOPX\nrei:\\btripo(?!d)\n');
+  const terms = put(proj, 'terms.local.txt', '# 試験の語\nひみつ村\ncs:SHOPX\nrei:\\bzorbo(?!x)\n');
   const env = (more = {}) => ({ CLAUDE_PROJECT_DIR: proj, PREPUSH_TERMS: terms, YC_HOOK_LOG: join(outside, 'log.jsonl'), ...more });
   const fakeKey = ['sk', 'ant', 'api03', 'y'.repeat(30)].join('-'); // 試験だけの偽の鍵(形だけ)
   const call = (tool_name, tool_input, more, extra = {}) => run(SECRETS, { hook_event_name: 'PreToolUse', tool_name, tool_input, ...extra }, env(more));
@@ -183,9 +183,9 @@ describe('鍵の見張り: リポジトリの中だけを見る(CLAUDE_PROJECT_D
   test('中: 書く先が分からない時は、念のため見る', () => {
     assert.equal(call('Write', { content: 'ひみつ村' }).code, 2);
   });
-  test('rei: の行(区別しない正規表現)も見る。似た語(tripod)は通す', () => {
-    assert.equal(call('Write', { file_path: join(proj, 'd.md'), content: 'Tripo で作った' }).code, 2);
-    assert.equal(call('Write', { file_path: join(proj, 'd.md'), content: 'solve_tripod と Tripod は別の語' }).code, 0);
+  test('rei: の行(区別しない正規表現)も見る。似た語(zorbox)は通す', () => {
+    assert.equal(call('Write', { file_path: join(proj, 'd.md'), content: 'Zorbo で作った' }).code, 2);
+    assert.equal(call('Write', { file_path: join(proj, 'd.md'), content: 'make_zorbox と Zorbox は別の語' }).code, 0);
   });
   test('読めない正規表現の行があれば、中のファイルは止める', () => {
     const bad = put(outside, 'bad.local.txt', 're:([\n');

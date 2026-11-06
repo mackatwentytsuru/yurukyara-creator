@@ -15,8 +15,9 @@
   --terms        書き換えた後に 0 件を確かめる語(形は tools/termlist.py: 既定は大文字と小文字を区別しない、
                  cs: は区別、re:・rei: は正規表現)。中身・コミットの文・ファイルの名前の全部で見る
   --keep         残す線。「元:新しい名前」で名前を替える(例 archive/three-pillars:before-pivot)。ほかの線は写しから消す
-  --drop-paths   全部の履歴から丸ごと外す場所(1 行 1 つ。/ で終わる行はその下の全部、ほかは fnmatch の形。# は注)
-  --strip-ai-images  画像生成の AI の署名(C2PA と「AI が作った」の印・生成の指示の文)が入った絵の版を、全部の履歴から外す
+  --drop-paths   全部の履歴から丸ごと外す場所(1 行 1 つ。/ で終わる行はその下の全部、ほかは fnmatch の形。# は注)。
+                 「old:<形>」の行は、その場所の古い版だけを外す(今の線 --current の先の版は残す。既定 main と yurukyara-dev)
+  --strip-ai-images  画像生成の AI の印(IPTC の「AI が作った」の値・生成の指示の文)が入った絵の版を、全部の履歴から外す
   --mailmap      作者の名前とメールを替える時だけ(本人の答え Q-0053 は「今のメールのまま」なので、本番では使わない)
   規則・語・外す場所・mailmap のファイルには社内の語が入るので、リポジトリに入れない(.local.txt にする)。
 
@@ -45,10 +46,9 @@ import termlist  # noqa: E402
 
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"RIFF", b"GIF8")
-# C2PA(内容の出どころの署名)の箱の印と、その中の「AI が作った」を示す語
-C2PA_MARKS = (b"c2pa", b"caBX", b"jumb")
-AI_MARKS = (b"trainedAlgorithmicMedia", b"OpenAI", b"ChatGPT", b"gpt-image", b"DALL-E", b"DALL\xc2\xb7E",
-            b"Gemini", b"Imagen", b"Firefly", b"Midjourney", b"SynthID")
+# IPTC の「デジタルの出どころの種類」のうち、AI が作った(trainedAlgorithmicMedia)・AI で合成した
+# (compositeWithTrainedAlgorithmicMedia)を表す値。C2PA の署名や XMP の中に、この語のまま入る。小文字にして探す
+AI_SOURCE_TYPE = b"trainedalgorithmicmedia"
 # 画像生成の道具が PNG の文の箱に書く「生成の指示」(prompt・workflow・parameters)
 GEN_TEXT = tuple(kind + key + b"\x00" for kind in (b"tEXt", b"iTXt", b"zTXt") for key in (b"parameters", b"prompt", b"workflow"))
 
@@ -65,12 +65,11 @@ def git(cwd, *args, check=True):
 
 
 def ai_signed(data):
-    """画像のバイト列に、画像生成の AI の印があるか(C2PA の箱+AI の語、IPTC の「AI が作った」、生成の指示の文)"""
+    """画像のバイト列に、画像生成の AI の印があるか(IPTC の「AI が作った」の値、生成の指示の文)。
+    署名(C2PA)があるだけでは印にしない(カメラの写真にも付くため)。"""
     if not data.startswith(IMAGE_MAGIC):
         return False
-    if b"trainedAlgorithmicMedia" in data:
-        return True
-    if any(m in data for m in C2PA_MARKS) and any(m in data for m in AI_MARKS):
+    if AI_SOURCE_TYPE in data.lower():
         return True
     return any(m in data for m in GEN_TEXT)
 
@@ -105,10 +104,28 @@ def find_ai_images(repo, refs):
 
 
 def load_drop_patterns(path):
+    """外す場所の一覧 → (場所ごと外す形, 古い版だけを外す形)。「old:」で始まる行は、今の線の先の版だけを残す"""
     if not path:
-        return []
+        return [], []
     with open(path, encoding="utf-8") as f:
-        return [t.strip() for t in f if t.strip() and not t.lstrip().startswith("#")]
+        lines = [t.strip() for t in f if t.strip() and not t.lstrip().startswith("#")]
+    return [t for t in lines if not t.startswith("old:")], [t[4:] for t in lines if t.startswith("old:") and t[4:]]
+
+
+def all_versions(repo, patterns):
+    """履歴で、形に合う場所に置かれた全部の版 → {blob の id: {場所}}(git log --raw で、足した・直した版を全部拾う)"""
+    found = {}
+    if not patterns:
+        return found
+    out = git(repo, "log", "--all", "-m", "--no-renames", "--raw", "--no-abbrev", "--format=")
+    for line in out.splitlines():
+        if not line.startswith(":"):
+            continue
+        meta, _, path = line.partition("\t")
+        parts = meta.split()
+        if len(parts) >= 4 and set(parts[3]) != {"0"} and dropped_by(path, patterns):
+            found.setdefault(parts[3], set()).add(path)
+    return found
 
 
 def dropped_by(path, patterns):
@@ -194,6 +211,7 @@ def main():
     ap.add_argument("--drop-paths", default="")
     ap.add_argument("--strip-ai-images", action="store_true")
     ap.add_argument("--drop-tags", action="store_true")
+    ap.add_argument("--current", action="append", default=[])
     a = ap.parse_args()
     keep = parse_keep(a.keep)
     t0 = time.time()
@@ -213,7 +231,7 @@ def main():
     if not pats:
         print("止めました: 確かめの語が空です")
         return 2
-    drops = load_drop_patterns(a.drop_paths)
+    drops, olds = load_drop_patterns(a.drop_paths)
     if os.path.exists(a.work) and os.listdir(a.work):
         print(f"止めました: 作業フォルダが空ではありません({a.work})")
         return 2
@@ -252,6 +270,10 @@ def main():
         git(mirror, "update-ref", "-d", r)
         dropped.append(r)
     total_before = int(git(mirror, "rev-list", "--count", "--all").strip() or 0)
+    # 古い版だけを外す場所(old:)では、今の線(--current。既定は main と yurukyara-dev)の先の版だけを残す
+    current = [c for c in (a.current or ["main", "yurukyara-dev"]) if c in before_blobs]
+    protected = {b for c in current for b in before_blobs[c].values()}
+    old_versions = {b: sorted(ps) for b, ps in all_versions(mirror, olds).items() if b not in protected}
     steps["2_mirror_s"] = round(time.time() - s, 1)
 
     # 3 残す場所(残す線の先にある物 − 外す場所)
@@ -265,12 +287,13 @@ def main():
 
     # 4 AI の署名入りの絵を探して外し、規則で置き換える
     ai_before = find_ai_images(mirror, ["--all"]) if a.strip_ai_images else {}
+    strip_ids = sorted(set(ai_before) | set(old_versions))
     cmd = [sys.executable, "-m", "git_filter_repo", "--force", "--paths-from-file", keep_paths,
            "--replace-text", os.path.abspath(a.rules), "--replace-message", os.path.abspath(a.rules)]
-    if ai_before:
-        ids = os.path.join(work, "ai_image_blobs.txt")
+    if strip_ids:
+        ids = os.path.join(work, "strip_blobs.txt")
         with open(ids, "w", encoding="utf-8", newline="\n") as f:
-            f.write("\n".join(sorted(ai_before)) + "\n")
+            f.write("\n".join(strip_ids) + "\n")
         cmd += ["--strip-blobs-with-ids", ids]
     if a.mailmap:
         cmd += ["--mailmap", os.path.abspath(a.mailmap)]
@@ -290,13 +313,16 @@ def main():
     s = time.time()
     hits = scan_path_names(mirror, pats, scan_terms(mirror, pats))
     ai_after = find_ai_images(mirror, ["--all"])
+    objects = {line.split(" ", 1)[0] for line in git(mirror, "rev-list", "--objects", "--all").splitlines()}
+    old_left = sorted(b for b in old_versions if b in objects)
     branches = {}
     unexpected = {}
     for old, new in keep:
         after = tracked(mirror, f"refs/heads/{new}")
         stripped = sorted(p for p in before[old] - after if not dropped_by(p, drops))
         stripped_ai = [p for p in stripped if before_blobs[old].get(p) in ai_before]
-        diff = sorted((before[old] - set(intended[old]) - set(stripped_ai)) ^ after)
+        stripped_old = [p for p in stripped if before_blobs[old].get(p) in old_versions and p not in stripped_ai]
+        diff = sorted((before[old] - set(intended[old]) - set(stripped_ai) - set(stripped_old)) ^ after)
         if diff:
             unexpected[new] = diff[:30]
         branches[new] = {
@@ -307,12 +333,13 @@ def main():
             "files_after": len(after),
             "dropped_by_policy": len(intended[old]),
             "dropped_ai_images": stripped_ai,
+            "dropped_old_versions": stripped_old,
         }
     total_after = int(git(mirror, "rev-list", "--count", "--all").strip() or 0)
     emails = sorted(set(git(mirror, "log", "--all", "--format=%ae%n%ce").split()))
     steps["4_verify_s"] = round(time.time() - s, 1)
 
-    left = len(hits) + len(ai_after) + len(unexpected)
+    left = len(hits) + len(ai_after) + len(unexpected) + len(old_left)
     report = {
         "keep": [f"{o}:{n}" if o != n else o for o, n in keep],
         "dropped_refs": len(dropped),
@@ -320,6 +347,9 @@ def main():
         "commits_after_all": total_after,
         "branches": branches,
         "drop_patterns": len(drops),
+        "old_version_patterns": len(olds),
+        "old_versions_found": len(old_versions),
+        "old_versions_left": len(old_left),
         "ai_images_found": len(ai_before),
         "ai_images_left": len(ai_after),
         "unexpected_tree_changes": unexpected,
@@ -332,10 +362,10 @@ def main():
     }
     with open(os.path.join(work, "report.json"), "w", encoding="utf-8") as f:
         json.dump({**report, "terms_left_detail": hits, "dropped_by_policy_detail": intended,
-                   "ai_images_detail": ai_before}, f, ensure_ascii=False, indent=2)
+                   "ai_images_detail": ai_before, "old_versions_detail": old_versions}, f, ensure_ascii=False, indent=2)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if left:
-        print(f"残りがあります: 語 {len(hits)} 語・AI の署名の絵 {len(ai_after)} 枚・思わぬ木の違い {len(unexpected)} 本"
+        print(f"残りがあります: 語 {len(hits)} 語・AI の署名の絵 {len(ai_after)} 枚・古い版 {len(old_left)} 個・思わぬ木の違い {len(unexpected)} 本"
               "(語の中身は report.json。画面には出さない)")
     print("\n本番で push する時の命令(合わせ係が、本人の OK の後に自分で打つ。この台本は push しない):")
     print(f"  cd {mirror}")

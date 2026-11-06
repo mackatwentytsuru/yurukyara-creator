@@ -18,8 +18,9 @@ import termlist  # noqa: E402
 
 TOOL = os.path.join(HERE, "rewrite_history.py")
 WORD = "ひみつ" + "村"  # 試験だけの語
-# 形だけの絵: PNG の頭+C2PA の箱の印+AI の語(本物の署名ではない)
-AI_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8 + b"caBX" + b"jumb" + b"c2pa" + b"Chat" + b"GPT" + b"\x00" * 16
+# 形だけの絵: PNG の頭+C2PA の箱の印+IPTC の「AI が作った」の値(本物の署名ではない)
+AI_PNG = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 8 + b"caBX" + b"jumb" + b"c2pa"
+          + b"http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia" + b"\x00" * 16)
 CLEAN_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8 + b"IHDR" + b"\x01" * 16
 
 
@@ -137,6 +138,30 @@ class RewriteTest(unittest.TestCase):
         self.assertIn("archive/old", sh(self.repo, "git", "branch"))
         self.assertIn("shop/menu.json", sh(self.repo, "git", "ls-tree", "-r", "--name-only", "archive/old"))
 
+    def test_old_versions_are_stripped_but_current_kept(self):
+        old_png, new_png = CLEAN_PNG + b"old-composite", CLEAN_PNG + b"new-composite"
+        put(self.repo, "pics/cmp.png", old_png)
+        sh(self.repo, "git", "add", ".")
+        sh(self.repo, "git", "commit", "-q", "-m", "比べの絵(古い版)")
+        sh(self.repo, "git", "branch", "archive/cmp")       # 保管の線の先は古い版のまま
+        put(self.repo, "pics/cmp.png", new_png)
+        sh(self.repo, "git", "add", ".")
+        sh(self.repo, "git", "commit", "-q", "-m", "比べの絵(今の版)")
+        with open(self.drops, "w", encoding="utf-8") as f:
+            f.write("old:pics/cmp.png\n")
+        work = os.path.join(self.root, "w6")
+        r = self.tool(work, "--keep", "main", "--keep", "archive/cmp:before-pivot", "--drop-paths", self.drops, mailmap=False)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        rep = self.report(work)
+        mirror = os.path.join(work, "mirror.git")
+        self.assertEqual((rep["old_versions_found"], rep["old_versions_left"]), (1, 0))
+        self.assertEqual(rep["branches"]["before-pivot"]["dropped_old_versions"], ["pics/cmp.png"])
+        self.assertEqual(rep["branches"]["main"]["dropped_old_versions"], [])
+        self.assertEqual(rep["unexpected_tree_changes"], {})
+        got = subprocess.run(["git", "show", "main:pics/cmp.png"], cwd=mirror, capture_output=True).stdout
+        self.assertEqual(got, new_png)                       # 今の線の版は残る
+        self.assertNotIn("pics/cmp.png", sh(mirror, "git", "ls-tree", "-r", "--name-only", "before-pivot"))
+
     def test_path_names_and_regex_terms_are_checked(self):
         put(self.repo, "docs/himitsu_note.md", "ふつうの文\n")
         sh(self.repo, "git", "add", ".")
@@ -180,8 +205,9 @@ class DetectorTest(unittest.TestCase):
         self.assertFalse(rewrite_history.ai_signed(CLEAN_PNG))
         self.assertTrue(rewrite_history.ai_signed(CLEAN_PNG + b"tEXtprompt\x00{}"))           # 生成の指示の文
         self.assertTrue(rewrite_history.ai_signed(b"\xff\xd8\xff\xe1" + b"trainedAlgorithmicMedia"))  # IPTC の印
-        self.assertFalse(rewrite_history.ai_signed(b"c2pa Chat" + b"GPT plain text"))         # 絵でなければ見ない
-        self.assertFalse(rewrite_history.ai_signed(CLEAN_PNG + b"c2pa"))                       # 署名だけで AI の語が無い
+        self.assertTrue(rewrite_history.ai_signed(CLEAN_PNG + b"compositeWithTrainedAlgorithmicMedia"))  # AI で合成
+        self.assertFalse(rewrite_history.ai_signed(b"c2pa trainedAlgorithmicMedia plain text"))  # 絵でなければ見ない
+        self.assertFalse(rewrite_history.ai_signed(CLEAN_PNG + b"caBXjumbc2pa digitalCapture"))  # カメラの署名だけ
 
     def test_drop_patterns(self):
         pats = ["shop/", "web/test/shop*", "docs/店の*.md"]
@@ -196,10 +222,10 @@ class TermListTest(unittest.TestCase):
         hit = lambda line, text: bool(termlist.compile_term(line).search(text))
         self.assertTrue(hit("Abc", "xxabcxx"))                 # 既定: 区別しない
         self.assertFalse(hit("cs:ABC", "abc"))                 # cs: 区別する
-        self.assertTrue(hit(r"re:\bGLM\b", "とGLMで"))         # \b は英数字だけ(日本語の隣でも切れ目)
-        self.assertFalse(hit(r"re:\bGLM\b", "GLMS"))
-        self.assertTrue(hit(r"rei:\btripo(?!d)", "Tripo で"))
-        self.assertFalse(hit(r"rei:\btripo(?!d)", "solve_tripod と Tripod"))
+        self.assertTrue(hit(r"re:\bQXZ\b", "とQXZで"))         # \b は英数字だけ(日本語の隣でも切れ目)
+        self.assertFalse(hit(r"re:\bQXZ\b", "QXZS"))
+        self.assertTrue(hit(r"rei:\bzorbo(?!x)", "Zorbo で"))
+        self.assertFalse(hit(r"rei:\bzorbo(?!x)", "make_zorbox と Zorbox"))
 
     def test_bad_regex_names_the_line_only(self):
         path = os.path.join(tempfile.mkdtemp(), "t.local.txt")
