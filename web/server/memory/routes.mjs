@@ -45,7 +45,8 @@ export function createMemoryRoutes({ store, config, limiter, readBody }) {
       }
       if (req.method === 'GET' && path === '/api/memory') return send(res, 200, store.list(keyOf(req))), true;
       if (req.method === 'DELETE' && path === '/api/memory') {
-        const id = url.searchParams.get('id');
+        const body = await readBody(req);
+        const id = typeof body.id === 'string' && body.id ? body.id : url.searchParams.get('id');
         if (id) return send(res, 200, { ok: true, removed: store.forgetItem(keyOf(req), id) }), true;
         return send(res, 200, { ok: true, forgotten: store.forgetAll(keyOf(req)) }), true;
       }
