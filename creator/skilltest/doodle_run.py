@@ -148,6 +148,12 @@ def run_one(pic, a, wrap):
         Image.open(inp).convert("RGB").save(png)
         inp = png
     res = {"id": cid, "picture": os.path.basename(pic), "started": now(), "passed": False, "stopped": None, "stages": []}
+    prev = os.path.join(run_dir, "result.json")
+    if a.resume and os.path.exists(prev):        # 続きから: 前に ok だった段は流し直さない
+        old = json.load(open(prev, encoding="utf-8"))
+        res.update({k: old[k] for k in ("started", "check") if k in old})
+        res["stages"] = [x for x in old.get("stages", []) if x.get("ok")]
+    done = {x["name"] for x in res["stages"]}
 
     def step(name, ok, sec):
         res["stages"].append({"name": name, "ok": ok, "sec": sec})
@@ -155,12 +161,15 @@ def run_one(pic, a, wrap):
         return ok
 
     # 入口: ゆるキャラチェック
-    ok, sec = stage(run_dir, cid, 0, "yuru_check", [PY, "creator/pipeline/c01_yuru_check.py", inp, run_dir + "/yuru_check"])
-    yc = json.load(open(run_dir + "/yuru_check/yuru_check.json", encoding="utf-8")) if os.path.exists(run_dir + "/yuru_check/yuru_check.json") else {}
-    res["check"] = {k: yc.get(k) for k in ("class", "next", "why")}
-    if not step("ゆるキャラチェック", ok and bool(yc), sec):
-        res["stopped"] = "ゆるキャラチェック"
-        return finish(run_dir, res)
+    ycp = run_dir + "/yuru_check/yuru_check.json"
+    if "ゆるキャラチェック" not in done:
+        ok, sec = stage(run_dir, cid, 0, "yuru_check", [PY, "creator/pipeline/c01_yuru_check.py", inp, run_dir + "/yuru_check"])
+        yc = json.load(open(ycp, encoding="utf-8")) if os.path.exists(ycp) else {}
+        res["check"] = {k: yc.get(k) for k in ("class", "next", "why")}
+        if not step("ゆるキャラチェック", ok and bool(yc), sec):
+            res["stopped"] = "ゆるキャラチェック"
+            return finish(run_dir, res)
+    yc = json.load(open(ycp, encoding="utf-8"))
     if yc["class"] == "human":
         res["stopped"] = "人の絵と分かれた(使う人の「ゆるキャラにしてみる」の はい が要る)"
         return finish(run_dir, res)
@@ -170,13 +179,14 @@ def run_one(pic, a, wrap):
     check_txt = f"{yc['class']}({yc.get('why')})" + ("。複雑なので主役を 1 つ選んで描き直す" if yc["class"] == "complex" else "")
 
     # ⓪ 描き直し
-    p0 = os.path.join(run_dir, "p0_draw.md")
-    open(p0, "w", encoding="utf-8").write(DRAW_BRIEF.format(pic=inp, check=check_txt, cid=cid, out=run_dir))
-    ok, sec = stage(run_dir, cid, 0, "draw", None, claude={"model": a.model, "prompt": p0, "judge_dir": run_dir + "/0_draw"})
     sample = os.path.join(REPO, "creator", "samples", f"{cid}_元の絵_noshadow.png")
-    if not step("⓪ 描き直し", ok and os.path.exists(sample), sec):
-        res["stopped"] = "⓪ 描き直し"
-        return finish(run_dir, res)
+    if "⓪ 描き直し" not in done:
+        p0 = os.path.join(run_dir, "p0_draw.md")
+        open(p0, "w", encoding="utf-8").write(DRAW_BRIEF.format(pic=inp, check=check_txt, cid=cid, out=run_dir))
+        ok, sec = stage(run_dir, cid, 0, "draw", None, claude={"model": a.model, "prompt": p0, "judge_dir": run_dir + "/0_draw"})
+        if not step("⓪ 描き直し", ok and os.path.exists(sample), sec):
+            res["stopped"] = "⓪ 描き直し"
+            return finish(run_dir, res)
 
     # ①〜⑥ 作る
     if a.stop_after == "draw":
@@ -239,6 +249,7 @@ def main():
     ap.add_argument("--until", default="07:00")
     ap.add_argument("--no-gpu-wrap", action="store_true")
     ap.add_argument("--stop-after", choices=["check", "draw"], help="道の試し用: その段で止める(結果は「通っていない」のまま)")
+    ap.add_argument("--resume", action="store_true", help="同じ --id の前の回で ok だった段を飛ばして、続きから流す")
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     wrap = gpu_wrap(a.no_gpu_wrap)
