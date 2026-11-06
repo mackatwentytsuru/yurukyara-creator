@@ -1,0 +1,183 @@
+// 性格の画面(最初の設計の決め)。型(おっとり・元気・いたずら好き・恥ずかしがり屋)・口調・元気さ・返事の長さ・声を選び、
+// その場で返事を試す。仮の頭脳のときは、変えるたびに自動で試す(お金がかからない)。本物の頭脳のときは「返事を試す」を押した時だけ。
+// 文字は textContent だけで入れる。語尾の入力は settings.js の cleanEnding で確かめる。
+import { injectStyles } from '../onboarding/styles.js';
+import {
+  ENERGY_LABELS, LENGTH_ORDER, LENGTHS, PITCHES, PRESET_ORDER, PRESETS, RATES, TONE_ORDER, TONES, VOICE_ORDER, VOICES,
+  applyPreset, cleanEnding, normalize, personaBlock, pitchKey, rateKey,
+} from './settings.js';
+
+const el = (tag, props = {}, ...children) => {
+  const n = Object.assign(document.createElement(tag), props);
+  n.append(...children.filter((c) => c !== null && c !== undefined && c !== false));
+  return n;
+};
+
+/** 押しボタンの組(1 つだけ選ぶ)。役割は radio(読み上げにも伝わる) */
+function segmented(label, entries, current, onPick, { className = 'yp-seg', withHint = false } = {}) {
+  const box = el('div', { className, role: 'radiogroup', ariaLabel: label });
+  const buttons = entries.map(([key, item]) => {
+    const b = el(
+      'button',
+      { type: 'button', className: withHint ? 'yp-choice' : '', role: 'radio' },
+      withHint ? el('b', { textContent: item.label }) : item.label,
+      withHint && item.hint ? el('small', { textContent: item.hint }) : null,
+    );
+    if (!withHint) b.textContent = item.label;
+    b.dataset.key = key;
+    b.addEventListener('click', () => onPick(key));
+    return b;
+  });
+  box.append(...buttons);
+  const sync = (value) => buttons.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.key === value)));
+  sync(current);
+  return { box, sync };
+}
+
+/**
+ * @param {object} o
+ * @param {object} o.initial いまの設定
+ * @param {string} [o.characterName]
+ * @param {()=>object} o.random おまかせの設定を作る
+ * @param {(settings:object, text:string)=>Promise<{text:string, brain:string, notice?:string}>} o.preview 返事を試す
+ * @param {(text:string, settings:object, el:HTMLElement)=>Promise<void>} [o.play] 返事を出す(文字送り・声)
+ * @param {()=>string} [o.brain] 'mock' | 'haiku'(仮の頭脳なら自動で試す)
+ * @param {(settings:object)=>void} o.onSave
+ * @param {()=>void} [o.onCancel]
+ * @param {HTMLElement} [o.parent]
+ */
+export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body }) {
+  injectStyles(parent.ownerDocument);
+  let s = normalize(initial);
+  let tries = 0;
+  let timer = null;
+  const back = el('div', { className: 'yp-back' });
+  const panel = el('section', { className: 'yp-panel', role: 'dialog', ariaModal: 'true', ariaLabel: `${characterName}の性格` });
+  back.append(panel);
+
+  const presets = segmented('性格', PRESET_ORDER.map((k) => [k, { label: PRESETS[k].label, hint: PRESETS[k].text.split('。')[0] }]), s.preset, (k) => update(applyPreset(s, k)), { className: 'yp-presets', withHint: true });
+  const tone = segmented('口調', TONE_ORDER.map((k) => [k, TONES[k]]), s.tone, (k) => {
+    if (k === 'ending') update({ ...s, tone: 'ending', ending: s.ending || endingIn.value || 'にゃ' });
+    else update({ ...s, tone: k });
+  });
+  const endingIn = el('input', { type: 'text', className: 'yp-ending-in', maxLength: 8, placeholder: '例: にゃ', autocomplete: 'off', value: s.ending || '' });
+  const endingMsg = el('span', { className: 'yp-note', textContent: 'ひらがな・カタカナで 4 字まで' });
+  const endingRow = el('label', { className: 'yp-ending', hidden: s.tone !== 'ending' }, el('span', { textContent: '語尾' }), endingIn);
+  endingIn.addEventListener('input', () => {
+    const ok = cleanEnding(endingIn.value);
+    endingMsg.textContent = ok ? `「${ok}」を文の終わりに付けます` : 'ひらがな・カタカナで 4 字まで';
+    if (ok) update({ ...s, tone: 'ending', ending: ok });
+  });
+
+  const energyIn = el('input', { type: 'range', min: 1, max: 5, step: 1, value: s.energy, ariaLabel: '元気さ' });
+  const energyOut = el('output', { textContent: `${s.energy} ${ENERGY_LABELS[s.energy]}` });
+  energyIn.addEventListener('input', () => update({ ...s, energy: Number(energyIn.value) }));
+  const length = segmented('返事の長さ', LENGTH_ORDER.map((k) => [k, LENGTHS[k]]), s.length, (k) => update({ ...s, length: k }));
+  const voices = segmented('声の出し方', VOICE_ORDER.map((k) => [k, VOICES[k]]), s.voice.provider, (k) => update({ ...s, voice: { ...s.voice, provider: k } }), { className: 'yp-voices', withHint: true });
+  const pitch = segmented('声の高さ', Object.entries(PITCHES), pitchKey(s), (k) => update({ ...s, voice: { ...s.voice, pitch: PITCHES[k].value } }));
+  const rate = segmented('話す速さ', Object.entries(RATES), rateKey(s), (k) => update({ ...s, voice: { ...s.voice, rate: RATES[k].value } }));
+
+  const tryIn = el('input', { type: 'text', className: 'yp-try-in', maxLength: 60, value: 'はじめまして!', ariaLabel: '試しに話しかける言葉' });
+  const tryBtn = el('button', { type: 'button', className: 'yp-try-btn', textContent: '返事を試す' });
+  const replyName = el('span', { className: 'yp-reply-name', textContent: characterName });
+  const replyText = el('span', { className: 'yp-reply-text' });
+  const reply = el('p', { className: 'yp-reply', ariaLive: 'polite' }, replyName, replyText);
+  const note = el('p', { className: 'yp-note yp-brain-note' });
+  const block = el('pre', { className: 'yp-block' });
+  const randomBtn = el('button', { type: 'button', className: 'yp-random', textContent: 'おまかせ' });
+  const saveBtn = el('button', { type: 'button', className: 'yp-save', textContent: 'これにする' });
+  const cancelBtn = el('button', { type: 'button', className: 'yp-cancel', textContent: 'もどす' });
+
+  // 返事の試しは上に置き、下の設定を選んでいる間も見えるようにする(スマホでは上に貼りつく)
+  panel.append(
+    el('h2', { textContent: `${characterName}の性格` }),
+    el('p', { className: 'yp-lead', textContent: '選ぶと、すぐ上の返事が変わります。' }),
+    el('div', { className: 'yp-try' }, el('div', { className: 'yp-try-row' }, tryIn, tryBtn), reply, note),
+    el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '性格' }), presets.box),
+    el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '口調' }), tone.box, endingRow, endingMsg),
+    el('div', { className: 'yp-group' }, el('div', { className: 'yp-label yp-energy-head' }, el('span', { textContent: '元気さ' }), energyOut), el('div', { className: 'yp-energy' }, energyIn)),
+    el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '返事の長さ' }), length.box),
+    el(
+      'fieldset',
+      { className: 'yp-group' },
+      el('legend', { textContent: '声' }),
+      voices.box,
+      el('div', { className: 'yp-sub' }, el('span', { textContent: '高さ' }), pitch.box),
+      el('div', { className: 'yp-sub' }, el('span', { textContent: '速さ' }), rate.box),
+    ),
+    el('details', {}, el('summary', { textContent: 'Claude に渡す文を見る' }), block),
+    el('div', { className: 'yp-foot' }, randomBtn, cancelBtn, saveBtn),
+  );
+
+  function sync() {
+    presets.sync(s.preset);
+    tone.sync(s.tone);
+    endingRow.hidden = s.tone !== 'ending';
+    endingMsg.hidden = s.tone !== 'ending';
+    if (s.tone === 'ending' && document.activeElement !== endingIn) endingIn.value = s.ending;
+    energyIn.value = String(s.energy);
+    energyOut.textContent = `${s.energy} ${ENERGY_LABELS[s.energy]}`;
+    length.sync(s.length);
+    voices.sync(s.voice.provider);
+    pitch.sync(pitchKey(s));
+    rate.sync(rateKey(s));
+    block.textContent = personaBlock(s);
+    panel.dataset.preset = s.preset;
+  }
+
+  async function runPreview() {
+    const n = ++tries;
+    tryBtn.disabled = true;
+    replyText.textContent = '…';
+    try {
+      const r = await preview(s, tryIn.value.trim() || 'はじめまして!');
+      if (n !== tries) return;
+      note.textContent = r.notice ?? '';
+      panel.dataset.brain = r.brain;
+      if (play) await play(r.text, s, replyText);
+      else replyText.textContent = r.text;
+      if (n === tries) panel.dataset.previewed = String(n);
+    } catch (err) {
+      if (n === tries) replyText.textContent = `試せませんでした(${err.message})`;
+    } finally {
+      if (n === tries) tryBtn.disabled = false;
+    }
+  }
+
+  function update(next) {
+    s = normalize(next);
+    sync();
+    if (brain() === 'mock') {
+      clearTimeout(timer);
+      timer = setTimeout(runPreview, 250);
+    } else {
+      note.textContent = '本物の頭脳です。「返事を試す」を押すと Claude に聞きます(1 回分の利用になります)。';
+    }
+  }
+
+  tryBtn.addEventListener('click', runPreview);
+  randomBtn.addEventListener('click', () => update({ ...random(), voice: s.voice }));
+  const close = () => {
+    clearTimeout(timer);
+    tries += 1;
+    back.remove();
+  };
+  saveBtn.addEventListener('click', () => {
+    close();
+    onSave(normalize(s));
+  });
+  cancelBtn.addEventListener('click', () => {
+    close();
+    onCancel();
+  });
+  back.addEventListener('click', (e) => {
+    if (e.target === back) cancelBtn.click();
+  });
+
+  sync();
+  parent.append(back);
+  if (brain() === 'mock') runPreview();
+  else note.textContent = '本物の頭脳です。「返事を試す」を押すと Claude に聞きます(1 回分の利用になります)。';
+  saveBtn.focus({ preventScroll: true });
+  return { element: panel, close, get settings() { return normalize(s); }, preview: runPreview };
+}
