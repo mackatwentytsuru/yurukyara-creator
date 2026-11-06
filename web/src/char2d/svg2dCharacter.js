@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import { CharacterBase } from '../character/characterBase.js';
 import { STANDARD_EXPRESSIONS } from '../character/expressionNames.js';
 import { FACE_SLOTS, MOUTH_SHAPES, availableExpressions, faceVariants, listGroupIds, mouthShape, partSvg, pickFaceId, validateParts } from './parts.js';
-import { pose2d } from './pose2d.js';
+import { DEFAULT_GAINS, pose2d } from './pose2d.js';
 
 const LAYER_GAP = 0.002; // 板どうしの前後の間(メートル)
 const EMOTION_MIN = 0.25; // これより弱い表情は neutral にする
-const ARM_FRONT = 1.0; // 腕がこれ(ラジアン)より上がったら頭の前に描く
+const ARM_FRONT = 1.0; // 腕がこれ(ラジアン)より上がったら頭の前に描く(parts.json の arms.front で変えられる。false なら前に出さない)
+const FACE_LAYER_ORDER = 0.3; // 顔の上の動かない部品(鼻など)は、頭の板の上・目と口の下
 
 /**
  * SVG の部品を板(平面)に描いて動かす 2D のキャラ。CharacterBase を継ぐので、
@@ -31,6 +32,10 @@ export class Svg2DCharacter extends CharacterBase {
     this.variants = variants;
     this.expressionFallback = { ...(spec.expressionFallback ?? {}), ...expressionFallback };
     this.noBlink = new Set(spec.blink?.noBlink ?? []);
+    // キャラごとの動きの効き(腕の大きさ・顔の部品のずれ)と、腕を頭の前に出す角度
+    this.gains = { ...DEFAULT_GAINS, ...(spec.gains ?? {}) };
+    const front = spec.arms?.front;
+    this.armFront = front === false ? Infinity : Number.isFinite(front) ? front : ARM_FRONT;
     this.state2d = { emotion: 'neutral', mouthShape: 'mouth_closed', eyesScaleY: 1, faceIds: {} };
     const [vx, vy, vw, vh] = spec.viewBox;
     this.unit = this.heightM / vh; // 元の座標 1 → メートル
@@ -96,6 +101,14 @@ export class Svg2DCharacter extends CharacterBase {
     head.add(this.face);
     this.facePlanes = new Map(); // gid → mesh
     this.slotGroups = {};
+    // 顔の上の動かない部品(parts.json の faceLayers。鼻など)。表情では替えず、目と口と一緒に動く
+    // (頭が横を向いて顔の部品がずれた時に、口と鼻がはなれない)
+    this.faceLayers = {};
+    for (const layer of this.spec.faceLayers ?? []) {
+      const mesh = this._plane(svg, layer.id, layer.box, rasterize, pxPerUnit, headZ + FACE_LAYER_ORDER, headPivot);
+      this.face.add(mesh);
+      this.faceLayers[layer.id] = mesh;
+    }
     for (const slot of FACE_SLOTS) {
       const boxKey = MOUTH_SHAPES.includes(slot) ? 'mouth' : slot;
       const box = face[boxKey]?.box;
@@ -174,7 +187,7 @@ export class Svg2DCharacter extends CharacterBase {
     this.state2d.eyesScaleY = eyesScaleY;
 
     // 体の動き
-    const m = pose2d(s.pose, { headYaw: s.headYaw, headPitch: s.headPitch, time: this.time });
+    const m = pose2d(s.pose, { headYaw: s.headYaw, headPitch: s.headPitch, time: this.time }, this.gains);
     this.rig.position.y = m.rootY * this.heightM;
     this.upper.scale.y = m.upperSquash;
     const head = this.groups.head;
@@ -189,7 +202,7 @@ export class Svg2DCharacter extends CharacterBase {
       arm.rotation.z = rot;
       // 腕を高く上げたら、頭の前に出す(後ろのままだと、手を振る手が頭に隠れる)
       const mesh = arm.children[0];
-      const front = Math.abs(rot) > ARM_FRONT;
+      const front = Math.abs(rot) > this.armFront;
       mesh.renderOrder = front ? this.headOrder + 0.5 : mesh.userData.order;
       mesh.position.z = (front ? this.headOrder + 0.5 : mesh.userData.order) * LAYER_GAP;
     }

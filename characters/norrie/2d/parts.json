@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "id": "norrie",
+  "svg": "body.svg",
+  "viewBox": [
+    -77.0,
+    45,
+    747,
+    1041
+  ],
+  "heightM": 1.0,
+  "pxPerUnit": 1.5,
+  "waist": [
+    296.5,
+    1086.0
+  ],
+  "parts": {
+    "tail": {
+      "box": [
+        486,
+        333,
+        180,
+        548
+      ],
+      "z": 0,
+      "pivot": [
+        524.8,
+        860
+      ]
+    },
+    "body": {
+      "box": [
+        46,
+        422,
+        500,
+        669
+      ],
+      "z": 1,
+      "pivot": [
+        296.5,
+        1086.0
+      ]
+    },
+    "arm_r": {
+      "box": [
+        80,
+        422,
+        177,
+        363
+      ],
+      "z": 2,
+      "pivot": [
+        191.0,
+        474
+      ]
+    },
+    "arm_l": {
+      "box": [
+        335,
+        422,
+        177,
+        363
+      ],
+      "z": 2,
+      "pivot": [
+        402.0,
+        474
+      ]
+    },
+    "bowtie": {
+      "box": [
+        217,
+        467,
+        158,
+        70
+      ],
+      "z": 3
+    },
+    "head": {
+      "box": [
+        72,
+        46,
+        448,
+        420
+      ],
+      "z": 5,
+      "pivot": [
+        296.5,
+        452
+      ]
+    }
+  },
+  "face": {
+    "eyes": {
+      "box": [
+        222,
+        181,
+        148,
+        62
+      ]
+    },
+    "brows": {
+      "box": [
+        222,
+        160,
+        148,
+        32
+      ]
+    },
+    "mouth": {
+      "box": [
+        248,
+        318,
+        98,
+        60
+      ]
+    }
+  },
+  "faceLayers": [
+    {
+      "id": "muzzle",
+      "box": [
+        245,
+        249,
+        104,
+        124
+      ]
+    }
+  ],
+  "blink": {
+    "noBlink": [
+      "happy",
+      "relaxed"
+    ]
+  },
+  "arms": {
+    "front": false
+  },
+  "gains": {
+    "arm": 0.7,
+    "faceParallax": 0.3
+  },
+  "expressionFallback": {},
+  "source": {
+    "drawing": "front",
+    "drawn_by": "協力者",
+    "palette": {
+      "brown": "#50403C",
+      "cream": "#F0E9DE",
+      "black": "#000000",
+      "white": "#FFFFFF",
+      "pink": "#E4B2BC",
+      "green": "#249867"
+    }
+  }
+}
