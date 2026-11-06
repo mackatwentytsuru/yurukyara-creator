@@ -1,8 +1,8 @@
 // 重さを測る(L0)。会話サーバーが配るページを ?perf=1 で開き、キャラごと・画面の幅ごとに window.__perf を集める。
 //   npm run build && PORT=8799 npm run server        (鍵は要らない。測りでは話さない)
-//   node scripts/measure-render.mjs --port 8799 --out <出力のフォルダ> [--characters yokoso,robo] [--views pc,phone] [--sec 6] [--query tier=low]
+//   node scripts/measure-render.mjs --port 8799 --out <出力のフォルダ> [--characters yokoso,robo] [--views pc,phone,quest] [--sec 6] [--query tier=low]
 // GPU で描く(gpuGuard.js の GPU_ARGS)。WebGL が CPU(SwiftShader)なら、その場で止める。GPU の札と鍵を取ってから流す。
-// 分かるのは、この PC の GPU での数字。スマホの幅は「幅と画素の密度だけ」をまねた物で、スマホの実機の速さではない(重さの表では別の行)。
+// 分かるのは、この PC の GPU での数字。スマホと Quest の幅は「幅・画素の密度・名乗り」だけをまねた物で、実機の速さではない(重さの表では別の行)。
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -28,6 +28,8 @@ const VIEW_SPECS = {
   // 幅 390・密度 3 は今のふつうの iPhone の画面。描く画素の倍率は stage が 2 までに抑える
   // 名乗りも iPhone にして、端末の段(stage/tiers.js)がスマホの段を選ぶかも確かめる
   phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' },
+  // Quest 3 のブラウザの平らな窓(VR に入る前の画面)。名乗りを Quest にして、端末の段が xr を選ぶかを確かめる。VR の中の速さは vr-check.mjs
+  quest: { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1, userAgent: 'Mozilla/5.0 (X11; Linux x86_64; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/40.4 Chrome/142.0.0.0 VR Safari/537.36' },
 };
 
 function commit() {
@@ -51,7 +53,7 @@ const rows = [];
 let guarded = false;
 for (const view of VIEWS) {
   const spec = VIEW_SPECS[view];
-  if (!spec) throw new Error(`知らない幅です: ${view}(pc か phone)`);
+  if (!spec) throw new Error(`知らない幅です: ${view}(${Object.keys(VIEW_SPECS).join('・')})`);
   for (const id of CHARS) {
     const context = await browser.newContext(spec);
     const page = await context.newPage();
