@@ -72,9 +72,9 @@ HEAD = [(80, 6, 395, 425), (86, 60, 340, 458), (100, 108, 292, 478), (130, 150, 
         (461, 45, 340, 440)]
 # ---- 顔の前半分の形: (py, 前半分の指数 p, いちばん広い所を後ろへずらす量 d px)。p=2 は楕円、1 に近いほどくさび形、2 より大きいと平ら ----
 # 正面の絵の顔(クリームの仮面・ピンクの鼻・目)を正面から貼ったまま、横から見た時に横の絵と同じ所に見えるように決めた。
-# 測った合い方(横の絵の画素): クリームの奥の端 平均 7 px・ピンクの奥の端 ±5 px・目の中心 234 px(絵 234 px。正面は 521.5/615.8 px、絵 521.4/615.6)
-FACE_SHAPE = [(150, 2.0, 0), (185, 2.0, 0), (204, 1.45, 18), (211, 1.35, 22), (222, 1.25, 40), (240, 1.12, 60), (300, 1.12, 60),
-              (330, 1.2, 55), (350, 1.16, 25), (365, 1.14, 5), (380, 1.25, 0), (400, 1.48, 0), (412, 1.9, 0), (425, 2.5, 0),
+# 測った合い方(横の絵の画素): クリームの奥の端 平均 5 px・ピンクの奥の端 -3〜+6 px・目の中心 234 px(絵 234 px。正面は 521.5/615.8 px、絵 521.4/615.6)
+FACE_SHAPE = [(150, 2.0, 0), (185, 2.0, 0), (204, 1.45, 18), (211, 1.35, 22), (222, 1.25, 40), (240, 1.12, 75), (300, 1.12, 78),
+              (330, 1.2, 65), (350, 1.16, 30), (365, 1.14, 5), (380, 1.25, 0), (400, 1.48, 0), (412, 1.9, 0), (425, 2.5, 0),
               (440, 3.0, 0), (452, 2.6, 0), (461, 2.0, 0)]
 # ---- 胴の断面(同じ書き方)。いちばん上の行の後ろの端は頭の中へ入れる(後ろから首に胴の上の縁と輪郭が見えないように) ----
 BODY = [(424, 108, 352, 488), (450, 128, 348, 565), (480, 148, 342, 598), (520, 152, 338, 642), (560, 146, 338, 676),
@@ -128,9 +128,12 @@ MOUTH_COLS = [(530, 326, 326), (534, 323, 332), (538, 325, 338), (542, 328, 341)
 # 前歯: 上の唇から下がる白い 1 本(正面の絵の白い所を行ごとに測った (py, 左の端, 右の端))。面から前へ出した小さな塊にして、横からも見える
 TOOTH_ROWS = [(338.5, 566.5, 570.5), (340, 564.5, 572.5), (341.5, 561.5, 575.5), (343, 556.0, 581.0), (345, 557.5, 579.5),
               (347, 559.0, 578.0), (349, 560.5, 576.5), (351, 562.5, 574.5)]
-TOOTH_OUT = float(os.environ.get("TOOTH_OUT", 0.0072))    # 前の面が頭の面から出る量(m)。輪郭の殻(7 mm)と同じくらい出すと横から白が見える
+# 前の面は行ごとに平ら(鼻づらの先から TOOTH_AHEAD〜TOOTH_AHEAD_TIP m 前)。上は口の板(面から 4.2 mm)より前。
+# 横の壁(鼻づらの先から 7 mm 後ろの面まで)が横から白い四角に見える(面に沿って前へ出すだけだと、横からは口の黒に隠れた)
+TOOTH_AHEAD = float(os.environ.get("TOOTH_AHEAD", 0.0068))          # 上の端(上の唇の所)
+TOOTH_AHEAD_TIP = float(os.environ.get("TOOTH_AHEAD_TIP", 0.0068))  # 下の端(先)。下ほど前へ出すと輪郭の殻(7 mm)の外へはみ出し、判定役に「口の外にはみ出した白い四角」と言われた(11 mm で試した)。殻の内に止める
 TOOTH_IN = -0.0012
-OL_TOOTH = 0.0015
+OL_TOOTH = 0.0010
 # 鼻の上の弧(︶): 正面の絵の黒い線を列ごとに測った中心と太さ(px)。真ん中は人中につながる
 ARC_PTS = [(548, 270.5), (552, 273.5), (556, 276.5), (560, 279.0), (564, 280.5), (568, 281.5), (572, 281.0), (576, 279.5),
            (580, 277.0), (584, 274.0), (588, 271.0), (590, 269.5)]
@@ -243,10 +246,14 @@ def loft_face(name, secs, mat=None, n=36, refine=3):
     return P._make(name, verts, faces, mat, (0, 0, 0), (0, 0, 0))
 
 
-def slab(name, rows, surf, off_front, off_back, mat, ncols=8):
-    """行ごとの範囲で作る、面から前へ出た小さな塊(前歯)。前の板・後ろの板・まわりの壁で閉じる。"""
+def slab(name, rows, surf, ahead, off_back, mat, ncols=8, ahead_tip=None):
+    """行ごとの範囲で作る、面から前へ出た小さな塊(前歯)。前の板・後ろの板・まわりの壁で閉じる。
+    前の板は行ごとに平ら: 顔の真ん中(x=0)の面から、上の行で ahead・下の行で ahead_tip だけ前(-Y)。後ろの板は面に沿って off_back。"""
     pts = rows_to_pts(rows, ncols)
-    fr, bk = px_grid(pts, surf, off_front), px_grid(pts, surf, off_back)
+    tip = ahead if ahead_tip is None else ahead_tip
+    y0, y1 = rows[0][0], rows[-1][0]
+    fr = [[(X(px), surf(0.0, Z(py)) - (ahead + (tip - ahead) * (py - y0) / (y1 - y0)), Z(py)) for px, py in row] for row in pts]
+    bk = px_grid(pts, surf, off_back)
     nv, nu = len(pts), ncols + 1
     nb = nv * nu
     verts = [p for row in fr for p in row] + [p for row in bk for p in row]
@@ -463,7 +470,7 @@ def build_face(surf_head, mats):
     phil = ribbon("philtrum", [(569, 282), (569, 300), (569, 322), (569, 334)], [9, 8, 8, 9], surf_head, 0.0052, mats["black"])
     mouth = mouth_mesh(surf_head, mats)
     # 前歯 1 本: 上の唇から下がる白い塊(正面は絵の形、横からは口の前に白く見える)
-    tooth = slab("Tooth", TOOTH_ROWS, surf_head, TOOTH_OUT, TOOTH_IN, mats["white"], ncols=8)
+    tooth = slab("Tooth", TOOTH_ROWS, surf_head, TOOTH_AHEAD, TOOTH_IN, mats["white"], ncols=8, ahead_tip=TOOTH_AHEAD_TIP)
     parts["flat"] = [mask_line, mask, nose, arc, phil]
     parts["Mouth"] = mouth
     parts["Tooth"] = tooth
@@ -735,7 +742,7 @@ def main():
         "belly": [on(surf_torso, 568.5, 650, 0.0032), on(surf_torso, 568.5, 760, 0.0032), on(surf_torso, 520, 900, 0.0032)],
         "tail": [list(TAIL[i]) for i in (6, 8, 10, 12)],
         "nose_tip": [on(surf_head, 568.5, 300, 0.003)],
-        "tooth": [on(surf_head, 568.5, 346, TOOTH_OUT)],
+        "tooth": [[0.0, round(surf_head(0.0, Z(346)) - (TOOTH_AHEAD + TOOTH_AHEAD_TIP) / 2, 4), round(Z(346), 4)]],
         "eye_L": [rig["eye_L"]], "eye_R": [rig["eye_R"]],
     }
     json.dump(samples, open(WORK + "/samples_at.json", "w"), indent=1)
