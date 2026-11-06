@@ -209,7 +209,7 @@ test('公開のリンクでも記憶が通る: 覚える → 一覧 → 番号�
 
   const code = (await (await memCall(d, '/api/memory/pair', { method: 'POST', key: keyA, pass: PASS })).json()).code;
   assert.match(code, /^[0-9]{6}$/);
-  const keyB = (await (await memCall(d, '/api/memory/claim', { method: 'POST', ip: '198.51.100.20', body: { code } })).json()).key;
+  const keyB = (await (await memCall(d, '/api/memory/claim', { method: 'POST', ip: '198.51.100.20', pass: PASS, body: { code } })).json()).key;
   assert.notEqual(keyB, undefined);
   const cont = await read(await handleChat(req({ text: 'こんにちは', history: [] }, { key: keyB, ip: '198.51.100.20' }), d));
   assert.ok(said(cont.data).includes('タロウさん、また会えたね。'), '別の端末で続きから話す');
@@ -217,7 +217,7 @@ test('公開のリンクでも記憶が通る: 覚える → 一覧 → 番号�
   const forget = await read(await handleChat(req({ text: 'わすれて' }, { key: keyA }), d));
   assert.equal(forget.data.brain, 'none');
   assert.equal(forget.data.fallback, false);
-  assert.deepEqual(forget.data.events[0], { type: 'memory', forgotten: true });
+  assert.deepEqual(forget.data.events[0], { type: 'memory', forgotten: true, via: 'chat' });
   assert.ok(said(forget.data).includes('わかった、覚えていたことは全部消したよ。'));
   assert.equal((await memCall(d, '/api/memory', { key: keyA })).status, 404);
   assert.equal(calls.length, 0, 'どの回も本物の頭脳は呼ばない(合言葉なし・わすれて)');
