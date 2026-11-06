@@ -67,6 +67,10 @@ description: 言葉か絵 1 枚から、ブラウザで話す 3D のゆるキャ
 - **改行に左右されない事は、リポジトリの外の写しで確かめる**: `git -c core.autocrlf=false -c core.eol=lf worktree add --detach <写し> <コミット>` → `git ls-files --eol | grep -c w/crlf` が 0 → 検査が合格 → 直す前の 2 本に戻すと落ちる(対照。11-07 は ④ が body.svg で不合格 1)→ `unix2dos` で 1 本を CRLF にしても合格。片付けは `git worktree remove <写し>`(消さずに残す時は、写しを動かしてから `git worktree prune`)。
 - Windows の Git は `core.autocrlf=false` だけだと、`text=auto` のファイルを CRLF で出す(既定の `core.eol` が CRLF)。`core.eol=lf` も付ける。設定ごとの出方は、取り出さずに `git -c <設定> cat-file --filters --path=<名前> <blob>` で測れる(git 2.51 で測った)。
 - `core.autocrlf=true` で取り出した木に `.gitattributes` を取り込んでも、触っていないファイルは CRLF のまま、合わせで書きかわったファイルだけ LF になる(1 つの木に混ざる)。`git apply` は CRLF の作業ファイルにも LF の patch を当てられ、当てたファイルは `eol=lf` の形(LF)で書かれた。
+- **ほかの流れが作例のファイルを変える時は、基準の直しと「対」で入れる**(第 7 波、11-07。人格の文 `persona.md` は会話の流れの持ち物だが、④ の基準に入っている)。相手が基準の行だけの控え(patch)を作り、こちらが `git apply --check` → `git apply` → 1 本でコミットする。どちらか 1 本だけでは ④ が落ちるので、合わせは 2 本を続けて入れ、門は 2 本の後に 1 回。
+  - 当てる前に、新しい値を相手のコミットの中身から自分で計算して比べる: `git show <相手>:<パス> | tr -d '\r' | sha256sum`。古い値が今の基準と同じか、相手と今の木で違う作例のファイルが控えの本数と同じか(`git diff --stat HEAD <相手> -- characters/<id>`)も見る。
+  - 写しの木での確かめ: LF で取り出す(上の行)→ `git merge --no-ff --no-commit <相手>`(コミットを作らない)→ 合格 → 作例の文字のファイルを全部 CRLF にしても合格。対照 2 つ: 自分の 1 本だけ → ④ NG(変わった本数が相手の分と同じ)/ 相手を入れたまま基準だけ前の版に戻す → ④ NG。2 本の合わせのぶつかりは `git merge-tree --write-tree <自分> <相手>` で書かずに見られる。
+  - 対は id ではなく中身で決まる。相手が線を付け直して id が変わっても、ファイルの blob の番号(`git rev-parse <コミット>:<パス>`)が同じなら基準はそのまま使える。中身が変わったら控えを作り直してもらう。
 
 ## 守ること
 - 描く・作る・判定・調べものは Claude だけ。画像の取り込み(`<image>`)・ほかの AI・Megascans は使わない。
