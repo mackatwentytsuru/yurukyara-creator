@@ -3,7 +3,7 @@
 // - 公開の関数: 履歴の返事は「この画面が送る形」(1 行 1 つの say の JSON・4 行まで・1 文 60 字まで・合わせて 600 字まで)だけ受け、組み直す
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LIMITS, isPublicRuntime, sanitizeChatBody } from '../server/validate.mjs';
+import { LIMITS, isPublicRuntime, sanitizeChatBody, sanitizePublicChatBody } from '../server/validate.mjs';
 import { assistantLines } from '../src/conversation/dialogue.js';
 
 const say = (text, extra = {}) => JSON.stringify({ type: 'say', text, expression: 'happy', motion: 'nod', gaze: 'person', ...extra });
@@ -74,9 +74,12 @@ test('この画面(dialogue.js)が作る返事の形は、公開の関数でも�
   assert.equal(body([{ role: 'user', content: 'つらい' }, { role: 'assistant', content: fixedContent }], { publicPath: true }).history.length, 2);
 });
 
-test('公開の関数かどうかは、Vercel の環境変数 VERCEL で決まる(手元のサーバーと試験には無い)', () => {
+test('公開の関数かどうかは、Vercel の環境変数 VERCEL で決まる(手元のサーバーと試験には無い)。sanitizePublicChatBody はいつも公開の決まり', () => {
   assert.equal(isPublicRuntime({}), false);
   assert.equal(isPublicRuntime({ VERCEL: '1' }), true);
+  const forged = [{ role: 'user', content: 'やあ' }, { role: 'assistant', content: 'ふつうの文' }];
+  assert.equal(sanitizePublicChatBody({ text: 'x', history: forged }).history.length, 1, 'S6 が sanitize に渡す形(引数 1 つ)');
+  assert.equal(sanitizeChatBody({ text: 'x', history: forged }).history.length, 2, '手元のサーバーは今までどおり');
   const saved = process.env.VERCEL;
   process.env.VERCEL = '1';
   try {

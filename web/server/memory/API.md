@@ -1,4 +1,4 @@
-# 記憶の API(契約 K4・版 1・持ち主 S3)
+# 記憶の API(契約 K4・版 1・持ち主 S3。11-07 に欄を足した: 公開の受け取りの合言葉・persona・via)
 
 端末をまたぐ記憶。アカウントを作らせず、長い乱数の「合鍵」だけで読み書きする。合鍵は **ヘッダー `x-memory-key`** で送る(URL に入れない。サーバーの記録にも書かない)。
 
@@ -9,9 +9,9 @@
 | `DELETE /api/memory` | `x-memory-key`、本文 `{}` | `{ok, forgotten}`(全部消す。その合鍵の番号も取り消す) | 401 |
 | `DELETE /api/memory` | `x-memory-key`、本文 `{id}` | `{ok, removed}`(1 つだけ消す) | 401・404 |
 | `POST /api/memory/pair` | `x-memory-key`、合言葉(公開は `x-demo-pass`、手元は `x-app-pass`) | `{code:"123456", expiresAt, ttlSec:600}` | 401・403(合言葉が無い・違う)・404 |
-| `POST /api/memory/claim` | 本文 `{code}` | `{key, items, notice, ...}` | 400(違う・切れた・使用済み)・429(5 回間違えた。10 分止める) |
+| `POST /api/memory/claim` | 本文 `{code}`。**公開の関数では合言葉 `x-demo-pass` も**(11-07 F9。手元のサーバーは見ない) | `{key, items, notice, ...}` | 400(違う・切れた・使用済み)・403(公開で合言葉が無い・違う)・429(5 回間違えた。10 分止める / 公開で合言葉を 1 分に 5 回間違えた) |
 | `POST /api/memory/reflect` | `x-memory-key`、本文 `{text}` | `{added:[...]}` | 401・404 |
-| `POST /api/chat` | 今までの本文+`x-memory-key`(任意) | 今までの流れ+`{type:"memory", added}` / `{type:"memory", forgotten}` | — |
+| `POST /api/chat` | 今までの本文+`x-memory-key`(任意) | 今までの流れ+`{type:"memory", added}` / `{type:"memory", forgotten, via:"chat"}`(会話の「わすれて」で消した印。画面の札は、この印の時だけ番号と古い知らせを消す) | — |
 
 ## 番号の決まり
 - 6 けたの数字。**10 分で切れる・1 回しか使えない**。新しく出すと前の番号は使えない。「わすれて」で番号も消える。
@@ -28,15 +28,18 @@
 ## 公開の関数(契約 K5。版 1・11-06 夜)
 - `web/server/memory/handler.mjs` の `handleMemory(request, { store, cfg, now })`(標準の Request → Response)。S6 の `web/api/memory.mjs` が読む。`store` は K5 の置き場(`get`・`set(期限)`・`del`・`incr(期限)`、値は文字)。
 - 下の道は `?sub=`(`vercel.json` の書き換え)を先に、無ければ道の名前から読む。入口と返事の形は上の表と同じ。合鍵を作るのは接続元ごと 1 分 10 回・全体で 1 日 2000 回まで(429)。
-- 設定は `cfg` を先に、無ければ環境変数: 塩 `MEMORY_PEPPER`、番号の合言葉 `DEMO_PASSPHRASE`(会話と同じ。見出しは `x-demo-pass`、古い `x-app-pass` も受ける)。**合言葉が無い設定では番号を作らない**(403)。
+- 設定は `cfg` を先に、無ければ環境変数: 塩 `MEMORY_PEPPER`、番号の合言葉 `DEMO_PASSPHRASE`(会話と同じ。見出しは `x-demo-pass`、古い `x-app-pass` も受ける。前後の空白は外して比べる)。**合言葉が無い設定では番号を作らない・受け取らない**(403)。
+- **番号の受け取り(`claim`)にも合言葉が要る**(11-07 CRITsec F9。審査の人は持っている)。合言葉を持たない人の当て試しは番号を試す所まで届かないので、全体の取り消し(下の `ycm:g:`)を起こせない。同じ接続元が合言葉を **1 分に 5 回** 間違えたら、作る・受け取るとも比べずに 429(`reason: "pass_limited"`。数は `ycm:pf:<接続元>:<分>`)。
 - 置き場の中身(`kv.mjs`): 記録 `ycm:r:<sha256(塩:合鍵)>`(7 日の期限。使うたびに延びる)、番号 `ycm:c:<番号のハッシュ>`(10 分。合鍵は「番号と塩」から作った鍵で AES-256-GCM の暗号にして置く)、1 回だけ使える印 `ycm:u:`(INCR の 1 回目だけ通す)、間違いの数 `ycm:f:`・止める印 `ycm:l:`(5 回で 10 分)、全体の間違い `ycm:g:<10 分の枠>`(30 回で世代 `ycm:gen` を上げ、今ある番号を全部取り消す)。**合鍵そのものは、どこにも置かない。**
 - 置き場が使えないときは 503(中身は返事に出さない)。console に何も書かない。
-- 会話の手伝い `chatMemory(request, text, { store, cfg, now })`: 公開の `/api/chat` が頭脳を呼ぶ前に 1 回呼ぶ。合鍵が無ければ何もしない。「わすれて」なら全部消して返事のイベントまで返す(`handled: true`、頭脳は呼ばない)。それ以外は `{ memory, learned, events }` を返すので、`runTurn(body, { memory, learned, ... })` に渡し、`events`(`{type:"memory", added}`)を返事の前に並べる。置き場が使えないときは、記憶なしで話を続ける。
-- 試験: `web/test/memory_handler.test.mjs`(13 件。S6 の `handleMemoryRoute` から呼べることも)。
+- 会話の手伝い `chatMemory(request, text, { store, cfg, now, persona })`: 公開の `/api/chat` が頭脳を呼ぶ前に 1 回呼ぶ。`persona`(人格の文)を渡すと、「わすれて」の返事がその子の言葉になる(人格の「## 覚えている時の言い方」)。合鍵が無ければ何もしない。「わすれて」なら全部消して返事のイベントまで返す(`handled: true`、頭脳は呼ばない)。それ以外は `{ memory, learned, events }` を返すので、`runTurn(body, { memory, learned, ... })` に渡し、`events`(`{type:"memory", added}`)を返事の前に並べる。置き場が使えないときは、記憶なしで話を続ける。
+- 仮の頭脳(合言葉なし・上限・頭脳の失敗)も同じ形: `runTurn(body, { onEvent, brain: "mock", paceMs: 0, memory, learned })`。`mockReply` を直接呼ぶ道は人格と記憶を使わない(試験 `web/test/brain_memory_voice.test.mjs` がこの形を通す)。
+- 本文の点検は `sanitizePublicChatBody`(`web/server/validate.mjs`。引数 1 つ)を `sanitize` に渡す。履歴の返事は画面が送る形(1 行 1 つの say の JSON・4 行まで・1 文 60 字まで・合わせて 600 字まで)だけ受ける(11-07 CRITsec F7)。Vercel の上では `sanitizeChatBody` も既定でこの決まり(環境変数 `VERCEL`)。
+- 試験: `web/test/memory_handler.test.mjs`(17 件。S6 の `handleMemoryRoute` から呼べることも。受け取りの合言葉と間違いの数え)。
 
 ## 画面の部品
-- `web/src/ui/memoryKey.js`: `getKey / setKey / clearKey / memoryHeaders / ensureKey / listMemory / forgetItem / forgetAll / pairCode / claimCode`
-- `web/src/ui/memoryPanel.js`: `mountMemoryPanel(parent, {askPass}) → {root, ready, refresh, onChatEvent}`。S5 が `main.js` に 1 行で付ける。会話のイベントを `onChatEvent` に渡すと、一覧を読み直す。
+- `web/src/ui/memoryKey.js`: `getKey / setKey / clearKey / memoryHeaders / ensureKey / listMemory / forgetItem / forgetAll / pairCode / claimCode(code, {pass})`。番号を作る時も受け取る時も、合言葉は札の欄の値か会話の合言葉(`demoPass.js`)を `x-demo-pass` で送る。
+- `web/src/ui/memoryPanel.js`: `mountMemoryPanel(parent, {askPass}) → {root, ready, refresh, onChatEvent, resync}`。S5 が `main.js` に 1 行で付ける。会話のイベントを `onChatEvent` に渡すと、一覧を読み直す。`via:"chat"` の「わすれた」では、出していた番号と「受け取りました」などの知らせも消す。引き出しを開いた時の読み直しは `resync()`(今の `{type:"memory", forgotten:true}` の形でも同じ。番号と知らせは消さない)。
 - `web/src/conversation/brainClient.js` は、合鍵があれば `/api/chat` に付けて送る。
 
 ## 試験

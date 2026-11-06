@@ -152,6 +152,9 @@ export function sanitizeChatBody(raw, { publicPath = isPublicRuntime() } = {}) {
   return out;
 }
 
+/** 公開の関数の決まりで点検する(履歴の返事は、この画面が送る形だけ)。S6 の web/api/chat.mjs が sanitize に渡せる形 */
+export const sanitizePublicChatBody = (raw) => sanitizeChatBody(raw, { publicPath: true });
+
 const METRIC_NUMBERS = ['totalMs', 'sendToFirstSayMs', 'ttsFirstByteMs', 't0ToSendMs', 'fillerMs', 'fillerEndMs'];
 
 /** /api/metrics の本文から、知っている項目だけを取り出す(ログに好きな物を書き込ませない) */
