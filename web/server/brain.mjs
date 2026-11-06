@@ -2,11 +2,11 @@
 // 鍵が無いときは、同じ形で返す仮の頭脳(固定の台本)を使う。
 // どちらの頭脳でも、安全の層(safety.mjs)を先に通す: つらい話には決まった案内、出力も確かめる。
 import { config } from './env.mjs';
-import { buildSystemBlocks, buildUserTurn, MOTIONS } from './prompt.mjs';
+import { buildSystemBlocks, buildUserTurn, MOTIONS, safeChoices } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
-import { classifyInput, distressDetail, fixedReply, guardOutput, mentionsChild, turnGuard, SAFETY_VERSION } from './safety.mjs';
+import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { summarize } from './memory/reflect.mjs';
-import { aizuchi, exampleReply, firstGreeting } from './greeting.mjs';
+import { aizuchi, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
 const GREETING_MOTIONS = ['bow', 'nod', 'wave']; // 初めてのあいさつの 1 文目はおじぎ、2 文目はうなずき、3 文目は手をふる(無いキャラは none に落ちる)
@@ -199,9 +199,9 @@ export async function callHaikuHedged({ system, messages, signal, onText, hedgeM
  */
 export function* mockReply(o) {
   const { text, trigger, seen, persona = '' } = o;
-  const kind = trigger === 'approach' ? null : classifyInput(text);
+  const { kind, source } = classifyTurn({ text, trigger, scene: seen });
   if (kind) {
-    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(text) || mentionsChild(persona), detail: distressDetail(text) });
+    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: distressDetail(source) });
     const { intent, stage, handoff, safety, ...line } = first;
     yield { type: 'thought', seen: seen || '', intent, stage, handoff, safety };
     yield line;
@@ -215,6 +215,22 @@ export function* mockReply(o) {
 function* greetingLines(hello) {
   for (const [i, line] of hello.entries()) yield { type: 'say', text: line, expression: 'happy', motion: GREETING_MOTIONS[i] ?? 'none', gaze: 'person' };
 }
+
+/**
+ * この回の言葉を分ける。使う人の言葉(近づいた時は無い)と、見えている様子(scene)の両方を見る(CRITsec F7)。
+ * source は分けた元の文(決まった返事の中身 = つらい話の種類・子どもか を、その文から決める)。
+ * @returns {{kind:'emergency'|'distress'|'romance'|'dependency'|null, source:string}}
+ */
+export function classifyTurn({ text = '', trigger = null, scene = '' } = {}) {
+  const fromText = trigger === 'approach' ? null : classifyInput(text);
+  const fromScene = classifyInput(scene);
+  const kind = mostSevere(fromText, fromScene);
+  return { kind, source: kind && kind === fromText ? String(text ?? '') : String(scene ?? '') };
+}
+
+// 覚えている事を話す時の文。人格の「## 覚えている時の言い方」があればその子の言葉、無ければ決まった文(11-07 CRITux 23)
+const againLine = (persona, name, fallback) => memoryLine(persona, 'また会えた', name ? { 名前: name } : {}) || fallback;
+const topicLine = (persona, topic, fallback) => memoryLine(persona, '話の続き', { 話題: topic }) || fallback;
 
 function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learned = [], history = [], persona = '' }) {
   const { name, topic } = summarize(memory?.items ?? []);
@@ -231,8 +247,11 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
       return;
     }
     yield { type: 'thought', seen: seen || '人が近づいてきた', intent: '未確認', stage: 'greet', handoff: false };
-    yield { type: 'say', text: san ? `${san}、また会えたね。` : 'こんにちは。', expression: 'happy', motion: 'wave', gaze: 'person' };
-    yield { type: 'say', text: topic ? `${topic}の話の続き、しようか。` : 'どんなお話をしようか。', expression: 'happy', motion: 'tilt', gaze: 'person' };
+    const first = san ? againLine(persona, name, `${san}、また会えたね。`) : topic ? againLine(persona, '', 'こんにちは。') : 'こんにちは。';
+    yield { type: 'say', text: first, expression: 'happy', motion: 'wave', gaze: 'person' };
+    // 2 文目: 話の続き。覚えている話が無ければ、その子のあいさつの最後の 1 文(無ければ決まった文)
+    const next = topic ? topicLine(persona, topic, `${topic}の話の続き、しようか。`) : hello.length ? hello.at(-1) : 'どんなお話をしようか。';
+    yield { type: 'say', text: next, expression: 'happy', motion: 'tilt', gaze: 'person' };
     return;
   }
   // 人間か AI かを聞かれたら、AI のキャラクターだと正直に答える(安全の決まり 5。仮の頭脳でも守る)
@@ -253,15 +272,15 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
   const learnedLike = learned.find((f) => f.kind === 'like')?.text.replace(/^好きなもの: /, '');
   if (learnedName || learnedLike) {
     yield { type: 'thought', seen: seen || '', intent: '自己紹介', stage: 'chat', handoff: false };
-    if (learnedName) yield { type: 'say', text: `${learnedName}さんっていうんだね。`, expression: 'happy', motion: 'nod', gaze: 'person' };
-    if (learnedLike) yield { type: 'say', text: `${learnedLike}が好きなんだ。覚えておくね。`, expression: 'happy', motion: 'nod', gaze: 'person' };
+    if (learnedName) yield { type: 'say', text: memoryLine(persona, '名前を覚えた', { 名前: learnedName }) || `${learnedName}さんっていうんだね。`, expression: 'happy', motion: 'nod', gaze: 'person' };
+    if (learnedLike) yield { type: 'say', text: memoryLine(persona, '好きなものを覚えた', { 好きなもの: learnedLike }) || `${learnedLike}が好きなんだ。覚えておくね。`, expression: 'happy', motion: 'nod', gaze: 'person' };
     return;
   }
   // 会話の始め(履歴が無い)で、覚えている事があれば、続きから話す
   if (!history.length && (san || topic)) {
     yield { type: 'thought', seen: seen || '', intent: '続きの会話', stage: 'chat', handoff: false };
-    yield { type: 'say', text: san ? `${san}、また会えたね。` : 'また会えたね。', expression: 'happy', motion: 'wave', gaze: 'person' };
-    if (topic) yield { type: 'say', text: `${topic}の話の続きだね。`, expression: 'happy', motion: 'tilt', gaze: 'person' };
+    yield { type: 'say', text: san ? againLine(persona, name, `${san}、また会えたね。`) : againLine(persona, '', 'また会えたね。'), expression: 'happy', motion: 'wave', gaze: 'person' };
+    if (topic) yield { type: 'say', text: topicLine(persona, topic, `${topic}の話の続きだね。`), expression: 'happy', motion: 'tilt', gaze: 'person' };
     return;
   }
   if (/こんにちは|はじめまして|おはよう|こんばんは|やあ/.test(text)) {
@@ -310,9 +329,10 @@ export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で�
  */
 export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, memory = null, learned = [], forceMock = false, brain: want = 'auto', paceMs = MOCK_PACE_MS }) {
   const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
-  const expressions = body.expressions?.length ? body.expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
+  // 表情と動きの名前は、決まった形(英小文字・数字・_ : -)の物だけ(指示文に名前のまま入るため。F6)
+  const expressions = safeChoices(body.expressions, ['neutral', 'happy', 'surprised', 'sad', 'think']);
   // そのキャラが実際に使える動き(rig は、動きのファイルがある物だけ)
-  const motions = Array.isArray(body.motions) && body.motions.length ? body.motions.filter((m) => typeof m === 'string').slice(0, 24) : MOTIONS;
+  const motions = Array.isArray(body.motions) && body.motions.length ? safeChoices(body.motions.slice(0, 24), MOTIONS) : MOTIONS;
   const limitCustom = oneCustomPerReply(expressions); // 特別な表情は、1 回の返事で 1 つまで
   const mockOnly = forceMock || want === 'mock';
   const brain = config.anthropicKey && !mockOnly ? 'haiku' : 'mock'; // 上限に当たった回・合言葉が無い回は、仮の頭脳で動き続ける
@@ -338,12 +358,15 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     }
   };
 
-  // 安全の層(1 段目): つらい話・命の危険は、頭脳を呼ばずに決まった一般の案内を返す(診断しない)
-  const kind = trigger === 'approach' ? null : classifyInput(text);
+  // 安全の層(1 段目): つらい話・命の危険は、頭脳を呼ばずに決まった一般の案内を返す(診断しない)。
+  // 使う人の言葉に加えて、見えている様子(scene)も分ける(CRITsec F7。近づいた時の scene に言葉を入れても、決まった案内を通る)
+  const { kind, source } = classifyTurn({ text, trigger, scene });
+  // 履歴の中の使う人の発言も分ける。決まった返事はくり返さず、本物の頭脳に注意を足すだけ(F7)
+  const historyKind = classifyHistory(history);
   const fixed = kind === 'emergency' || kind === 'distress' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
   if (fixed) {
     onEvent({ type: 'meta', brain, safety: kind, safetyVersion: SAFETY_VERSION });
-    for (const obj of fixedReply(kind, { child: mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(text) })) emit(obj);
+    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(source) })) emit(obj);
     return;
   }
 
@@ -358,11 +381,12 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     return;
   }
 
-  onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}) });
+  onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}) });
   const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true });
+  const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : ''].filter(Boolean).join('\n');
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
-    { role: 'user', content: buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard: turnGuard(kind) }) },
+    { role: 'user', content: buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard }) },
   ];
   let raw = '';
   let said = 0;

@@ -1,4 +1,4 @@
-// 安全の 30 問を「本物の頭脳の返事」で集める道(safety-judge.mjs の --base)の試験。本物の API は呼ばない。
+// 安全の 34 問(30 問 + 人格以外の欄からの上書き 4 問)を「本物の頭脳の返事」で集める道(safety-judge.mjs の --base)の試験。本物の API は呼ばない。
 // 手元のサーバーを偽の Anthropic サーバーに向けて起こし、HTTP で聞く。つらい話・命の危険は頭脳を呼ばずに決まった案内、
 // ふつうの問いは頭脳を呼ぶ(使った量が残る)。上限に当たった問いは仮の頭脳の印が付く。
 import { test } from 'node:test';
@@ -26,10 +26,13 @@ const freePort = () =>
 
 async function fakeBrain() {
   let calls = 0;
+  const bodies = []; // 頭脳に届いた本文(上書きの文字が入っていないかを見る)
   const server = createHttpServer((req, res) => {
-    req.resume();
+    let raw = '';
+    req.on('data', (c) => (raw += c));
     req.on('end', () => {
       calls += 1;
+      bodies.push(raw);
       const sse = (e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`;
       const line = { type: 'say', text: 'うん、聞いているよ。', expression: 'happy', motion: 'nod', gaze: 'person', intent: '雑談', stage: 'chat', handoff: false };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -40,7 +43,7 @@ async function fakeBrain() {
     });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  return { url: `http://127.0.0.1:${server.address().port}/v1/messages`, calls: () => calls, close: () => server.close() };
+  return { url: `http://127.0.0.1:${server.address().port}/v1/messages`, calls: () => calls, bodies, close: () => server.close() };
 }
 
 async function startServer(brainUrl, perMinute) {
@@ -65,7 +68,7 @@ async function startServer(brainUrl, perMinute) {
   throw new Error(`サーバーが立ちませんでした: ${out}`);
 }
 
-test('本物の頭脳のサーバーに 30 問を聞く: つらい話・命の危険は頭脳を呼ばない。ふつうの問いは呼んで、使った量が残る', async () => {
+test('本物の頭脳のサーバーに 34 問を聞く: つらい話・命の危険は頭脳を呼ばない。ふつうの問いは呼んで、使った量が残る。上書きの文字は頭脳に届かない', async () => {
   const brain = await fakeBrain();
   const server = await startServer(brain.url, 100);
   try {
@@ -84,6 +87,11 @@ test('本物の頭脳のサーバーに 30 問を聞く: つらい話・命の�
     assert.equal(called, brain.calls(), '頭脳を呼んだ数と、偽の API に届いた数が同じ');
     assert.ok(called > 0 && called < rows.length);
     assert.ok(rows.every((r) => r.brain === 'haiku'));
+    // 人格以外の欄(名前・場所・目印・表情と動き)に書いた上書きの文字は、サーバーの入口と指示文の組み立てで外れ、頭脳に届かない(F6)
+    const injected = cases.filter((c) => c.cat === 'override').flatMap((c) => c.injected);
+    assert.ok(injected.length >= 3);
+    for (const body of brain.bodies) for (const bad of injected) assert.ok(!body.includes(bad), `頭脳への入力に「${bad}」が入った`);
+    assert.ok(rows.filter((r) => r.cat === 'override').every((r) => r.calledBrain && r.safety === null), '上書きの問いはふつうに話す');
   } finally {
     server.proc.kill();
     brain.close();

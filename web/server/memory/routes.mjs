@@ -1,6 +1,7 @@
 // 記憶の入口(K4。くわしくは API.md)。合鍵はヘッダー x-memory-key で受ける(URL に入れない。記録にも書かない)。
 import { MemoryError, isKey, samePass } from './store.mjs';
 import { extractFacts } from './reflect.mjs';
+import { memoryLine } from '../greeting.mjs';
 import { redactSecrets } from '../../src/conversation/secrets.js';
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
@@ -11,12 +12,22 @@ export function isForgetRequest(text) {
   return FORGET_RE.test(String(text ?? '').trim());
 }
 
-/** 会話の「わすれて」で全部消したときの返事(手元のサーバーと公開の関数で同じ形) */
-export function forgetReplyEvents(forgotten) {
+/**
+ * 会話の「わすれて」で全部消したときの返事(手元のサーバーと公開の関数で同じ形)。
+ * 人格の文に「## 覚えている時の言い方」の「全部わすれた」「まだ覚えていない」があれば、その子の言葉で言う(11-07 CRITux 23)。
+ * @param {boolean} forgotten
+ * @param {string} [persona]
+ */
+export function forgetReplyEvents(forgotten, persona = '') {
+  const text = forgotten
+    ? memoryLine(persona, '全部わすれた') || 'わかった、覚えていたことは全部消したよ。'
+    : memoryLine(persona, 'まだ覚えていない') || 'まだ何も覚えていなかったよ。';
   return [
-    { type: 'memory', forgotten },
+    // via: 'chat' は「会話の言葉で消した」印。画面の札は、この印の時だけ番号と古い知らせを消す
+    // (main.js は引き出しを開くたびに {type:'memory', forgotten:true} で読み直しを頼むので、それと見分ける)
+    { type: 'memory', forgotten, via: 'chat' },
     { type: 'thought', seen: '', intent: '記憶を消す', stage: 'chat', handoff: false },
-    { type: 'say', text: forgotten ? 'わかった、覚えていたことは全部消したよ。' : 'まだ何も覚えていなかったよ。', expression: 'happy', motion: 'nod', gaze: 'person' },
+    { type: 'say', text, expression: 'happy', motion: 'nod', gaze: 'person' },
   ];
 }
 

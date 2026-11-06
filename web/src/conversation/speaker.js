@@ -12,6 +12,9 @@ import { RETRO, crawlSchedule, isPause, scheduleRetro, voiceFor } from './retroV
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const SERVER_TTS_OFF = new Set([404, 405, 429, 501, 503]); // サーバーに声が無い・上限: この画面の間は聞きに行かない
+// サーバーが 204 と印(x-tts-reason)で「声なし」と返した時の理由(11-07 CRITux 25: 鍵が無い時の 503 を 204 にした)
+const SERVER_TTS_REASON = { 'no-key': '読み上げの鍵がありません' };
+export const NO_SERVER_VOICE = '声のサーバーがありません';
 
 export class Speaker {
   constructor() {
@@ -49,6 +52,20 @@ export class Speaker {
   setVoice({ voiceId, seed } = {}) {
     if (voiceId) this.voiceId = voiceId;
     if (seed !== undefined) this.retroVoice = voiceFor(seed);
+  }
+
+  /**
+   * 画面を配るサーバーに声があるか(main.js が /api/status を読んだ後に渡す。公開の URL には /api/status も /api/tts も無い)。
+   * false なら、この画面の間は /api/tts を聞きに行かない(無い道を聞くと、console に 404 の赤い行が出る)。
+   * true に戻すと、また聞きに行く(この知らせで止めていた時だけ)。声の鍵(BYOK)の道は、どちらでも使える。
+   * @param {boolean} available
+   */
+  setServerVoice(available) {
+    if (available) {
+      if (this.serverTtsOff === NO_SERVER_VOICE) this.serverTtsOff = null;
+    } else if (!this.serverTtsOff) {
+      this.serverTtsOff = NO_SERVER_VOICE;
+    }
   }
 
   /** あいづちの声を、サーバーから読んでおく(前もって作られた物。無ければ何もしない) */
@@ -249,6 +266,13 @@ export class Speaker {
       }
       this.ttsError = reason;
       if (SERVER_TTS_OFF.has(res.status)) this.serverTtsOff = reason;
+      return;
+    }
+    if (!key && (res.status === 204 || res.headers?.get?.('x-tts') === 'off' || !res.body)) {
+      // サーバーに声の鍵が無い(失敗ではない。字幕と「ピッ」で話す)。この画面の間は聞きに行かない
+      const reason = SERVER_TTS_REASON[res.headers?.get?.('x-tts-reason') ?? ''] ?? '読み上げが使えません';
+      this.ttsError = reason;
+      this.serverTtsOff = reason;
       return;
     }
     if (key) this.voiceKeyStatus = null;

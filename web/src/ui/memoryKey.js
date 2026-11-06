@@ -50,13 +50,18 @@ async function read(res, what) {
 }
 
 const jsonHeaders = () => ({ 'content-type': 'application/json', ...memoryHeaders() });
+/** 合言葉の見出し: 札の欄に入っていればそれ、無ければ会話の合言葉(公開では、番号を作る時も受け取る時も要る) */
+const passHeaders = (pass) => {
+  const p = String(pass ?? '').trim();
+  return p ? { 'x-demo-pass': p } : demoHeaders();
+};
 // 宛先は、どれも文字で書く(画面の通信先の点検 privacy.test が見る)
 const api = {
   list: async () => read(await fetch('/api/memory', { headers: memoryHeaders() }), '記憶を読めません'),
   create: async () => read(await fetch('/api/memory/new', { method: 'POST' }), '合鍵を作れません'),
   forget: async (body) => read(await fetch('/api/memory', { method: 'DELETE', headers: jsonHeaders(), body: JSON.stringify(body) }), '記憶を消せません'),
-  pair: async (pass) => read(await fetch('/api/memory/pair', { method: 'POST', headers: { ...memoryHeaders(), ...(pass ? { 'x-demo-pass': pass } : demoHeaders()) } }), '番号を作れません'),
-  claim: async (code) => read(await fetch('/api/memory/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }) }), '番号を受け取れません'),
+  pair: async (pass) => read(await fetch('/api/memory/pair', { method: 'POST', headers: { ...memoryHeaders(), ...passHeaders(pass) } }), '番号を作れません'),
+  claim: async (code, pass) => read(await fetch('/api/memory/claim', { method: 'POST', headers: { 'content-type': 'application/json', ...passHeaders(pass) }, body: JSON.stringify({ code }) }), '番号を受け取れません'),
 };
 
 /** 合鍵が無ければ作る。あれば、まだサーバーに記憶があるかを確かめ、無ければ作り直す */
@@ -87,11 +92,14 @@ export async function forgetAll() {
 /** 別の端末へ渡す 6 桁の番号を作る。合言葉(公開のとき)は画面の入力欄から受け、見出し x-demo-pass で送る(空なら、会話の合言葉を使う) */
 export const pairCode = ({ pass = '' } = {}) => api.pair(pass);
 
-/** 番号を入れて、合鍵を受け取る。この端末の前の合鍵は置き換える */
-export async function claimCode(code) {
+/**
+ * 番号を入れて、合鍵を受け取る。この端末の前の合鍵は置き換える。
+ * 合言葉(公開のとき)は、札の欄の値か、会話の合言葉を見出し x-demo-pass で送る(手元のサーバーは見ない)
+ */
+export async function claimCode(code, { pass = '' } = {}) {
   const clean = String(code ?? '').replace(/\D/g, '');
   if (clean.length !== 6) throw new Error('番号は 6 けたの数字です');
-  const data = await api.claim(clean);
+  const data = await api.claim(clean, pass);
   setKey(data.key);
   return data;
 }

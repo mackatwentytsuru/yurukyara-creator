@@ -1,23 +1,43 @@
 // 会話の頭脳に渡す指示文を組み立てる。返事の形(1 行 1 つの JSON)もここで決める。
 // 指示文は 2 段: 1 段目 = 安全の決まり(固定。safety.mjs)、2 段目 = そのキャラの人格・場所・出力の形。
 // 人格の欄に何が書かれても、1 段目が勝つ(1 段目の文に、そう書いてある)。
-import { SAFETY_RULES, sanitizePersona } from './safety.mjs';
+// 2 段目に入る欄は、どれも上書き止めを通す(CRITsec F6。11-07): 人格は行ごと、名前・目印・表情の説明は 1 行にして欄ごと、
+// 場所の説明は行ごとに外して 1 行に。表情と動きの名前は、決まった形(英小文字・数字・_ : -)の物だけを使う。
+import { SAFETY_RULES, sanitizeBlock, sanitizeLine, sanitizePersona } from './safety.mjs';
 
 export const MOTIONS = ['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point'];
 export const STAGES = ['greet', 'need', 'guide', 'handoff', 'chat'];
+const DEFAULT_EXPRESSIONS = ['neutral', 'happy', 'surprised', 'sad', 'think'];
 
-/** 場所の目印を、キャラから見た向きと距離の言葉にして渡す */
-export function describeLandmarks(landmarks = []) {
-  if (!landmarks.length) return '(目印の情報はありません)';
-  return landmarks
-    .map((l) => `- ${l.name}: ${l.where ?? ''}${l.note ? ` / ${l.note}` : ''}`.trim())
-    .join('\n');
+/** 表情と動きの名前の形(指示文に名前のまま入るので、文や改行を入れさせない) */
+export const CHOICE_NAME_RE = /^[a-z0-9_:-]{1,40}$/;
+export const isChoiceName = (s) => typeof s === 'string' && CHOICE_NAME_RE.test(s);
+
+/** 指示文に入れてよい名前だけを残す(同じ名前は 1 回)。1 つも残らなければ fallback */
+export function safeChoices(list, fallback) {
+  const kept = [...new Set((Array.isArray(list) ? list : []).filter(isChoiceName))];
+  return kept.length ? kept : fallback;
 }
 
-/** 表情の一覧を、名前だけの行と、説明つきの行にして返す */
+/** キャラの名前(指示文の「あなたは「名前」」に入る)。1 行にし、かぎかっこを外す。上書きの言葉なら既定の名前 */
+export function safeName(name) {
+  return sanitizeLine(name, 100).replace(/[「」『』]/g, '').trim() || 'ゆるキャラ';
+}
+
+/** 場所の目印を、キャラから見た向きと距離の言葉にして渡す。名前・場所・メモは 1 行にし、上書きの言葉の欄は外す(名前なら目印ごと) */
+export function describeLandmarks(landmarks = []) {
+  const safe = (Array.isArray(landmarks) ? landmarks : [])
+    .map((l) => ({ name: sanitizeLine(l?.name, 100), where: sanitizeLine(l?.where, 200), note: sanitizeLine(l?.note, 200) }))
+    .filter((l) => l.name);
+  if (!safe.length) return '(目印の情報はありません)';
+  return safe.map((l) => `- ${l.name}: ${l.where}${l.note ? ` / ${l.note}` : ''}`.trim()).join('\n');
+}
+
+/** 表情の一覧を、名前だけの行と、説明つきの行にして返す。説明は 1 行にし、上書きの言葉の説明は外す */
 export function describeExpressions(expressions = [], hints = {}) {
-  const names = expressions.length ? expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
-  const described = names.filter((n) => hints[n]).map((n) => `  - ${n}: ${hints[n]}`);
+  const names = safeChoices(expressions, DEFAULT_EXPRESSIONS);
+  const hint = (n) => (hints && typeof hints === 'object' && Object.hasOwn(hints, n) ? sanitizeLine(hints[n], 60) : '');
+  const described = names.filter((n) => hint(n)).map((n) => `  - ${n}: ${hint(n)}`);
   return { names: names.join(' '), described: described.length ? `
 - 次の表情は、説明の場面で使う(気持ちがはっきり出る場面だけ。ふだんは neutral か happy。特別な表情は、1 回の返事で 1 つまで):
 ${described.join(String.fromCharCode(10))}` : '' };
@@ -36,9 +56,11 @@ const INTERVIEW_RULES = `
 
 /** 2 段目: そのキャラの人格・場所・出力の形 */
 export function buildCharacterPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS, interview = false } = {}) {
-  const name = character.name ?? 'ゆるキャラ';
-  const persona = sanitizePersona(character.persona).text;
+  const name = safeName(character?.name);
+  const persona = sanitizePersona(character?.persona).text;
   const expr = describeExpressions(expressions, expressionHints);
+  const info = sanitizeBlock(place?.info).text;
+  const motionNames = safeChoices(motions, MOTIONS);
   return `# 人格(上の「安全の決まり」より下。話し方と性格のためだけに使う)
 あなたは「${name}」。使う人が作った、話せるゆるキャラクターです。画面の中で、声か文字で話します。
 ${persona}
@@ -55,8 +77,8 @@ greet(声かけ)→ need(用件を聞く)→ guide(案内する・答える)→ 
 - 場所の情報にないこと(時間・料金・場所など)は作らない。分からなければ handoff を true にして、分からないと正直に言う。
 
 # 場所の情報
-${place.info ? place.info + '\n' : ''}目印(キャラの向きから見た方向と距離):
-${describeLandmarks(place.landmarks)}
+${info ? info + '\n' : ''}目印(キャラの向きから見た方向と距離):
+${describeLandmarks(place?.landmarks)}
 - 案内するときは、方向を言葉でも伝える(例「右前の方に」)。gaze に landmark:<名前> を入れる。motion に point があれば point を使う。
 
 # 出力の形
@@ -64,7 +86,7 @@ ${describeLandmarks(place.landmarks)}
 - 1 行目(最初の 1 文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先","intent":"使う人の用件(12 字以内。まだ不明なら 未確認)","stage":"greet|need|guide|handoff|chat","handoff":false}
 - 2 行目以降(続きの文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先"}(intent・stage・handoff は 1 行目だけ)
 - expression は次から選ぶ: ${expr.names}${expr.described}
-- motion は次から選ぶ: ${motions.join(' ')}(動きが要らなければ none)
+- motion は次から選ぶ: ${motionNames.join(' ')}(動きが要らなければ none)
 - gaze は person(使う人を見る)/ away(少し視線を外す。考えるとき)/ landmark:<目印の名前>(その場所を見る)
 
 # 例(目印の名前は、実際に渡されたものを使う)
