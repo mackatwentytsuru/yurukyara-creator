@@ -17,6 +17,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TOOL = os.path.join(REPO, "creator", "review", "review_state.py")
 GATED = {0: "C0", 2: "C2", 3: "C3", 4: "C3", 7: "C5"}     # K3 の段と門(review_state.py の GATES と同じ)
+GATE_LAST = {"C0": 0, "C2": 2, "C3": 4, "C5": 7}            # 門ごとの最後の段(C3 は段 3・4 をまとめて見る)
 EXIT_CLOSED = 2
 ENV_GATED = "YC_REVIEW_GATED"     # 外側の道具(stage_run.py)が確認を済ませた印。中の道具は二重に見ない
 
@@ -48,13 +49,18 @@ def decide(cid, mode="auto"):
 
 
 def check_range(first, last):
-    """段 first〜last を 1 回で作ってよいか。途中(last より前)に門があれば GateClosed。"""
+    """段 first〜last を 1 回で作ってよいか。途中(last より前)で終わる門があれば GateClosed。
+    門の途中の段から始めるのも断る(C3 は段 3・4 をまとめて作り、まとめて見る)。"""
     if last < first:
         raise GateClosed(f"段の範囲が逆です({first}〜{last})")
-    inner = [n for n in range(first, last) if n in GATED]
+    inner = sorted(GATE_LAST[g] for g in set(GATED.get(n) for n in range(first, last + 1)) - {None}
+                   if first <= GATE_LAST[g] < last)
     if inner:
         n = inner[0]
-        raise GateClosed(f"段 {n} は門 {GATED[n]}(人が見る段)です。段 {first}〜{n} で止めて、スマホで確かめてから次へ進みます")
+        raise GateClosed(f"段 {n} で門 {GATED[n]}(人が見る段)が終わります。段 {first}〜{n} で止めて、スマホで確かめてから次へ進みます")
+    g = GATED.get(last)
+    if g and GATE_LAST[g] != last:
+        raise GateClosed(f"門 {g} は段 {GATE_LAST[g]} までをまとめて見ます。--upto {GATE_LAST[g]} にしてください")
 
 
 def outer_checked():

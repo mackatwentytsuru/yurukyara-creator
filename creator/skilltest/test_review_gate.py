@@ -117,9 +117,28 @@ class GateTest(unittest.TestCase):
         st = rs.load_state("g5")
         self.assertEqual(st["gates"]["C2"]["status"], "waiting")
         self.human("g5", "C2", "ok")
-        rc, ran, out = self.stage("g5", 3)
+        rc, ran, out = self.stage("g5", 3, upto=4)
         self.assertEqual(rc, 0, out)
         self.assertTrue(ran)
+
+    def test_c3_is_made_together_and_waits(self):
+        """C3 は段 3・4 をまとめて見る門。段 3 だけでは始めない。3〜4 は作れて、そのあと段 5 は人の C3 を待つ。"""
+        self.c0_ok("g11")
+        rc, ran, out = self.stage("g11", 1, "--publish-right", SVG, upto=2)
+        self.assertEqual(rc, 0, out)
+        self.human("g11", "C2", "ok")
+        rc, ran, out = self.stage("g11", 3)
+        self.assertEqual(rc, RG.EXIT_CLOSED, out)
+        self.assertFalse(ran)
+        self.assertIn("--upto 4", out)
+        rc, ran, out = self.stage("g11", 3, upto=4)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(ran)
+        self.assertIsNone(self.record("g11", 3))
+        self.assertIsNone(self.record("g11", 4))
+        rc, ran, out = self.stage("g11", 5)
+        self.assertEqual(rc, RG.EXIT_CLOSED, out)
+        self.assertFalse(ran)
 
     def test_redo_blocks_next_stage(self):
         rs.init("g6", name="試し")
