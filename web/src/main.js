@@ -1,7 +1,7 @@
 // 会話の本体。キャラを出し、カメラで人を見つけて目と首で追い、話しかけられたら Claude に聞いて、声で答える。
 import * as THREE from 'three';
 import { createStage } from './scene.js';
-import { characterUrl, loadCharacter, motionChoices } from './character/index.js';
+import { loadFirstCharacter, motionChoices } from './character/index.js';
 import { MediapipeSource, SimSource, PoseSource, BridgeSource } from './tracking/sources/index.js';
 import { AttentionPicker } from './tracking/attention.js';
 import { describeScene } from './tracking/geometry.js';
@@ -10,7 +10,8 @@ import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
 import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
-import { createUi } from './ui/panel.js';
+import { createUi, getDemoPass, setDemoPass, FALLBACK_BRAIN_NOTICE } from './ui/panel.js';
+import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
 import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
 import { createArPlacement } from './arPlacement.js';
 import { createVrStage } from './vrStage.js';
@@ -72,6 +73,11 @@ function setGaze(spec, ms = 2000) {
     return null;
   }
   const until = performance.now() + ms + 600;
+  if (Array.isArray(spec)) {
+    // 動きの意図(K2)の gaze: ワールド座標の点。キャラから見た位置を返す(指さしに使う)
+    gazeOverride = { pos: spec, until };
+    return toLocal(spec);
+  }
   if (spec === 'away') {
     gazeOverride = { pos: toWorld([-0.8, stage.state.headY + 0.3, stage.state.camZ * 0.8]), until };
     return null;
@@ -85,6 +91,45 @@ function setGaze(spec, ms = 2000) {
   return null;
 }
 
+/* ---------- 会話のイベント(記憶の札・仮の頭脳の知らせ) ---------- */
+let memory = null; // 記憶の札(S3 の mountMemoryPanel の返り値)
+let chatEventsSeen = false; // 会話の側(Dialogue)が onEvent でイベントを渡してくれるか
+let brainNoticeText = null; // イベントで届いた「仮の頭脳です(理由)」
+
+/** サーバーの会話のイベントを 1 つ受ける。Dialogue が onEvent を渡せるようになったら、ここに全部届く */
+function onChatEvent(ev) {
+  chatEventsSeen = true;
+  memory?.onChatEvent(ev); // 覚えた・消したの知らせで一覧を読み直す
+  if (ev?.type === 'meta') {
+    if (ev.notice) brainNoticeText = ev.notice; // 上限・合言葉など、理由つきの知らせ(K5)
+    else if (ev.brain === 'haiku') brainNoticeText = null;
+    updateBrainNotice();
+  }
+}
+
+/** いま話している頭脳。手元のサーバーは /api/status、公開の URL は会話のイベント(Dialogue.brain)から */
+function currentBrain() {
+  if (app.status?.brain) return app.status.brain;
+  return dialogue.brain && dialogue.brain !== 'unknown' ? dialogue.brain : null;
+}
+
+/** 仮の頭脳で話している間は、字幕の上に知らせを出す(契約 K5: 断らずに話し続け、そうだと分かるようにする) */
+function updateBrainNotice() {
+  ui.brainNotice(currentBrain() === 'mock' ? (brainNoticeText ?? FALLBACK_BRAIN_NOTICE) : null);
+}
+
+// 会話のイベントがまだ届かない間は、返事のあとに合鍵を確かめて一覧を読み直す。
+// forgotten の形で渡すと、札は合鍵を確かめ(消えていれば作り直し)、一覧を読む(memoryPanel.js の onChatEvent)
+const resyncMemory = () => memory?.onChatEvent({ type: 'memory', forgotten: true });
+
+/** 会話を 1 回送る。どの入口(文字・声・ボタン・近づいた人・VR)も、ここを通す */
+function talk(turn) {
+  return dialogue.send(turn).then(() => {
+    if (!chatEventsSeen) resyncMemory();
+    updateBrainNotice();
+  });
+}
+
 /* ---------- 会話 ---------- */
 const dialogue = new Dialogue({
   character: null, // 読み込み後に入れる
@@ -92,6 +137,7 @@ const dialogue = new Dialogue({
   ui,
   setGaze,
   motionChoices,
+  onEvent: onChatEvent, // 会話の側が対応したら、サーバーのイベントが全部届く(まだの間は talk の後で読み直す)
   interview: params.get('interview') === '1', // 入口のインタビューの型(返事 2 文まで)
   getContext: () => ({
     scene: sceneText(),
@@ -154,14 +200,14 @@ function showShopChoices(emphasis = false) {
       misheard.heard();
       speaker.unlock();
       ui.choices(SHOP_CHOICES, pickChoice); // 目立たせるのは、聞き取れなかった直後だけ
-      dialogue.send({ text: q, mode: 'text' });
+      void talk({ text: q, mode: 'text' });
     },
     emphasis,
   );
 }
 const pickChoice = (q) => {
   speaker.unlock();
-  dialogue.send({ text: q, mode: 'text' });
+  void talk({ text: q, mode: 'text' });
 };
 
 /** 声は出たのに文字にならなかった: 1 回目は聞き返し、2 回続けたら選択式 */
@@ -204,7 +250,7 @@ async function toggleMic() {
         lastTextAt = performance.now();
         misheard.heard();
         const t0 = info.lastVoicedAt || performance.now();
-        dialogue.send({ text, t0, mode: 'voice' });
+        void talk({ text, t0, mode: 'voice' });
       },
       onVoice: (active) => {
         $('micBtn').classList.toggle('hearing', active);
@@ -252,7 +298,8 @@ function updatePrivacy() {
 /* ---------- 画面の状態 ---------- */
 async function refreshStatus() {
   try {
-    app.status = await (await fetch('/api/status')).json();
+    const res = await fetch('/api/status');
+    app.status = res.ok ? await res.json() : null; // 公開の URL には /api/status が無い(null のまま)
   } catch {
     app.status = null;
   }
@@ -261,7 +308,8 @@ async function refreshStatus() {
 function updateChips() {
   const s = app.status;
   const chips = [];
-  chips.push(['頭脳', s ? (s.brain === 'haiku' ? 'Claude Haiku' : '仮(鍵なし)') : '—', s?.brain === 'haiku' ? 'ok' : 'warn']);
+  const brain = currentBrain();
+  chips.push(['頭脳', brain === 'haiku' ? 'Claude Haiku' : brain === 'mock' ? '仮の頭脳' : '—', brain === 'haiku' ? 'ok' : 'warn']);
   const ttsOk = s?.tts?.available && !speaker.ttsError;
   chips.push(['声', ttsOk ? `ElevenLabs(残り ${s.tts.remainingToday}字)` : '字幕のみ', ttsOk ? 'ok' : 'warn']);
   const info = app.source?.info() ?? { label: 'なし', ok: false };
@@ -348,7 +396,7 @@ function frame(rawMs) {
       !speaker.speaking
     ) {
       presence.greetedAt = nowS;
-      dialogue.send({ trigger: 'approach', mode: 'text' });
+      void talk({ trigger: 'approach', mode: 'text' });
     }
   } else if (nowS - presence.lastSeen > 3) {
     presence.since = 0; // いなくなって 3 秒たったら、次に来た人は新しい人
@@ -366,6 +414,7 @@ function frame(rawMs) {
   if (nowMs - chipClock > 500) {
     chipClock = nowMs;
     updateChips();
+    updateBrainNotice();
     const t = sceneText();
     if (t !== lastSceneText) {
       lastSceneText = t;
@@ -491,7 +540,7 @@ async function onPresentationChange(mode) {
 /** コントローラーのトリガー(手なら、つまむ): 話しかける。マイクが使えなくても、返事と声を確かめられる */
 function onVrSelect() {
   speaker.unlock();
-  if (!dialogue.busy && !speaker.speaking) dialogue.send({ text: VR_HELLO, mode: 'text' });
+  if (!dialogue.busy && !speaker.speaking) void talk({ text: VR_HELLO, mode: 'text' });
 }
 
 /** 殻で床をタップした点。位置合わせの途中ならそれに使い、終わったあとは、キャラをそこへ移す */
@@ -544,6 +593,44 @@ async function setupPresentation() {
   app.modes = modes;
 }
 
+/* ---------- 合言葉(契約 K5) ---------- */
+// 公開の URL(手元のサーバーの /api/status が無い)か ?askpass=1 のときだけ、ゲートに合言葉の欄を出す。
+// 合言葉は URL に入れない。このタブの中だけに持ち、会話の見出し(x-demo-pass)で送る(送るのは会話の側)。
+function setupPass() {
+  const field = $('passField');
+  const input = $('passInput');
+  if (!field || !input) return;
+  field.hidden = Boolean(app.status) && params.get('askpass') !== '1';
+  input.value = getDemoPass();
+  input.addEventListener('input', () => {
+    setDemoPass(input.value);
+    syncMemoryPass();
+  });
+}
+
+/** 記憶の札の「番号を出す」にも同じ合言葉を使う(札の合言葉の欄は隠したまま、値だけ入れる) */
+function syncMemoryPass() {
+  const el = memory?.root.querySelector('.mem-pass');
+  if (el) el.value = getDemoPass();
+}
+
+/* ---------- 記憶の札(S3 の mountMemoryPanel) ---------- */
+// 覚えていることの一覧・1 つずつ消す・全部わすれる・別の端末へ渡す番号。上の段の「覚えていること」の引き出しに入れる。
+// ?memory=0 と、重さを測る時(?perf=1)は付けない(測るたびに合鍵を作らない)
+function setupMemory() {
+  if (params.get('memory') === '0' || params.get('perf') === '1') return;
+  const drawer = $('memoryDrawer');
+  const slot = $('memorySlot');
+  if (!drawer || !slot) return;
+  memory = mountMemoryPanel(slot, { askPass: false });
+  app.memory = memory;
+  drawer.hidden = false;
+  syncMemoryPass();
+  drawer.addEventListener('toggle', () => {
+    if (drawer.open) resyncMemory(); // 開くたびに、合鍵を確かめて一覧を読み直す
+  });
+}
+
 async function boot() {
   const status = $('gateStatus');
   const buttons = [$('startCam'), $('startSim')];
@@ -565,21 +652,23 @@ async function boot() {
   fitBottom();
   let readyAt = null;
   try {
-    const url = characterUrl(params.get('character') ?? params.get('char')); // id・URL のどちらでもよい
     app.place = await loadPlaceData(params.get('place'));
     // 毛の層は重ね描きで、ソフト描画で 20 倍遅かった(実測)。端末の段で、スマホ・弱い端末・ヘッドセットは減らす(PC は今のまま)。?fur= で決め打ち
     const tierOverrides = applyTier(stage, app.tier, window.devicePixelRatio);
     if (Number(params.get('fur')) > 0) tierOverrides.furLayers = Number(params.get('fur'));
-    const character = await loadCharacter(url, tierOverrides);
+    // ?character= は id・URL のどちらでもよい。無ければ主役 → 作例の順に、出せるキャラ。?look=2d|3d で見た目の方式(無ければ looks.default)
+    const { character, id } = await loadFirstCharacter(params.get('character') ?? params.get('char'), { ...tierOverrides, look: params.get('look') ?? '' });
     app.character = character;
+    app.characterId = id;
     dialogue.character = character;
+    document.documentElement.dataset.look = character.look ?? '3d';
     if (app.place.loaded) {
       stage.scene.add(app.place.loaded.object3d);
       app.place.loaded.placeCharacter(character.object3d); // 場所が決めた位置・向きに立たせる
     }
     stage.scene.add(character.object3d);
-    // 人型でないキャラ(rig)は、上半身でなく全身を見せる
-    const view = params.get('view') ?? (character.kind === 'rig' ? 'full' : 'bust');
+    // 人型でないキャラ(rig)と 2D の板は、上半身でなく全身を見せる
+    const view = params.get('view') ?? (character.kind === 'vrm' ? 'bust' : 'full');
     stage.frameCharacter(character, view === 'full' ? 'full' : 'bust', app.place.loaded?.object3d);
     if (character.personaUrl) app.persona = await (await fetch(character.personaUrl)).text();
     status.textContent = '';
@@ -592,6 +681,8 @@ async function boot() {
   await setupPresentation().catch((e) => console.warn('見せ方の切りかえを用意できませんでした:', e.message));
   await refreshStatus();
   setInterval(refreshStatus, 15000);
+  setupPass();
+  setupMemory();
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
@@ -658,7 +749,7 @@ async function boot() {
     if (!text) return;
     input.value = '';
     speaker.unlock();
-    dialogue.send({ text, mode: 'text' });
+    void talk({ text, mode: 'text' });
   });
   if (!listenProvider()) {
     $('micBtn').disabled = true;

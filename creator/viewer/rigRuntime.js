@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createGltfLoader } from '../../web/src/character/gltfLoader.js'; // meshopt で縮めた GLB も読める
 import { CharacterBase } from '../../web/src/character/characterBase.js';
 import { applyFur } from './furShell.js';
 
@@ -232,7 +232,7 @@ export async function loadRigCharacter(url, options = {}) {
   const json = await res.json();
   if (json.fur && options.furLayers) json.fur = { ...json.fur, layers: options.furLayers };
   const base = new URL(url, location.href);
-  const loader = new GLTFLoader();
+  const loader = createGltfLoader();
   const gltf = await loader.loadAsync(new URL(json.model, base).href);
   const clips = new Map();
   await Promise.all(

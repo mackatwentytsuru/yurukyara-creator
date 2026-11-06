@@ -11,7 +11,7 @@
 //    object3d が動き、worldFromRoom / roomFromWorld / placeCharacter / describeLandmarksFromWorld がそれを使う。
 //    spawn と landmarks は、いつでも部屋の座標のまま。
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createGltfLoader } from '../character/gltfLoader.js'; // meshopt で縮めた GLB も読める
 import { parsePlaceJson, bearingFrom } from './placeSchema.js';
 
 async function fetchJson(url) {
@@ -22,7 +22,7 @@ async function fetchJson(url) {
 
 function loadGlb(url) {
   return new Promise((resolve, reject) => {
-    new GLTFLoader().load(url, resolve, undefined, (e) =>
+    createGltfLoader().load(url, resolve, undefined, (e) =>
       reject(new Error(`GLB を読めない: ${url} (${e?.message ?? e})`)),
     );
   });

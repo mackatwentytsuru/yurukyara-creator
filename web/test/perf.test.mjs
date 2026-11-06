@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PERF_SCHEMA, quantile, summarizeFrames, summarizeResources } from '../src/stage/perf.js';
+import { PERF_SCHEMA, k6Record, quantile, summarizeFrames, summarizeResources } from '../src/stage/perf.js';
 
 test('版の名前がある', () => {
   assert.equal(PERF_SCHEMA, 'perf/1');
@@ -36,4 +36,26 @@ test('読み込んだファイルを種類ごとにまとめる', () => {
   assert.equal(s.total.count, 4);
   assert.equal(s.total.transfer, 1650);
   assert.deepEqual(s.files.map((f) => f.path), ['/characters/robo/model.glb', '/characters/robo/face_atlas.png']);
+});
+
+test('契約 K6 の平らな 1 行を作る(欄の名前と値)', () => {
+  const json = {
+    character: 'robo', look: '3d', tier: { name: 'mid' }, renderer: { name: 'ANGLE (Apple, Apple GPU, Metal)' },
+    timing: { sample_s: 6, ready_ms: 2400 }, frames: { fps_median: 59.9, frame_ms_median: 16.7, frame_ms_p95: 18.2 },
+    gl: { calls: 26, triangles: 51234 }, bytes: { model: { transfer: 1048576 } },
+  };
+  const k = k6Record(json, { commit: 'abc1234', device: 'mobile' });
+  assert.deepEqual(Object.keys(k), ['commit', 'device', 'renderer', 'id', 'look', 'tier', 'seconds', 'fps_median', 'frame_ms_p50', 'frame_ms_p95', 'draw_calls', 'triangles', 'load_ms', 'glb_bytes']);
+  assert.equal(k.commit, 'abc1234');
+  assert.equal(k.device, 'mobile');
+  assert.equal(k.id, 'robo');
+  assert.equal(k.tier, 'mid');
+  assert.equal(k.frame_ms_p50, 16.7);
+  assert.equal(k.draw_calls, 26);
+  assert.equal(k.load_ms, 2400);
+  assert.equal(k.glb_bytes, 1048576);
+  const empty = k6Record({});
+  assert.equal(empty.commit, null);
+  assert.equal(empty.device, 'desktop');
+  assert.equal(empty.glb_bytes, 0); // 2D の板は GLB を読まない
 });

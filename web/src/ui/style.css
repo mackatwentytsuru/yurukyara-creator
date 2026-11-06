@@ -168,3 +168,61 @@ html.is-led #choices,
 html.is-led #composer,
 html.is-led .modes { display: none !important; }
 html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origin: top left; }
+
+/* 上の段: 見せ方のボタンと「覚えていること」を同じ行に(スマホで「Claude の考え」の見出しと重ならないように) */
+.top-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.thought-body .row[hidden] { display: none; }
+
+/* 仮の頭脳の知らせ(契約 K5)。字幕の上に 1 行、黄色で */
+.brain-notice {
+  width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(12px, 1.6vw, 15px); line-height: 1.4;
+  padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--warn); color: var(--warn);
+}
+.brain-notice[hidden] { display: none; }
+
+/* 覚えていること(S3 の記憶の札を入れる引き出し) */
+.drawer { position: relative; pointer-events: auto; }
+.drawer[hidden] { display: none; }
+.drawer > summary {
+  list-style: none; font-size: 13px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text);
+  background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.drawer > summary::-webkit-details-marker { display: none; }
+.drawer > summary:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.drawer[open] > summary { border-color: var(--lav); }
+.top:has(.drawer[open]) { z-index: 7; } /* 開いている間は「Claude の考え」より手前に出す */
+.drawer-body {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: min(360px, calc(100vw - 24px)); max-height: 55vh; overflow: auto;
+  padding: 12px 14px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.memory-panel { display: grid; gap: 8px; font-size: 13px; }
+.memory-panel h2 { display: none; } /* 引き出しの見出しと同じ言葉なので出さない */
+.mem-notice, .mem-status { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.mem-status:empty { display: none; }
+.mem-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.mem-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); word-break: break-word; }
+.mem-empty { color: var(--muted); padding: 4px 0; }
+.mem-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.memory-panel button {
+  font: inherit; font-size: 13px; min-height: 40px; padding: 8px 12px; border-radius: 12px; cursor: pointer;
+  color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+}
+.memory-panel button:focus-visible, .memory-panel input:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.memory-panel .mem-item-forget { min-height: 32px; padding: 4px 10px; font-size: 12px; }
+.memory-panel .mem-forget { border-color: var(--coral); color: var(--coral); }
+.memory-panel input {
+  font: inherit; font-size: 16px; min-height: 40px; padding: 8px 10px; border-radius: 12px; width: 9.5em;
+  color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+}
+.memory-panel input[hidden] { display: none; }
+.mem-code { font-size: 22px; font-weight: 700; letter-spacing: 0.12em; color: var(--mint); font-variant-numeric: tabular-nums; }
+
+/* 合言葉(公開の URL のときだけ出す。契約 K5) */
+.gate .pass { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.gate .pass[hidden] { display: none; }
+.gate .pass input {
+  font: inherit; font-size: 16px; padding: 12px 14px; border-radius: 14px; color: var(--text);
+  background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+}
+.gate .pass input:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+html.is-led .drawer { display: none !important; }

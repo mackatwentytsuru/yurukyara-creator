@@ -77,6 +77,7 @@ for (const view of VIEWS) {
     }
     const shot = path.join(OUT, `${id}_${view}.png`);
     await page.screenshot({ path: shot }).catch(() => {});
+    if (perf?.k6 && !perf.k6.commit) perf.k6.commit = sha; // K6 の 1 行に、測った木のコミットを入れる(組み立てに VITE_COMMIT が無い時)
     const row = { id, view, commit: sha, ok: Boolean(perf) && problems.length === 0, problems, perf };
     fs.writeFileSync(path.join(OUT, `${id}_${view}.json`), JSON.stringify(row, null, 1));
     rows.push(row);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createGltfLoader } from './gltfLoader.js'; // meshopt で縮めた GLB も読める
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { CharacterBase } from './characterBase.js';
 import { REST_POSE } from './gestures.js';
@@ -125,7 +125,7 @@ export class VrmCharacter extends CharacterBase {
 
 /** ブラウザで VRM を読み込む */
 export async function loadVrm(url, config = {}) {
-  const loader = new GLTFLoader();
+  const loader = createGltfLoader();
   loader.register((parser) => new VRMLoaderPlugin(parser));
   const gltf = await loader.loadAsync(url);
   const vrm = gltf.userData.vrm;
