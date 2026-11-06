@@ -8,7 +8,7 @@
 | `GET /api/memory` | `x-memory-key` | `{items:[{id,kind,text,at}], notice, retentionDays, expiresAt}` | 401(形が違う)・404(無い・7 日たった) |
 | `DELETE /api/memory` | `x-memory-key`、本文 `{}` | `{ok, forgotten}`(全部消す。その合鍵の番号も取り消す) | 401 |
 | `DELETE /api/memory` | `x-memory-key`、本文 `{id}` | `{ok, removed}`(1 つだけ消す) | 401・404 |
-| `POST /api/memory/pair` | `x-memory-key`、公開のときは `x-app-pass`(合言葉) | `{code:"123456", expiresAt, ttlSec:600}` | 401・403(合言葉が無い・違う)・404 |
+| `POST /api/memory/pair` | `x-memory-key`、合言葉(公開は `x-demo-pass`、手元は `x-app-pass`) | `{code:"123456", expiresAt, ttlSec:600}` | 401・403(合言葉が無い・違う)・404 |
 | `POST /api/memory/claim` | 本文 `{code}` | `{key, items, notice, ...}` | 400(違う・切れた・使用済み)・429(5 回間違えた。10 分止める) |
 | `POST /api/memory/reflect` | `x-memory-key`、本文 `{text}` | `{added:[...]}` | 401・404 |
 | `POST /api/chat` | 今までの本文+`x-memory-key`(任意) | 今までの流れ+`{type:"memory", added}` / `{type:"memory", forgotten}` | — |
@@ -23,7 +23,16 @@
 - 覚えるのは決まった形の言葉だけ(名前・好きなもの・前の話)。つらい話・安全の層が受けた話は覚えない(`reflect.mjs`)。
 - 会話で「わすれて」(それだけの言葉)と言うと、全部消える。
 - サーバーには合鍵を置かない。保存の名前は `sha256(MEMORY_PEPPER + ":" + 合鍵)`。
-- 保存先は差し替えられる(`store.mjs` の backend: `get/set/del`)。既定はファイル(`MEMORY_DIR`、既定 `web/logs/memory`)。番号は今は 1 つの処理の中だけに持つ(公開の関数では KV に替える。S6 と相談)。
+- 保存先は差し替えられる(`store.mjs` の backend: `get/set/del`)。手元のサーバーの既定はファイル(`MEMORY_DIR`、既定 `web/logs/memory`)で、番号は 1 つの処理の中に持つ。公開の関数は下の `kv.mjs` で、番号も置き場に置く。
+
+## 公開の関数(契約 K5。版 1・11-06 夜)
+- `web/server/memory/handler.mjs` の `handleMemory(request, { store, cfg, now })`(標準の Request → Response)。S6 の `web/api/memory.mjs` が読む。`store` は K5 の置き場(`get`・`set(期限)`・`del`・`incr(期限)`、値は文字)。
+- 下の道は `?sub=`(`vercel.json` の書き換え)を先に、無ければ道の名前から読む。入口と返事の形は上の表と同じ。合鍵を作るのは接続元ごと 1 分 10 回・全体で 1 日 2000 回まで(429)。
+- 設定は `cfg` を先に、無ければ環境変数: 塩 `MEMORY_PEPPER`、番号の合言葉 `DEMO_PASSPHRASE`(会話と同じ。見出しは `x-demo-pass`、古い `x-app-pass` も受ける)。**合言葉が無い設定では番号を作らない**(403)。
+- 置き場の中身(`kv.mjs`): 記録 `ycm:r:<sha256(塩:合鍵)>`(7 日の期限。使うたびに延びる)、番号 `ycm:c:<番号のハッシュ>`(10 分。合鍵は「番号と塩」から作った鍵で AES-256-GCM の暗号にして置く)、1 回だけ使える印 `ycm:u:`(INCR の 1 回目だけ通す)、間違いの数 `ycm:f:`・止める印 `ycm:l:`(5 回で 10 分)、全体の間違い `ycm:g:<10 分の枠>`(30 回で世代 `ycm:gen` を上げ、今ある番号を全部取り消す)。**合鍵そのものは、どこにも置かない。**
+- 置き場が使えないときは 503(中身は返事に出さない)。console に何も書かない。
+- 会話の手伝い `chatMemory(request, text, { store, cfg, now })`: 公開の `/api/chat` が頭脳を呼ぶ前に 1 回呼ぶ。合鍵が無ければ何もしない。「わすれて」なら全部消して返事のイベントまで返す(`handled: true`、頭脳は呼ばない)。それ以外は `{ memory, learned, events }` を返すので、`runTurn(body, { memory, learned, ... })` に渡し、`events`(`{type:"memory", added}`)を返事の前に並べる。置き場が使えないときは、記憶なしで話を続ける。
+- 試験: `web/test/memory_handler.test.mjs`(13 件。S6 の `handleMemoryRoute` から呼べることも)。
 
 ## 画面の部品
 - `web/src/ui/memoryKey.js`: `getKey / setKey / clearKey / memoryHeaders / ensureKey / listMemory / forgetItem / forgetAll / pairCode / claimCode`

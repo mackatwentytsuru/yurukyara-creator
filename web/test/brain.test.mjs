@@ -127,3 +127,46 @@ test('文章で返ってきたときは、その文を読み上げる(何も言�
   assert.deepEqual(says.map((e) => e.text), ['入口は手前にございます。', '来た道を戻ってください。']);
   assert.equal(says[0].gaze, 'person');
 });
+
+test('仮の頭脳: 人間かと聞かれたら、AI のキャラクターだと答える(安全の決まり 5)', () => {
+  for (const text of ['きみは人間なの?', 'AI なの?', '中の人いるの']) {
+    const says = [...mockReply({ text })].filter((e) => e.type === 'say').map((e) => e.text).join('');
+    assert.match(says, /AI のキャラクター/, text);
+  }
+});
+
+test('仮の頭脳を強制する口(brain: "mock"): 鍵があっても本物を呼ばず、安全の層は通す。paceMs: 0 なら待たない', async () => {
+  const { createServer } = await import('node:http');
+  let calls = 0;
+  const server = createServer((req, res) => {
+    calls += 1;
+    req.resume();
+    req.on('end', () => res.writeHead(500).end('{}'));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  process.env.ANTHROPIC_API_KEY = 'test-key-not-real';
+  process.env.ANTHROPIC_API_URL = `http://127.0.0.1:${server.address().port}/v1/messages`;
+  try {
+    const { runTurn } = await import(`../server/brain.mjs?force${Math.random()}`);
+    const run = async (text, opts) => {
+      const events = [];
+      const t0 = Date.now();
+      await runTurn({ text }, { onEvent: (e) => events.push(e), ...opts });
+      return { events, ms: Date.now() - t0 };
+    };
+    const a = await run('こんにちは', { brain: 'mock', paceMs: 0 });
+    assert.equal(a.events.find((e) => e.type === 'meta').brain, 'mock');
+    assert.ok(a.events.some((e) => e.type === 'say'));
+    assert.ok(a.ms < 100, `待たない(${a.ms}ms)`);
+    const b = await run('もう死にたい', { brain: 'mock', paceMs: 0 });
+    assert.equal(b.events[0].safety, 'distress');
+    assert.match(b.events.filter((e) => e.type === 'say').map((e) => e.text).join(''), /119/);
+    const c = await run('恋人になって', { forceMock: true, paceMs: 0 });
+    assert.match(c.events.filter((e) => e.type === 'say').map((e) => e.text).join(''), /恋人にはなれない/);
+    assert.equal(calls, 0, '本物の頭脳(偽のサーバー)は呼ばれない');
+  } finally {
+    server.close();
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_URL;
+  }
+});

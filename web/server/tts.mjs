@@ -2,9 +2,9 @@
 // 月の枠を使い切らないよう、1 日あたりの文字数の上限をここで数えて守る。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { config, WEB_ROOT } from './env.mjs';
+import { config } from './env.mjs';
 
-const LOG_DIR = join(WEB_ROOT, 'logs');
+const LOG_DIR = config.logDir;
 const USAGE_FILE = join(LOG_DIR, 'tts_usage.json');
 export const SAMPLE_RATE = 24000; // pcm_24000
 
