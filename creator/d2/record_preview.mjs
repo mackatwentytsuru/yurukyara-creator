@@ -2,6 +2,7 @@
 // 2D のキャラを、GPU の Chrome で 1 コマずつ進めて撮る(確かめの写真と短い動画)。
 //   node creator/d2/record_preview.mjs --parts characters/norrie/2d/parts.json --out <フォルダ> --stills
 //   node creator/d2/record_preview.mjs --parts characters/norrie/2d/parts.json --out <フォルダ> --video 10 [--mp4 <出力.mp4>]
+//   写真は 18 枚(--only で選ぶ): 表情 7・まばたき・口 2・手を振る・おじぎ・首かしげ・肩すくめ・考え中で話す・後ろを向く(途中と後ろ)
 // 時間はページの中で決まった刻み(1/30 秒)で進めるので、毎回同じ絵になる(まばたきも台本どおり)。
 // WebGL を CPU で描かない決まり: GPU の引数で起動し、CPU の描画なら止める(gpuGuard.js)。GPU の札を取ってから流す。
 import fs from 'node:fs';
@@ -74,7 +75,7 @@ async function frame(cmd = {}) {
 const shot = (file) => page.screenshot({ path: file });
 const state = () => page.evaluate(() => {
   const c = window.__preview.character;
-  return { emotion: c.state2d.emotion, mouth: c.state2d.mouthShape, eyesScaleY: +c.state2d.eyesScaleY.toFixed(3), armR: +c.groups.arm_r?.rotation.z.toFixed(3), faceIds: c.state2d.faceIds };
+  return { emotion: c.state2d.emotion, mouth: c.state2d.mouthShape, eyesScaleY: +c.state2d.eyesScaleY.toFixed(3), armR: +c.groups.arm_r?.rotation.z.toFixed(3), foreR: c.groups.forearm_r ? +c.groups.forearm_r.rotation.z.toFixed(3) : null, facing: c.state2d.facing, faceIds: c.state2d.faceIds };
 });
 
 const log = [];
@@ -95,6 +96,11 @@ if (has('stills')) {
     bow: [{ emotion: 'neutral', mouth: 0, noRandomBlink: true }, 0.6, { gesture: 'bow' }, 0.9],
     tilt: [{ emotion: 'think', mouth: 0, noRandomBlink: true }, 0.6, { gesture: 'tilt' }, 0.7],
     shrug: [{ emotion: 'neutral', mouth: 0, noRandomBlink: true }, 0.6, { gesture: 'shrug' }, 0.6],
+    // 考え中のまま話す(口は考え中の形のまま開く)
+    think_talk: [{ emotion: 'think', mouth: 0.6, noRandomBlink: true }, 1.0],
+    // 後ろを向く(後ろ姿の板がある時だけ動く): 途中(0.35 秒)と、後ろを向いたまま(1.2 秒)
+    turn_mid: [{ emotion: 'neutral', mouth: 0, noRandomBlink: true }, 0.6, { gesture: 'turn' }, 0.35],
+    turn: [{ emotion: 'neutral', mouth: 0, noRandomBlink: true }, 0.6, { gesture: 'turn' }, 1.2],
   };
   const only = arg('only');
   for (const [name, plan] of Object.entries(STILLS)) {
@@ -117,19 +123,19 @@ if (has('video')) {
   const framesDir = path.join(OUT, 'frames');
   fs.rmSync(framesDir, { recursive: true, force: true });
   fs.mkdirSync(framesDir, { recursive: true });
-  // 10 秒の台本: まばたき → 話す(口 3 形)→ うれしい(手を振る)→ おどろき → かなしい(おじぎ)→ もどる
+  // 10 秒の台本: まばたき → 話す(口 3 形)→ うれしい(手を振る。ひじで曲がる)→ 考え中のまま話す → おじぎ(蝶ネクタイは胸に)
+  //   → 後ろを向く(背中の筋)→ もどる。後ろ姿の板が無いキャラでは、後ろを向く所は動かない
   const PLAN = [
     { t: 0.0, emotion: 'neutral', mouth: 0, noRandomBlink: true, caption: 'ノリー(2D)' },
-    { t: 0.8, blink: true, caption: 'まばたき' },
-    { t: 1.5, blink: true },
-    { t: 2.0, caption: '話す(口の形 3 つ)', talk: [2.0, 4.6, 0.95] },
-    { t: 2.6, gesture: 'nod' },
-    { t: 4.8, emotion: 'happy', gesture: 'wave', caption: 'うれしい', talk: [5.0, 5.8, 0.75] },
-    { t: 6.6, emotion: 'surprised', caption: 'おどろき', talk: [6.7, 7.3, 0.9] },
-    { t: 7.5, blink: true },
-    { t: 8.2, emotion: 'sad', gesture: 'bow', caption: 'かなしい' },
-    { t: 9.4, emotion: 'neutral', caption: 'ノリー(2D)' },
-    { t: 9.6, blink: true },
+    { t: 0.4, blink: true },
+    { t: 0.9, caption: '話す(口の形 3 つ)', talk: [0.9, 2.1, 0.95] },
+    { t: 1.2, gesture: 'nod' },
+    { t: 2.2, emotion: 'happy', gesture: 'wave', caption: 'うれしい・手を振る', talk: [2.5, 3.3, 0.75] },
+    { t: 4.4, emotion: 'think', caption: '考え中のまま話す', talk: [4.5, 5.4, 0.8] },
+    { t: 5.6, emotion: 'neutral', gesture: 'bow', caption: 'おじぎ' },
+    { t: 6.9, blink: true },
+    { t: 7.4, gesture: 'turn', caption: '後ろ姿(背中の筋)' },
+    { t: 9.6, caption: 'ノリー(2D)' },
   ];
   let talk = null;
   const n = Math.round(seconds * FPS);

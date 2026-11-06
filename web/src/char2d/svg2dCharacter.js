@@ -8,11 +8,41 @@ const LAYER_GAP = 0.002; // 板どうしの前後の間(メートル)
 const EMOTION_MIN = 0.25; // これより弱い表情は neutral にする
 const ARM_FRONT = 1.0; // 腕がこれ(ラジアン)より上がったら頭の前に描く(parts.json の arms.front で変えられる。false なら前に出さない)
 const FACE_LAYER_ORDER = 0.3; // 顔の上の動かない部品(鼻など)は、頭の板の上・目と口の下
+// 向こうを向く動き 'turn'(後ろ姿の板があるキャラだけ): 0.55 秒で後ろを向き、1.4 秒そのまま、0.65 秒で前へ戻る(1 回り)
+const TURN = { out: 0.55, hold: 1.4, back: 0.65 };
+const TURN_TOTAL = TURN.out + TURN.hold + TURN.back;
+const FACING_TAU = 0.12; // setFacing で向きを変える速さ(秒)
+const easeInOut = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+
+/** 向こうを向く動きの、その時の向き(ラジアン。0 = 正面、π = 後ろ、2π = 1 回りして正面) */
+export function turnAngle(t) {
+  if (t <= TURN.out) return Math.PI * easeInOut(t / TURN.out);
+  if (t <= TURN.out + TURN.hold) return Math.PI;
+  return Math.PI * (1 + easeInOut((t - TURN.out - TURN.hold) / TURN.back));
+}
+
+/** 親のある部品(前腕など)が、親より後に作られる順にする。ほかは z の順 */
+function partOrder(parts) {
+  const names = Object.keys(parts).sort((a, b) => (parts[a].z ?? 0) - (parts[b].z ?? 0));
+  const out = [];
+  const seen = new Set();
+  const visit = (n, depth = 0) => {
+    if (seen.has(n) || depth > 8) return;
+    const parent = parts[n]?.parent;
+    if (parent && parent !== 'root' && parts[parent]) visit(parent, depth + 1);
+    seen.add(n);
+    out.push(n);
+  };
+  for (const n of names) visit(n);
+  return out;
+}
 
 /**
  * SVG の部品を板(平面)に描いて動かす 2D のキャラ。CharacterBase を継ぐので、
  * lookAt・setExpression・setEmotion・setMouth・play・update は 3D と同じ呼び方で動く。
  *   まばたき = 目の板を縦につぶす / 口 = 3 形を開きの値で切り替える / 表情 = 目・眉・口の板を差し替える
+ *   腕が 2 枚(parts.json の forearm_* に parent)なら、上腕を肩で回し、前腕をひじで曲げる
+ *   後ろ姿の板(parts.json の back)があれば、向こうを向いた時(後ろから見た時・play('turn')・setFacing('back'))に後ろ姿が出る
  * 画像にする所(rasterize)は外から渡す。ブラウザでは SVG → canvas、試験では偽物を渡す。
  */
 export class Svg2DCharacter extends CharacterBase {
@@ -36,7 +66,11 @@ export class Svg2DCharacter extends CharacterBase {
     this.gains = { ...DEFAULT_GAINS, ...(spec.gains ?? {}) };
     const front = spec.arms?.front;
     this.armFront = front === false ? Infinity : Number.isFinite(front) ? front : ARM_FRONT;
-    this.state2d = { emotion: 'neutral', mouthShape: 'mouth_closed', eyesScaleY: 1, faceIds: {} };
+    this.state2d = { emotion: 'neutral', mouthShape: 'mouth_closed', eyesScaleY: 1, faceIds: {}, facing: 'front' };
+    // 後ろ姿の板があるキャラは、前の板を表だけ描く(後ろから見ると前の板は消え、後ろ姿の板が見える)
+    this.side = spec.back ? THREE.FrontSide : THREE.DoubleSide;
+    this.turnT = null; // 向こうを向く動きの経過(秒)。null なら動いていない
+    this.facingTarget = 0; // setFacing の向き(0 = 正面、π = 後ろ)
     const [vx, vy, vw, vh] = spec.viewBox;
     this.unit = this.heightM / vh; // 元の座標 1 → メートル
     this.origin = { x: vx + vw / 2, y: vy + vh }; // 足もとの真ん中を原点にする
@@ -54,7 +88,7 @@ export class Svg2DCharacter extends CharacterBase {
     const [x, y, w, h] = box;
     const text = partSvg(svg, gid, box, pxPerUnit);
     const map = rasterize(text, { w: Math.round(w * pxPerUnit), h: Math.round(h * pxPerUnit) });
-    const mat = new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    const mat = new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, side: this.side ?? THREE.DoubleSide, toneMapped: false });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w * this.unit, h * this.unit), mat);
     mesh.name = `2d:${gid}`;
     mesh.position.copy(this._toLocal(x + w / 2, y + h / 2, parentPivot));
@@ -76,19 +110,31 @@ export class Svg2DCharacter extends CharacterBase {
     this.rig.add(this.upper);
 
     this.groups = {};
-    const names = Object.keys(parts).sort((a, b) => (parts[a].z ?? 0) - (parts[b].z ?? 0));
-    for (const name of names) {
+    for (const name of partOrder(parts)) {
       const p = parts[name];
       const pivot = p.pivot ?? [p.box[0] + p.box[2] / 2, p.box[1] + p.box[3] / 2];
       const g = new THREE.Group();
       g.name = `2d:${name}:pivot`;
+      const parent = p.parent && p.parent !== 'root' ? this.groups[p.parent] : null;
       const inUpper = p.upper !== false;
-      g.position.copy(this._toLocal(pivot[0], pivot[1], inUpper ? waist : null));
+      // 親のある部品(前腕)は、親の回る中心から見た位置に置く(親と一緒に回る)
+      g.position.copy(parent ? this._toLocal(pivot[0], pivot[1], parent.userData.pivot) : this._toLocal(pivot[0], pivot[1], inUpper ? waist : null));
       g.userData.base = g.position.clone();
       g.userData.pivot = pivot;
       g.add(this._plane(svg, name, p.box, rasterize, pxPerUnit, p.z ?? 0, pivot));
-      (inUpper ? this.upper : this.rig).add(g);
+      (parent ?? (inUpper ? this.upper : this.rig)).add(g);
       this.groups[name] = g;
+    }
+    // 後ろ姿の板: 後ろ向き(y で半回り)に置く。前の板と同じ大きさ・同じ足もと
+    if (this.spec.back) {
+      const b = this.spec.back;
+      this.back = new THREE.Group();
+      this.back.name = '2d:back';
+      this.back.rotation.y = Math.PI;
+      const mesh = this._plane(svg, b.id ?? 'back', b.box, rasterize, pxPerUnit, 0, null);
+      mesh.position.z = LAYER_GAP; // 後ろ向きの板の手前 = 体の後ろ
+      this.back.add(mesh);
+      this.rig.add(this.back);
     }
 
     // 顔の枠: 表情ごとの板を全部先に作り、出す物だけ見せる(差し替えは見える・見えないの切り替えだけ)
@@ -136,6 +182,27 @@ export class Svg2DCharacter extends CharacterBase {
 
   _headWorld(out) {
     return this.groups.head.getWorldPosition(out);
+  }
+
+  /** 動きを始める。'turn' は後ろ姿の板があるキャラだけ(向こうを向いて、1 回りして戻る) */
+  play(name, opts = {}) {
+    if (name === 'turn') {
+      if (!this.back) return false;
+      this.turnT = 0;
+      return true;
+    }
+    return super.play(name, opts);
+  }
+
+  get playing() {
+    return this.turnT !== null ? 'turn' : super.playing;
+  }
+
+  /** 'back' で向こうを向いたまま、'front' で正面へ戻る(後ろ姿の板があるキャラだけ。無ければ false) */
+  setFacing(which) {
+    if (!this.back) return false;
+    this.facingTarget = which === 'back' ? Math.PI : 0;
+    return true;
   }
 
   /** そのキャラが 2D で出せる表情か */
@@ -196,10 +263,14 @@ export class Svg2DCharacter extends CharacterBase {
     // 上半身のつぶしを頭では打ち消す(頭は丸いまま、少し手前へ大きく)
     head.scale.set(m.headGrow, (m.headSquash * m.headGrow) / this.upper.scale.y, 1);
     this.face.position.set(m.faceX * this.headSize.w, m.faceY * this.headSize.h, 0);
-    for (const [name, rot] of [['arm_r', m.armR], ['arm_l', m.armL]]) {
-      const arm = this.groups[name];
+    for (const side of ['r', 'l']) {
+      const arm = this.groups[`arm_${side}`];
       if (!arm) continue;
+      // 腕が 2 枚なら、上腕は肩で回し、前腕はひじで曲げる。1 枚なら腕全体を肩で回す
+      const fore = this.groups[`forearm_${side}`];
+      const rot = fore ? (side === 'r' ? m.upperR : m.upperL) : side === 'r' ? m.armR : m.armL;
       arm.rotation.z = rot;
+      if (fore) fore.rotation.z = side === 'r' ? m.foreR : m.foreL;
       // 腕を高く上げたら、頭の前に出す(後ろのままだと、手を振る手が頭に隠れる)
       const mesh = arm.children[0];
       const front = Math.abs(rot) > this.armFront;
@@ -207,6 +278,25 @@ export class Svg2DCharacter extends CharacterBase {
       mesh.position.z = (front ? this.headOrder + 0.5 : mesh.userData.order) * LAYER_GAP;
     }
     this.state2d.motion = m;
+    this._applyFacing(s.dt ?? 0);
+  }
+
+  /** 向こうを向く動き(turn)と setFacing の向き。後ろ姿の板が無いキャラは何もしない */
+  _applyFacing(dt) {
+    if (!this.back) return;
+    let yaw;
+    if (this.turnT !== null) {
+      this.turnT += dt;
+      if (this.turnT >= TURN_TOTAL) {
+        this.turnT = null;
+        yaw = this.facingTarget;
+      } else yaw = turnAngle(this.turnT);
+    } else {
+      const cur = this.rig.rotation.y % (Math.PI * 2);
+      yaw = cur + (this.facingTarget - cur) * (dt > 0 ? 1 - Math.exp(-dt / FACING_TAU) : 0);
+    }
+    this.rig.rotation.y = yaw;
+    this.state2d.facing = Math.cos(yaw) >= 0 ? 'front' : 'back';
   }
 
   dispose() {

@@ -4,6 +4,7 @@
 使い方: python creator/d2/from_drawing/norrie_masks.py <作業フォルダ>
 出力: <作業フォルダ>/masks.npz と parts_vis.png・body_only_vis.png(確かめの絵)
 """
+import json
 import os
 import sys
 
@@ -11,7 +12,7 @@ import cv2
 import numpy as np
 from scipy import ndimage as ndi
 
-from vec import dil
+from vec import dil, ero
 
 WORK = sys.argv[1]
 Z = np.load(os.path.join(WORK, 'regions.npz'))
@@ -169,6 +170,35 @@ M['teeth'] = g('teeth')
 M['nose_pad'] = g('nose_pad') | nm | g('teeth')
 M['eye_r'] = g('eye_r')
 M['eye_l'] = g('eye_l')
+
+# --- 腕を 2 枚に分ける(上腕と前腕。手を振る時にひじで曲げる。2026-11-07)---
+# 上腕は胴の後ろに置く: 手を上げた時、肩の継ぎ目は胴(体の色)の塗りと線が隠す。止まっている時は胴にすっかり隠れる。
+# 前腕(ひじから下の袖と手袋)は胴の前。ひじは丸く: 上腕の先に丸(線つき)、前腕の元に少し小さい丸(線なし)。
+ELBOW_Y = 622                 # 袖を横に切る高さ(袖がいちばん外へふくらむ所)
+SHOULDER = (181.0, 496.0)     # キャラの右肩(絵の左)の回る中心。左肩は左右の鏡
+SHOULDER_R = 55               # 上腕は、肩の丸(この半径)とひじへ向かう管だけを持つ(胴の上へはみ出さない)
+RING_W = 12                   # ひじの丸の線の太さ(元の絵の線の太さ)
+above = Y < ELBOW_Y
+JOINTS = {}
+for s, area, glove in (('r', arm_r_area, glove_r), ('l', arm_l_area, glove_l)):
+    xs = np.where(area[ELBOW_Y])[0]
+    ex = float(xs.min() + xs.max() + 1) / 2
+    er = float(xs.max() + 1 - xs.min()) / 2    # 袖の幅の半分(線の真ん中まで)
+    sx = SHOULDER[0] if s == 'r' else 2 * AXIS - SHOULDER[0]
+    S = np.array([sx, SHOULDER[1]])
+    E = np.array([ex, float(ELBOW_Y)])
+    d = (E - S) / np.linalg.norm(E - S)
+    tube = ((X - S[0]) * d[0] + (Y - S[1]) * d[1]) >= 0
+    near_s = (X - S[0]) ** 2 + (Y - S[1]) ** 2 <= SHOULDER_R ** 2
+    de = np.sqrt((X - E[0]) ** 2 + (Y - E[1]) ** 2)
+    keep = above & (tube | near_s)
+    arm_ink = M[f'arm_{s}_ink']
+    M[f'upper_{s}_fill'] = (area & keep) | ((de <= er) & ~above)
+    M[f'upper_{s}_ink'] = (arm_ink & keep) | ((np.abs(de - er) <= RING_W / 2) & ~above)
+    M[f'fore_{s}_fill'] = (area & ~above) | ((de <= er - 5) & above & ero(area, 7))
+    M[f'fore_{s}_ink'] = arm_ink & ~above
+    JOINTS[s] = {'shoulder': [round(float(S[0]), 1), round(float(S[1]), 1)], 'elbow': [round(ex, 1), float(ELBOW_Y)], 'elbow_r': round(er, 1)}
+M['joints'] = np.array(json.dumps(JOINTS))
 np.savez_compressed(os.path.join(WORK, 'masks.npz'), **M)
 
 # 確かめの絵: 部品ごとに色を変えて重ねる

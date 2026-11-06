@@ -28,6 +28,32 @@
         860
       ]
     },
+    "arm_r": {
+      "box": [
+        80,
+        438,
+        149,
+        234
+      ],
+      "z": 0.5,
+      "pivot": [
+        181.0,
+        496.0
+      ]
+    },
+    "arm_l": {
+      "box": [
+        363,
+        438,
+        149,
+        234
+      ],
+      "z": 0.5,
+      "pivot": [
+        412.0,
+        496.0
+      ]
+    },
     "body": {
       "box": [
         46,
@@ -41,30 +67,32 @@
         1086.0
       ]
     },
-    "arm_r": {
+    "forearm_r": {
       "box": [
         80,
-        422,
+        583,
         177,
-        363
+        202
       ],
       "z": 2,
+      "parent": "arm_r",
       "pivot": [
-        191.0,
-        474
+        130.0,
+        622.0
       ]
     },
-    "arm_l": {
+    "forearm_l": {
       "box": [
         335,
-        422,
+        583,
         177,
-        363
+        202
       ],
       "z": 2,
+      "parent": "arm_l",
       "pivot": [
-        402.0,
-        474
+        462.0,
+        622.0
       ]
     },
     "bowtie": {
@@ -137,12 +165,31 @@
     "front": false
   },
   "gains": {
-    "arm": 0.7,
-    "faceParallax": 0.3
+    "arm": 0.62,
+    "elbow": 2.2,
+    "swing": 0.6,
+    "faceParallax": 0.3,
+    "bowSquash": 0.22,
+    "bowHoldHead": 1,
+    "bowHeadDrop": 0.02,
+    "bowHeadSquash": 0.08,
+    "bowHeadGrow": 0.02,
+    "bowFaceDrop": 0.03
+  },
+  "back": {
+    "id": "back",
+    "box": [
+      -79,
+      46,
+      626,
+      1045
+    ],
+    "drawing": "back"
   },
   "expressionFallback": {},
   "source": {
     "drawing": "front",
+    "back": "back",
     "drawn_by": "協力者",
     "palette": {
       "brown": "#50403C",

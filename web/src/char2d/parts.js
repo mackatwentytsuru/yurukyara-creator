@@ -123,6 +123,13 @@ export function validateParts(spec, svg) {
     if (!isBox(layer?.box)) problems.push(`顔の上の部品 ${name} の box が正しくない`);
     if (layer?.id && (spec.parts?.[layer.id] || String(layer.id).startsWith('face.'))) problems.push(`顔の上の部品 ${name} の名前が、体の部品か顔の枠と同じ`);
   }
+  // 後ろ姿の板(向こうを向いた時に出す。無くてもよい)
+  if (spec.back !== undefined) {
+    const id = spec.back?.id ?? 'back';
+    if (!ids.has(id)) problems.push(`後ろ姿の板 ${id} の <g id> が SVG に無い`);
+    if (!isBox(spec.back?.box)) problems.push('後ろ姿の板の box が正しくない');
+    if (spec.parts?.[id] || String(id).startsWith('face.')) problems.push(`後ろ姿の板 ${id} の名前が、体の部品か顔の枠と同じ`);
+  }
   for (const slot of ['eyes', 'mouth']) {
     if (!isBox(spec.face?.[slot]?.box)) problems.push(`顔の枠 ${slot} の box が無い`);
   }
