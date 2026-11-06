@@ -8,7 +8,10 @@
   3. web を組み立て(vite build)、空いた番号でサーバーを起こす(頭脳と声の鍵は外す = 仮の頭脳・字幕と口パクだけ。費用は出ない。お店のデータは空)
   4. web_talk_check.mjs(GPU で描く。CPU の描画なら止まる)で、読み込み・返事・口・表情か動きを確かめる
   5. 自分で起こしたサーバーの番号(PID)だけを止める
-終わりの番号: 0 = 話せた、1 = できない所がある。結果は <出力>/web_check.json。
+終わりの番号: 0 = 話せた、1 = できない所がある、2 = 人の確認(契約 K3)で止めた。結果は <出力>/web_check.json。
+人の確認: キャラに確認の状態(creator/work/<id>/review/state.json)があれば、段 6 の OK(ok か auto)が無いと始めない
+(--review on は状態が無くても止める、off は見ない)。stage_run.py の中から呼ばれたときは、外側が見たので見ない。
+作り直しで同じ言葉を渡したときは、character.json の origin(生まれた時の記録)を変えない。
 GPU を使うので、大きな PC では先に機械の札と GPU の鍵を取る。
 """
 import argparse
@@ -22,6 +25,9 @@ import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import review_gate as RG  # noqa: E402
+
 PY = sys.executable
 SAMPLES = REPO / "creator" / "samples"
 DROP = ("ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY")
@@ -36,10 +42,12 @@ def free_port():
     return p
 
 
-def add_k1(char_path, cid, words):
+def add_k1(char_path, cid, words, old_origin=None):
     d = json.loads(char_path.read_text(encoding="utf-8"))
     d.setdefault("schema_version", 1)
-    if words:
+    if old_origin and (not words or old_origin.get("words") == words):
+        d["origin"] = old_origin      # 作り直し: 生まれた時の記録(何から・いつ)は変えない
+    elif words:
         d["origin"] = {"input": "words", "words": words, "drawn_by": "claude",
                        "created": time.strftime("%Y-%m-%dT%H:%M:%S+09:00")}
     svg = SAMPLES / f"{cid}_元の絵.svg"
@@ -77,25 +85,43 @@ def main():
     ap.add_argument("--words")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--no-build", action="store_true")
+    ap.add_argument("--review", choices=["auto", "on", "off"], default="auto")
     a = ap.parse_args()
+    gated = False
+    if not RG.outer_checked():
+        try:
+            gated = RG.begin(a.id, 7, 7, a.review, note="段 7(話す)を確かめています")
+        except RG.GateClosed as e:
+            print(f"止めた: 段 7(話す)は始めません。{e}", file=sys.stderr)
+            sys.exit(RG.EXIT_CLOSED)
+    rc = run(a)
+    if gated:
+        RG.finish(a.id, 7, 7, rc == 0)
+    sys.exit(rc)
+
+
+def run(a):
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
+    cj = REPO / "characters" / a.id / "character.json"
+    old_origin = None
+    if cj.exists():       # pk04 は character.json を pack の物で置きかえるので、先に origin を控える
+        old_origin = json.loads(cj.read_text(encoding="utf-8")).get("origin")
     cmd = [PY, str(REPO / "creator/pipeline/pk04_install.py"), a.pack, a.id, "--name", a.name]
     if a.persona:
         cmd += ["--persona", a.persona]
     if a.force:
         cmd.append("--force")
     if subprocess.run(cmd).returncode:
-        sys.exit(1)
-    cj = REPO / "characters" / a.id / "character.json"
-    add_k1(cj, a.id, a.words)
+        return 1
+    add_k1(cj, a.id, a.words, old_origin)
     if subprocess.run([PY, str(REPO / "creator/specs/validate_character.py"), str(cj)]).returncode:
-        sys.exit(1)
+        return 1
     if subprocess.run([PY, str(REPO / "creator/pipeline/pk02_check_character.py"), str(cj.parent)]).returncode:
-        sys.exit(1)
+        return 1
     npm = "npm.cmd" if os.name == "nt" else "npm"
     if not a.no_build and subprocess.run([npm, "run", "build"], cwd=REPO / "web").returncode:
-        sys.exit(1)
+        return 1
     port = free_port()
     env = {k: v for k, v in os.environ.items() if k not in DROP and not k.startswith("CLAUDE_CODE_")}
     env.update(PORT=str(port), SHOP_DATA_FILE=str(REPO / "creator/setup/shop_empty.json"))
@@ -114,7 +140,7 @@ def main():
         stop(srv)
         log.close()
     print("話す確かめ:", "OK" if rc == 0 else "NG", f"({out / 'web_check.json'})")
-    sys.exit(0 if rc == 0 else 1)
+    return 0 if rc == 0 else 1
 
 
 if __name__ == "__main__":
