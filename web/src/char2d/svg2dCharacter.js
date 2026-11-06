@@ -66,6 +66,9 @@ export class Svg2DCharacter extends CharacterBase {
     this.gains = { ...DEFAULT_GAINS, ...(spec.gains ?? {}) };
     const front = spec.arms?.front;
     this.armFront = front === false ? Infinity : Number.isFinite(front) ? front : ARM_FRONT;
+    // 腕が 2 枚の時: 前腕をこの角度より大きく曲げたら、上腕の後ろへ回す(ひじの丸を前に出し、前腕の線の元を隠す)
+    const behind = spec.arms?.foreBehind;
+    this.foreBehind = Number.isFinite(behind) ? behind : Infinity;
     this.state2d = { emotion: 'neutral', mouthShape: 'mouth_closed', eyesScaleY: 1, faceIds: {}, facing: 'front' };
     // 後ろ姿の板があるキャラは、前の板を表だけ描く(後ろから見ると前の板は消え、後ろ姿の板が見える)
     this.side = spec.back ? THREE.FrontSide : THREE.DoubleSide;
@@ -270,7 +273,15 @@ export class Svg2DCharacter extends CharacterBase {
       const fore = this.groups[`forearm_${side}`];
       const rot = fore ? (side === 'r' ? m.upperR : m.upperL) : side === 'r' ? m.armR : m.armL;
       arm.rotation.z = rot;
-      if (fore) fore.rotation.z = side === 'r' ? m.foreR : m.foreL;
+      if (fore) {
+        fore.rotation.z = side === 'r' ? m.foreR : m.foreL;
+        const fm = fore.children[0];
+        const am = arm.children[0];
+        const back = Math.abs(fore.rotation.z) > this.foreBehind;
+        const order = back ? am.userData.order - 0.05 : fm.userData.order;
+        fm.renderOrder = order;
+        fm.position.z = order * LAYER_GAP;
+      }
       // 腕を高く上げたら、頭の前に出す(後ろのままだと、手を振る手が頭に隠れる)
       const mesh = arm.children[0];
       const front = Math.abs(rot) > this.armFront;

@@ -267,7 +267,8 @@ spec = {
     'face': {k: {'box': v} for k, v in face_boxes.items()},
     'faceLayers': [{'id': 'muzzle', 'box': mz}],
     'blink': {'noBlink': ['happy', 'relaxed']},
-    'arms': {'front': False},
+    # front: 腕を頭の前に出さない。foreBehind: 前腕をこの角度(ラジアン)より大きく曲げたら、上腕の後ろへ回す(ひじの丸が前に出る)
+    'arms': {'front': False, 'foreBehind': 0.6},
     # 腕は 2 枚(arm 上腕の効き・elbow ひじで曲げる最大・swing 前腕の振り)。
     # おじぎは蝶ネクタイを胸に残す: 頭は下げず(bowHoldHead・bowHeadDrop)、顔を少しつぶして下へ(bowHeadSquash・bowFaceDrop)
     'gains': {'arm': 0.62, 'elbow': 2.2, 'swing': 0.6, 'faceParallax': 0.3,

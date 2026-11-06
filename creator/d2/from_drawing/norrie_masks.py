@@ -195,6 +195,7 @@ for s, area, glove in (('r', arm_r_area, glove_r), ('l', arm_l_area, glove_l)):
     arm_ink = M[f'arm_{s}_ink']
     M[f'upper_{s}_fill'] = (area & keep) | ((de <= er) & ~above)
     M[f'upper_{s}_ink'] = (arm_ink & keep) | ((np.abs(de - er) <= RING_W / 2) & ~above)
+    # 大きく曲げた時は、前腕を上腕の後ろへ回す(parts.json の arms.foreBehind)。前腕の線の元は上腕のひじの丸に隠れる
     M[f'fore_{s}_fill'] = (area & ~above) | ((de <= er - 5) & above & ero(area, 7))
     M[f'fore_{s}_ink'] = arm_ink & ~above
     JOINTS[s] = {'shoulder': [round(float(S[0]), 1), round(float(S[1]), 1)], 'elbow': [round(ex, 1), float(ELBOW_Y)], 'elbow_r': round(er, 1)}
@@ -204,7 +205,8 @@ np.savez_compressed(os.path.join(WORK, 'masks.npz'), **M)
 # 確かめの絵: 部品ごとに色を変えて重ねる
 vis = np.full((H, W, 3), 255, np.uint8)
 layers = [('tail_fill', (230, 210, 160)), ('torso_fill', (120, 90, 80)), ('belly_fill', (235, 225, 200)), ('body_ink', (0, 0, 0)), ('tail_ink', (90, 60, 0)),
-          ('sleeve_r_fill', (60, 90, 200)), ('sleeve_l_fill', (60, 160, 200)), ('glove_r_fill', (250, 250, 250)), ('glove_l_fill', (250, 250, 250)),
+          ('upper_r_fill', (60, 90, 200)), ('upper_l_fill', (60, 160, 200)), ('fore_r_fill', (150, 110, 220)), ('fore_l_fill', (110, 190, 230)),
+          ('glove_r_fill', (250, 250, 250)), ('glove_l_fill', (250, 250, 250)),
           ('arm_r_ink', (0, 0, 160)), ('arm_l_ink', (0, 120, 160)), ('bow_fill', (40, 160, 100)), ('bow_ink', (0, 80, 0)),
           ('ear_r_fill', (150, 60, 60)), ('ear_l_fill', (150, 60, 60)), ('head_fur_fill', (110, 70, 60)), ('face_cream_fill', (240, 230, 210)),
           ('ear_r_ink', (60, 0, 0)), ('ear_l_ink', (60, 0, 0)), ('head_ink', (40, 0, 0)), ('nose_pad', (230, 170, 190)), ('nose_mark', (0, 0, 0)),

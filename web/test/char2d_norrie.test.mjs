@@ -285,11 +285,14 @@ test('手を振る: 腕は上腕と前腕の 2 枚で、ひじで曲がって前
   let upMin = 0;
   let bendMin = 0;
   let pawUp = false;
+  let foreBehind = false;
   const bendSeen = new Set();
   run(c, 2.2, (cc) => {
     upMin = Math.min(upMin, arm.rotation.z);
     bendMin = Math.min(bendMin, fore.rotation.z);
     bendSeen.add(Math.round(fore.rotation.z * 10));
+    // 大きく曲げた時は、前腕が上腕の後ろ(ひじの丸が前に出て、前腕の線の元を隠す)
+    if (fore.rotation.z < -1.5 && order(fore) < order(arm)) foreBehind = true;
     // 手袋(前腕の先)がひじより上にあるか
     cc.object3d.updateWorldMatrix(true, true);
     const elbow = fore.getWorldPosition(new THREE.Vector3());
@@ -300,9 +303,11 @@ test('手を振る: 腕は上腕と前腕の 2 枚で、ひじで曲がって前
   assert.ok(bendMin < -1.8, `ひじで曲がる (${bendMin.toFixed(2)})`);
   assert.ok(pawUp, '前腕が上を向く(手袋がひじより上)');
   assert.ok(bendSeen.size > 6, '前腕を振る(角度が行き来する)');
+  assert.ok(foreBehind, '大きく曲げた時は、前腕が上腕の後ろに回る');
   // 振り終わったら元に戻る
   run(c, 0.6);
   assert.ok(Math.abs(arm.rotation.z) < 0.05 && Math.abs(fore.rotation.z) < 0.05, '振り終わったら元の形');
+  assert.ok(order(c.groups.body) < order(fore), '戻ったら前腕は胴の前(手袋がお腹の前)');
 });
 
 test('後ろ姿の板: 向こうを向くと背中の筋が見える(前の板は表だけ・後ろ姿の板は裏向き)', () => {

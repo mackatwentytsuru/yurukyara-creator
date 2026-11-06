@@ -162,7 +162,8 @@
     ]
   },
   "arms": {
-    "front": false
+    "front": false,
+    "foreBehind": 0.6
   },
   "gains": {
     "arm": 0.62,
