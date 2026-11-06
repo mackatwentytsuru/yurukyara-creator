@@ -2,6 +2,7 @@
 // - 案内役(主役の猫)とできた子の文は、1 字ずつ出す(文字送り)。本物の声が無いときは、レトロな効果音を鳴らす
 // - できた子の文は、本物の声があれば、その声で話す(7 歩目の「声が出せるようになったよ、ありがとう!」)
 // - 文字は textContent だけで入れる。鍵の欄の文字は、押したらすぐ消し、画面のどこにも残さない
+// - 選んだ絵(この端末の中の blob:)と、PC で描いた絵(作る画面の小さな枠)は、札の上の「絵の欄」に出したままにする(D3・D5)
 import { injectStyles } from './styles.js';
 import { STEPS, countChars } from './script.js';
 import { crawl } from './voice.js';
@@ -38,6 +39,7 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     return li;
   });
   const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで' });
+  const pinBox = el('figure', { className: 'fr-pin', hidden: true });
   const log = el('div', { className: 'fr-log' });
   const live = el('p', { className: 'fr-sr', ariaLive: 'polite' });
   const actions = el('div', { className: 'fr-actions', role: 'group', ariaLabel: 'えらぶ' });
@@ -45,6 +47,7 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     'section',
     { className: 'fr-sheet', role: 'dialog', ariaLabel: 'はじめての会話' },
     el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, el('h2', { textContent: 'はじめての会話' }), closeBtn), steps),
+    pinBox,
     log,
     live,
     actions,
@@ -212,12 +215,47 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
   }
 
   /** 手元の PC の「作る画面」(1〜3 歩の入力と絵)を、札の中の枠に出す。絵と通信は枠の中だけで、この画面は知らせだけを受ける */
-  function frameAction(a) {
-    const f = el('iframe', { className: 'fr-frame', title: a.label ?? 'PC の作る画面', src: a.url });
+  function frameEl(url, title) {
+    const f = el('iframe', { className: 'fr-frame', title, src: url });
     f.setAttribute('referrerpolicy', 'no-referrer');
     f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
     f.addEventListener('load', scroll, { once: true });
-    return el('div', { className: 'fr-wide fr-frame-wrap' }, f);
+    return f;
+  }
+  function frameAction(a) {
+    return el('div', { className: 'fr-wide fr-frame-wrap' }, frameEl(a.url, a.label ?? 'PC の作る画面'));
+  }
+
+  /** 押すと別のタブで開くだけのリンク(README の作り方の節など)。台本は進まない */
+  function linkAction(a) {
+    const link = el('a', { className: `fr-btn fr-link${a.primary ? ' primary' : ''}`, href: a.url, target: '_blank', rel: 'noopener noreferrer', textContent: a.label });
+    link.dataset.act = a.id;
+    return link;
+  }
+
+  /**
+   * 絵の欄。{ img, caption } は選んだ絵(この端末の中の blob:)。{ frame: <作る画面の絵だけの住所>, caption } は PC で描いた絵(小さな枠)。
+   * null で消す。台本(script.js)の pin が呼ぶ
+   */
+  function pin(p) {
+    if (!p) {
+      pinBox.replaceChildren();
+      pinBox.hidden = true;
+      delete sheet.dataset.pin;
+      return;
+    }
+    const cap = el('figcaption', { className: 'fr-pin-cap', textContent: p.caption ?? '' });
+    if (p.img) {
+      const img = el('img', { className: 'fr-pin-img', alt: p.caption || '選んだ絵' });
+      img.src = p.img;
+      pinBox.replaceChildren(img, cap);
+      sheet.dataset.pin = 'img';
+    } else if (p.frame) {
+      pinBox.replaceChildren(el('div', { className: 'fr-pin-frame' }, frameEl(p.frame, p.caption || 'PC で描いた絵')), cap);
+      sheet.dataset.pin = 'frame';
+    } else return;
+    pinBox.hidden = false;
+    scroll();
   }
 
   function textAction(a) {
@@ -274,7 +312,9 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
   /** 台本の offer: 選べる物を出す(空なら消す) */
   function offer(list) {
     actions.replaceChildren(
-      ...list.map((a) => (a.kind === 'file' ? fileAction(a) : a.kind === 'text' ? textAction(a) : a.kind === 'key' ? keyAction(a) : a.kind === 'frame' ? frameAction(a) : button(a))),
+      ...list.map((a) =>
+        a.kind === 'file' ? fileAction(a) : a.kind === 'text' ? textAction(a) : a.kind === 'key' ? keyAction(a) : a.kind === 'frame' ? frameAction(a) : a.kind === 'link' ? linkAction(a) : button(a),
+      ),
     );
     if (list.length) stats.actionsShown += 1;
     sheet.dataset.actions = list.map((a) => a.id).join(' ');
@@ -291,5 +331,5 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     onClose(reason);
   }
 
-  return { element: sheet, present, offer, setStep, close, stats, get closed() { return closed; } };
+  return { element: sheet, present, offer, setStep, close, pin, stats, get closed() { return closed; } };
 }

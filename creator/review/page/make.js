@@ -6,6 +6,8 @@
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.hash.slice(1));
 const KEY = params.get("k") || "";
+// view=pic: 「この子にする」の後、会話の画面の札の上に小さく出す枠。描いた絵だけを見せる(ボタン・知らせなし。D5)
+const PIC_ONLY = params.get("view") === "pic";
 const PARENT = (() => {
   const p = params.get("p") || "";
   try {
@@ -149,6 +151,7 @@ async function decide(decision, note) {
     await api("/api/review/decision", { method: "POST", body: { gate: "C0", decision, ticket: S.ticket, seen_hash: S.hash, note: note || null, tags: [], focus: null } });
     if (decision === "ok") {
       $("doneMsg").textContent = `${S.name}にきまりました。形(3D)は PC の Claude Code が続けて作ります。`;
+      $("donePic").src = $("pic").src; // 決めた絵は、決めた後も見せる
       show("done");
       tell("decided", { decision: "ok", id: S.id, name: S.name, round: S.drawn });
     } else {
@@ -191,7 +194,8 @@ async function showDrawn(st) {
   S.picUrl = URL.createObjectURL(blob);
   Object.assign(S, { drawn: g.round, ticket: g.ticket, hash: b.hash, name: st.name && st.name !== "新しい子" ? st.name : "新しい子" });
   $("pic").src = S.picUrl;
-  $("picCap").textContent = `${S.name}(C0 絵の ${g.round} 回目。この PC の Claude Code が描いた絵)`;
+  // 画面に内部の言葉(C0・段 0)を出さない(D7)
+  $("picCap").textContent = `${S.name}(${g.round} 回目の絵。この PC の Claude Code が描きました)`;
   show("c0");
   tell("drawn", { id: S.id, name: S.name, round: g.round });
 }
@@ -252,7 +256,36 @@ function schedule() {
   }, document.hidden ? 5000 : 1200);
 }
 
+/** 絵だけの枠: いまの子の最後に描いた絵を出す(枠を作った後に描き直されても、5 秒ごとに新しい回を見る) */
+async function picOnly() {
+  document.documentElement.classList.add("mk-pic");
+  show("done");
+  $("doneMsg").textContent = "";
+  let shown = 0;
+  const tick = async () => {
+    try {
+      const j = await api("/api/review/state");
+      const g = j.state && j.state.gates && j.state.gates.C0;
+      if (g && g.round > shown) {
+        const b = await api(`/api/review/bundle/C0?round=${g.round}`);
+        const m = b.manifest;
+        const blob = await api(`/api/review/file/C0/r${g.round}/${m.png || m.compare.right}`, { blob: true });
+        if (S.picUrl) URL.revokeObjectURL(S.picUrl);
+        S.picUrl = URL.createObjectURL(blob);
+        $("donePic").src = S.picUrl;
+        shown = g.round;
+      }
+      error("");
+    } catch (e) {
+      error(e.message);
+    }
+    setTimeout(tick, 5000);
+  };
+  tick();
+}
+
 (async () => {
+  if (PIC_ONLY && KEY) return picOnly();
   if (!KEY) {
     error("合言葉がありません。PC の /qr の画面のリンクから開き直してください");
     show("input");

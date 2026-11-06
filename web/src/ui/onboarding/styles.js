@@ -7,12 +7,19 @@ export const CSS = `
   --fr-mint: var(--mint, #7be0c3); --fr-warn: var(--warn, #ffd37a);
   font-family: var(--font, "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", Meiryo, system-ui, sans-serif); color: var(--fr-text); }
 .fr-sheet *, .yp-panel * { box-sizing: border-box; }
-.fr-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
-  max-height: min(80dvh, 760px); max-height: min(80vh, 760px); width: 100%; background: rgba(23, 20, 38, 0.94);
+.fr-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+  max-height: min(80vh, max(58vh, 440px), 760px); width: 100%; background: rgba(23, 20, 38, 0.94);
   border: 1px solid var(--fr-line); border-bottom: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,0.45);
   padding-bottom: env(safe-area-inset-bottom, 0px); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-@supports (height: 1dvh) { .fr-sheet { max-height: min(80dvh, 760px); } }
-.fr-head { padding: 12px 14px 8px; display: grid; gap: 8px; border-bottom: 1px solid var(--fr-line); }
+/* スマホ: 札は画面の 58%(最低 440px)まで。上の段と札の間に、案内役(主役)の顔が見えるように(CRITux 16。1 歩目は 72% を覆っていた) */
+@supports (height: 1dvh) { .fr-sheet { max-height: min(80dvh, max(58dvh, 440px), 760px); } }
+.fr-head { grid-row: 1; padding: 12px 14px 8px; display: grid; gap: 8px; border-bottom: 1px solid var(--fr-line); }
+.fr-pin { grid-row: 2; margin: 0; padding: 8px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--fr-line); }
+.fr-pin[hidden] { display: none; }
+.fr-pin-img { display: block; width: 72px; height: 72px; object-fit: contain; border-radius: 12px; background: #fff; }
+.fr-pin-frame { width: 96px; height: 96px; }
+.fr-pin-frame .fr-frame { width: 96px; height: 96px; border-radius: 12px; }
+.fr-pin-cap { font-size: 13px; line-height: 1.5; color: var(--fr-muted); overflow-wrap: anywhere; }
 .fr-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
 .fr-title h2 { margin: 0; font-size: 16px; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fr-close { flex: none; font: inherit; font-size: 14px; min-height: 44px; min-width: 64px; padding: 0 14px; border-radius: 999px; cursor: pointer;
@@ -26,7 +33,7 @@ export const CSS = `
 .fr-steps li.now span { background: linear-gradient(135deg, #7d62ff, #c15bff); border-color: transparent; color: #fff; }
 .fr-steps li.now { color: var(--fr-text); }
 .fr-steps li.skip span { opacity: 0.45; text-decoration: line-through; }
-.fr-log { overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px; display: grid; align-content: start; gap: 10px; min-height: 96px; }
+.fr-log { grid-row: 3; overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px; display: grid; align-content: start; gap: 10px; min-height: 96px; }
 .fr-line { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 8px; align-items: start; }
 .fr-who { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 700; color: #1b1630; }
 .fr-line.guide .fr-who { background: var(--fr-coral); }
@@ -39,11 +46,16 @@ export const CSS = `
 .fr-line.user .fr-bubble { max-width: 85%; border-radius: 16px 4px 16px 16px; background: rgba(125,98,255,0.24); border-color: rgba(183,168,255,0.45); }
 .fr-pic { display: block; max-width: 100%; max-height: 160px; margin-top: 6px; border-radius: 10px; object-fit: contain; background: #fff; }
 .fr-frame-wrap { display: grid; }
-.fr-frame { display: block; width: 100%; height: min(400px, 48vh); border: 1px solid var(--fr-line); border-radius: 14px; background: #fffdf8; }
+.fr-frame { display: block; width: 100%; height: min(400px, 48vh); border: 1px solid var(--fr-line); border-radius: 14px; background: #1d1a2e; }
 .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] { max-height: min(88vh, 760px); }
 @supports (height: 1dvh) { .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] { max-height: min(88dvh, 760px); } .fr-frame { height: min(400px, 48dvh); } }
 .fr-note { margin: 0 0 0 40px; font-size: 13px; line-height: 1.55; color: var(--fr-muted); overflow-wrap: anywhere; }
-.fr-actions { padding: 10px 14px 14px; display: grid; gap: 8px; border-top: 1px solid var(--fr-line); }
+.fr-actions { grid-row: 4; padding: 10px 14px 14px; display: grid; gap: 8px; border-top: 1px solid var(--fr-line); }
+/* 1 歩目: 写真と絵は 2 つ並べて、札を低くする(言葉の欄は 1 行に) */
+.fr-sheet[data-actions^="photo pick words"] .fr-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fr-sheet[data-actions^="photo pick words"] .fr-actions > .fr-wide, .fr-sheet[data-actions^="photo pick words"] .fr-actions > .fr-link { grid-column: 1 / -1; }
+.fr-sheet[data-actions^="photo pick words"] .fr-link { min-height: 44px; font-size: 14px; padding: 6px 12px; }
+.fr-link { text-decoration: none; }
 .fr-actions:empty { display: none; }
 .fr-btn { position: relative; font: inherit; font-size: 16px; min-height: 48px; width: 100%; padding: 10px 14px; border-radius: 14px; cursor: pointer;
   color: var(--fr-text); background: rgba(255,255,255,0.06); border: 1px solid var(--fr-line); display: flex; align-items: center; justify-content: center;
@@ -66,17 +78,19 @@ export const CSS = `
 .fr-launch { font: inherit; font-size: 13px; padding: 9px 14px; min-height: 40px; border-radius: 999px; cursor: pointer; color: var(--text, #f4f1fb);
   background: var(--glass, rgba(24,21,40,0.62)); border: 1px solid var(--line, rgba(255,255,255,0.12)); }
 .fr-launch.floating { position: fixed; top: max(12px, env(safe-area-inset-top)); right: 12px; z-index: 6; }
-/* スマホ: できた子が出た後(3 歩目から)は、札を低くして、舞台のキャラが見えるようにする */
-.fr-sheet[data-step="3"], .fr-sheet[data-step="4"], .fr-sheet[data-step="5"], .fr-sheet[data-step="6"], .fr-sheet[data-step="7"], .fr-sheet[data-step="8"] {
-  max-height: min(80vh, max(58vh, 440px)); }
-@supports (height: 1dvh) {
-  .fr-sheet[data-step="3"], .fr-sheet[data-step="4"], .fr-sheet[data-step="5"], .fr-sheet[data-step="6"], .fr-sheet[data-step="7"], .fr-sheet[data-step="8"] {
-    max-height: min(80dvh, max(58dvh, 440px)); }
-}
-/* PC: 右下の札にして、真ん中のキャラを隠さない */
+/* PC: 右の札にして、真ん中のキャラを隠さない。下の帯(会話の欄と「送る」。高さ --bottom-h は main.js が測る)の上に置き、
+   上の段(--top-h)との間に収める(1280×720 で「送る」が札の下に隠れていた。CRITux 14) */
 @media (min-width: 720px) {
-  .fr-sheet, .fr-sheet[data-step] { left: auto; right: 16px; bottom: 16px; width: min(460px, calc(100vw - 32px));
-    border-radius: 22px; border-bottom: 1px solid var(--fr-line); max-height: min(82vh, 760px); }
+  .fr-sheet, .fr-sheet[data-step], .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] { left: auto; right: 16px;
+    bottom: calc(var(--bottom-h, 0px) + 12px); width: min(460px, calc(100vw - 32px)); border-radius: 22px; border-bottom: 1px solid var(--fr-line);
+    max-height: min(760px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 48px)); }
+  @supports (height: 1dvh) { .fr-sheet, .fr-sheet[data-step], .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] {
+    max-height: min(760px, calc(100dvh - var(--top-h, 64px) - var(--bottom-h, 0px) - 48px)); } }
+  .fr-pin-img { width: 88px; height: 88px; }
+  .fr-pin-frame, .fr-pin-frame .fr-frame { width: 120px; height: 120px; }
+  /* 作る画面の枠は、札の高さの中に収める(1280×720 でも「直したい」まで見えるように。作る画面は横に並べる。CRITux 22) */
+  .fr-sheet[data-actions="frame"] .fr-log { min-height: 64px; }
+  .fr-actions .fr-frame { height: clamp(220px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 250px), 400px); }
   .fr-actions { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
   .fr-actions > .fr-field, .fr-actions > form, .fr-actions > .fr-wide { grid-column: 1 / -1; }
   .fr-steps li b { font-size: 11px; }
@@ -99,6 +113,10 @@ export const CSS = `
 .yp-choice[aria-checked="true"], .yp-seg button[aria-checked="true"] { border-color: var(--fr-lav); background: rgba(125,98,255,0.28); }
 .yp-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .yp-seg.yp-tones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.yp-seg[data-locked="true"] button { cursor: not-allowed; }
+.yp-seg[data-locked="true"] button:not([aria-checked="true"]) { opacity: 0.4; }
+.yp-tone-lock { color: var(--fr-text); }
+.yp-tone-lock[hidden] { display: none; }
 .yp-seg button { font: inherit; font-size: 14px; min-height: 44px; padding: 6px 4px; border-radius: 12px; cursor: pointer; color: var(--fr-text);
   background: rgba(255,255,255,0.05); border: 1px solid var(--fr-line); overflow-wrap: anywhere; }
 .yp-ending { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; font-size: 14px; color: var(--fr-muted); }
@@ -129,11 +147,14 @@ export const CSS = `
   .yp-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .yp-seg.yp-tones { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
-/* 初めての会話の間は、会話の画面の入口(ゲート)を消して、舞台のキャラを見せる。閉じると元に戻る(本物の画面の写真で、ゲートがキャラを隠していた) */
-html.fr-open .gate { opacity: 0 !important; pointer-events: none !important; }
-/* スマホでは、初めての会話の間だけ「Claude の考え」を隠す(会話は札に出る)。上の段の札(頭脳・声…)が 2 行になると、
-   考えの欄が「性格」「はじめての会話」「覚えていること」に重なり、押せず見た目も崩れていた(幅 390 の撮影の練習)。PC は今のまま */
-@media (max-width: 719px) { html.fr-open .thought { display: none !important; } }
+/* 初めての会話の間は、会話の画面の入口(ゲート)を消して、舞台のキャラを見せる(本物の画面の写真で、ゲートがキャラを隠していた)。
+   閉じた後も、カメラなしの入力が始まって main.js が入口を隠すまでは消したまま(fr-after。入口を出し直さない。D4) */
+html.fr-open .gate, html.fr-after .gate { opacity: 0 !important; pointer-events: none !important; }
+/* 初めての会話の間は「Claude の考え」を隠す(会話は札に出る)。スマホでは考えの欄が上の段のボタンに重なり、
+   PC(1280×720)では札が考えの箱に重なっていた(CRITux 14) */
+html.fr-open .thought { display: none !important; }
+/* 見本の子が舞台にいる間は、見た目の切り替え(主役の 3D/2D の控え)を隠す。押すと主役に戻ってしまうため */
+html.fr-guest #lookSwitch { display: none !important; }
 @media (prefers-reduced-motion: reduce) { .fr-sheet *, .yp-panel * { transition: none !important; animation: none !important; } }
 `;
 

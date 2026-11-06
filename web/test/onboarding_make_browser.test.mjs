@@ -191,7 +191,8 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       const pc1 = await pcNext(work, '--fake-draw');
       assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
       await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
-      assert.match(await frame.$eval('#picCap', (e) => e.textContent), /C0 絵の 1 回目/);
+      assert.match(await frame.$eval('#picCap', (e) => e.textContent), /1 回目の絵。この PC の Claude Code が描きました/);
+      assert.doesNotMatch(await frame.$eval('#picCap', (e) => e.textContent), /C0|段 \d/, '内部の言葉を出さない(D7)');
       assert.ok(await frame.$eval('#pic', (e) => e.naturalWidth > 0), '描いた絵が出る');
       await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子ができたよ。どうかな?'));
       await fits(page, frame, '3 歩目');
@@ -211,9 +212,19 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
 
       await frame.click('#okBtn');
       await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
-      assert.equal(await page.$('iframe.fr-frame'), null, '決めたら枠を閉じる');
+      assert.equal(await page.$('.fr-actions iframe.fr-frame'), null, '決めたら作る画面の枠を閉じる');
       assert.match(await logText(page), /けってい! OK を PC に伝えたよ/);
-      assert.match(await logText(page), /段 1〜6/);
+      assert.match(await logText(page), /3D ができるまでは、ノリーがかわりに舞台に立って/, '主役が代わりに立つと言う(D5)');
+      assert.doesNotMatch(await logText(page), /段 \d|C0/, '札に内部の言葉(段 0・C0)を出さない(D7)');
+      // 描いた絵は、札の上の小さな枠(絵だけ)に出したまま。話している間も見える(D5)
+      const pic = await page.waitForSelector('.fr-pin iframe.fr-frame', { timeout: 10_000 });
+      assert.match(await pic.getAttribute('src'), /\/m\/#k=.*&view=pic$/);
+      const picFrame = await pic.contentFrame();
+      await picFrame.waitForFunction(() => (document.getElementById('donePic')?.naturalWidth ?? 0) > 0, null, { timeout: 15_000 });
+      assert.equal(await picFrame.$eval('#okBtn', (e) => e.offsetParent === null), true, '絵だけの枠にボタンを出さない');
+      assert.match(await page.$eval('.fr-pin-cap', (e) => e.textContent), /PC の Claude Code が描いた絵。3D はこれから/);
+      const box = await page.$eval('.fr-pin', (e) => e.getBoundingClientRect().height);
+      assert.ok(box > 0 && box < 140, `絵の欄は小さく ${box}`);
       await shot(page, 'make390_4_persona');
       const pc3 = await pcNext(work, '--fake-draw');
       assert.equal(pc3.did, 'claimed_ok', JSON.stringify(pc3));

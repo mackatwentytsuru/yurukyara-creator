@@ -58,10 +58,10 @@ async function startServer(env) {
 // 試しの画面: 会話の画面の CSS と、ボタンを置く #modes だけ。声の鍵の部品は、鍵を受け取ったら記録するだけの偽物
 const PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="stylesheet" href="/__fr/src/ui/style.css"><title>初めての会話の試し</title></head>
+<link rel="stylesheet" href="/__fr/src/ui/style.css"><link rel="help" href="https://example.org/readme#make-your-own-character-on-your-pc-with-claude-code"><title>初めての会話の試し</title></head>
 <body><header class="top"><div class="modes" id="modes"></div></header>
 <aside id="thought" class="thought" aria-label="Claude の考え"><button class="thought-head" type="button">Claude の考え</button></aside>
-<div id="gate" class="gate"><div class="gate-card"><h1>入口</h1><button type="button" class="primary">はじめる</button></div></div>
+<div id="gate" class="gate"><div class="gate-card"><h1>入口</h1><button type="button" class="primary">はじめる</button><button id="startSim" type="button">カメラなしで試す</button></div></div>
 <script type="module">
 import { mountFirstRun } from '/__fr/src/ui/onboarding/index.js';
 import { seededRandom } from '/__fr/src/ui/persona/settings.js';
@@ -76,7 +76,9 @@ const byok = params.get('byok') === '1' ? {
   notice: () => '試しの鍵の部品です(本物の ElevenLabs は呼びません)。',
   canRemember: () => true,
 } : null;
-window.__test = { spoken, calls };
+window.__test = { spoken, calls, simStarted: 0 };
+// main.js の「カメラなしで試す」のまね: 押すと少し後に入口を隠す
+document.getElementById('startSim').addEventListener('click', () => { window.__test.simStarted += 1; setTimeout(() => document.getElementById('gate').classList.add('hidden'), 60); });
 window.__fr = mountFirstRun({ app: null, params, buttonHost: document.getElementById('modes'), byok, random: seededRandom(5) });
 </script></body></html>`;
 
@@ -176,12 +178,16 @@ async function walkWords(page, label, { full }) {
   const gate = () => page.$eval('#gate', (e) => [getComputedStyle(e).opacity, getComputedStyle(e).pointerEvents].join(' '));
   assert.equal(await gate(), '0 none', '初めての会話の間は、入口のゲートを消して舞台を見せる');
   const thought = () => page.$eval('#thought', (e) => getComputedStyle(e).display);
-  const phone = (await page.evaluate(() => innerWidth)) < 720;
-  assert.equal(await thought() === 'none', phone, 'スマホの初めての会話の間だけ「Claude の考え」を隠す(上の段のボタンに重ならない)');
+  assert.equal(await thought(), 'none', '初めての会話の間は「Claude の考え」を隠す(スマホは上の段のボタン、PC は札に重なっていた)');
+  // スマホの 1 歩目は、写真と絵を 2 つ並べて札を低くする(上に案内役の顔が見えるように。CRITux 16)
+  const vh = await page.evaluate(() => innerHeight);
+  const sheetH = await page.$eval('.fr-sheet', (e) => e.getBoundingClientRect().height);
+  if ((await page.evaluate(() => innerWidth)) < 720) assert.ok(sheetH <= Math.max(0.58 * vh, 440) + 1, `1 歩目の札が高すぎる ${sheetH}/${vh}`);
 
   await page.fill('.fr-actions [data-act="words"] input', '赤い提灯の子');
   await page.click('.fr-actions [data-act="words"] button[type="submit"]');
   await waitAct(page, 'keep');
+  assert.match(await logText(page), /見本の中に、近い子がいたよ。/, '見本だと言う説明が、読み込み直しで消えない(D2)');
   assert.match(await logText(page), /見本: ちょうちんくん/);
   assert.match(await logText(page), /ちょうちんくんだよ。この子はどうかな\?/);
   assert.equal(await page.$eval('.fr-steps li[data-n="2"]', (e) => e.className), 'skip', '言葉のときは 2 歩目(チェック)をとばす');
@@ -286,12 +292,19 @@ async function walkWords(page, label, { full }) {
 
   await page.click('.fr-actions [data-act="close"]');
   await page.waitForSelector('.fr-sheet', { state: 'detached', timeout: 15_000 });
-  assert.equal(await gate(), '1 auto', '閉じたら、入口のゲートが戻る');
+  // 閉じたら: 入口を出し直さない(カメラなしで始める)・アドレスから onboard=1 を消す・読み込み直しても 7 歩を始めない(D4)
+  await page.waitForFunction(() => document.getElementById('gate').classList.contains('hidden'), null, { timeout: 5000 });
+  assert.equal(await page.evaluate(() => window.__test.simStarted), 1, '入口が残っていたので、カメラなしで 1 回始めた');
+  assert.ok(!/onboard=/.test(await page.evaluate(() => location.search)), 'アドレスから onboard=1 を消した');
   assert.notEqual(await thought(), 'none', '閉じたら「Claude の考え」も戻る');
   assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done');
   const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), `${STORE_PREFIX}d_lantern`);
   assert.equal(saved.preset, 'shy');
   assert.equal(saved.voice.provider, 'elevenlabs');
+  await page.reload();
+  await page.waitForSelector('#modes [data-firstrun="start"]');
+  await page.waitForTimeout(400);
+  assert.equal(await page.$('.fr-sheet'), null, '読み込み直しても、7 歩を最初から始めない');
 }
 
 const VIEWS = [
@@ -327,7 +340,7 @@ test('初めての会話: 言葉の入口から 7 歩目まで(幅 390・400・P
 // 1×1 の白い PNG(試しの絵)
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64');
 
-test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」→ 主役の子。鍵の部品が無いと正直に言う', { skip: SLOW, timeout: 120_000 }, async (t) => {
+test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」→ この画面では作れないと正直に言う → 主役で続ける。絵は札に出したまま。鍵の部品が無いと正直に言う', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
   const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
@@ -347,10 +360,21 @@ test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」�
       assert.match(await logText(page), /これはちょっとリアルな写真みたい。ゆるキャラにしてみる\?/);
       await shot(page, 'w390_2_human');
       await page.click('.fr-actions [data-act="yurufy"]');
-      await waitAct(page, 'keep');
-      assert.match(await logText(page), /協力者が手で描いた絵から/);
-      await page.click('.fr-actions [data-act="keep"]');
+      await waitAct(page, 'use_guide');
+      assert.match(await logText(page), /この画面では、絵から新しい子を作れないんだ/, 'だまって見本を「できた子」にしない(D1)');
+      assert.match(await logText(page), /serve_review\.py --make/);
+      const readme = await page.$eval('.fr-actions a[data-act="readme"]', (a) => ({ href: a.href, target: a.target, rel: a.rel, h: a.getBoundingClientRect().height }));
+      assert.equal(readme.href, 'https://example.org/readme#make-your-own-character-on-your-pc-with-claude-code', 'README の作り方の節へ 1 回で飛ぶ(頁の link rel="help")');
+      assert.deepEqual([readme.target, readme.rel], ['_blank', 'noopener noreferrer']);
+      assert.ok(readme.h >= 44, 'README のリンクも押す所は 44px 以上');
+      const pinned = () => page.$eval('.fr-pin', (e) => ({ hidden: e.hidden, src: e.querySelector('img')?.src ?? '', h: e.getBoundingClientRect().height }));
+      assert.ok(!(await pinned()).hidden && /^blob:/.test((await pinned()).src), '選んだ絵を札の上に出したまま(D3)');
+      await checkLayout(page, '絵 3 歩目(見本がいない)');
+      await shot(page, 'w390_3_nomatch_picture');
+      await page.click('.fr-actions [data-act="use_guide"]');
       await waitAct(page, 'persona_ok');
+      assert.match(await logText(page), /協力者が手で描いた絵から/);
+      assert.ok(/^blob:/.test((await pinned()).src), '4 歩目でも絵は見えている');
       await page.click('.fr-actions [data-act="persona_ok"]');
       await waitAct(page, 'to_retro');
       await page.click('.fr-actions [data-act="to_retro"]');
@@ -382,11 +406,9 @@ test('主役の絵の入口(幅 390): おまかせ・性格の画面のおまか
       await page.setInputFiles('.fr-actions [data-act="pick"] input[type="file"]', { name: 'drawing.png', mimeType: 'image/png', buffer: PNG_1PX });
       await waitAct(page, 'kind_yuru');
       await page.click('.fr-actions [data-act="kind_yuru"]');
-      await waitAct(page, 'next_meet');
-      await page.click('.fr-actions [data-act="next_meet"]');
-      await waitAct(page, 'keep');
-      assert.match(await logText(page), new RegExp(`${MAIN.name}だよ。この子はどうかな\\?`), '絵の入口は主役');
-      await page.click('.fr-actions [data-act="keep"]');
+      await waitAct(page, 'use_guide');
+      assert.doesNotMatch(await logText(page), new RegExp(`${MAIN.name}だよ。この子はどうかな`), '主役を「できた子」として紹介しない');
+      await page.click('.fr-actions [data-act="use_guide"]');
       await waitAct(page, 'persona_ok');
       assert.match(await logText(page), /性格: .+・この子の話し方・/, '4 歩目のおまかせ');
 
@@ -396,6 +418,11 @@ test('主役の絵の入口(幅 390): おまかせ・性格の画面のおまか
       const ownChecked = () => page.$eval('.yp-tones [data-key="own"]', (e) => e.getAttribute('aria-checked'));
       assert.equal(await ownChecked(), 'true');
       assert.equal(await page.$$eval('.yp-tones button', (els) => els.length), 4, '口調は 4 つ');
+      // 主役の話し方は人格の文で決まっている: 口調の列は止めて、理由を書く(D6)
+      assert.deepEqual(await page.$$eval('.yp-tones button', (els) => els.map((b) => b.disabled)), [true, true, true, true], '口調のボタンは押せない');
+      assert.match(await page.$eval('.yp-tone-lock', (e) => (e.hidden ? '' : e.textContent)), /話し方は、この子の人格の文で決まっています/);
+      await page.click('.yp-tones [data-key="ending"]', { force: true });
+      assert.equal(await ownChecked(), 'true', '押しても口調は変わらない');
       await checkLayout(page, '主役の性格の画面');
       await shot(page, 'w390_main_persona_own');
       noEnding(await page.$eval('.yp-reply-text', (e) => e.textContent), '性格の画面の試し');

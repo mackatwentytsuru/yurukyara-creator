@@ -319,14 +319,17 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
             if cur.make and web:
                 from html import escape
                 link = f"{web.rstrip('/')}/?onboard=1#yc-make=http://127.0.0.1:{port}&yc-key={gate.token}"
+                # 画面の文字には合言葉を出さない(画面の録画や写真に残らないように。リンクと QR の中だけ。CRITux 22)
                 first = ("<h2 style='font-size:18px'>この PC の初めての会話(言葉か絵で作る)</h2>"
-                         f"<p style='word-break:break-all'><a href='{escape(link, quote=True)}'>{escape(link)}</a></p>"
+                         f"<p style='word-break:break-all'><a href='{escape(link, quote=True)}'>{escape(link.replace(gate.token, '••••••'))}</a></p>"
                          "<p>開くと、初めての会話の 1〜3 歩の中に、この PC の作る画面が出ます。言葉か絵を入れたら、"
                          "Claude Code で /yuru-next と打ってください。</p>")
             html = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                     "<title>確認画面の入口</title><body style='font:16px sans-serif;margin:24px'>"
                     f"<h1 style='font-size:20px'>スマホで読む QR({cur.id or '作る道'})</h1>{qr}"
-                    f"<p style='word-break:break-all'>{url}</p>{first}"
+                    f"<p style='word-break:break-all'><a href='{url}'>{url.replace(gate.token, '••••••')}</a></p>"
+                    "<p>合言葉は伏せて出しています(リンクと QR には入っています)。</p>"
+                    f"{first}"
                     "<p>この画面は人にだけ見せてください。撮影のあとは serve_review.py を止めて、合言葉を捨ててください。</p></body>")
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8",
                        csp="default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'")
