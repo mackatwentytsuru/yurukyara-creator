@@ -10,16 +10,18 @@
 
 数字は次の 2 つの記録からだけ取る。手で書いた数字は表に入れない。
 
-**作る段の記録 `run.jsonl`**(S1 が書く。置き場所 `creator/work/<id>/run.jsonl`。リポジトリには入れず、`tools/metrics.py` が消毒した要約だけを `docs/runs/` に出す)。1 行 1 件の JSON で、欄は次のとおり:
+**作る段の記録 `run.jsonl`**(S1 が書く。S1 の案のとおり。置き場所 `creator/work/<id>/run.jsonl`。`creator/work/` はリポジトリに入れず、`tools/metrics.py` が消毒した要約だけを `docs/runs/` に出す)。1 行 1 段の JSON で、欄は次のとおり:
 
-- `ts`(ISO 8601、`+09:00` つき)・`id`(キャラ)・`stage`(`check`・`draw`・`look`・`shape`・`material`・`motion`・`talk`)
-- `event`(`start`・`end`・`fail`・`review`)・`ok`(真偽。`end` と `review` のとき)・`source`(`text` か `image`)
-- `duration_ms`・`cost_usd`(測っていなければ `null`。推しはかった値は入れない)・`model`・`tokens_in`・`tokens_out`
-- `commit`(`git rev-parse --short HEAD`)・`note`(40 字まで。パス・機械の名前・鍵を書かない)
+- `run`(回の id)・`char`(キャラの id)・`stage`(0〜7)・`name`(`draw`・`look`・`shape`・`material`・`texture`・`rig`・`motion`・`talk`)
+- `start`・`end`(ISO 8601、時差つき)・`sec`・`actor`(`claude:<モデル>` か `tool:<名前>`)・`ok`(真偽)
+- `cost_usd`(`claude -p` の `total_cost_usd`。定額のプランで流した回は請求ではなく定価に直した目安。測れない回は `null`)
+- `tokens`(`in`・`out`・`cache_read`・`cache_write`。無ければ `null`)・`commit`(短い sha)・`note`(パス・機械の名前・鍵を書かない)
 
 **描画の重さ `?perf=1`**(S5 が書く)。ページを `?perf=1` で開くと、決まった秒数を測ったあと `window.__perf` に入れ、コンソールへ `PERF ` に続けて 1 行の JSON を出す。欄: `commit`・`device`(`desktop`・`mobile`・`xr`)・`renderer`(WebGL の描画役の名前。`SwiftShader` なら測った値として使わない)・`id`・`tier`・`seconds`・`fps_median`・`frame_ms_p50`・`frame_ms_p95`・`draw_calls`・`triangles`・`load_ms`・`glb_bytes`。保存先は `docs/runs/perf/<日付>_<device>.json`。
 
-`tools/metrics.py` がこの 2 つを読んで表にするのは、記録が出始めてから(今の版はまだ読まない)。
+**フックが止めた記録**(S6 のフックが書く)。`creator/work/_hooks/blocked.jsonl` に 1 行 1 件(`ts`・`hook`・`decision: block`・`reason`)。`--hook-log` で数える。
+
+`tools/metrics.py` が `run.jsonl` と `?perf=1` を読んで表にするのは、記録が出始めてから(今の版はまだ読まない)。
 
 ## 1. 作り直した体(元の絵を SVG で描いた回)の時間と費用
 
