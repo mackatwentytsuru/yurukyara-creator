@@ -1,0 +1,86 @@
+{
+  "id": "mikan",
+  "name": "みかんちゃん",
+  "model": "model.glb",
+  "type": "rig",
+  "height_m": 0.8,
+  "fur": false,
+  "expressions": [
+    "neutral",
+    "happy",
+    "surprised",
+    "sad",
+    "think"
+  ],
+  "motions": {
+    "bow": "motions/bow.glb",
+    "idle": "motions/idle.glb",
+    "nod": "motions/nod.glb",
+    "talk": "motions/talk.glb",
+    "wave": "motions/wave.glb"
+  },
+  "look": {
+    "bone": "body",
+    "max_deg": [
+      22,
+      14
+    ],
+    "eyes": [
+      "eye_L",
+      "eye_R"
+    ]
+  },
+  "mouth": {
+    "kind": "morph",
+    "morph": "mouth_open",
+    "gain": 1.2
+  },
+  "blink": {
+    "morph": "eye_blink"
+  },
+  "morphs": {
+    "happy": {
+      "mouth_wide": 0.9
+    },
+    "surprised": {
+      "mouth_o": 1.0
+    },
+    "sad": {
+      "eye_blink": 0.3
+    },
+    "think": {
+      "mouth_o": 0.3
+    }
+  },
+  "persona": "persona.md",
+  "schema_version": 1,
+  "origin": {
+    "input": "words",
+    "words": "みかんの子。まるくて元気。頭に葉っぱが 1 枚",
+    "drawn_by": "claude",
+    "created": "2026-11-06T18:32:05+09:00"
+  },
+  "looks": {
+    "default": "3d",
+    "3d": {
+      "at": "top"
+    },
+    "2d": {
+      "svg": "../../creator/samples/mikan_元の絵.svg",
+      "parts": [
+        "shadow",
+        "foot_R",
+        "foot_L",
+        "arm_R",
+        "arm_L",
+        "body",
+        "cheek_R",
+        "cheek_L",
+        "eye_R",
+        "eye_L",
+        "mouth",
+        "hat"
+      ]
+    }
+  }
+}

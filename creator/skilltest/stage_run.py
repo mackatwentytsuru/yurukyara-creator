@@ -6,6 +6,8 @@
          [--timeout 3000] [--split <段の分け方.json>]
   python creator/skilltest/stage_run.py tool --run <回のフォルダ> --char <id> --stage <N> --name <名前> -- <命令…>
   python creator/skilltest/stage_run.py sum --run <回のフォルダ>
+  python creator/skilltest/stage_run.py redo --run … --char … --stage … --name … --model … [--split …] [--judge-dir …]
+      (記録の行だけを、残った log.jsonl と result.json から作り直す。claude は流し直さない)
 
 - 定額のプランのログインで流す: 親の CLAUDE_CODE_* と ANTHROPIC_API_KEY・ELEVENLABS_API_KEY を外す(API の請求にしない。声の費用も出さない)。
 - cost_usd は claude -p が返す total_cost_usd(定額のプランで流したので、請求ではなく定価に直した目安)。
@@ -77,11 +79,22 @@ def usage_tokens(u):
             "cache_read": u.get("cache_read_input_tokens", 0), "cache_write": u.get("cache_creation_input_tokens", 0)}
 
 
-def split_stages(log_path, pattern_map):
-    """log.jsonl を、Bash の命令の形で段に分ける。戻り値 {段: {start, end, tokens}}。"""
+def split_stages(log_path, pattern_map, first_stage=None):
+    """log.jsonl を、Bash の命令の形で段に分ける。行ったり来たりする作業(builder を直して骨を入れ直す、など)に合わせ、
+    出来事ごとに「最後に出た命令の段」に時間と量を足す(つながった区間ではなく合計)。最初の命令の前は first_stage
+    (無ければ最初に出た段)に数える。戻り値 {段: {first, last, sec, tokens}}。"""
     pats = [(int(k), re.compile(v)) for k, v in pattern_map.items()]
     events = [json.loads(line) for line in open(log_path, encoding="utf-8")]
-    marks = []          # (時刻, 段)
+    zero = lambda: {"in": 0, "out": 0, "cache_read": 0, "cache_write": 0}
+    cur, spans, seen, prev_t = first_stage, {}, set(), None
+    pending = []          # 最初の段が決まるまでの出来事
+    def put(st, t, dt, u):
+        sp = spans.setdefault(st, {"first": t, "last": t, "sec": 0.0, "tokens": zero()})
+        sp["last"] = t
+        sp["sec"] += dt
+        if u:
+            for k, v in usage_tokens(u).items():
+                sp["tokens"][k] += v
     for e in events:
         ev = e.get("ev") or {}
         msg = ev.get("message") or {}
@@ -91,33 +104,20 @@ def split_stages(log_path, pattern_map):
                 cmd = (c.get("input") or {}).get("command", "")
                 for st, rx in pats:
                     if rx.search(cmd):
-                        marks.append((e["t"], st))
+                        cur = st
                         break
-    if not marks:
-        return {}
-    first = {}
-    for t, st in marks:
-        first.setdefault(st, t)
-    order = sorted(first.items(), key=lambda x: x[1])
-    end_all = events[-1]["t"]
-    spans = {}
-    for i, (st, t0) in enumerate(order):
-        t1 = order[i + 1][1] if i + 1 < len(order) else end_all
-        spans[st] = {"start": t0, "end": t1, "tokens": {"in": 0, "out": 0, "cache_read": 0, "cache_write": 0}}
-    seen = set()
-    for e in events:
-        ev = e.get("ev") or {}
-        msg = ev.get("message") or {}
-        u = msg.get("usage") if ev.get("type") == "assistant" else None
-        if not u or msg.get("id") in seen:
+        u = msg.get("usage") if ev.get("type") == "assistant" and msg.get("id") not in seen else None
+        if u:
+            seen.add(msg.get("id"))
+        dt = 0.0 if prev_t is None else e["t"] - prev_t
+        prev_t = e["t"]
+        if cur is None:
+            pending.append((e["t"], dt, u))
             continue
-        seen.add(msg.get("id"))
-        for st, sp in spans.items():
-            if sp["start"] <= e["t"] < sp["end"] or (st == order[0][0] and e["t"] < sp["start"]):
-                tk = usage_tokens(u)
-                for k in tk:
-                    sp["tokens"][k] += tk[k]
-                break
+        for item in pending:
+            put(cur, *item)
+        pending = []
+        put(cur, e["t"], dt, u)
     return spans
 
 
@@ -162,6 +162,19 @@ def cmd_claude(a):
     t1 = time.time()
     with open(os.path.join(work, "result.json"), "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)
+    return finish_row(a, work, t0, t1, result)
+
+
+def cmd_redo(a):
+    """記録の行だけを、残った log.jsonl と result.json から作り直す(途中で落ちた時。claude は流し直さない)。"""
+    work = os.path.join(a.run, f"{a.stage}_{a.name}")
+    ts = [json.loads(x)["t"] for x in open(os.path.join(work, "log.jsonl"), encoding="utf-8")]
+    result = json.load(open(os.path.join(work, "result.json"), encoding="utf-8"))
+    return finish_row(a, work, ts[0] - 1, ts[-1], result)
+
+
+def finish_row(a, work, t0, t1, result):
+    log = os.path.join(work, "log.jsonl")
     jc, jn = judge_costs(a.cwd if not a.judge_dir else a.judge_dir, t0)
     main_cost = result.get("total_cost_usd")
     row = {"run": os.path.basename(os.path.abspath(a.run)), "char": a.char, "stage": a.stage, "name": a.name,
@@ -172,9 +185,11 @@ def cmd_claude(a):
            "ok": result.get("subtype") == "success" and not result.get("is_error", False),
            "commit": commit(), "note": "定額のプランで流した。cost_usd は定価に直した目安"}
     if a.split:
-        spans = split_stages(log, json.load(open(a.split, encoding="utf-8")))
+        sm = json.load(open(a.split, encoding="utf-8"))
+        first = sm.pop("first", None)
+        spans = split_stages(log, sm, first)
         tot = sum(sum(sp["tokens"].values()) for sp in spans.values()) or 1
-        row["stages"] = {str(st): {"start": iso(sp["start"]), "end": iso(sp["end"]), "sec": round(sp["end"] - sp["start"]),
+        row["stages"] = {str(st): {"first": iso(sp["first"]), "last": iso(sp["last"]), "sec": round(sp["sec"]),
                                    "tokens": sp["tokens"],
                                    "cost_usd_share": round((main_cost or 0) * sum(sp["tokens"].values()) / tot, 4)}
                          for st, sp in sorted(spans.items())}
@@ -205,28 +220,30 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd_name", required=True)
     c = sub.add_parser("claude")
+    r = sub.add_parser("redo")
     t = sub.add_parser("tool")
     s = sub.add_parser("sum")
-    for x in (c, t, s):
+    for x in (c, r, t, s):
         x.add_argument("--run", required=True)
-    for x in (c, t):
+    for x in (c, r, t):
         x.add_argument("--char", required=True)
         x.add_argument("--stage", type=int, required=True)
         x.add_argument("--name", required=True)
         x.add_argument("--cwd", default=REPO)
-    c.add_argument("--model", required=True)
-    c.add_argument("--effort", default="medium")
+    for x in (c, r):
+        x.add_argument("--model", required=True)
+        x.add_argument("--effort", default="medium")
+        x.add_argument("--split")
+        x.add_argument("--judge-dir")
     c.add_argument("--prompt", required=True)
     c.add_argument("--add-dir", action="append")
     c.add_argument("--timeout", type=int, default=3000)
-    c.add_argument("--split")
-    c.add_argument("--judge-dir")
     c.add_argument("--light", action="store_true", help="--setting-sources project で流す(使う人の設定を読まない)")
     t.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
     if a.cmd_name == "tool" and a.cmd and a.cmd[0] == "--":
         a.cmd = a.cmd[1:]
-    sys.exit({"claude": cmd_claude, "tool": cmd_tool, "sum": cmd_sum}[a.cmd_name](a) or 0)
+    sys.exit({"claude": cmd_claude, "redo": cmd_redo, "tool": cmd_tool, "sum": cmd_sum}[a.cmd_name](a) or 0)
 
 
 if __name__ == "__main__":

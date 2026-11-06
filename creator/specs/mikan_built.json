@@ -1,0 +1,96 @@
+{
+ "id": "mikan",
+ "height_m": 0.8,
+ "bones": [
+  {
+   "name": "root",
+   "at": [
+    0,
+    0,
+    0
+   ],
+   "parent": null
+  },
+  {
+   "name": "body",
+   "at": [
+    0,
+    0,
+    0.3714
+   ],
+   "parent": "root"
+  },
+  {
+   "name": "arm_L",
+   "at": [
+    0.2959,
+    0,
+    0.3469
+   ],
+   "parent": "body"
+  },
+  {
+   "name": "arm_R",
+   "at": [
+    -0.2959,
+    0,
+    0.3469
+   ],
+   "parent": "body"
+  },
+  {
+   "name": "leg_L",
+   "at": [
+    0.1143,
+    0,
+    0.0959
+   ],
+   "parent": "root"
+  },
+  {
+   "name": "leg_R",
+   "at": [
+    -0.1143,
+    0,
+    0.0959
+   ],
+   "parent": "root"
+  },
+  {
+   "name": "eye_L",
+   "at": [
+    0.0847,
+    -0.31,
+    0.3449
+   ],
+   "parent": "body"
+  },
+  {
+   "name": "eye_R",
+   "at": [
+    -0.0847,
+    -0.31,
+    0.3449
+   ],
+   "parent": "body"
+  }
+ ],
+ "roles": {
+  "root": "root",
+  "body": "body",
+  "arm_L": "arm_L",
+  "arm_R": "arm_R",
+  "leg_L": "leg_L",
+  "leg_R": "leg_R"
+ },
+ "motion": {
+  "only": [
+   "idle",
+   "talk",
+   "nod",
+   "bow",
+   "wave"
+  ],
+  "arm_amp": 0.5
+ }
+}
