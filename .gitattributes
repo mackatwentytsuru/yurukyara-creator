@@ -1,2 +1,40 @@
-*.command text eol=lf
-*.sh text eol=lf
+# Line endings: text files are stored with LF and checked out with LF on every OS
+# (Windows clones included), so scripts run and tests that compare file contents
+# give the same result everywhere. Binary files are never converted.
+* text=auto
+
+*.md        text eol=lf
+*.mjs       text eol=lf
+*.js        text eol=lf
+*.cjs       text eol=lf
+*.json      text eol=lf
+*.jsonl     text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.svg       text eol=lf
+*.txt       text eol=lf
+*.py        text eol=lf
+*.sh        text eol=lf
+*.command   text eol=lf
+*.args      text eol=lf
+*.example   text eol=lf
+.gitignore  text eol=lf
+.gitattributes text eol=lf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.gif   binary
+*.ico   binary
+*.glb   binary
+*.vrm   binary
+*.wav   binary
+*.mp3   binary
+*.ogg   binary
+*.mp4   binary
+*.webm  binary
+*.woff  binary
+*.woff2 binary
+*.task  binary
+*.wasm  binary
