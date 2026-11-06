@@ -9,6 +9,7 @@ import { FirstRun } from '../src/ui/onboarding/script.js';
 import { cleanMakeEvent, createLocalCreator, isLocalBase } from '../src/ui/onboarding/creators.js';
 import { readLocalMake, MAKE_KEY } from '../src/ui/onboarding/index.js';
 import { randomSettings, seededRandom } from '../src/ui/persona/settings.js';
+import { MAIN_CHARACTER } from '../src/character/defaults.js';
 
 const MOCK = { lines: [{ text: 'こんにちは。' }], brain: 'mock' };
 
@@ -81,7 +82,7 @@ function harness({ frameWaitMs } = {}) {
   const win = fakeWindow();
   const creator = createLocalCreator({ base: 'http://127.0.0.1:8796', key: 'test-key', parentOrigin: 'http://localhost:5173', win });
   const fr = new FirstRun({
-    guide: { id: 'norrie', name: 'ノリー' },
+    guide: MAIN_CHARACTER,
     creator,
     persona: { get: (id) => stored.get(id) ?? null, set: (id, s) => stored.set(id, s), random: () => randomSettings(seededRandom(3)) },
     talk: async () => MOCK,

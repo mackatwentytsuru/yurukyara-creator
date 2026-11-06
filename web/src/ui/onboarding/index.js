@@ -1,5 +1,6 @@
 // 初めての会話(7 歩)と性格の画面を、会話の画面に付ける入口。main.js(S5)に 1 行で付ける:
-//   import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost: $('modes') }));
+//   import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER }));
+// - 案内役(guide)の既定は主役 MAIN_CHARACTER。主役の決まりは web/src/character/defaults.js(S5)の 1 か所だけに置き、ここでは写さない
 // - 「性格」と「はじめての会話」のボタンを buttonHost に足す(無ければ右上に浮かべる)
 // - ?onboard=1 で初めての会話を出す。auto: true なら、この端末で初めての時も出す(既定は出さない。ほかの試験を邪魔しない)
 // - 性格の設定は、キャラの id ごとに、この端末の中に覚える。会話の頭脳に渡す人格の文(app.persona)に足す
@@ -17,9 +18,9 @@ import { openPersonaPanel } from '../persona/panel.js';
 import { composePersona, loadSettings, normalize, randomSettings, saveSettings } from '../persona/settings.js';
 import { MOCK_NOTICE_SHORT, styleLines } from '../persona/preview.js';
 import { streamChat } from '../../conversation/brainClient.js';
+// 主役で案内役(協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリ」と呼ぶ)。three を読まない小さな部品
+import { MAIN_CHARACTER } from '../../character/defaults.js';
 
-/** 主役で案内役: 協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリ」と呼ぶ */
-export const MAIN_CHARACTER = { id: 'norrie', name: 'ノリー' };
 export const DONE_KEY = 'yc.onboarded.v1';
 export const RESUME_KEY = 'yc.onboarding.resume.v1';
 export const MAKE_KEY = 'yc.make.v1';

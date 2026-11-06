@@ -5,8 +5,7 @@ import assert from 'node:assert/strict';
 import { FirstRun, VOICE_THANKS, NOTE_MAX } from '../src/ui/onboarding/script.js';
 import { createSampleCreator, pickSample } from '../src/ui/onboarding/creators.js';
 import { randomSettings, seededRandom, normalize } from '../src/ui/persona/settings.js';
-
-const MAIN = { id: 'norrie', name: 'ノリー' };
+import { MAIN_CHARACTER as MAIN } from '../src/character/defaults.js';
 const MOCK = { lines: [{ text: 'こんにちは。', expression: 'happy', motion: 'wave' }, { text: '今日は、どんなお話をしようか。' }], brain: 'mock' };
 
 function harness({ creator = createSampleCreator({ main: MAIN, exists: async () => true }), voice = {}, talk = async () => MOCK, show = async () => true, seed = 7 } = {}) {
@@ -113,7 +112,7 @@ test('絵の入口(見本の道): 人の絵なら「ゆるキャラにしてみ�
   assert.ok(h.texts('note').some((t) => t.includes('どんな写真でもきれいに作れるわけではありません')));
   assert.deepEqual(h.offered, ['yurufy', 'other']);
   await h.fr.act('yurufy');
-  assert.equal(h.fr.character.id, 'norrie');
+  assert.equal(h.fr.character.id, MAIN.id);
   assert.equal(h.fr.input.yurufy, true);
   assert.equal(h.fr.snapshot().words, null, '絵の住所は残さない');
   assert.ok(!JSON.stringify(h.fr.snapshot()).includes('blob:'));
