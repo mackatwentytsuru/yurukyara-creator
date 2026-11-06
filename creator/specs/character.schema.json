@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "creator/specs/character.schema.json",
+  "title": "キャラの設計図(契約 K1、版 1)",
+  "description": "characters/<id>/character.json の形。中身(id・名前・性格・声・記憶・知識)は 2D と 3D で共通。見た目は looks に分ける。3D の項目(type・model・motions・look・mouth・face など)は、これまでどおり最上位に置き、動かさない(looks.3d は『最上位にある』という印だけ)。知らない項目は止めない(足すのは自由。消す・名前を変えるときは版を上げる)。持ち主は S1。確かめ: python creator/specs/validate_character.py characters/*/character.json",
+  "type": "object",
+  "required": ["id", "name", "persona"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"type": "integer", "enum": [1], "description": "この形の版。書かなければ 1 とみなす"},
+    "id": {"type": "string", "pattern": "^[a-z0-9_][a-z0-9_-]{0,39}$", "description": "共通の ID。フォルダ名と同じ。2D・3D・記憶・知識は全部この ID でつなぐ"},
+    "name": {"type": "string", "minLength": 1, "maxLength": 40, "description": "表示の名前(日本語でよい)"},
+    "persona": {"type": "string", "minLength": 1, "description": "性格と口調の文(このフォルダからの相対パス。ふつう persona.md)。安全の決まりは別の層(S3)で、ここに書かない"},
+    "voice": {
+      "type": "object",
+      "description": "声。無ければ文字送りとレトロ音(S3)。鍵はここに書かない",
+      "additionalProperties": true,
+      "properties": {
+        "provider": {"type": "string", "enum": ["none", "elevenlabs", "browser"]},
+        "voice_id": {"type": "string", "maxLength": 64},
+        "rate": {"type": "number", "minimum": 0.5, "maximum": 2.0},
+        "pitch": {"type": "number", "minimum": 0.5, "maximum": 2.0}
+      }
+    },
+    "memory": {
+      "type": "object",
+      "description": "記憶の名前空間(S3 の K4 が使う)。無ければ id",
+      "additionalProperties": true,
+      "properties": {"namespace": {"type": "string", "pattern": "^[a-z0-9_][a-z0-9_-]{0,39}$"}}
+    },
+    "knowledge": {
+      "type": "array",
+      "description": "専門知識の置き場(このフォルダからの相対パス。出どころと日時は中に書く)",
+      "items": {"type": "string"}
+    },
+    "origin": {
+      "type": "object",
+      "description": "どこから生まれたか(動画・README の『言葉から』『絵から』の裏付け)",
+      "additionalProperties": true,
+      "properties": {
+        "input": {"type": "string", "enum": ["words", "picture"]},
+        "words": {"type": "string", "maxLength": 400},
+        "picture": {"type": "string"},
+        "drawn_by": {"type": "string", "description": "元の絵を描いた者(claude・人 など)"},
+        "run": {"type": "string", "description": "作った回の記録(run.jsonl)の場所"},
+        "created": {"type": "string"}
+      }
+    },
+    "looks": {
+      "type": "object",
+      "description": "見た目の方式。3d は最上位の項目を使う印。2d は SVG の部品の板(S2)",
+      "additionalProperties": true,
+      "properties": {
+        "default": {"type": "string", "enum": ["3d", "2d"]},
+        "3d": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {"at": {"type": "string", "enum": ["top"], "description": "3D の項目は最上位にある"}}
+        },
+        "2d": {
+          "type": "object",
+          "required": ["svg", "parts"],
+          "additionalProperties": true,
+          "properties": {
+            "svg": {"type": "string", "description": "元の SVG(<g id=\"char\"> の下に決まった名前の部品。yc-0-draw の d02 が点検)"},
+            "parts": {
+              "type": "array",
+              "description": "SVG にある部品の名前。正本は creator/pipeline/d03_svgkit.py の PARTS",
+              "items": {"type": "string", "enum": ["shadow", "back", "foot_R", "foot_L", "arm_R", "arm_L", "body", "head", "ear_R", "ear_L", "cheek_R", "cheek_L", "eye_R", "eye_L", "brow_R", "brow_L", "mouth", "hat", "accessory"]}
+            },
+            "expressions": {
+              "type": "object",
+              "description": "表情の名前 → {部品の名前: 差し替える SVG の断片のパス}。表情の名前は K2(S5)の emotion に合わせる",
+              "additionalProperties": {"type": "object", "additionalProperties": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "type": {"type": "string", "enum": ["rig", "vrm"], "description": "3D の方式(今の項目)"},
+    "model": {"type": "string", "description": "3D のモデル(model.glb か model.vrm)"},
+    "height_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 5},
+    "expressions": {"type": "array", "items": {"type": "string"}},
+    "motions": {"type": "object", "additionalProperties": {"type": "string"}},
+    "look": {"type": "object"},
+    "mouth": {"type": "object"},
+    "blink": {"type": "object"},
+    "face": {"type": "object"},
+    "morphs": {"type": "object"},
+    "fur": {"type": ["object", "boolean"], "description": "毛の殻(false で無し)"},
+    "glow": {"type": "object"},
+    "expression_hints": {"type": "object"},
+    "expression_fallback": {"type": "object"}
+  }
+}

@@ -94,21 +94,35 @@ def make_sheet(orig_path, shots_dir, out_dir):
 
 
 def clean_env():
-    """Claude Code の中から呼んでも、別の文脈で動くように、親の印を外す。"""
-    return {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
+    """Claude Code の中から呼んでも、別の文脈で動くように、親の印を外す。
+    ANTHROPIC_API_KEY も外す(開発の判定は定額のプランのログインで流す。API の請求にしない。2026-11-06)。
+    API の鍵で流したいときだけ JUDGE_KEEP_API_KEY=1。"""
+    keep_key = os.environ.get("JUDGE_KEEP_API_KEY") == "1"
+    return {k: v for k, v in os.environ.items()
+            if not k.startswith("CLAUDE_CODE_") and (keep_key or k != "ANTHROPIC_API_KEY")}
 
 
 def ask_claude(model, work_dir, out_path):
     with open(os.path.join(work_dir, "brief.md"), encoding="utf-8") as f:
         prompt = f.read()
-    cmd = [shutil.which("claude") or "claude", "-p", "--model", model, "--allowedTools", "Read", "--output-format", "text"]
+    # json で受け、答えの文だけを返す。使った量(定価に直した目安と、トークン)は <判定のフォルダ>/answers/_usage.jsonl に 1 行ずつ足す(run.jsonl の費用の元)
+    cmd = [shutil.which("claude") or "claude", "-p", "--model", model, "--allowedTools", "Read", "--output-format", "json"]
     try:
         p = subprocess.run(cmd, input=prompt, cwd=work_dir, env=clean_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT_S)
     except (OSError, subprocess.TimeoutExpired):
         return ""
+    try:
+        res = json.loads(p.stdout)
+    except json.JSONDecodeError:
+        res = {"result": p.stdout}
+    text = res.get("result") or ""
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write(p.stdout)
-    return p.stdout
+        f.write(text)
+    usage_line = {"model": model, "file": os.path.basename(out_path), "cost_usd": res.get("total_cost_usd"),
+                  "usage": res.get("usage"), "ms": res.get("duration_ms")}
+    with open(os.path.join(os.path.dirname(out_path), "_usage.jsonl"), "a", encoding="utf-8") as f:
+        f.write(json.dumps(usage_line, ensure_ascii=False) + "\n")
+    return text
 
 
 def judges():
