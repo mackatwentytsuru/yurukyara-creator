@@ -51,3 +51,7 @@ allowed-tools: Read, Write(creator/work/**), Edit(creator/work/**), Bash(python 
 - POST で本文を読まずに断ると、HTTP/1.1 のつなぎっぱなしで残りの本文が次の呼び出しとして読まれる(400 Bad request syntax)。先に本文を読み切ってから確かめる。
 - 確かめる画面は WebGL を使わない(C0・C2 は絵だけ)ので、画面なしの Chrome で試しても CPU の 3D 描画にはならない。試験に「canvas が 0 個」を入れてある。
 - 試験: `python -m unittest discover creator/review/tests -p "test_*.py"`(13 件)、`node creator/review/tests/ui_review.mjs`(偽の iPhone 幅 360・390・400、11 件)。
+
+- 1 往復の記録(11-06 18:00): スマホのやり直し+一言 → request.json → claude -p で /yuru-next の手順を 1 回(Sonnet、11 回のやりとり、87 秒)→ 2 回目の絵を publish → スマホで OK → claim で 0.json が ok。記録は creator/work/<id>/review/log.jsonl。
+- claude -p の --allowedTools の "Write(creator/work/**)" は、最初の 1 回が承認待ちで書けなかった(2 回目は書けた)。手で流すときは、書く場所を相対のパスで渡すよう依頼の文に書く。
+- 描き直した SVG を、作った Claude は見ないまま出した(目の下の欠きが、ひげのような黒い形に見えた)。publish の前に、描いた SVG を絵にして Read で見る段を足すのがよい(yc-0-draw ができたら、そちらの見直しを使う)。最後に決めるのは人なので、スマホでやり直しを押せば直る。
