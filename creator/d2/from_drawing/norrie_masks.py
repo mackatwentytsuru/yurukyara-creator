@@ -102,7 +102,9 @@ def side_curve(side):
         if not len(ys):
             raise SystemExit(f'端が見つからない {side} {prefer}')
         pts = np.column_stack([xs + 0.5, ys + 0.5])
-        return pts[np.argmax(pts[:, 1])] if prefer == 'bottom' else pts[np.argmin(pts[:, 1])]
+        tip = pts[np.argmax(pts[:, 1])] if prefer == 'bottom' else pts[np.argmin(pts[:, 1])]
+        # 線の端の真ん中(端の画素から 7 画素までの線の重心)。端の 1 画素だと線のふちに寄り、つなぎ目に段ができる
+        return pts[np.linalg.norm(pts - tip, axis=1) <= 7].mean(axis=0)
     p0 = end_near(upper_edge, 'bottom')
     p1 = end_near(low_edge, 'top')
     # 向き: 端から 25 画素ほど離れた所の点との差
@@ -129,8 +131,13 @@ edge_under = np.zeros((H, W), bool)
 for s, glove in (('r', glove_r), ('l', glove_l)):
     curve, t0, t1 = side_curve(s)
     m = np.zeros((H, W), np.uint8)
-    cv2.polylines(m, [np.round(curve * 4).astype(np.int32)], False, 1, thickness=9, lineType=cv2.LINE_8, shift=2)
-    edge_under |= m.astype(bool) & dil(glove, LW)
+    # 線の太さは元の絵の線と同じ 12。両端は今の線の中へ 7 画素のばして重ね、手袋のまわり 15 画素まで残す
+    # (前は太さ 9・手袋のまわり 8 画素までで、手を振ると つなぎ目の段と、すき間の透けが見えた)
+    ext = np.vstack([[curve[0] - t0 * 7], curve, [curve[-1] + t1 * 7]])
+    cv2.polylines(m, [np.round(ext * 4).astype(np.int32)], False, 1, thickness=12, lineType=cv2.LINE_8, shift=2)
+    # 止まっている時に前腕(ひじから下の袖・手袋・その線)が隠す所だけに描く(止まっている時の絵を変えない)
+    hidden = ((g('torso') & arm_side(X if s == 'r' else 2 * AXIS - X) & (Y >= 622)) | glove | M[f'arm_{s}_ink']) & (Y >= 622)
+    edge_under |= m.astype(bool) & dil(glove, LW + 7) & hidden
     # 曲線より内側(体の真ん中の側)はクリーム色、外側は茶色。曲線の両端は、線の向きのまま 120 画素のばす
     inner = np.zeros((H, W), np.uint8)
     top = curve[0] - t0 * 120
