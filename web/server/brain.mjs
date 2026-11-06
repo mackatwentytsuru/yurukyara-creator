@@ -6,8 +6,10 @@ import { buildSystemBlocks, buildUserTurn, MOTIONS } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 import { classifyInput, distressDetail, fixedReply, guardOutput, mentionsChild, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { summarize } from './memory/reflect.mjs';
+import { firstGreeting } from './greeting.mjs';
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
+const GREETING_MOTIONS = ['bow', 'nod']; // 初めてのあいさつの 1 文目はおじぎ、2 文目はうなずき(無いキャラは none に落ちる)
 // 「人間なの?」「AI なの?」など、相手が何者かを聞く言葉
 const ASKS_IF_HUMAN = /(人間なの|人間なん|人間ですか|にんげんなの|人なの\?|本物の人|AI\s*なの|AI\s*ですか|ロボットなの|中の人)/i;
 
@@ -186,8 +188,9 @@ export async function callHaikuHedged({ system, messages, signal, onText, hedgeM
 /**
  * 仮の頭脳。鍵が無いときと、画面だけ確かめたいときに使う(固定の言い回し。お金はかからない)。
  * 覚えていること(memory)があれば、名前を呼んで話の続きにふれる。目印の名前が話に出たら案内する。
+ * 人格の文(persona)に「初めてのあいさつ」の節があれば、はじめての「こんにちは」「はじめまして」にその文で名乗る。
  */
-export function* mockReply({ text, trigger, landmarks = [], seen, memory = null, learned = [], history = [] }) {
+export function* mockReply({ text, trigger, landmarks = [], seen, memory = null, learned = [], history = [], persona = '' }) {
   const { name, topic } = summarize(memory?.items ?? []);
   const san = name ? `${name}さん` : '';
   if (trigger === 'approach') {
@@ -226,6 +229,13 @@ export function* mockReply({ text, trigger, landmarks = [], seen, memory = null,
     return;
   }
   if (/こんにちは|はじめまして|おはよう|こんばんは|やあ/.test(text)) {
+    // はじめての会話(履歴も覚えている事も無い)で、人格に初めてのあいさつがあれば、その子の言葉で名乗る
+    const hello = history.length ? [] : firstGreeting(persona);
+    if (hello.length) {
+      yield { type: 'thought', seen: seen || '', intent: '初めてのあいさつ', stage: 'greet', handoff: false };
+      for (const [i, line] of hello.entries()) yield { type: 'say', text: line, expression: 'happy', motion: GREETING_MOTIONS[i] ?? 'none', gaze: 'person' };
+      return;
+    }
     yield { type: 'thought', seen: seen || '', intent: '未確認', stage: 'need', handoff: false };
     yield { type: 'say', text: 'こんにちは。', expression: 'happy', motion: 'wave', gaze: 'person' };
     yield { type: 'say', text: '今日は、どんなお話をしようか。', expression: 'happy', motion: 'tilt', gaze: 'person' };
@@ -285,7 +295,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   if (brain === 'mock') {
     onEvent({ type: 'meta', brain: 'mock' });
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
-    for (const obj of mockReply({ text, trigger, landmarks, seen: scene, memory, learned, history })) {
+    for (const obj of mockReply({ text, trigger, landmarks, seen: scene, memory, learned, history, persona: character.persona ?? '' })) {
       if (paceMs > 0) await new Promise((r) => setTimeout(r, paceMs));
       emit(obj);
     }
