@@ -474,7 +474,8 @@ export class FirstRun {
   _offerKey() {
     this._offer([
       { id: 'key', label: '鍵を入れる', kind: 'key', remember: Boolean(this.d.voice.canRemember?.()), primary: true },
-      { id: 'later', label: 'あとで' },
+      // 札の右上の「あとで」(初めての会話ごと閉じる)と同じ名前にしない(撮影の練習で、7 歩目に「あとで」が 2 つ並んでいた)
+      { id: 'later', label: '鍵なしで続ける' },
     ]);
   }
 

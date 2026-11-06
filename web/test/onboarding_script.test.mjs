@@ -43,6 +43,7 @@ function harness({ creator = createSampleCreator({ main: MAIN, exists: async () 
   return {
     fr, said, steps, stored, snaps, talks, personas,
     get offered() { return offered.map((a) => a.id); },
+    get labels() { return offered.map((a) => a.label); },
     get done() { return done; },
     texts: (who) => said.filter((l) => !who || l.who === who).map((l) => l.text),
   };
@@ -170,6 +171,7 @@ test('鍵が違う → もう一度。あとで → 文字で話す。鍵の受�
   await h.fr.act('key', { key: 'bad-key' });
   assert.equal(h.texts('char').at(-1), 'うまくいかなかったみたい。');
   assert.deepEqual(h.offered, ['key', 'later']);
+  assert.equal(h.labels[1], '鍵なしで続ける', '札の右上の「あとで」(会話ごと閉じる)と同じ名前にしない');
   await h.fr.act('later');
   assert.equal(h.texts('char').at(-1), 'じゃあ、文字とレトロな音で話そうね。');
 

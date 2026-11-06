@@ -129,6 +129,9 @@ export const CSS = `
 }
 /* 初めての会話の間は、会話の画面の入口(ゲート)を消して、舞台のキャラを見せる。閉じると元に戻る(本物の画面の写真で、ゲートがキャラを隠していた) */
 html.fr-open .gate { opacity: 0 !important; pointer-events: none !important; }
+/* スマホでは、初めての会話の間だけ「Claude の考え」を隠す(会話は札に出る)。上の段の札(頭脳・声…)が 2 行になると、
+   考えの欄が「性格」「はじめての会話」「覚えていること」に重なり、押せず見た目も崩れていた(幅 390 の撮影の練習)。PC は今のまま */
+@media (max-width: 719px) { html.fr-open .thought { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { .fr-sheet *, .yp-panel * { transition: none !important; animation: none !important; } }
 `;
 
