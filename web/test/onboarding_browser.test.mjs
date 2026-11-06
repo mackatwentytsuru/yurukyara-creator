@@ -56,6 +56,7 @@ const PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="/__fr/src/ui/style.css"><title>初めての会話の試し</title></head>
 <body><header class="top"><div class="modes" id="modes"></div></header>
+<div id="gate" class="gate"><div class="gate-card"><h1>入口</h1><button type="button" class="primary">はじめる</button></div></div>
 <script type="module">
 import { mountFirstRun } from '/__fr/src/ui/onboarding/index.js';
 import { seededRandom } from '/__fr/src/ui/persona/settings.js';
@@ -167,6 +168,8 @@ async function walkWords(page, label, { full }) {
   await checkLayout(page, `${label} 1 歩目`);
   await shot(page, `${label}_1_start`);
   assert.equal(await page.$eval('.fr-sheet', (e) => e.dataset.step), '1');
+  const gate = () => page.$eval('#gate', (e) => [getComputedStyle(e).opacity, getComputedStyle(e).pointerEvents].join(' '));
+  assert.equal(await gate(), '0 none', '初めての会話の間は、入口のゲートを消して舞台を見せる');
 
   await page.fill('.fr-actions [data-act="words"] input', '赤い提灯の子');
   await page.click('.fr-actions [data-act="words"] button[type="submit"]');
@@ -275,6 +278,7 @@ async function walkWords(page, label, { full }) {
 
   await page.click('.fr-actions [data-act="close"]');
   await page.waitForSelector('.fr-sheet', { state: 'detached', timeout: 15_000 });
+  assert.equal(await gate(), '1 auto', '閉じたら、入口のゲートが戻る');
   assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done');
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('yc.persona.v1.d_lantern')));
   assert.equal(saved.preset, 'shy');
@@ -364,6 +368,7 @@ test('「性格」のボタン(幅 400): 開く → おまかせ → これに�
     try {
       await page.waitForSelector('#modes [data-firstrun="persona"]');
       assert.equal(await page.$('.fr-sheet'), null, '?onboard=1 が無ければ、初めての会話は自動で出さない(既定)');
+      await page.evaluate(() => document.getElementById('gate').classList.add('hidden')); // 使う人が入口を通った後(会話の画面と同じ)
       await page.click('#modes [data-firstrun="persona"]');
       await page.waitForSelector('.yp-panel');
       await waitPreview(page, 0);

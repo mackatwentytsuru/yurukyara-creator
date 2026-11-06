@@ -123,6 +123,8 @@ export const CSS = `
   .yp-panel { width: min(600px, calc(100vw - 32px)); border-radius: 22px; max-height: 88vh; }
   .yp-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+/* 初めての会話の間は、会話の画面の入口(ゲート)を消して、舞台のキャラを見せる。閉じると元に戻る(本物の画面の写真で、ゲートがキャラを隠していた) */
+html.fr-open .gate { opacity: 0 !important; pointer-events: none !important; }
 @media (prefers-reduced-motion: reduce) { .fr-sheet *, .yp-panel * { transition: none !important; animation: none !important; } }
 `;
 

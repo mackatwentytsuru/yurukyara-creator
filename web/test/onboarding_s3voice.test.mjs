@@ -133,6 +133,8 @@ test('画面なしの Chrome(幅 390): 鍵なしはレトロ音と文字送り�
       if (r.url().startsWith(server.base)) ours.push(`${r.url()} ${JSON.stringify(r.headers())} ${r.postData() ?? ''}`);
     });
     await page.goto(`${server.base}/__fr/index.html?onboard=1&character=d_lantern`);
+    // 試しの画面は、付ける前に /api/status を待つ(モジュールの最上位の await)。load の後でも、まだ付いていないことがある
+    await page.waitForFunction(() => window.__fr, null, { timeout: 30_000 });
     await page.evaluate(() => window.__fr.byokReady);
     const act = (id) => page.waitForSelector(`.fr-actions [data-act="${id}"]`, { timeout: 30_000 });
     await act('words');

@@ -195,9 +195,33 @@ export function mountFirstRun({
     return false; // 続きは読み込み直しの後(save で状態を残してから移る)
   }
 
+  /**
+   * スマホでは札が画面の下の半分ほどを隠すので、舞台(app.stage)の「下の余白」を札の高さにして、キャラを札の上に収める。
+   * 閉じたら元の余白に戻す。舞台の形が違う・PC(札は右下)・AR/VR の間は何もしない。
+   */
+  let savedInset = null;
+  function fitStage(open) {
+    const st = app?.stage;
+    if (!st?.state || typeof st.frameCharacter !== 'function' || !app.character || st.state.immersive) return;
+    if (open && (window.innerWidth >= 720 || !sheet || sheet.closed)) return;
+    if (open) {
+      if (savedInset === null) savedInset = st.state.bottomInset ?? 0;
+      st.state.bottomInset = Math.max(savedInset, sheet.element.offsetHeight + 8);
+    } else if (savedInset !== null) {
+      st.state.bottomInset = savedInset;
+      savedInset = null;
+    } else return;
+    try {
+      st.frameCharacter(app.character, st.state.view, st.state.obstacles);
+    } catch {
+      // 見せ方を取り直せなくても、会話は続ける
+    }
+  }
+
   function startOnboarding({ resume = null } = {}) {
     if (sheet && !sheet.closed) return engine;
     let finishTimer = null;
+    let sizeWatch = null;
     sheet = createSheet({
       guideName: guideName(),
       voice,
@@ -207,9 +231,17 @@ export function mountFirstRun({
       stage: () => (app?.character ? { character: app.character, speaker: app.speaker, guideId: guide.id } : null),
       onClose: (reason) => {
         clearTimeout(finishTimer);
+        sizeWatch?.disconnect();
+        document.documentElement.classList.remove('fr-open');
+        fitStage(false);
         if (reason === 'later') local?.setItem(DONE_KEY, 'later');
       },
     });
+    document.documentElement.classList.add('fr-open'); // 入口のゲートを消して、舞台のキャラを見せる(styles.js)
+    if (typeof ResizeObserver === 'function') {
+      sizeWatch = new ResizeObserver(() => fitStage(true));
+      sizeWatch.observe(sheet.element);
+    }
     engine = new FirstRun({
       guide: { id: guide.id, name: guideName() },
       creator: made,
