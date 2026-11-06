@@ -28,7 +28,8 @@
   4. AI の署名入りの絵の版を探して外し、規則で本文とコミットの文を置き換える(mailmap はある時だけ)
   5. 線の名前を替え、commit-map(古い SHA → 新しい SHA)を作業フォルダに写す
   6. 確かめ: 語(中身・コミットの文・ファイルの名前)が 0 件、AI の署名入りの絵が 0 件、
-     残す線の先のファイルが「前 − 外すと決めた物」と同じ、線ごとのコミットの数
+     残す線の先のファイルが「前 − 外すと決めた物」と同じ、線ごとのコミットの数、
+     先の版で規則が中身を変えたファイル(数と名前を報告するだけ。試験の見本の値が言い換わると、その試験が落ちる)
   7. report.json と、本番で使う push の命令(と、GitHub から消す古い線)を出す
 終わりの番号: 0 = 全部 0 件で済んだ、1 = 何か残った(report.json を見る)、2 = 動かせない
 """
@@ -325,6 +326,9 @@ def main():
         diff = sorted((before[old] - set(intended[old]) - set(stripped_ai) - set(stripped_old)) ^ after)
         if diff:
             unexpected[new] = diff[:30]
+        # 先の版で、規則が中身を変えたファイル(試験の見本の値などが言い換わると、その試験が落ちる。持ち主が見る)
+        after_blobs = tip_blobs(mirror, f"refs/heads/{new}")
+        changed = sorted(p for p, b in after_blobs.items() if p in before_blobs[old] and before_blobs[old][p] != b)
         branches[new] = {
             "from": old,
             "commits_before": commits_before[old],
@@ -334,6 +338,8 @@ def main():
             "dropped_by_policy": len(intended[old]),
             "dropped_ai_images": stripped_ai,
             "dropped_old_versions": stripped_old,
+            "changed_by_rules": changed[:30],
+            "changed_by_rules_count": len(changed),
         }
     total_after = int(git(mirror, "rev-list", "--count", "--all").strip() or 0)
     emails = sorted(set(git(mirror, "log", "--all", "--format=%ae%n%ce").split()))
@@ -367,6 +373,10 @@ def main():
     if left:
         print(f"残りがあります: 語 {len(hits)} 語・AI の署名の絵 {len(ai_after)} 枚・古い版 {len(old_left)} 個・思わぬ木の違い {len(unexpected)} 本"
               "(語の中身は report.json。画面には出さない)")
+    changed_tip = {n: v["changed_by_rules_count"] for n, v in branches.items() if v["changed_by_rules_count"]}
+    if changed_tip:
+        print("規則で中身が変わった先のファイル: " + "・".join(f"{n} {c} 本" for n, c in changed_tip.items())
+              + "(試験の見本の値などが言い換わっていないか、持ち主が見る。名前は report.json の branches.<線>.changed_by_rules)")
     print("\n本番で push する時の命令(合わせ係が、本人の OK の後に自分で打つ。この台本は push しない):")
     print(f"  cd {mirror}")
     print("  git remote add public <GitHub の URL>   # 元の origin は --mirror の写しに付いたまま。宛先を確かめてから")
