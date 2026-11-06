@@ -1,7 +1,7 @@
 """段 7: メッシュに骨・重み・顔の面を入れて、model.glb と動きの GLB を書き出す(Blender の背景モード)。
 
 使い方:
-  blender -b -P b03_rig.py -- <rig_spec.json> <メッシュ.obj> <色の絵.png> <顔の表フォルダ> <出力フォルダ>
+  blender -b -P b03_rig.py -- <rig_spec.json> <手組みの形.blend> <色の絵.png> <顔の表フォルダ> <出力フォルダ>
 
 rig_spec.json(キャラごとに 1 つ。位置は、メッシュの外接箱に対する割合 0〜1 で書く):
   {
@@ -65,11 +65,7 @@ def main():
         body = bpy.context.view_layer.objects.active
         built = True
     else:
-        bpy.ops.wm.read_factory_settings(use_empty=True)
-        sc = bpy.context.scene
-        bpy.ops.wm.obj_import(filepath=obj_path, forward_axis="NEGATIVE_Y", up_axis="Z")
-        body = [o for o in sc.objects if o.type == "MESH"][0]
-        built = False
+        raise SystemExit("手組みの .blend だけを受けます(m00_prims で組んだ builder の出力)")
     sc.render.fps = 30
     body.name = "Body"
     # 読み込みは物の向きを 180° 回して入れる。重みも顔の面も絵のとおりの座標で測るので、物の回転は 0 に戻す

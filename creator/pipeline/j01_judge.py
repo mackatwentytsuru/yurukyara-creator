@@ -10,14 +10,12 @@
 - 絵に文字や数字を入れない(見出しの数字を見て答える例が出たため)。
 - 合格しても、使う人の目が優先。
 
-判定役: 何も設定しなければ、新しい文脈の Claude を 2 つ(CLAUDE_MODEL_1・CLAUDE_MODEL_2)。
-別の AI を使うときは、環境変数 JUDGE_CMD_1・JUDGE_CMD_2 にコマンドを書く({dir}=絵と問いのフォルダ、{prompt}=問いのファイル、{out}=答えを書くファイル)。
+判定役: 新しい文脈の Claude を 2 つ(CLAUDE_MODEL_1 = Haiku 5.5、CLAUDE_MODEL_2 = Sonnet 5.5)。作った Claude とは別の文脈で、絵を Read で見て 1 語で答える。判定は Claude だけで行う(別の会社の AI は呼ばない)。
 """
 import argparse
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -113,29 +111,11 @@ def ask_claude(model, work_dir, out_path):
     return p.stdout
 
 
-def ask_command(template, work_dir, out_path):
-    prompt = os.path.join(work_dir, "brief.md")
-    cmd = [a.format(dir=work_dir, prompt=prompt, out=out_path) for a in shlex.split(template)]
-    try:
-        subprocess.run(cmd, cwd=os.path.expanduser("~"), capture_output=True, timeout=TIMEOUT_S)
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    try:
-        with open(out_path, encoding="utf-8-sig", errors="replace") as f:
-            return f.read()
-    except OSError:
-        return ""
-
-
 def judges():
     """[(名前, 問う関数)] を返す。"""
     out = []
     for i, model in ((1, CLAUDE_MODEL_1), (2, CLAUDE_MODEL_2)):
-        template = os.environ.get(f"JUDGE_CMD_{i}")
-        if template:
-            out.append((f"j{i}", lambda w, o, t=template: ask_command(t, w, o)))
-        else:
-            out.append((f"j{i}", lambda w, o, m=model: ask_claude(m, w, o)))
+        out.append((f"j{i}", lambda w, o, m=model: ask_claude(m, w, o)))
     return out
 
 

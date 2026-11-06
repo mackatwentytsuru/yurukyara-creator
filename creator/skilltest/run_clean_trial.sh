@@ -23,7 +23,7 @@ cd "$WORK/repo" || exit 2
 START=$(date +%s)
 # 手元の道具の設定を受け継がない(本当に doctor が見つけられるかを試す)
 timeout 3300 env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH -u CLAUDE_CODE_OAUTH_TOKEN \
-  -u BLENDER -u PY -u TRIAL_BASE -u JUDGE_CMD_1 -u JUDGE_CMD_2 -u CHROME_PATH -u ELEVENLABS_API_KEY \
+  -u BLENDER -u PY -u TRIAL_BASE -u CHROME_PATH -u ELEVENLABS_API_KEY \
   CLAUDE_CONFIG_DIR="$TRIAL_BASE/empty_cfg" ANTHROPIC_API_KEY="$TRIAL_KEY" \
   claude -p "$PROMPT" --model "$MODEL" --effort "$EFFORT" --output-format stream-json --verbose --max-budget-usd "$BUDGET" \
   --allowedTools "Read Write Edit Bash Glob Grep Skill" > "$WORK/log.jsonl" 2> "$WORK/stderr.txt"

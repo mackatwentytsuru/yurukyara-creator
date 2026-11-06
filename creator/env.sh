@@ -2,7 +2,6 @@
 #   BLENDER         Blender の実行ファイル(5.2 以降)
 #   PY              PIL と numpy の入った Python
 #   TRIAL_BASE      試験の作業フォルダの親
-#   JUDGE_CMD_1・2  判定役のコマンド(省略すると新しい文脈の Claude。creator/pipeline/j01_judge.py)
 #   CHROME_PATH     Chrome の実行ファイル(省略すると、入っている Chrome を探す)
 # 使い方: ENV_SH="$0"; . "<このファイル>"   → REPO・BLENDER・PY・TRIAL_BASE が決まる
 # 手元の値は python creator/setup/doctor.py --write が調べて書く
