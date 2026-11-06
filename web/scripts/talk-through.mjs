@@ -4,6 +4,7 @@
 // 声(ElevenLabs)の文字数を使う。サーバーの 1 日の上限(logs/tts_usage.json)が先に止める。
 // 注意: 出力の音は聞けない。ここで言う「口の合い」は、声の音量の波(analyser)と、画面の口(aa)の合い。端末の出力の遅れは入らない。
 import fs from 'node:fs';
+import { GPU_ARGS, stopIfSoftwareRenderer } from '../src/stage/gpuGuard.js'; // WebGL を CPU で描かない決まり
 
 const arg = (k, d) => {
   const i = process.argv.indexOf('--' + k);
@@ -20,7 +21,7 @@ const { chromium } = await import('playwright-core');
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
+  args: [...GPU_ARGS, '--autoplay-policy=no-user-gesture-required'],
 });
 const page = await browser.newPage({ viewport: { width: 480, height: 640 } });
 const consoleProblems = [];
@@ -34,6 +35,7 @@ await page.addInitScript(() => {
   window.fetch = (u, o) => (String(u).includes('/api/metrics') ? Promise.resolve(new Response('{}')) : of(u, o));
 });
 await page.goto(`http://127.0.0.1:${PORT}/?character=${CHAR}&place=test_room&auto=0`);
+await stopIfSoftwareRenderer(page, browser); // CPU の描画なら止める
 await page.waitForFunction(() => window.__app?.character?.vrm, null, { timeout: 90000 });
 await page.getByText('カメラなしで試す').click();
 await page.waitForTimeout(2000);

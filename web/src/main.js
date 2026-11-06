@@ -19,6 +19,7 @@ import { createAlignFlow } from './stage/alignFlow.js'; // 撮った部屋を現
 // 見せ方(画面・AR・VR)の切りかえは、場所の柱が出している入口(docs/共通の決まり.md)
 import { createPresentation } from './stage/modes.js';
 import { mountModeButtons } from './stage/modeButtons.js';
+import { detectTierInBrowser, applyTier } from './stage/tiers.js'; // 端末の段(軽いのにきれい)
 
 const params = new URLSearchParams(location.search);
 const GAIN = Number(params.get('gain') ?? 2); // 視線の振れ幅の倍率
@@ -28,7 +29,6 @@ const APPROACH_HOLD_S = 1.2;
 const GREET_COOLDOWN_S = 90;
 // ヘッドセットのブラウザ。カメラは使えず、聞き取りはサーバーで行い、マイクの許可は VR に入る前に取る
 const IS_HEADSET = params.get('headset') === '1' || /OculusBrowser|Quest/i.test(navigator.userAgent);
-const VR_FUR_LAYERS = 4;
 const VR_HELLO = 'こんにちは'; // コントローラーのトリガーで話しかける言葉(マイクが使えなくても、返事と声を確かめられる)
 
 const $ = (id) => document.getElementById(id);
@@ -56,6 +56,7 @@ app.stage = stage;
 app.THREE = THREE;
 Object.defineProperty(app, 'listener', { get: () => listener });
 app.picker = picker;
+app.tier = detectTierInBrowser(stage.renderer, params); // 端末の段。数字の根拠は docs/重さの表.md
 
 /* ---------- 視線 ---------- */
 // 視線の先は、キャラの座標(足元が原点・+z が正面・+x がお客さんから見て右)で考えて、世界の座標に直す。
@@ -562,11 +563,14 @@ async function boot() {
   };
   new ResizeObserver(fitBottom).observe(bottomBar);
   fitBottom();
+  let readyAt = null;
   try {
     const url = characterUrl(params.get('character') ?? params.get('char')); // id・URL のどちらでもよい
     app.place = await loadPlaceData(params.get('place'));
-    // 毛の層は重ね描きで、ソフト描画で 20 倍遅かった(実測)。ヘッドセットでは減らす
-    const character = await loadCharacter(url, IS_HEADSET ? { furLayers: Number(params.get('fur')) || VR_FUR_LAYERS } : {});
+    // 毛の層は重ね描きで、ソフト描画で 20 倍遅かった(実測)。端末の段で、スマホ・弱い端末・ヘッドセットは減らす(PC は今のまま)。?fur= で決め打ち
+    const tierOverrides = applyTier(stage, app.tier, window.devicePixelRatio);
+    if (Number(params.get('fur')) > 0) tierOverrides.furLayers = Number(params.get('fur'));
+    const character = await loadCharacter(url, tierOverrides);
     app.character = character;
     dialogue.character = character;
     if (app.place.loaded) {
@@ -579,6 +583,7 @@ async function boot() {
     stage.frameCharacter(character, view === 'full' ? 'full' : 'bust', app.place.loaded?.object3d);
     if (character.personaUrl) app.persona = await (await fetch(character.personaUrl)).text();
     status.textContent = '';
+    readyAt = performance.now(); // キャラが出た時刻(?perf=1 で使う)
   } catch (err) {
     console.error(err);
     status.textContent = `キャラを読み込めませんでした: ${err.message}`;
@@ -592,6 +597,8 @@ async function boot() {
   updatePrivacy();
   buttons.forEach((b) => (b.disabled = false));
   stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う
+  // ?perf=1: いまの重さを測る(L0。数字は window.__perf。測りの部品は、このときだけ読む)
+  if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt, tier: app.tier }));
 
   /** 入力を選んで始める。失敗したら理由を出して、ゲートに戻る */
   async function startSource(kind, pending) {

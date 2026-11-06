@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { GPU_ARGS, stopIfSoftwareRenderer } from '../src/stage/gpuGuard.js'; // WebGL を CPU で描かない決まり
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -55,7 +56,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const { chromium } = await import(pathToFileURL(path.join(HERE, '../node_modules/playwright-core/index.mjs')).href);
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required',
+  args: [...GPU_ARGS, '--autoplay-policy=no-user-gesture-required',
     '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${path.resolve(MIC).replaceAll('\\', '/')}%noloop`],
 });
 const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, userAgent: QUEST_UA, permissions: ['microphone'] });
@@ -65,6 +66,7 @@ page.on('response', async (r) => {
   if (r.url().endsWith('/api/stt')) sttReplies.push(await r.json().catch(() => ({})));
 });
 await page.goto(`http://127.0.0.1:${PORT}/?character=${CHAR}`);
+await stopIfSoftwareRenderer(page, browser); // CPU の描画なら止める
 await page.waitForFunction(() => window.__app?.character && !document.getElementById('startCam').disabled, null, { timeout: 180000 });
 const status = await page.evaluate(async () => (await fetch('/api/status')).json());
 await page.click('#startCam');
