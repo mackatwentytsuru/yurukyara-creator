@@ -179,6 +179,12 @@ html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origi
   padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--warn); color: var(--warn);
 }
 .brain-notice[hidden] { display: none; }
+/* 短い知らせ(会話の側の ui.notice。鍵らしい文字を送らなかった、など)。数秒で消える */
+.ui-notice {
+  width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(12px, 1.6vw, 15px); line-height: 1.4;
+  padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--lav); color: var(--text);
+}
+.ui-notice[hidden] { display: none; }
 
 /* 覚えていること(S3 の記憶の札を入れる引き出し) */
 .drawer { position: relative; pointer-events: auto; }
@@ -194,6 +200,11 @@ html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origi
 .drawer-body {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: min(360px, calc(100vw - 24px)); max-height: 55vh; overflow: auto;
   padding: 12px 14px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+/* スマホと小さいタブレット: 上の段にボタン(性格・はじめての会話・AR)が増えると引き出しが右へ押され、開いた札が画面の外へはみ出した。
+   札は上の段の全体(.top)の左にそろえる(幅 390 で、札のボタン 3 つが右の外に出ていたのを直した) */
+@media (max-width: 760px) {
+  .drawer { position: static; }
 }
 .memory-panel { display: grid; gap: 8px; font-size: 13px; }
 .memory-panel h2 { display: none; } /* 引き出しの見出しと同じ言葉なので出さない */

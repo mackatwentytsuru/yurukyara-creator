@@ -1,8 +1,8 @@
 // 実機の Quest が無くても、VR の入口を端から端まで確かめる。Meta の IWER(WebXR の偽物)を入れた Chrome で、
 // ページのボタンを押して VR に入り、頭を動かし、スティックとトリガーを使い、偽のマイクから声を流す。
 //   npm run build && PORT=8799 npm run server
-//   node scripts/vr-check.mjs --port 8799 --character <id> --out <フォルダ> [--mic 声.wav](GPU の札と鍵を取ってから)
-// --mic の WAV は、頭に長めの無音を入れておく(VR に入ったあとで声が流れるように)。
+//   node scripts/vr-check.mjs --port 8799 --character <id> --out <フォルダ> [--mic 声.wav] [--query look=2d](GPU の札と鍵を取ってから)
+// --mic の WAV は、頭に長めの無音を入れておく(VR に入ったあとで声が流れるように)。--query は URL に足す値(2D の板で VR に入る時など)。
 // 分かるのは、ページの作りが合っているか。Quest の本物のブラウザでの動き(マイク・音・速さ)は分からない。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,6 +20,7 @@ const CHAR = opt('character', 'yokoso');
 const OUT = opt('out', 'vr_check');
 const MIC = opt('mic', null);
 const MIC_WORD = opt('mic-word', null); // 偽のマイクの声に入っている言葉。字が崩れていないかを、これで見る
+const EXTRA = opt('query', ''); // URL に足す値(例 look=2d)
 const QUEST_UA = 'Mozilla/5.0 (X11; Linux x86_64; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/40.4 Chrome/142.0.0.0 VR Safari/537.36';
 const DIST_M = 1.6;
 
@@ -90,18 +91,19 @@ const measure = () => page.evaluate(() => {
   };
 });
 const shot = (name) => page.screenshot({ path: path.join(OUT, name) }).catch((e) => problems.push(`撮れない: ${e.message.slice(0, 100)}`));
+let renderer = null;
 const finish = async () => {
   const failed = Object.entries(checks).filter(([, v]) => !v.ok).map(([k]) => k);
-  const result = { character: CHAR, ok: failed.length === 0 && problems.length === 0, failed, checks, stt, problems };
+  const result = { character: CHAR, query: EXTRA, renderer, ok: failed.length === 0 && problems.length === 0, failed, checks, stt, problems };
   fs.writeFileSync(path.join(OUT, 'vr_check.json'), JSON.stringify(result, null, 1));
   await context.close();
   await browser.close();
-  console.log(JSON.stringify({ character: CHAR, ok: result.ok, failed, stt, problems: problems.slice(0, 6) }));
+  console.log(JSON.stringify({ character: CHAR, query: EXTRA, renderer, ok: result.ok, failed, stt, problems: problems.slice(0, 6) }));
   process.exit(result.ok ? 0 : 1);
 };
 
-await page.goto(`http://127.0.0.1:${PORT}/?character=${CHAR}`);
-await stopIfSoftwareRenderer(page, browser); // WebGL が CPU で描かれていたら、ここで止める
+await page.goto(`http://127.0.0.1:${PORT}/?character=${encodeURIComponent(CHAR)}${EXTRA ? `&${EXTRA}` : ''}`);
+renderer = await stopIfSoftwareRenderer(page, browser); // WebGL が CPU で描かれていたら、ここで止める
 await page.waitForFunction(() => window.__app?.character && !document.getElementById('startCam').disabled, null, { timeout: 180000 });
 const realVoice = await page.evaluate(async () => Boolean((await (await fetch('/api/status')).json()).tts?.available));
 check('入る前: 入口がヘッドセット用になっている', await page.evaluate(() => document.getElementById('startSim').hidden && document.documentElement.classList.contains('is-headset')));
@@ -211,7 +213,7 @@ const peak = await page.evaluate(() => {
   clearInterval(window.__app.__peakTimer);
   return { level: +p.level.toFixed(3), mouth: +p.mouth.toFixed(3), fps: +(p.frames / ((performance.now() - p.t0) / 1000)).toFixed(1) };
 });
-checks['参考: コマの速さ(ソフト描画なので実機の数字ではない)'] = { ok: true, value: peak.fps };
+checks['参考: コマの速さ(この PC の GPU と IWER のまね。実機の数字ではない)'] = { ok: true, value: peak.fps };
 if (realVoice) check('声: 読み上げの音が出て、口が動く', peak.level > 0.01 && peak.mouth > 0.05, peak);
 
 // 出る
