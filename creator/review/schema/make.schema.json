@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "yc-review-make/1",
+  "title": "K3 make.json(画面 → Claude。初めての会話の「言葉か絵で作って」。serve_review.py だけが書く)",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "make_id",
+    "from",
+    "words",
+    "picture",
+    "client",
+    "created_at",
+    "choice"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "enum": [
+        "yc-review-make/1"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]{1,32}$"
+    },
+    "make_id": {
+      "type": "string",
+      "pattern": "^mk_[A-Za-z0-9_-]{8,64}$"
+    },
+    "from": {
+      "enum": [
+        "words",
+        "picture"
+      ]
+    },
+    "words": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "text",
+        "chars",
+        "warning"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "chars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        },
+        "warning": {
+          "type": "string"
+        }
+      }
+    },
+    "picture": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "file",
+        "sha256",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "pattern": "^original\\.png$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 1254
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 1254
+        }
+      }
+    },
+    "client": {
+      "enum": [
+        "iphone",
+        "android",
+        "pc",
+        "other"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+    },
+    "choice": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "value",
+        "at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "enum": [
+            "yurufy",
+            "redraw"
+          ]
+        },
+        "at": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@
 // 会話サーバーは鍵なしで立てる(仮の頭脳。本物の API は呼ばない)。声の鍵の部品は偽物(本物の ElevenLabs は呼ばない)。
 // 試しの画面は、初めての会話の部品だけ(舞台の WebGL は使わない)。Chrome が無い時は飛ばす(CHROME_PATH で場所を渡せる)。
 // FR_SHOTS_DIR を渡すと、そのフォルダに画面の写真を残す(目で見る点検用)。
+// 重いので YC_BROWSER_TESTS=1 のときだけ動く(編集ごとのフックの試験を 30 秒未満にする。合わせの門と、画面を直した時に流す)。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -14,6 +15,7 @@ import { VOICE_THANKS } from '../src/ui/onboarding/script.js';
 const WEB = join(import.meta.dirname, '..');
 const SRC = join(WEB, 'src');
 const SHOTS = process.env.FR_SHOTS_DIR || '';
+const SLOW = process.env.YC_BROWSER_TESTS === '1' ? false : '画面なしの Chrome の試験は YC_BROWSER_TESTS=1 のときだけ(編集ごとの試験を 30 秒未満にするため。合わせの門で流す)';
 const GOOD_KEY = 'test-key-ok-0123456789';
 const BAD_KEY = 'test-key-bad-9876543210';
 
@@ -291,7 +293,7 @@ const VIEWS = [
   { label: 'pc1280', width: 1280, height: 800, full: false },
 ];
 
-test('初めての会話: 言葉の入口から 7 歩目まで(幅 390・400・PC、仮の頭脳)', { timeout: 300_000 }, async (t) => {
+test('初めての会話: 言葉の入口から 7 歩目まで(幅 390・400・PC、仮の頭脳)', { skip: SLOW, timeout: 300_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
   const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
@@ -318,7 +320,7 @@ test('初めての会話: 言葉の入口から 7 歩目まで(幅 390・400・P
 // 1×1 の白い PNG(試しの絵)
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64');
 
-test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」→ 主役の子。鍵の部品が無いと正直に言う', { timeout: 120_000 }, async (t) => {
+test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」→ 主役の子。鍵の部品が無いと正直に言う', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
   const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
@@ -359,7 +361,7 @@ test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」�
   }
 });
 
-test('「性格」のボタン(幅 400): 開く → おまかせ → これにする で、この端末に覚える', { timeout: 120_000 }, async (t) => {
+test('「性格」のボタン(幅 400): 開く → おまかせ → これにする で、この端末に覚える', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
   const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });

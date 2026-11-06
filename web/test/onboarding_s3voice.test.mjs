@@ -16,6 +16,7 @@ const WEB = join(import.meta.dirname, '..');
 const SRC = join(WEB, 'src');
 const HAS_S3 = ['voiceKey.js', 'elevenDirect.js', 'voiceKeyForm.js', 'retroVoice.js'].every((f) => existsSync(join(SRC, 'conversation', f)));
 const SKIP = HAS_S3 ? false : '会話の流れ(S3)の声の部品がまだ無い線(合わせ②の後で動く)';
+const SLOW = process.env.YC_BROWSER_TESTS === '1' ? false : '画面なしの Chrome の試験は YC_BROWSER_TESTS=1 のときだけ(編集ごとの試験を 30 秒未満にするため。合わせの門で流す)';
 const FAKE_KEY = 'fakeVoiceKeyForTestOnly0123456789';
 
 test('鍵の受け口(s3voice.js): 形・確かめ・覚えない', { skip: SKIP }, async () => {
@@ -96,7 +97,7 @@ window.__fr = mountFirstRun({ app, params: new URLSearchParams(location.search),
 </script></body></html>`;
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
-test('画面なしの Chrome(幅 390): 鍵なしはレトロ音と文字送り、鍵を入れると声で「ありがとう」(声のサービスは横取り)', { skip: SKIP, timeout: 180_000 }, async (t) => {
+test('画面なしの Chrome(幅 390): 鍵なしはレトロ音と文字送り、鍵を入れると声で「ありがとう」(声のサービスは横取り)', { skip: SKIP || SLOW, timeout: 180_000 }, async (t) => {
   let chromium;
   try {
     ({ chromium } = await import('playwright-core'));

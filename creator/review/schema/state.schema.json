@@ -32,7 +32,18 @@
     "done": { "type": "boolean" },
     "history": { "type": "array", "maxItems": 50, "items": { "type": "object", "required": ["at", "gate", "round", "result", "request_id"], "additionalProperties": false,
       "properties": { "at": { "type": "string" }, "gate": { "type": "string" }, "round": { "type": "integer" },
-        "result": { "enum": ["ok", "redo", "rejected"] }, "request_id": { "type": "string" }, "reason": { "type": ["string", "null"] } } } }
+        "result": { "enum": ["ok", "redo", "rejected"] }, "request_id": { "type": "string" }, "reason": { "type": ["string", "null"] } } } },
+    "make": { "type": ["object", "null"], "required": ["from", "status", "check", "choice", "notice", "updated_at"], "additionalProperties": false,
+      "properties": {
+        "from": { "enum": ["words", "picture"] },
+        "status": { "enum": ["queued", "checking", "check_waiting", "drawing", "drawn", "failed"] },
+        "check": { "type": ["object", "null"], "required": ["class", "next", "message", "by"], "additionalProperties": false,
+          "properties": { "class": { "enum": ["yuru", "human", "complex"] }, "next": { "type": ["string", "null"], "maxLength": 40 },
+            "message": { "type": "string", "maxLength": 120 }, "by": { "enum": ["claude", "pixels"] } } },
+        "choice": { "enum": [null, "yurufy", "redraw"] },
+        "notice": { "type": ["string", "null"], "maxLength": 120 },
+        "updated_at": { "type": "string" }
+      } }
   },
   "$defs": {
     "gate": { "type": "object", "required": ["stages", "status", "round", "ticket", "bundle", "bundle_hash", "decided", "notice"], "additionalProperties": false,

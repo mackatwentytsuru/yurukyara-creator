@@ -4,20 +4,25 @@
 // - ?onboard=1 で初めての会話を出す。auto: true なら、この端末で初めての時も出す(既定は出さない。ほかの試験を邪魔しない)
 // - 性格の設定は、キャラの id ごとに、この端末の中に覚える。会話の頭脳に渡す人格の文(app.persona)に足す
 // - 声の鍵(BYOK)の部品は、会話の流れ(S3)の物を byok で受け取る。無ければ 7 歩目は「まだつながっていない」と正直に言う
+// - 作る道: 既定は見本の道。URL の # に yc-make=<PC の作る道のサーバー>&yc-key=<合言葉> があれば(PC の serve_review.py --make の
+//   /qr の画面のリンク)、1〜3 歩を本当の作る道にする(言葉か絵 → PC のゆるキャラチェック → 段 0 の絵 → C0)。入力と絵は PC が配る
+//   作る画面(枠)の中だけで扱い、この画面は枠からの知らせだけを受ける。合言葉は # の後ろなので会話の画面のサーバーには送られない。
+//   読んだらこのタブの中だけに覚え(sessionStorage)、アドレスの欄から消す
 import { FirstRun } from './script.js';
 import { createSheet } from './view.js';
 import { createVoice, crawl } from './voice.js';
-import { createSampleCreator } from './creators.js';
+import { createLocalCreator, createSampleCreator, isLocalBase } from './creators.js';
 import { injectStyles } from './styles.js';
 import { openPersonaPanel } from '../persona/panel.js';
 import { composePersona, loadSettings, normalize, randomSettings, saveSettings } from '../persona/settings.js';
 import { MOCK_NOTICE_SHORT, styleLines } from '../persona/preview.js';
 import { streamChat } from '../../conversation/brainClient.js';
 
-/** 主役(協力者が手で描いた猫)。案内役。名前は仮(本人が決めたら、キャラの設計図の name が使われる) */
-export const MAIN_CHARACTER = { id: 'tegaki_neko', name: 'ねこ' };
+/** 主役で案内役: 協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリ」と呼ぶ */
+export const MAIN_CHARACTER = { id: 'norrie', name: 'ノリー' };
 export const DONE_KEY = 'yc.onboarded.v1';
 export const RESUME_KEY = 'yc.onboarding.resume.v1';
+export const MAKE_KEY = 'yc.make.v1';
 const TALK_TIMEOUT_MS = 20000;
 
 function storageOf(kind) {
@@ -29,6 +34,39 @@ function storageOf(kind) {
   } catch {
     return null; // 内緒のウインドウなど。覚えられないだけで、画面は動く
   }
+}
+
+/**
+ * 作る道のサーバーの場所と合言葉を、URL の # から読む(読んだら # を消し、このタブの中だけに覚える)。無ければ覚えた物。
+ * 手元の場所(isLocalBase)でなければ使わない(よその場所へ絵と合言葉を送らない)。
+ * @returns {{base:string, key:string}|null}
+ */
+export function readLocalMake({ loc = globalThis.location, session = null, history = globalThis.history } = {}) {
+  let found = null;
+  const hash = String(loc?.hash ?? '').replace(/^#/, '');
+  if (hash) {
+    const h = new URLSearchParams(hash);
+    const base = h.get('yc-make');
+    const key = h.get('yc-key');
+    if (base || key) {
+      if (base && key && isLocalBase(base) && key.length <= 128) found = { base: base.replace(/\/$/, ''), key };
+      try {
+        history?.replaceState?.(history.state, '', `${loc.pathname}${loc.search}`); // 合言葉をアドレスの欄と履歴に残さない
+      } catch {
+        // 消せなくても続ける
+      }
+      if (found) session?.setItem(MAKE_KEY, JSON.stringify(found));
+    }
+  }
+  if (!found) {
+    try {
+      const s = JSON.parse(session?.getItem(MAKE_KEY) ?? 'null');
+      if (s && isLocalBase(s.base) && s.key) found = { base: s.base, key: s.key };
+    } catch {
+      found = null;
+    }
+  }
+  return found;
 }
 
 /**
@@ -56,6 +94,7 @@ export function mountFirstRun({
   injectStyles(document);
   const local = storageOf('localStorage');
   const session = storageOf('sessionStorage');
+  const localMake = creator ? null : readLocalMake({ session });
   const voice = createVoice({ app, byok: byok === 'auto' ? null : byok });
   // 声の鍵の部品: 'auto'(既定)なら、舞台の読み上げがあるときに、会話の流れ(S3)の部品を読む。読めなければ鍵は入れられない
   const byokReady =
@@ -65,9 +104,12 @@ export function mountFirstRun({
           () => null,
         )
       : Promise.resolve();
-  const made = creator ?? createSampleCreator({ main: guide });
+  // 見本の道の絵の入口は、主役が舞台に出せるときだけ主役にする(舞台が無い試しの画面では出せるとみなす)。通信はしない
+  const mainOnStage = async (id) => !app || app.characterId === id || app.character?.id === id;
+  const made = creator ?? (localMake ? createLocalCreator(localMake) : createSampleCreator({ main: guide, exists: mainOnStage }));
   const stageId = () => params.get('character') ?? params.get('char') ?? app?.character?.id ?? null;
   let basePersona = null; // persona.md の文(main.js が読んだ物)。足す前の元
+  let stopListen = null;
   let engine = null;
   let sheet = null;
   let pendingNav = null;
@@ -187,6 +229,7 @@ export function mountFirstRun({
 
   async function defaultShow(c) {
     if (!app || !c?.id || c.id === stageId()) return true; // 舞台が無い(試しの画面)か、もう出ている
+    if (c.local) return true; // 手元で描いたばかりの子は、まだ形(3D)が無い。舞台は案内役のまま、絵で話す
     const url = new URL(location.href);
     url.searchParams.set('character', c.id);
     url.searchParams.delete('char');
@@ -264,6 +307,8 @@ export function mountFirstRun({
     });
     api.engine = engine;
     api.sheet = sheet;
+    stopListen?.();
+    stopListen = typeof made.listen === 'function' ? made.listen((ev) => engine.makeEvent(ev)) : null; // 作る画面(枠)からの知らせ
     if (resume) engine.resume(resume);
     else engine.start();
     return engine;
@@ -283,7 +328,7 @@ export function mountFirstRun({
     host.append(personaBtn, startBtn);
   }
 
-  const api = { engine: null, sheet: null, voice, byokReady, start: startOnboarding, openPersona, applyPersona, talk };
+  const api = { engine: null, sheet: null, voice, byokReady, creator: made, start: startOnboarding, openPersona, applyPersona, talk };
 
   // ---- 出すかどうか ----
   const kiosk = ['led', 'autostart', 'headset'].some((k) => params.get(k) === '1');

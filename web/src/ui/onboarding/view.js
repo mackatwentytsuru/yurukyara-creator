@@ -211,6 +211,15 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     return label;
   }
 
+  /** 手元の PC の「作る画面」(1〜3 歩の入力と絵)を、札の中の枠に出す。絵と通信は枠の中だけで、この画面は知らせだけを受ける */
+  function frameAction(a) {
+    const f = el('iframe', { className: 'fr-frame', title: a.label ?? 'PC の作る画面', src: a.url });
+    f.setAttribute('referrerpolicy', 'no-referrer');
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+    f.addEventListener('load', scroll, { once: true });
+    return el('div', { className: 'fr-wide fr-frame-wrap' }, f);
+  }
+
   function textAction(a) {
     const input = el('input', { type: 'text', placeholder: a.placeholder ?? '', autocomplete: 'off', enterKeyHint: 'send', ariaLabel: a.label });
     const count = el('p', { className: 'fr-count', textContent: a.max ? `0 / ${a.max}` : '' });
@@ -265,7 +274,7 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
   /** 台本の offer: 選べる物を出す(空なら消す) */
   function offer(list) {
     actions.replaceChildren(
-      ...list.map((a) => (a.kind === 'file' ? fileAction(a) : a.kind === 'text' ? textAction(a) : a.kind === 'key' ? keyAction(a) : button(a))),
+      ...list.map((a) => (a.kind === 'file' ? fileAction(a) : a.kind === 'text' ? textAction(a) : a.kind === 'key' ? keyAction(a) : a.kind === 'frame' ? frameAction(a) : button(a))),
     );
     if (list.length) stats.actionsShown += 1;
     sheet.dataset.actions = list.map((a) => a.id).join(' ');
