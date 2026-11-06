@@ -94,7 +94,6 @@ node creator/pipeline/web_talk_check.mjs --port 8799 --character <id> --out <作
 
 性格の文(`persona.md`)には、キャラの話し方と、分からないことはスタッフに渡すことを書く。お店の情報を推測で書かない。
 
-**お店のデータ**: `SHOP_DATA_FILE` を付けないと、見本の店(LED のあるショーの店)のデータで答えてしまう(試験で、パンのキャラが席の話をした)。データをもらっていないときは、上のように `creator/setup/shop_empty.json` を使う。知らないことを聞かれると、スタッフに渡す。データをもらったら、`web/server/shop/sample.json` と同じ形の JSON を作り、`SHOP_DATA_FILE` で渡す(手順は `shop-guide` スキル)。もらっていない営業時間や料金を作らない。
 
 **動きだけを確かめるときは、新しく声を作らない(声の生成は費用がかかる。本人の決まり、2026-11-04)。** 前に録った声(`web_talk_record.mjs` の出力の音、例 `video_1104/*_talk_*.webm` の音声)を使い回して、口と動きを見る。新しい声は、返事の中身や声そのものを確かめるときだけ。
 
@@ -137,7 +136,7 @@ Claude を使わない部分(doctor → builder → 骨 → `check_all.sh` → `
 
 ## main をゆるキャラだけに整えたときの知見(2026-11-06)
 - 柱を外すときは、先に `grep` で「残す側が外す側のファイルを読んでいないか」を見る。`web/src/main.js` が `place/web/` の 8 ファイル(alignFlow・align・modes・xr・nativeAR・modeButtons・loadPlace・placeSchema)を読んでいたので、`web/src/stage/` へ移して直した。
-- 試験が、外すフォルダの見本やスキルを読むことがある(`memory.test.mjs` は `kiosk/memory/sample`、`shop/rules.mjs` は shop-guide スキル)。外す前に `node --test` を流して、落ちた所を直す。
+- 試験が、外すフォルダの見本やスキルを読むことがある(`memory.test.mjs` は `kiosk/memory/sample`)。外す前に `node --test` を流して、落ちた所を直す。
 - プライバシーの試験は `web/src` の `fetch(変数)` を許可リストで見る。移した部品の `fetch(url)` は `VARIABLE_FETCH` に足す。
 - 他のスレッドが動いている作業コピーは動かさない。main の整理は別の worktree でやり、元の作業コピーは別の線(archive)に切り替えるだけにすると、未コミットの変更も絶対パスの台本も壊れない。
 - 別の worktree には `web/node_modules`(junction)と、`tools/prepush_terms.local.txt`(git 無視)を写さないと、`npm test` と `prepush_check` が動かない。
@@ -178,6 +177,8 @@ Claude を使わない部分(doctor → builder → 骨 → `check_all.sh` → `
 ## ⑦ 話すを 1 回の命令で(2026-11-06)
 - `python creator/pipeline/t07_talk.py <pack> <id> --name <表示の名前> --out <出力> --persona <性格.md> --words "<元の言葉>"`。取り付け(pk04)→ character.json に K1 の `origin` と `looks` を足して検証 → `vite build` → 空いた番号で鍵なしのサーバー(仮の頭脳・字幕と口パク)→ `web_talk_check.mjs` → 自分のサーバーの PID だけを止める。
 - 質問は既定で「こんにちは、はじめまして|あなたのお名前と、好きなことを教えて」(お店の質問をしない)。
+- 作り直しを取り付けるとき(`--force`)、同じ言葉(`--words`)なら character.json の `origin`(生まれた時の記録)を変えない(11-06 夜から。前は `created` が今の時刻になった)。persona.md は `--persona` を渡さなければ、今ある物を残す。
+- 人の確認(K3)の状態があるキャラは、段 6 の OK が無いと取り付けの前に止まる(終わりの番号 2)。`stage_run.py` の中から呼ぶと、外側が見たので二重に見ない。
 
 ## ブラウザの道具は GPU だけ(2026-11-06)
 - `shot_browser.mjs`・`shot_eye.mjs`・`test_look_drift.mjs`・`web_talk_check.mjs`・`web_talk_record.mjs` は、WebGL を GPU(d3d11)で描き、描画役の名前が SwiftShader など CPU なら止まる(`creator/skilltest/gpu_only.mjs`)。`CHECK_GPU=1` は付けなくても GPU。大きな PC では先に機械の札(`--kind gpu --vram 3`)と GPU の鍵を取る。

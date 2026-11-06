@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # works with python -I too
 import termlist
 
 # 鍵の形。誤検知を減らすため、長さを見る

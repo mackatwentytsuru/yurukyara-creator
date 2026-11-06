@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # works with python -I (git hook) too
 import termlist
 
 # .env だけでなく .env.local・.env.production なども止める(見本の .env.example・.env.sample は上げてよい)
