@@ -56,10 +56,11 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   back.append(panel);
 
   const presets = segmented('性格', PRESET_ORDER.map((k) => [k, { label: PRESETS[k].label, hint: PRESETS[k].text.split('。')[0] }]), s.preset, (k) => update(applyPreset(s, k)), { className: 'yp-presets', withHint: true });
+  // 口調は 4 つ(この子の話し方・フレンドリー・ていねい・独特の語尾)。スマホでは 2 つずつ 2 段に並べる(.yp-tones)
   const tone = segmented('口調', TONE_ORDER.map((k) => [k, TONES[k]]), s.tone, (k) => {
     if (k === 'ending') update({ ...s, tone: 'ending', ending: s.ending || endingIn.value || 'にゃ' });
     else update({ ...s, tone: k });
-  });
+  }, { className: 'yp-seg yp-tones' });
   const endingIn = el('input', { type: 'text', className: 'yp-ending-in', maxLength: 8, placeholder: '例: にゃ', autocomplete: 'off', value: s.ending || '' });
   const endingMsg = el('span', { className: 'yp-note', textContent: 'ひらがな・カタカナで 4 字まで' });
   const endingRow = el('label', { className: 'yp-ending', hidden: s.tone !== 'ending' }, el('span', { textContent: '語尾' }), endingIn);

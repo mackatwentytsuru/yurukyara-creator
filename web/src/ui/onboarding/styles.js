@@ -98,6 +98,7 @@ export const CSS = `
 .yp-choice small { font-size: 12px; color: var(--fr-muted); line-height: 1.4; overflow-wrap: anywhere; }
 .yp-choice[aria-checked="true"], .yp-seg button[aria-checked="true"] { border-color: var(--fr-lav); background: rgba(125,98,255,0.28); }
 .yp-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.yp-seg.yp-tones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .yp-seg button { font: inherit; font-size: 14px; min-height: 44px; padding: 6px 4px; border-radius: 12px; cursor: pointer; color: var(--fr-text);
   background: rgba(255,255,255,0.05); border: 1px solid var(--fr-line); overflow-wrap: anywhere; }
 .yp-ending { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; font-size: 14px; color: var(--fr-muted); }
@@ -126,6 +127,7 @@ export const CSS = `
   .yp-back { place-items: center; }
   .yp-panel { width: min(600px, calc(100vw - 32px)); border-radius: 22px; max-height: 88vh; }
   .yp-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .yp-seg.yp-tones { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 /* 初めての会話の間は、会話の画面の入口(ゲート)を消して、舞台のキャラを見せる。閉じると元に戻る(本物の画面の写真で、ゲートがキャラを隠していた) */
 html.fr-open .gate { opacity: 0 !important; pointer-events: none !important; }

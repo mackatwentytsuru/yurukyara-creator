@@ -1,9 +1,12 @@
 // 性格の設定(画面で選ぶ物)と、Claude に渡す人格の文。DOM を使わない純粋な関数だけ(node の試験で確かめる)。
 // 最初の設計の決め: 初めの性格はランダム。性格・口調・元気さ・返事の長さ・声を画面から変えられる。
 // 安全の決まりは別の層(web/server/safety.mjs)。ここで作る文は、安全の決まりより下に置かれる(prompt.mjs)。
+// 人格の文で話し方が決まっている子(主役ノリーなど)は、おまかせで口調を「この子の話し方」(own)にし、語尾も口調も足さない。
 
-export const SETTINGS_VERSION = 1;
-export const STORE_PREFIX = 'yc.persona.v1.'; // + キャラの id(この端末の中だけ)
+// v2(11/7): 口調に own を足した。v1 のおまかせは、話し方の決まった主役にも語尾を付けていた(「ノリーと申しマスぽよ」)。
+// v1 で覚えた設定は読まない(覚える場所の名前を替えた)。次に開いた時、v2 のおまかせで選び直す
+export const SETTINGS_VERSION = 2;
+export const STORE_PREFIX = 'yc.persona.v2.'; // + キャラの id(この端末の中だけ)
 
 /** 性格の型。lead は仮の頭脳の試しで最初の文の前に付ける一言、extra は「長め」のときに足す 1 文 */
 export const PRESETS = {
@@ -43,14 +46,42 @@ export const PRESETS = {
 export const PRESET_ORDER = ['calm', 'genki', 'mischief', 'shy'];
 
 export const TONES = {
+  own: { label: 'この子の話し方', hint: '人格の文のまま' },
   friendly: { label: 'フレンドリー', hint: '「〜だよ」「〜だね」' },
   polite: { label: 'ていねい', hint: '「〜です」「〜ます」' },
   ending: { label: '独特の語尾', hint: '文の終わりに決まった音' },
 };
-export const TONE_ORDER = ['friendly', 'polite', 'ending'];
-/** おまかせで選ぶ語尾(どの文の終わりに付けても読める音だけ) */
+export const TONE_ORDER = ['own', 'friendly', 'polite', 'ending'];
+/** おまかせで選ぶ語尾(どの文の終わりに付けても読める音だけ)。話し方の決まった子には選ばない */
 export const ENDINGS = ['にゃ', 'ぽよ', 'ぴょん'];
 export const ENDING_MAX = 4;
+
+// 人格の文で「話し方」が決まっている印: 行の頭(「- 」や見出しの「#」の後)が、話し方・口調・語尾・一人称・口ぐせ
+const OWN_SPEECH = /^(?:[-*・]\s*|#{1,6}\s*)?(?:話し方|口調|語尾|一人称|口ぐせ|口癖)/u;
+// 画面が人格の文の後ろに足す設定の節(composePersona)。ここから後ろは、その子の話し方として数えない
+const SETTINGS_HEAD = /^#\s*性格と話し方/u;
+
+/**
+ * 人格の文(persona.md)に、その子の話し方が書いてあるか(「- 話し方: …」「- 一人称は…」「## 話し方の例」など)。
+ * 画面が後ろに足した設定の節は見ない。
+ * @param {string} persona
+ */
+export function definesOwnSpeech(persona) {
+  const lines = String(persona ?? '').split(/\r?\n/).map((l) => l.trim());
+  const end = lines.findIndex((l) => SETTINGS_HEAD.test(l));
+  return (end < 0 ? lines : lines.slice(0, end)).some((l) => OWN_SPEECH.test(l));
+}
+
+/**
+ * その子の話し方が決まっているか(おまかせで、語尾と口調を足さない子か)。
+ * 人格の文に書いてあるか、主役(mainId)か。主役は人格の文がまだ届いていない時(読み込みの途中・404)も、決まっているとみなす。
+ * @param {string|null|undefined} id
+ * @param {{persona?: string, mainId?: string|null}} [o]
+ */
+export function ownSpeechFor(id, { persona = '', mainId = null } = {}) {
+  if (!id) return false;
+  return definesOwnSpeech(persona) || (Boolean(mainId) && id === mainId);
+}
 
 export const ENERGY_LABELS = { 1: 'とても静か', 2: 'ひかえめ', 3: 'ふつう', 4: '元気', 5: 'とても元気' };
 
@@ -143,11 +174,15 @@ export function normalize(input) {
   };
 }
 
-/** おまかせ(初めの性格)。rnd は 0〜1 を返す関数。声の出し方は選ばない(鍵が要るので、使う人が決める) */
-export function randomSettings(rnd = Math.random, { voice = 'none' } = {}) {
+/**
+ * おまかせ(初めの性格)。rnd は 0〜1 を返す関数。声の出し方は選ばない(鍵が要るので、使う人が決める)。
+ * ownSpeech: 人格の文で話し方が決まっている子(ownSpeechFor)。口調はいつも own(この子の話し方)で、語尾は付けない。
+ *   型・元気さ・長さ・声の高さは、ほかの子と同じに選ぶ(同じ種なら、口調のほかは ownSpeech が無い時と同じ)。
+ */
+export function randomSettings(rnd = Math.random, { voice = 'none', ownSpeech = false } = {}) {
   const preset = pick(PRESET_ORDER, rnd);
-  const r = rnd();
-  const tone = r < 0.5 ? 'friendly' : r < 0.75 ? 'polite' : 'ending';
+  const r = rnd(); // ownSpeech の時も引く(ほかの欄の並びを変えない)
+  const tone = ownSpeech ? 'own' : r < 0.5 ? 'friendly' : r < 0.75 ? 'polite' : 'ending';
   const energy = clampInt(PRESETS[preset].energy + pick([-1, 0, 0, 1], rnd), 1, 5, 3);
   const length = pick(['short', 'normal', 'normal', 'long'], rnd);
   const pitch = pick(Object.keys(PITCHES), rnd);
@@ -182,11 +217,13 @@ export function personaBlock(settings) {
   const s = normalize(settings);
   const p = PRESETS[s.preset];
   const tone =
-    s.tone === 'polite'
-      ? 'ていねい。「〜です」「〜ます」で話す。'
-      : s.tone === 'ending'
-        ? `文の終わりに「${s.ending}」を付けて話す(例: こんにちは${s.ending})。`
-        : 'フレンドリー。「〜だよ」「〜だね」と、友だちのように話す。';
+    s.tone === 'own'
+      ? '上の人格の文に書いてある話し方のまま。一人称・文の終わり・言い回しを変えない。'
+      : s.tone === 'polite'
+        ? 'ていねい。「〜です」「〜ます」で話す。'
+        : s.tone === 'ending'
+          ? `文の終わりに「${s.ending}」を付けて話す(例: こんにちは${s.ending})。`
+          : 'フレンドリー。「〜だよ」「〜だね」と、友だちのように話す。';
   return [
     // 見出しに「安全の決まり」と書くと、安全の層(sanitizePersona)が上書きの企てとして行ごと消す。書かない
     '# 性格と話し方(使う人が画面で選んだ設定。上の人格の文と違うときは、こちらを使う)',

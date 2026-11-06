@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
 import { createServer } from 'node:net';
 import { VOICE_THANKS } from '../src/ui/onboarding/script.js';
+import { ENDINGS, SETTINGS_VERSION, STORE_PREFIX } from '../src/ui/persona/settings.js';
+import { MAIN_CHARACTER as MAIN } from '../src/character/defaults.js';
 
 const WEB = join(import.meta.dirname, '..');
 const SRC = join(WEB, 'src');
@@ -287,7 +289,7 @@ async function walkWords(page, label, { full }) {
   assert.equal(await gate(), '1 auto', '閉じたら、入口のゲートが戻る');
   assert.notEqual(await thought(), 'none', '閉じたら「Claude の考え」も戻る');
   assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done');
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('yc.persona.v1.d_lantern')));
+  const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), `${STORE_PREFIX}d_lantern`);
   assert.equal(saved.preset, 'shy');
   assert.equal(saved.voice.provider, 'elevenlabs');
 }
@@ -366,6 +368,65 @@ test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」�
   }
 });
 
+// 11/7 03:09 の録画で、おまかせが主役に語尾「ぽよ」を付けた(「ノリーと申しマスぽよ」)。試しの画面の乱数(種 5)は、直す前なら
+// 最初のおまかせで語尾「ぽよ」を選ぶ。入口(index.js)が主役を「話し方の決まった子」と見て、語尾も口調も足さないかを見る
+test('主役の絵の入口(幅 390): おまかせ・性格の画面のおまかせ 5 回・あいさつで、語尾を足さない(この子の話し方)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
+  const noEnding = (text, where) => assert.ok(!ENDINGS.some((e) => text.includes(e)), `${where}: 語尾が付いた: ${text}`);
+  try {
+    const { ctx, page, errors } = await openPage(browser, server.base, { width: 390, height: 844, query: `onboard=1&character=${MAIN.id}`, reduced: true });
+    try {
+      await waitAct(page, 'pick');
+      await page.setInputFiles('.fr-actions [data-act="pick"] input[type="file"]', { name: 'drawing.png', mimeType: 'image/png', buffer: PNG_1PX });
+      await waitAct(page, 'kind_yuru');
+      await page.click('.fr-actions [data-act="kind_yuru"]');
+      await waitAct(page, 'next_meet');
+      await page.click('.fr-actions [data-act="next_meet"]');
+      await waitAct(page, 'keep');
+      assert.match(await logText(page), new RegExp(`${MAIN.name}だよ。この子はどうかな\\?`), '絵の入口は主役');
+      await page.click('.fr-actions [data-act="keep"]');
+      await waitAct(page, 'persona_ok');
+      assert.match(await logText(page), /性格: .+・この子の話し方・/, '4 歩目のおまかせ');
+
+      await page.click('.fr-actions [data-act="persona_edit"]');
+      await page.waitForSelector('.yp-panel');
+      await waitPreview(page, 0);
+      const ownChecked = () => page.$eval('.yp-tones [data-key="own"]', (e) => e.getAttribute('aria-checked'));
+      assert.equal(await ownChecked(), 'true');
+      assert.equal(await page.$$eval('.yp-tones button', (els) => els.length), 4, '口調は 4 つ');
+      await checkLayout(page, '主役の性格の画面');
+      await shot(page, 'w390_main_persona_own');
+      noEnding(await page.$eval('.yp-reply-text', (e) => e.textContent), '性格の画面の試し');
+      assert.match(await page.$eval('.yp-block', (e) => e.textContent), /話し方のまま/);
+      for (let i = 1; i <= 5; i++) {
+        const n = await previewed(page);
+        await page.click('.yp-random');
+        const reply = await waitPreview(page, n);
+        assert.equal(await ownChecked(), 'true', `性格の画面のおまかせ ${i} 回目`);
+        noEnding(reply, `性格の画面のおまかせ ${i} 回目`);
+      }
+      await page.click('.yp-save');
+      await page.waitForSelector('.yp-panel', { state: 'detached' });
+      await waitAct(page, 'persona_ok');
+      await page.click('.fr-actions [data-act="persona_ok"]');
+      await waitAct(page, 'to_retro');
+      noEnding(await lastChar(page), '5 歩目のあいさつ');
+      await shot(page, 'w390_main_hello_own');
+      const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), `${STORE_PREFIX}${MAIN.id}`);
+      assert.equal(saved.tone, 'own');
+      assert.equal(saved.v, SETTINGS_VERSION);
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    server.proc.kill();
+  }
+});
+
 test('「性格」のボタン(幅 400): 開く → おまかせ → これにする で、この端末に覚える', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
@@ -385,8 +446,8 @@ test('「性格」のボタン(幅 400): 開く → おまかせ → これに�
       await waitPreview(page, n);
       await page.click('.yp-save');
       await page.waitForSelector('.yp-panel', { state: 'detached' });
-      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('yc.persona.v1.mikan')));
-      assert.ok(saved && saved.v === 1, '設定を覚えた');
+      const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), `${STORE_PREFIX}mikan`);
+      assert.ok(saved && saved.v === SETTINGS_VERSION, '設定を覚えた');
       assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();

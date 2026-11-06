@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   PRESET_ORDER, PRESETS, applyPreset, cleanEnding, composePersona, defaults, normalize, personaBlock, randomSettings,
-  seededRandom, summary, loadSettings, saveSettings, PERSONA_MAX, STORE_PREFIX,
+  seededRandom, summary, loadSettings, saveSettings, PERSONA_MAX, STORE_PREFIX, TONE_ORDER,
 } from '../src/ui/persona/settings.js';
 import { styleLines, toPolite, withEnding, withEnergy } from '../src/ui/persona/preview.js';
 import { sanitizePersona } from '../server/safety.mjs';
@@ -51,8 +51,9 @@ test('語尾: ひらがな・カタカナ 4 字まで。記号・英字・恋人
 });
 
 test('人格の文: 全部の型・口調で、安全の層の消しゴムで 1 行も消えず、長すぎない', () => {
+  assert.deepEqual(TONE_ORDER, ['own', 'friendly', 'polite', 'ending'], '口調は 4 つ(この子の話し方が先頭)');
   for (const preset of PRESET_ORDER) {
-    for (const tone of ['friendly', 'polite', 'ending']) {
+    for (const tone of TONE_ORDER) {
       const s = normalize({ preset, tone, ending: 'にゃ', energy: 3, length: 'long' });
       const block = personaBlock(s);
       assert.match(block, new RegExp(PRESETS[preset].label));
