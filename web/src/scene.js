@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+// 上の段と下の帯の間に収める計算(three を読まない小さな部品)
+import { fitBand } from './stage/framing.js';
+
+/** ふだんの画角(度)。部屋の中で下がれない時だけ広げる */
+const BASE_FOV = 28;
 
 /** 床にやわらかい丸い影を敷く(画像ファイルは使わず、その場で描く) */
 function makeFloorGlow() {
@@ -33,7 +38,7 @@ export function createStage(canvas) {
   renderer.xr.enabled = true; // Quest の VR/AR で使う(入らないときは、ふつうに描く)
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(28, 1, 0.05, 60);
+  const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.05, 60);
 
   scene.add(new THREE.HemisphereLight(0xfff1e0, 0x2a2540, 1.0));
   const key = new THREE.DirectionalLight(0xffffff, 1.7);
@@ -44,35 +49,76 @@ export function createStage(canvas) {
   scene.add(rim);
   scene.add(makeFloorGlow());
 
-  const state = { view: 'bust', height: 1.5, headY: 1.35, immersive: false, bottomInset: 0 };
+  // bottomInset: 下の帯の高さ(px。main.js が測る)。topGuard(left, right): 画面の横の範囲に重なる上の段の下の端(px。main.js が渡す)。
+  // topInset: いま避けている上の段の高さ(px。frameCharacter が書く。試験と確かめ用)
+  const state = { view: 'bust', height: 1.5, headY: 1.35, immersive: false, bottomInset: 0, topGuard: null, topInset: 0 };
 
   /**
    * キャラの大きさ・位置・向きに合わせてカメラを置く。bust は腰から上、full は全身。
    * state.headY と state.camZ は、キャラの座標(足元が原点・+z が正面)での値。
+   * 上の段(札・ボタン・「Claude の考え」の見出し)と下の帯の間に収める: 1 回置いてキャラの横の範囲を測り、
+   * そこに重なる上の段(state.topGuard)の下にキャラの上の端が来ていなければ、上の段の下から置き直す(スマホの幅で頭と耳が段の下に入った)。
+   * 2 回目はキャラが小さくなるだけなので、横に重なる段は増えない。
    */
   function frameCharacter(character, view = state.view, obstacles = state.obstacles) {
     state.view = view;
     state.obstacles = obstacles;
     character.object3d.updateWorldMatrix(true, true);
-    const base = character.object3d.getWorldPosition(new THREE.Vector3());
     const box = new THREE.Box3().setFromObject(character.object3d);
+    const viewW = canvas.clientWidth || window.innerWidth;
+    const viewH = canvas.clientHeight || window.innerHeight;
+    placeCamera(character, box, view, obstacles, viewH, 0);
+    let topPx = 0;
+    if (typeof state.topGuard === 'function' && !state.immersive) {
+      const span = screenSpan(box, viewW, viewH);
+      const guard = Number(state.topGuard(span.left, span.right)) || 0;
+      if (guard > 0 && span.top < guard) {
+        topPx = guard;
+        placeCamera(character, box, view, obstacles, viewH, topPx);
+      }
+    }
+    state.topInset = topPx;
+    return state;
+  }
+
+  /** 箱の 8 つの角を画面へ写した、横の範囲と上の端(px) */
+  function screenSpan(box, viewW, viewH) {
+    camera.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    let left = Infinity;
+    let right = -Infinity;
+    let top = Infinity;
+    for (const x of [box.min.x, box.max.x]) {
+      for (const y of [box.min.y, box.max.y]) {
+        for (const z of [box.min.z, box.max.z]) {
+          v.set(x, y, z).project(camera);
+          left = Math.min(left, ((v.x + 1) / 2) * viewW);
+          right = Math.max(right, ((v.x + 1) / 2) * viewW);
+          top = Math.min(top, ((1 - v.y) / 2) * viewH);
+        }
+      }
+    }
+    return { left, right, top };
+  }
+
+  /** キャラの正面にカメラを置く。topPx は避ける上の段の下の端(px) */
+  function placeCamera(character, box, view, obstacles, viewH, topPx) {
+    const base = character.object3d.getWorldPosition(new THREE.Vector3());
     const height = Math.max(0.3, box.max.y - box.min.y);
     const floor = box.min.y - base.y; // キャラの原点から見た足元の高さ
     state.height = height;
     state.headY = floor + height * 0.9;
     const aspect = camera.aspect;
-    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const fov = THREE.MathUtils.degToRad(BASE_FOV);
     const visibleH = view === 'full' ? height * 1.18 : height * 0.62;
     const centerY = floor + (view === 'full' ? height * 0.5 : height * 0.67);
-    // 横が狭い画面(スマホ)でも、肩と腕が入るようにする
-    let neededH = Math.max(visibleH, (height * (view === 'full' ? 0.55 : 0.4)) / aspect);
-    // 全身のときは、下の入力の帯(字幕・ボタン・入力欄)に足が隠れないよう、帯の上の範囲に全身を収める
-    const viewH = canvas.clientHeight || window.innerHeight;
-    const bottomPx = view === 'full' ? Math.min(state.bottomInset ?? 0, viewH * 0.5) : 0;
-    const usable = 1 - bottomPx / viewH;
-    neededH /= usable;
-    let dist = neededH / (2 * Math.tan(fov / 2));
-    camera.fov = 28;
+    // 横が狭い画面(スマホ)でも、肩と腕が入るようにする。全身のときは、キャラの実際の幅(真ん中から遠い側の 2 倍)も入れる
+    const width = view === 'full' ? Math.max(height * 0.55, halfWidth(character, box, base) * 2 * 1.04) : height * 0.4;
+    // 全身のときは、下の入力の帯(字幕・ボタン・入力欄)に足が隠れないよう、帯の上の範囲に全身を収める。上の段の下からにも収める
+    const bottomPx = view === 'full' ? state.bottomInset ?? 0 : 0;
+    const band = fitBand({ viewH, topPx, bottomPx, needH: visibleH, needW: width, aspect });
+    let dist = band.neededH / (2 * Math.tan(fov / 2));
+    camera.fov = BASE_FOV;
     if (obstacles) {
       // 部屋の中では、壁の手前までしか下がれない。足りない分は画角を広げて収める
       const origin = character.object3d.localToWorld(new THREE.Vector3(0, centerY, 0));
@@ -80,17 +126,29 @@ export function createStage(canvas) {
       const hit = new THREE.Raycaster(origin, dir, 0.1, dist + 1).intersectObject(obstacles, true)[0];
       if (hit && hit.distance - 0.2 < dist) {
         dist = Math.max(0.8, hit.distance - 0.2);
-        camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(neededH / 2 / dist)), 28, 75);
+        camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(band.neededH / 2 / dist)), BASE_FOV, 75);
       }
     }
     camera.updateProjectionMatrix();
-    // 画面の中心を、帯の分だけ下げる(= キャラが画面の上の側に寄る)。見える高さ × 帯の半分の割合
+    // 画面の中心を、上の段と下の帯の差の分だけずらす(下の帯が高いとキャラは上へ、上の段が高いと下へ)。見える高さ × 帯の差の半分の割合
     const visible = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-    const lookY = centerY - (bottomPx / 2 / viewH) * visible;
+    const lookY = centerY + band.shift * visible;
     camera.position.copy(character.object3d.localToWorld(new THREE.Vector3(0, lookY, dist)));
     camera.lookAt(character.object3d.localToWorld(new THREE.Vector3(0, lookY, 0)));
     state.camZ = dist;
-    return state;
+  }
+
+  /** キャラの真ん中(原点)から、横(キャラの左右)にいちばん遠い所までの長さ(世界の長さ)。しっぽなど片側だけ長くても、両側を同じだけ空ける */
+  function halfWidth(character, box, base) {
+    const side = new THREE.Vector3(1, 0, 0).applyQuaternion(character.object3d.getWorldQuaternion(new THREE.Quaternion()));
+    const v = new THREE.Vector3();
+    let half = 0;
+    for (const x of [box.min.x, box.max.x]) {
+      for (const z of [box.min.z, box.max.z]) {
+        half = Math.max(half, Math.abs(v.set(x, base.y, z).sub(base).dot(side)));
+      }
+    }
+    return half;
   }
 
   function resize() {

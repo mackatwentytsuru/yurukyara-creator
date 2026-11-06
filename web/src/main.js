@@ -1,7 +1,9 @@
 // 会話の本体。キャラを出し、カメラで人を見つけて目と首で追い、話しかけられたら Claude に聞いて、声で答える。
 import * as THREE from 'three';
 import { createStage } from './scene.js';
-import { loadFirstCharacter, motionChoices, MAIN_CHARACTER } from './character/index.js';
+import { loadFirstCharacter, loadCharacter, availableLooks, motionChoices, MAIN_CHARACTER } from './character/index.js';
+import { writeRemembered } from './character/looks.js'; // このタブで選んだ見た目(3D・2D)を覚える
+import { guardBottom } from './stage/framing.js'; // キャラを上の段の下に収める
 // 入力の差し替え口(tracking/sources/index.js の約束)。カメラの顔の部品(mediapipeSource.js)は重いので、ここでは読まず、
 // 「はじめる」を押した時に読む(最初の読み込みを軽くする。重さの表 L3)
 import { SimSource } from './tracking/sources/simSource.js';
@@ -38,6 +40,14 @@ const IS_HEADSET = params.get('headset') === '1' || /OculusBrowser|Quest/i.test(
 const VR_HELLO = 'こんにちは'; // コントローラーのトリガーで話しかける言葉(マイクが使えなくても、返事と声を確かめられる)
 
 const $ = (id) => document.getElementById(id);
+// このタブだけで覚える所(見た目の切り替え)。使えないブラウザ(プライベートの設定など)では覚えないだけ
+const tabMemory = (() => {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+})();
 const ui = createUi();
 const stage = createStage($('stage'));
 const speaker = new Speaker();
@@ -599,6 +609,104 @@ async function setupPresentation() {
   app.modes = modes;
 }
 
+/* ---------- キャラの見せ方(上の段と下の帯の間に収める) ---------- */
+// 上の段: 上の札・見せ方のボタン・覚えていること・見た目の切り替え・「Claude の考え」の見出し(開いた中身は、使う人が開いた時だけの重なりなので数えない)
+const TOP_GUARD = '.top .chip, .top .top-row > *, #thoughtToggle';
+const TOP_GAP_PX = 8; // 上の段とキャラの頭のすき間
+
+/** 画面の横の範囲 [left, right] に重なる上の段の、下の端(px)。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
+function topGuard(left, right) {
+  return guardBottom([...document.querySelectorAll(TOP_GUARD)].map((el) => el.getBoundingClientRect()), left, right, TOP_GAP_PX);
+}
+stage.state.topGuard = topGuard;
+
+/** 今の見せ方で、キャラを置き直す(画面の大きさ・上の段・下の帯が変わった時)。AR・VR の間は端末が決めるので何もしない */
+function reframe() {
+  if (app.character && !stage.state.immersive) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
+}
+
+/* ---------- 見た目の切り替え(3D と 2D。両方あるキャラだけ。このタブだけで覚える) ---------- */
+const lookCache = new Map(); // 見た目 → 読み込んだキャラ(捨てずに持つ。2 回目からはすぐ替わる)
+let lookBusy = false;
+
+/** 両方の見た目があるキャラなら、上の段に切り替えを出す */
+async function setupLookSwitch() {
+  const box = $('lookSwitch');
+  if (!box || IS_HEADSET || ['led', 'autostart'].some((k) => params.get(k) === '1') || params.get('perf') === '1') return;
+  const looks = await availableLooks(app.character).catch((err) => {
+    console.warn('見た目の種類を調べられませんでした:', err.message);
+    return [];
+  });
+  if (!(looks.includes('3d') && looks.includes('2d'))) return;
+  lookCache.set(app.character.look, app.character);
+  box.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-look]');
+    if (btn) void switchLook(btn.dataset.look);
+  });
+  syncLookSwitch();
+  box.hidden = false;
+}
+
+function syncLookSwitch() {
+  const box = $('lookSwitch');
+  for (const b of box.querySelectorAll('button[data-look]')) {
+    b.setAttribute('aria-pressed', String(b.dataset.look === app.character.look));
+    b.disabled = lookBusy;
+  }
+}
+
+/** 見た目を替える。読み込めなければ、今の見た目のまま理由を出す */
+async function switchLook(look) {
+  if (lookBusy || !app.character || look === app.character.look) return;
+  if (modes && modes.mode !== 'screen') return; // AR・VR の間は替えない(位置合わせと舞台がキャラを持っている)
+  lookBusy = true;
+  syncLookSwitch();
+  try {
+    let next = lookCache.get(look);
+    if (!next) {
+      next = await loadCharacter(app.character.lookSource.url, { ...app.tierOverrides, look });
+      if (next.look !== look) throw new Error(`${look === '2d' ? '2D' : '3D'} の形を読めませんでした`);
+      lookCache.set(look, next);
+    }
+    swapCharacter(next);
+    writeRemembered(tabMemory, next.lookSource?.json?.id ?? next.id ?? app.characterId, look); // 読む側(loadCharacter)と同じ id
+    // URL に ?look= があれば、選んだ方に書き換える(読み込み直しても、選んだ見た目のまま)
+    if (params.has('look')) {
+      const url = new URL(location.href);
+      url.searchParams.set('look', look);
+      history.replaceState(history.state, '', url);
+    }
+  } catch (err) {
+    console.error(err);
+    ui.error(`見た目を替えられませんでした(${err.message})`);
+  } finally {
+    lookBusy = false;
+    syncLookSwitch();
+  }
+}
+
+/** 舞台のキャラを入れ替える。位置・向き・会話はそのまま */
+function swapCharacter(next) {
+  const prev = app.character;
+  if (app.place?.loaded) app.place.loaded.placeCharacter(next.object3d);
+  else {
+    next.object3d.position.copy(prev.object3d.position);
+    next.object3d.quaternion.copy(prev.object3d.quaternion);
+  }
+  stage.scene.remove(prev.object3d);
+  stage.scene.add(next.object3d);
+  app.character = next;
+  dialogue.character = next;
+  document.documentElement.dataset.look = next.look ?? '3d';
+  stage.frameCharacter(next, characterView(next), app.place?.loaded?.object3d);
+}
+
+/** 人型でないキャラ(rig)と 2D の板は、上半身でなく全身を見せる(?view= で決め打ち) */
+function characterView(character) {
+  const view = params.get('view') ?? (character.kind === 'vrm' ? 'bust' : 'full');
+  return view === 'full' ? 'full' : 'bust';
+}
+
 /* ---------- 合言葉(契約 K5) ---------- */
 // 公開の URL(手元のサーバーの /api/status が無い)か ?askpass=1 のときだけ、ゲートに合言葉の欄を出す。
 // 合言葉は URL に入れない。このタブの中だけに持ち、会話の見出し(x-demo-pass)で送る(送るのは会話の側)。
@@ -652,10 +760,19 @@ async function boot() {
   const fitBottom = () => {
     document.documentElement.style.setProperty('--bottom-h', `${bottomBar.offsetHeight}px`);
     stage.state.bottomInset = bottomBar.offsetHeight + 8 + 80; // 80 は、帯の上に出る字幕と札の分(足に重ならないように)
-    if (app.character && !stage.state.immersive) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
+    reframe();
   };
   new ResizeObserver(fitBottom).observe(bottomBar);
   fitBottom();
+  // 上の段(札・ボタン)の高さが変わったら(始めると札が 2 行になる・ボタンが増える)、「Claude の考え」をその下へ下げ(--top-h)、
+  // キャラを置き直す(頭と耳が段の下に入らないように)。幅 390 で、考えの見出しが「覚えていること」に重なって押せなかった
+  const topBar = document.querySelector('.top');
+  const fitTop = () => {
+    document.documentElement.style.setProperty('--top-h', `${topBar.offsetHeight}px`);
+    reframe();
+  };
+  new ResizeObserver(fitTop).observe(topBar);
+  fitTop();
   let readyAt = null;
   let loopStartAt = null;
   try {
@@ -663,8 +780,10 @@ async function boot() {
     // 毛の層は重ね描きで、ソフト描画で 20 倍遅かった(実測)。端末の段で、スマホ・弱い端末・ヘッドセットは減らす(PC は今のまま)。?fur= で決め打ち
     const tierOverrides = applyTier(stage, app.tier, window.devicePixelRatio);
     if (Number(params.get('fur')) > 0) tierOverrides.furLayers = Number(params.get('fur'));
-    // ?character= は id・URL のどちらでもよい。無ければ主役ノリー → ようこそくんの順に、出せるキャラ。?look=2d|3d で見た目の方式(無ければ looks.default)
-    const { character, id } = await loadFirstCharacter(params.get('character') ?? params.get('char'), { ...tierOverrides, look: params.get('look') ?? '' });
+    app.tierOverrides = tierOverrides; // 見た目を切り替える時も同じ段で読む
+    // ?character= は id・URL のどちらでもよい。無ければ主役ノリー → ようこそくんの順に、出せるキャラ。
+    // 見た目の方式は ?look=2d|3d → このタブで選んだ物 → looks.default の順
+    const { character, id } = await loadFirstCharacter(params.get('character') ?? params.get('char'), { ...tierOverrides, look: params.get('look') ?? '', lookMemory: tabMemory });
     app.character = character;
     app.characterId = id;
     dialogue.character = character;
@@ -676,8 +795,7 @@ async function boot() {
     }
     stage.scene.add(character.object3d);
     // 人型でないキャラ(rig)と 2D の板は、上半身でなく全身を見せる
-    const view = params.get('view') ?? (character.kind === 'vrm' ? 'bust' : 'full');
-    stage.frameCharacter(character, view === 'full' ? 'full' : 'bust', app.place.loaded?.object3d);
+    stage.frameCharacter(character, characterView(character), app.place.loaded?.object3d);
     readyAt = performance.now(); // キャラを舞台に置いた時刻(?perf=1 で使う)
     // 置いたらすぐ描き始める。人格の文・見せ方の用意(VR の有無を調べる)・/api/status を待たない。
     // 待つと、初めて開いたブラウザで最初のコマが 0.6〜1 秒遅れた(重さの表 L3)。frame() は、まだ無い物(見せ方・入力)を飛ばす
@@ -700,6 +818,7 @@ async function boot() {
   setInterval(refreshStatus, 15000);
   setupPass();
   setupMemory();
+  void setupLookSwitch(); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない)
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();

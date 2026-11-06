@@ -92,7 +92,7 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); overflow: hidden;
 }
 .thought-head {
-  all: unset; box-sizing: border-box; width: 100%; padding: 11px 14px; cursor: pointer;
+  all: unset; box-sizing: border-box; width: 100%; min-height: 44px; padding: 11px 14px; cursor: pointer;
   font-size: 13px; font-weight: 700; letter-spacing: 0.04em; display: flex; align-items: center; gap: 8px; color: var(--lav);
 }
 .thought-head:focus-visible { outline: 2px solid var(--lav); outline-offset: -2px; border-radius: var(--radius); }
@@ -151,8 +151,17 @@ html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: n
 .fine { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
 .status { margin: 0; min-height: 1.4em; font-size: 13px; color: var(--warn); }
 
+/* 「Claude の考え」は、上の段(札とボタン。高さ --top-h は main.js が測る)のすぐ下に置く。
+   札が 2 行になる・ボタンが増えると段が高くなり、決め打ちの位置では「覚えていること」などに重なって押せなかった(幅 390)。
+   幅 960 まで: 上の段のボタンが右へ伸びると、右上の窓とも重なるので、同じく段の下へ */
+@media (max-width: 960px) {
+  .thought { top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); }
+}
 @media (max-width: 640px) {
-  .thought { top: calc(max(12px, env(safe-area-inset-top)) + 76px); right: 12px; left: 12px; width: auto; max-height: 46vh; overflow: auto; }
+  .thought { top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); right: 12px; left: 12px; width: auto; max-height: 46vh; overflow: auto; }
+  /* 畳んだ時は見出しの幅だけにして、同じ行の右に見た目の切り替えを並べる(上の段を 1 行減らし、キャラを大きく見せる) */
+  .thought.collapsed { right: auto; }
+  .look-switch { position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); right: 12px; }
   .subs { width: calc(100vw - 24px); }
   .caption { font-size: clamp(18px, 5vw, 26px); }
   .mic span { display: none; }
@@ -170,7 +179,25 @@ html.is-led .modes { display: none !important; }
 html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origin: top left; }
 
 /* 上の段: 見せ方のボタンと「覚えていること」を同じ行に(スマホで「Claude の考え」の見出しと重ならないように) */
-.top-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.top-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 上の段の押す所は 44px 以上(指で押せる大きさ。S4 の「性格」「はじめての会話」も同じ形。S4 の形より強く効かせる) */
+.top .place-mode-button, .top .drawer > summary { min-height: 44px; padding-top: 12px; padding-bottom: 12px; line-height: 18px; }
+
+/* 見た目の切り替え(3D と 2D。両方の見た目があるキャラだけ main.js が出す。選んだ方は、このタブだけで覚える)。押す所は 44px 以上 */
+.look-switch {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 2px; padding: 0 1px 0 12px; border-radius: 999px;
+  background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.look-switch[hidden] { display: none; }
+.look-label { font-size: 12px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+.look-switch button {
+  font: inherit; font-size: 14px; font-weight: 700; min-width: 44px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 999px;
+  cursor: pointer; color: var(--muted); background: transparent; transition: background 0.2s ease, color 0.2s ease;
+}
+.look-switch button[aria-pressed="true"] { color: var(--ink); background: var(--lav); }
+.look-switch button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.look-switch button:disabled { cursor: wait; opacity: 0.6; }
+html.is-led .look-switch { display: none !important; }
 .thought-body .row[hidden] { display: none; }
 
 /* 仮の頭脳の知らせ(契約 K5)。字幕の上に 1 行、黄色で */
