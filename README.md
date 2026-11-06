@@ -27,6 +27,26 @@ npm start        # then open http://127.0.0.1:8787/
 - We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: 【確かめ待ち】
 - `npm ci` also downloads the face-tracking model into `web/public/mediapipe/`; it is not stored in this repository.
 
+## Make your own character on your PC with Claude Code
+
+In the browser alone, the first conversation's word box only picks the nearest of the sample characters. To have Claude really draw a new one from your words or your picture, run the maker on the same PC:
+
+```bash
+cd web && npm start                       # terminal 1: the app, as above
+python creator/review/serve_review.py --make --web http://127.0.0.1:8787
+                                          # terminal 2, in the repository root
+```
+
+1. On this PC, open `http://127.0.0.1:8796/qr` and click the link under 「この PC の初めての会話」 ("the first conversation on this PC"). The app opens with the maker inside the first-conversation card.
+2. Type a few words (for example 「青いまるい雲の子」, "a round blue cloud child"), or choose a picture, and press 「これで作る」 ("make it").
+3. Open Claude Code in the repository folder and type `/yuru-next`. Claude checks the input and draws the first picture (a few minutes). The picture appears in the card.
+4. Press 「この子にする」 ("keep this one"), or write a short note and press 「直したい」 ("fix it"). Then type `/yuru-next` again. Each `/yuru-next` moves one step.
+
+- To try the steps without calling Claude, run `python creator/review/yuru_make.py next --fake-draw` instead of `/yuru-next`. It puts a fixed test picture in the card.
+- Needs Python 3 and Claude Code signed in; `/yuru-next` uses your Claude Code plan. Your words and picture go to the maker on your PC and, for the drawing, to Claude.
+- After the picture, the 3D stages (shape, materials, bones, motion) run with the [make-character](.claude/skills/make-character/SKILL.md) skill in Claude Code (about 20 minutes for Mikan-chan). They are not started from the browser yet.
+- Stop the maker (Ctrl+C) when you are done. Its link holds a passphrase made fresh at each start.
+
 ## What works today
 
 Each row was checked by running it. The check is named next to it.
@@ -49,7 +69,7 @@ Each row was checked by running it. The check is named next to it.
 - Real devices: iPhone, Android and Quest 【確かめ待ち】. So far we checked phone widths in a headless browser, and VR only in an emulator (`web/scripts/vr-check.mjs`).
 - Talking with the real Claude Haiku on this version, including memory 【確かめ待ち】.
 - A voice with your own ElevenLabs key 【確かめ待ち】. Without a key the character talks with text and a retro sound.
-- The public link (two small functions on Vercel, with an optional Upstash Redis store) 【確かめ待ち】.
+- The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only with the stand-in brain and keeps no memory) 【確かめ待ち】.
 - From the side, Norrie's front teeth still look too small in 3D: all 6 judge answers said so after the fixes.
 - A quick doodle by a person through all stages. So far only a machine-made doodle-style test picture went through (12.1 minutes).
 
@@ -81,7 +101,7 @@ Dates, numbers and what went wrong: [How we built it](docs/HOW_WE_BUILT.md).
 | Speech to text | The browser's built-in speech recognition, or faster-whisper running on your own PC (local server only) |
 | Face tracking | MediaPipe Face Landmarker (runs on the device; video is not sent) |
 | 3D in the browser | three.js and three-vrm |
-| Public link | Two functions on Vercel; counts and memory in Upstash Redis when connected |
+| Public link | Two functions on Vercel; counts and memory in Upstash Redis (without it: stand-in brain only, no memory) |
 
 Versions and licences of every part: [THIRD_PARTY.md](THIRD_PARTY.md).
 
