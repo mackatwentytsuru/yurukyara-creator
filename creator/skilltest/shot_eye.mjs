@@ -3,7 +3,7 @@
 // 使い方: CHECK_GPU=1 node creator/skilltest/shot_eye.mjs <serve のポート> <出力フォルダ> [id,id,...] [前の shot_eye_info.json(同じカメラで撮る)]
 //   例: CHECK_GPU=1 node creator/skilltest/shot_eye.mjs 8777 before yokoso,robo,f_led,d_lantern
 // 出力: <出力フォルダ>/<id>_eye.png(顔の中心を大きく)、<id>_chest.png(胸から上)。1024px 四方、背景は薄い灰色。
-// 前提: creator/viewer/serve.py が動いている。CHECK_GPU=1 なら GPU(d3d11)で描く(作業用 PC では GPU の札を先に取る)。
+// 前提: creator/viewer/serve.py が動いている。GPU(d3d11)で描く(メイン PC では GPU の札を先に取る)。
 // 前後で同じ絵になるよう、動きを時刻 0 で止め、まばたきを止め、視線を正面の固定の目標へ向ける。カメラは顔の部品(Eyes / Face)の箱から決める。
 import { chromium } from '../../web/node_modules/playwright-core/index.mjs';
 import { GPU_ARGS, assertGpu } from './gpu_only.mjs';
