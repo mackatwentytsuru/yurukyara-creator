@@ -211,10 +211,25 @@ export function* mockReply(o) {
   for (const ev of mockLines(o)) yield ev.type === 'say' ? guardOutput(ev) : ev;
 }
 
+/** 人格の初めてのあいさつ(3 文まで)を、おじぎ → うなずき → 手をふる で言う */
+function* greetingLines(hello) {
+  for (const [i, line] of hello.entries()) yield { type: 'say', text: line, expression: 'happy', motion: GREETING_MOTIONS[i] ?? 'none', gaze: 'person' };
+}
+
 function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learned = [], history = [], persona = '' }) {
   const { name, topic } = summarize(memory?.items ?? []);
   const san = name ? `${name}さん` : '';
+  const hello = firstGreeting(persona); // 人格の「初めてのあいさつ」(無ければ空)
   if (trigger === 'approach') {
+    // 人が近づいた(カメラ・マウスの試し)。覚えている人でなければ、その子の言葉で声をかける。
+    // 話の始めなら初めてのあいさつで名乗る。話の途中なら名乗り直さず、あいさつの最後の 1 文だけ(2026-11-07 本物の画面で、
+    // マウスがキャラの上を動くと決まった「こんにちは。」が先に出て、ノリーの名乗りが出なくなるのを見た)
+    if (!san && !topic && hello.length) {
+      yield { type: 'thought', seen: seen || '人が近づいてきた', intent: history.length ? 'あいさつ' : '初めてのあいさつ', stage: 'greet', handoff: false };
+      if (!history.length) yield* greetingLines(hello);
+      else yield { type: 'say', text: hello.at(-1), expression: 'happy', motion: 'wave', gaze: 'person' };
+      return;
+    }
     yield { type: 'thought', seen: seen || '人が近づいてきた', intent: '未確認', stage: 'greet', handoff: false };
     yield { type: 'say', text: san ? `${san}、また会えたね。` : 'こんにちは。', expression: 'happy', motion: 'wave', gaze: 'person' };
     yield { type: 'say', text: topic ? `${topic}の話の続き、しようか。` : 'どんなお話をしようか。', expression: 'happy', motion: 'tilt', gaze: 'person' };
@@ -251,10 +266,15 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
   }
   if (/こんにちは|はじめまして|おはよう|こんばんは|やあ/.test(text)) {
     // はじめての会話(履歴も覚えている事も無い)で、人格に初めてのあいさつがあれば、その子の言葉で名乗る
-    const hello = history.length ? [] : firstGreeting(persona);
-    if (hello.length) {
+    if (hello.length && !history.length) {
       yield { type: 'thought', seen: seen || '', intent: '初めてのあいさつ', stage: 'greet', handoff: false };
-      for (const [i, line] of hello.entries()) yield { type: 'say', text: line, expression: 'happy', motion: GREETING_MOTIONS[i] ?? 'none', gaze: 'person' };
+      yield* greetingLines(hello);
+      return;
+    }
+    // 話の途中のあいさつは名乗り直さない。その子の言葉で短く(あいさつの最後の 1 文)
+    if (hello.length) {
+      yield { type: 'thought', seen: seen || '', intent: 'あいさつ', stage: 'chat', handoff: false };
+      yield { type: 'say', text: hello.at(-1), expression: 'happy', motion: 'wave', gaze: 'person' };
       return;
     }
     yield { type: 'thought', seen: seen || '', intent: '未確認', stage: 'need', handoff: false };
