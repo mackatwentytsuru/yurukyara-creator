@@ -661,6 +661,7 @@ async function boot() {
     app.character = character;
     app.characterId = id;
     dialogue.character = character;
+    speaker.setVoice({ seed: character.name ?? id ?? '' }); // 声が無い時の「ピッ」の高さと音色をキャラごとに(S3 の speaker)
     document.documentElement.dataset.look = character.look ?? '3d';
     if (app.place.loaded) {
       stage.scene.add(app.place.loaded.object3d);
