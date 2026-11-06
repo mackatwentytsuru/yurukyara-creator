@@ -8,7 +8,7 @@
  "characters/yokoso/motions/nod.glb": "cafe29cfc9e5529649e3aeb270753c1f0c9a654a873dab51e2fd8af0d5144f35",
  "characters/yokoso/motions/talk.glb": "84398609e442892b0cae00f3824e63cf5d10b8cc61bffd2cf0428d05a0914afb",
  "characters/yokoso/motions/wave.glb": "8741e003107dca4c797a689d6f54e264bbd35c6553b6c8cde848b409b9c82f9f",
- "characters/yokoso/persona.md": "80ae02406f71363d3c8ad8ca13ba1934df2c72afbe17cfa51a2f0abed4f893d7",
+ "characters/yokoso/persona.md": "ca26be9adb7d61acb394d4d07623ea10cb85c9f824e131e1f69320c6a6cedd4a",
  "characters/robo/character.json": "af21f614ad16282ed856ddac37d5535619a52c7753458b4ecfc33903c5ea2f8d",
  "characters/robo/model.glb": "2f582129b1986842bbcc143a38744059dbbaac4a82448efa0e0448bd17b90152",
  "characters/robo/motions/bow.glb": "5f6f777e5ec09dc0c4b9c69d3bed4454d5b972aee59d1da12c02d1cc88f4b75b",
@@ -16,7 +16,7 @@
  "characters/robo/motions/nod.glb": "fb39cface0d19ebefdf0b0a8c3e4ffc3d4e4f3f7b3e92c24bbf2818804941d26",
  "characters/robo/motions/talk.glb": "f5a5dc37223dbbbba53a60abcc6a2e74aa6f31640ca99244adb54cb66ed7e3ce",
  "characters/robo/motions/wave.glb": "df799703b591e1d972646af306acef4714e6582f965e7099c974da79031c0340",
- "characters/robo/persona.md": "cd5da467b1bfb6c4bc2b98c76010971d194649688ad1a1fa42cede253aa7ca21",
+ "characters/robo/persona.md": "394f0abe4a10c1bb4a705392ec73547a689472074acee68628b8859e4a242338",
  "characters/f_led/character.json": "5998317bb9711fee8bf81715eff395242cc360b7d25e04668e8c32e418e8c6de",
  "characters/f_led/face_atlas.png": "53275f27b34fb3680c8ea511e88aa7bc80a7fbc5858ba355fdb4a3d7d6be102a",
  "characters/f_led/model.glb": "2ac7af90a187d5e8f3c79a971649d5dcd6bbeb0eb4b76ddf98ed586cff5c21c9",
@@ -28,7 +28,7 @@
  "characters/f_led/motions/talk.glb": "2612573ec13301242a7885e1542e6e43bb6217e22c2c8b6509dd7b4d07351dc0",
  "characters/f_led/motions/think.glb": "082d54246db18c4a68fa98b9b90ee7ec4649339e91b0402c390371b3016067f4",
  "characters/f_led/motions/wave.glb": "1a854799ad7ecd3e355f4d5203bd097c0b22ac98a09f4ad377a8346d99e45ed6",
- "characters/f_led/persona.md": "b4e626ddaf15e19a0bc3e43b43c606520f3fc394c237c2075c5a2809675ca1f0",
+ "characters/f_led/persona.md": "f6c026c9b26de64eccc7e33fecd7812aaca6c0fc6a6cec434847a0f3a181ab08",
  "characters/d_lantern/character.json": "560c2e06553d9950a06abadbbabdb71ce4180032aad0485533cb686d373befa0",
  "characters/d_lantern/face_atlas.png": "965e3d1497142273daab69b9654fedb418a1b2ceb07f8471705e2937de7a002a",
  "characters/d_lantern/model.glb": "8342ae0d2efd9ccae7d4578c70aacb8e8632e881a5d3a76e3096325b189a985d",
@@ -40,5 +40,5 @@
  "characters/d_lantern/motions/talk.glb": "74df6ad9f9fee10972b4267e4eef7af86107a810dc9f4ff89c7f7572179911c9",
  "characters/d_lantern/motions/think.glb": "5989597b47595be42148796e41409703271a75782873d3af7de4777185dee1a0",
  "characters/d_lantern/motions/wave.glb": "6f5ad546cffd710237d2b7610c6274a71c6628237f89483c226c2f6ee6f468c0",
- "characters/d_lantern/persona.md": "2822482bab63009f2686f08c93abd62944bd1244f0c92e693620a3ab3a45d57c"
+ "characters/d_lantern/persona.md": "ed5e489e7a5488f1260a69ec5a14c03b609de74ce1b85a82a49eb2c4dbae0d68"
 }
