@@ -562,6 +562,7 @@ async function boot() {
   };
   new ResizeObserver(fitBottom).observe(bottomBar);
   fitBottom();
+  let readyAt = null;
   try {
     const url = characterUrl(params.get('character') ?? params.get('char')); // id・URL のどちらでもよい
     app.place = await loadPlaceData(params.get('place'));
@@ -579,6 +580,7 @@ async function boot() {
     stage.frameCharacter(character, view === 'full' ? 'full' : 'bust', app.place.loaded?.object3d);
     if (character.personaUrl) app.persona = await (await fetch(character.personaUrl)).text();
     status.textContent = '';
+    readyAt = performance.now(); // キャラが出た時刻(?perf=1 で使う)
   } catch (err) {
     console.error(err);
     status.textContent = `キャラを読み込めませんでした: ${err.message}`;
@@ -592,6 +594,8 @@ async function boot() {
   updatePrivacy();
   buttons.forEach((b) => (b.disabled = false));
   stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う
+  // ?perf=1: いまの重さを測る(L0。数字は window.__perf。測りの部品は、このときだけ読む)
+  if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt }));
 
   /** 入力を選んで始める。失敗したら理由を出して、ゲートに戻る */
   async function startSource(kind, pending) {

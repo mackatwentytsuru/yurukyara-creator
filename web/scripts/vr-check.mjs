@@ -1,12 +1,13 @@
 // 実機の Quest が無くても、VR の入口を端から端まで確かめる。Meta の IWER(WebXR の偽物)を入れた Chrome で、
 // ページのボタンを押して VR に入り、頭を動かし、スティックとトリガーを使い、偽のマイクから声を流す。
 //   npm run build && PORT=8799 npm run server
-//   node scripts/vr-check.mjs --port 8799 --character <id> --out <フォルダ> [--mic 声.wav] [--gpu]
+//   node scripts/vr-check.mjs --port 8799 --character <id> --out <フォルダ> [--mic 声.wav](GPU の札と鍵を取ってから)
 // --mic の WAV は、頭に長めの無音を入れておく(VR に入ったあとで声が流れるように)。
 // 分かるのは、ページの作りが合っているか。Quest の本物のブラウザでの動き(マイク・音・速さ)は分からない。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { GPU_ARGS, stopIfSoftwareRenderer } from '../src/stage/gpuGuard.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -24,7 +25,8 @@ const DIST_M = 1.6;
 
 fs.mkdirSync(OUT, { recursive: true });
 const { chromium } = await import(pathToFileURL(path.join(HERE, '../node_modules/playwright-core/index.mjs')).href);
-const gpuArgs = argv.includes('--gpu') ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-watchdog'];
+// いつも GPU で描く(--gpu は前の書き方の名残で、付けても同じ)。CPU(SwiftShader)の描画は使わない決まり
+const gpuArgs = GPU_ARGS;
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   args: [...gpuArgs, '--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
@@ -99,6 +101,7 @@ const finish = async () => {
 };
 
 await page.goto(`http://127.0.0.1:${PORT}/?character=${CHAR}`);
+await stopIfSoftwareRenderer(page, browser); // WebGL が CPU で描かれていたら、ここで止める
 await page.waitForFunction(() => window.__app?.character && !document.getElementById('startCam').disabled, null, { timeout: 180000 });
 const realVoice = await page.evaluate(async () => Boolean((await (await fetch('/api/status')).json()).tts?.available));
 check('入る前: 入口がヘッドセット用になっている', await page.evaluate(() => document.getElementById('startSim').hidden && document.documentElement.classList.contains('is-headset')));

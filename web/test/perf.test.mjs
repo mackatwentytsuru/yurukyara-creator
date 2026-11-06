@@ -1,0 +1,39 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { PERF_SCHEMA, quantile, summarizeFrames, summarizeResources } from '../src/stage/perf.js';
+
+test('版の名前がある', () => {
+  assert.equal(PERF_SCHEMA, 'perf/1');
+});
+
+test('quantile は並べた数の位置の値', () => {
+  assert.equal(quantile([], 0.5), null);
+  assert.equal(quantile([1, 2, 3, 4, 5], 0.5), 3);
+  assert.equal(quantile([1, 2, 3, 4, 5], 0.95), 5);
+});
+
+test('フレームの間隔から fps と長いフレームを数える', () => {
+  const intervals = [...Array(50).fill(16.7), 40, 50];
+  const s = summarizeFrames(intervals, [1, 2, 3]);
+  assert.equal(s.frames, 52);
+  assert.equal(s.frame_ms_median, 16.7);
+  assert.equal(s.fps_median, 59.9);
+  assert.equal(s.long_frames_over_33ms, 2);
+  assert.equal(s.render_cpu_ms_median, 2);
+});
+
+test('読み込んだファイルを種類ごとにまとめる', () => {
+  const s = summarizeResources([
+    { name: 'http://h/characters/robo/model.glb', transferSize: 1000, decodedBodySize: 1000 },
+    { name: 'http://h/characters/robo/face_atlas.png', transferSize: 0, encodedBodySize: 200, decodedBodySize: 200 },
+    { name: 'http://h/characters/robo/motions/idle.json', transferSize: 50, decodedBodySize: 300 },
+    { name: 'http://h/assets/index-abc.js', transferSize: 400, decodedBodySize: 1200 },
+  ]);
+  assert.equal(s.model.transfer, 1000);
+  assert.equal(s.texture.transfer, 200); // 送った大きさが 0(手元の写し)なら、中身の大きさで数える
+  assert.equal(s.motion.count, 1);
+  assert.equal(s.script.count, 1);
+  assert.equal(s.total.count, 4);
+  assert.equal(s.total.transfer, 1650);
+  assert.deepEqual(s.files.map((f) => f.path), ['/characters/robo/model.glb', '/characters/robo/face_atlas.png']);
+});
