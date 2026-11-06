@@ -4,6 +4,8 @@
 // - 「性格」と「はじめての会話」のボタンを buttonHost に足す(無ければ右上に浮かべる)
 // - ?onboard=1 で初めての会話を出す。auto: true なら、この端末で初めての時も出す(既定は出さない。ほかの試験を邪魔しない)
 // - 性格の設定は、キャラの id ごとに、この端末の中に覚える。会話の頭脳に渡す人格の文(app.persona)に足す
+// - おまかせ(初めの性格・もう一度ひく・性格の画面のおまかせ)は、人格の文で話し方が決まっている子(主役を含む)には
+//   語尾も口調も足さない(口調は「この子の話し方」)。11/7 の録画で、主役が「ノリーと申しマスぽよ」になったため
 // - 声の鍵(BYOK)の部品は、会話の流れ(S3)の物を byok で受け取る。無ければ 7 歩目は「まだつながっていない」と正直に言う
 // - 作る道: 既定は見本の道。URL の # に yc-make=<PC の作る道のサーバー>&yc-key=<合言葉> があれば(PC の serve_review.py --make の
 //   /qr の画面のリンク)、1〜3 歩を本当の作る道にする(言葉か絵 → PC のゆるキャラチェック → 段 0 の絵 → C0)。入力と絵は PC が配る
@@ -15,7 +17,7 @@ import { createVoice, crawl } from './voice.js';
 import { createLocalCreator, createSampleCreator, isLocalBase } from './creators.js';
 import { injectStyles } from './styles.js';
 import { openPersonaPanel } from '../persona/panel.js';
-import { composePersona, loadSettings, normalize, randomSettings, saveSettings } from '../persona/settings.js';
+import { composePersona, loadSettings, normalize, ownSpeechFor, randomSettings, saveSettings } from '../persona/settings.js';
 import { MOCK_NOTICE_SHORT, styleLines } from '../persona/preview.js';
 import { streamChat } from '../../conversation/brainClient.js';
 // 主役で案内役(協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリ」と呼ぶ)。three を読まない小さな部品
@@ -116,10 +118,16 @@ export function mountFirstRun({
   let pendingNav = null;
 
   const guideName = () => (app?.character?.id === guide.id && app.character.name) || guide.name;
+  /**
+   * その子の話し方が人格の文で決まっているか。決まっていれば、おまかせは語尾も口調も足さない(口調は「この子の話し方」)。
+   * 舞台の子は persona.md の文で見る。主役は、人格の文がまだ届いていない時も決まっているとみなす(主役の決まりは defaults.js)
+   */
+  const ownSpeechOf = (id) => ownSpeechFor(id, { persona: id && id === stageId() ? (basePersona ?? app?.persona ?? '') : '', mainId: MAIN_CHARACTER.id });
+  const randomFor = (id) => randomSettings(random, { ownSpeech: ownSpeechOf(id) });
   const personaStore = {
     get: (id) => loadSettings(local, id),
     set: (id, s) => saveSettings(local, id, s),
-    random: () => randomSettings(random),
+    random: (character) => randomFor(character?.id ?? stageId()),
   };
 
   /** 舞台のキャラなら、頭脳に渡す人格の文(app.persona)に設定を足す */
@@ -206,11 +214,11 @@ export function mountFirstRun({
   function openPersona({ character = null, initial = null, onSave = () => {}, onCancel = () => {} } = {}) {
     voice.unlock();
     const ch = character ?? { id: stageId() ?? 'unknown', name: app?.character?.name ?? 'この子' };
-    const start = initial ?? loadSettings(local, ch.id) ?? randomSettings(random);
+    const start = initial ?? loadSettings(local, ch.id) ?? randomFor(ch.id);
     return openPersonaPanel({
       initial: start,
       characterName: ch.name,
-      random: () => randomSettings(random),
+      random: () => randomFor(ch.id),
       preview: async (s, text) => {
         const r = await previewReply(ch, s, text);
         lastBrain = r.brain === 'haiku' ? 'haiku' : 'mock';

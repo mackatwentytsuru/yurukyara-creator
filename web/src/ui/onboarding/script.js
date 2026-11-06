@@ -38,7 +38,8 @@ export class FirstRun {
    * @param {object} d
    * @param {{id:string, name:string}} d.guide 案内役(既定は主役 MAIN_CHARACTER = ノリー)
    * @param {object} d.creator 作る道(creators.js)
-   * @param {{get:(id:string)=>object|null, set:(id:string, s:object)=>void, random:()=>object}} d.persona
+   * @param {{get:(id:string)=>object|null, set:(id:string, s:object)=>void, random:(character?:object)=>object}} d.persona
+   *   random はおまかせ。今の子(character)を渡す(話し方の決まった子には、語尾も口調も足さないため)
    * @param {(text:string, ctx:object)=>Promise<{lines:{text:string,expression?:string,motion?:string}[], brain:string, safety?:string|null, notice?:string}>} d.talk
    * @param {object} d.voice 声(voice.js)
    * @param {(lines:Line[], ctx:object)=>Promise<void>} d.present 言った文を画面に出し、出し終わったら解決する
@@ -349,7 +350,7 @@ export class FirstRun {
     const id = this.character?.id ?? 'unknown';
     let s = this.d.persona.get(id);
     if (!s) {
-      s = this.d.persona.random();
+      s = this.d.persona.random(this.character);
       this.d.persona.set(id, s);
     }
     this.settings = normalize(s);
@@ -382,7 +383,7 @@ export class FirstRun {
 
   async _personaRoll() {
     const keepVoice = this.settings?.voice;
-    this.settings = normalize({ ...this.d.persona.random(), ...(keepVoice ? { voice: keepVoice } : {}) });
+    this.settings = normalize({ ...this.d.persona.random(this.character), ...(keepVoice ? { voice: keepVoice } : {}) });
     this.d.persona.set(this.character?.id ?? 'unknown', this.settings);
     this.d.onPersona?.(this.settings, this.character);
     await this._say(

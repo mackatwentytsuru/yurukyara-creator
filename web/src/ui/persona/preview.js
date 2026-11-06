@@ -1,6 +1,7 @@
 // 返事の試し。本物の頭脳(Claude Haiku)のときは、設定の文を Claude に渡して、その返事をそのまま見せる。
 // 仮の頭脳(鍵なし・上限)のときは、返事の中身は決まった文なので、話し方(口調・語尾・元気さ・長さ・性格の一言)だけを
 // この端末の中で設定に合わせる。画面には「仮の頭脳です」と必ず出す(できない事を、できるように見せない)。
+// 口調が own(この子の話し方)のときは、言い回しも語尾も変えない(人格の文の手本の文が、そのままその子の話し方)。
 import { normalize, PRESETS } from './settings.js';
 
 const END = /([。!?！？…]*)$/u;
@@ -63,7 +64,8 @@ export function styleLines(lines, settings) {
   if (!out.length) return out;
   const count = s.length === 'short' ? 1 : s.length === 'normal' ? 2 : 3;
   out = out.slice(0, count);
-  if (s.length === 'long' && out.length < count) out.push(p.extra[s.tone === 'polite' ? 'polite' : 'friendly']);
+  // 型の一言(extra)はフレンドリーかていねいの言い回し。「この子の話し方」(own)の子には足さない(その子の話し方とぶつかる)
+  if (s.length === 'long' && out.length < count && s.tone !== 'own') out.push(p.extra[s.tone === 'polite' ? 'polite' : 'friendly']);
   out = out.map((t) => (s.tone === 'polite' ? toPolite(t) : t));
   out = out.map((t) => (s.tone === 'ending' ? withEnding(t, s.ending) : t));
   out = out.map((t) => withEnergy(t, s.energy));
