@@ -117,7 +117,8 @@ test('画面なしの Chrome: タブ A → 番号 → タブ B で続きが話�
     const a1 = await A.page.evaluate(() => window.talk('わたしはタロウ。カレーが好き'));
     assert.match(a1, /タロウ/);
     await A.page.waitForFunction(() => document.querySelectorAll('.mem-item').length >= 2);
-    assert.deepEqual(await items(A.page), ['名前 名前: タロウ', '好きなもの 好きなもの: カレー', '前の話 前に話したこと: カレーの話']);
+    // 種類の名前を 2 回出さない(S4 の頼み。前は「名前 名前: タロウ」と出ていた)
+    assert.deepEqual(await items(A.page), ['名前: タロウ', '好きなもの: カレー', '前に話したこと: カレーの話']);
     assert.match(await A.page.textContent('.mem-notice'), /7 日で消えます/);
 
     // タブ B は、まだ何も覚えていない(別の合鍵)

@@ -204,7 +204,7 @@ export class Dialogue {
       if (!ac.signal.aborted) this.ui.error(err.message);
     }
     if (id !== this.turnId) return;
-    this.history.push({ role: 'user', content: trigger === 'approach' ? '(お客さんが近づいてきた)' : text });
+    this.history.push({ role: 'user', content: trigger === 'approach' ? '(使う人が近づいてきた)' : text });
     // 前の返事は、指示で決めた形(1 行 1 つの JSON。最初の行に用件と段階)のまま履歴に戻す。
     // ふつうの文で戻すと、モデルがそれをまねて、JSON でなく文章で答える回が出た(2026-11-02)
     if (sayEvents.length) this.history.push({ role: 'assistant', content: assistantLines(sayEvents, thoughtEv) });

@@ -58,3 +58,32 @@ test('人格の欄に書かれた危ないあいさつは、出力の確かめ�
   assert.equal(said[0].guarded, true);
   assert.ok(!said[0].text.includes('あなただけ'));
 });
+
+// 2026-11-07 本物の画面で見つけた: マウスがキャラの上を動く(人が近づいた扱い)と、決まった「こんにちは。」が先に出て、
+// 後から「はじめまして」と打ってもノリーの名乗りが出なかった。近づいた時も、その子の言葉で声をかける。
+test('近づいた時(話の始め・覚えていない人): 初めてのあいさつで名乗る(おじぎ → うなずき → 手をふる)', async () => {
+  const { events, said } = await turn({ text: '', trigger: 'approach', character: { name: 'ノリー', persona: PERSONA } });
+  assert.deepEqual(said.map((s) => s.text), ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリ、がんばりマス! なにをお手伝いしまショウ?']);
+  assert.deepEqual(said.map((s) => s.motion), ['bow', 'nod', 'wave']);
+  const th = events.find((e) => e.type === 'thought');
+  assert.equal(th.stage, 'greet');
+  assert.equal(th.intent, '初めてのあいさつ');
+});
+
+test('近づいた時(話の途中)と、話の途中の「こんにちは」: 名乗り直さず、その子の言葉で 1 文', async () => {
+  const history = [{ role: 'user', content: 'はじめまして' }, { role: 'assistant', content: 'はじめまして! ノリーと申しマス。' }];
+  for (const body of [{ text: '', trigger: 'approach' }, { text: 'こんにちは' }]) {
+    const { said } = await turn({ ...body, history, character: { name: 'ノリー', persona: PERSONA } });
+    assert.deepEqual(said.map((s) => s.text), ['ノリ、がんばりマス! なにをお手伝いしまショウ?'], JSON.stringify(body));
+    assert.equal(said[0].motion, 'wave');
+  }
+});
+
+test('近づいた時: 覚えている人には今までどおり「また会えたね」。あいさつの節が無いキャラも今までどおり', async () => {
+  const memory = { text: '- 名前: タロウ', items: [{ kind: 'name', text: '名前: タロウ' }] };
+  const again = await turn({ text: '', trigger: 'approach', character: { name: 'ノリー', persona: PERSONA } }, { memory });
+  assert.equal(again.said[0].text, 'タロウさん、また会えたね。');
+  assert.ok(!again.said.some((s) => s.text.includes('ノリーと申しマス')));
+  const plain = await turn({ text: '', trigger: 'approach', character: { name: 'みかんちゃん', persona: '# みかんちゃん\n- 一人称は「わたし」。' } });
+  assert.deepEqual(plain.said.map((s) => s.text), ['こんにちは。', 'どんなお話をしようか。']);
+});
