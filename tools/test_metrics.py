@@ -23,6 +23,8 @@ HOME = "/ho" + "me/"
 POSIX = HOME + USER + "/proj/out.png"
 DRIVE = "Q:" + BS + "secret_disk" + BS + "party"
 KEY = "sk-" + "ant-api03-DUMMYDUMMYDUMMY1234"  # 試験用のダミー(検査に引っかからないよう分けて書く)
+# 家の中の回線の番号の形のダミー。公開の前の履歴の書き換えの規則に当たらないよう、その場で組み立てる
+LAN_IP = ".".join(["192", "168", "10", "20"])
 LEAKS = [USER, HOST, "secret_disk", "DUMMYDUMMY", WUSERS, HOME]
 
 TESTS_LOG = "# tests 12\n# suites 0\n# pass 11\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n"
@@ -69,7 +71,7 @@ def fake_log(path):
          "cwd": WUSERS + USER + BS + "work", "session_id": "s", "timestamp": "2026-11-06T03:00:00.000Z"},
         {"type": "system", "subtype": "task_started", "description": f"clone to {WIN} on {HOST} as {USER}@{HOST}", "timestamp": "2026-11-06T03:00:01.000Z"},
         {"type": "system", "subtype": "task_started", "description": f"copy {POSIX} and {DRIVE} with {KEY}", "timestamp": "2026-11-06T03:00:02.000Z"},
-        {"type": "system", "subtype": "task_started", "description": f"ssh {HOST}.local 192.168.x.x password=hunter2 {USER.upper()} again", "timestamp": "2026-11-06T03:00:03.000Z"},
+        {"type": "system", "subtype": "task_started", "description": f"ssh {HOST}.local {LAN_IP} password=hunter2 {USER.upper()} again", "timestamp": "2026-11-06T03:00:03.000Z"},
         {"type": "assistant", "timestamp": "2026-11-06T03:00:04.000Z", "message": {"content": [
             {"type": "tool_use", "name": "Read", "input": {"file_path": WUSERS + USER + BS + "p" + BS + ".claude" + BS + "skills" + BS + "demo-skill" + BS + "SKILL.md"}},
             {"type": "tool_use", "name": "Bash", "input": {"command": "sh creator/pipeline/check_all.sh " + WIN}}]}},

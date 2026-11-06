@@ -1,9 +1,10 @@
 // フック(PreToolUse): 鍵と入れない語の見張り。今の .claude/hooks/check-secrets.mjs(git commit の直前だけ)を広げた版。
 // 1) Bash の git commit の直前: これから記録する差分の名前と足した行を見る(前と同じ)+入れない語
-// 2) Write・Edit・MultiEdit の直前: 書こうとしている文と、書く先のファイルの名前を見る
-// 見つけたら止める(終了コード 2)。登録は本人の OK の後(tools/hooks/README.md)。
+// 2) Write・Edit・MultiEdit の直前: 書く先がリポジトリ(CLAUDE_PROJECT_DIR)の中の時だけ、書こうとしている文と
+//    書く先のファイルの名前を見る。外(作業の板・メモなど)は記録に入らないので見ない。
+// 見つけたら止める(終了コード 2)。登録の形は tools/hooks/README.md。
 import { spawnSync } from 'node:child_process';
-import { badPath, checkText, isTermsFile, loadTerms, textOfEdit } from './lib/secret-core.mjs';
+import { badPath, checkText, insideProject, isTermsFile, loadTerms, textOfEdit } from './lib/secret-core.mjs';
 import { block, logBlock, projectRoot, readInput } from './lib/hook-io.mjs';
 
 const input = await readInput();
@@ -29,6 +30,7 @@ if (tool === 'Bash') {
   }
 } else if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(tool)) {
   const path = String(ti.file_path ?? ti.notebook_path ?? '');
+  if (!insideProject(root, path, input.cwd)) process.exit(0);
   const why = badPath(path);
   if (why) problems.push(`${path}: ${why}`);
   if (!isTermsFile(path)) for (const p of checkText(textOfEdit(tool, ti), terms)) problems.push(p);

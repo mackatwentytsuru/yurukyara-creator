@@ -4,33 +4,34 @@ import re
 import subprocess
 import sys
 
+import termlist
+
 # .env だけでなく .env.local・.env.production なども止める(見本の .env.example・.env.sample は上げてよい)
 BLOCKED_FILES = re.compile(r"(\.vrm|\.vrma|\.pem|\.key|\.crt|(^|/)\.env(?!\.(example|sample)$)(\.[\w-]+)?)$", re.I)
 SECRETS = re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}|sk_[a-f0-9]{30,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}")
-# 入れない名前はリポジトリに書かない。外のファイル(1 行 1 語。# で始まる行は注)から読む。無ければ、黙って通さず止める
+# 入れない名前はリポジトリに書かない。外のファイル(形は tools/termlist.py)から読む。無ければ、黙って通さず止める
 WORDS_FILE = os.environ.get("PREPUSH_TERMS") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "prepush_terms.local.txt")
 
 
 class Words:
-    """入れない語。既定は大文字と小文字を区別しない。「cs:」で始まる行は区別する(英語のふつうの語と重なる物)。"""
+    """入れない語(cs:・re:・rei: の行も読む。tools/termlist.py)"""
 
-    def __init__(self, terms):
-        loose = [t for t in terms if not t.startswith("cs:")]
-        strict = [t[3:] for t in terms if t.startswith("cs:") and t[3:]]
-        self.loose = re.compile("|".join(re.escape(t) for t in loose), re.I) if loose else None
-        self.strict = re.compile("|".join(re.escape(t) for t in strict)) if strict else None
+    def __init__(self, pats):
+        self.pats = pats
 
     def search(self, text):
-        return (self.loose and self.loose.search(text)) or (self.strict and self.strict.search(text))
+        return termlist.first_hit(self.pats, text)
 
 
 def load_words(path):
     try:
-        with open(path, encoding="utf-8") as f:
-            terms = [t.strip() for t in f if t.strip() and not t.lstrip().startswith("#")]
+        pats = termlist.load(path)
     except OSError:
         return None
-    return Words(terms) if terms else None
+    except ValueError as e:
+        print(f"push を止めました: {e}")
+        sys.exit(1)
+    return Words(pats) if pats else None
 
 
 WORDS = load_words(WORDS_FILE)
