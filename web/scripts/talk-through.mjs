@@ -1,9 +1,8 @@
 // 本物の頭脳と声で、画面を通して話させて測る(画面なしの Chrome)。
-//   node scripts/talk-through.mjs --port 8817 --character sample_vrm --label flash --out <json>
+//   node scripts/talk-through.mjs --port 8817 --character yokoso --label flash --out <json>
 // 測るもの: 最初の音までの時間(あいづちと本当の返事は別)・口と声の合い(相関とずれ)・まばたき・うなずき・視線・揺れ物・割り込み。
 // 声(ElevenLabs)の文字数を使う。サーバーの 1 日の上限(logs/tts_usage.json)が先に止める。
 // 注意: 出力の音は聞けない。ここで言う「口の合い」は、声の音量の波(analyser)と、画面の口(aa)の合い。端末の出力の遅れは入らない。
-import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 
 const arg = (k, d) => {
@@ -11,13 +10,13 @@ const arg = (k, d) => {
   return i > 0 ? process.argv[i + 1] : d;
 };
 const PORT = arg('port', '8787');
-const CHAR = arg('character', 'sample_vrm');
+const CHAR = arg('character', 'yokoso');
 const LABEL = arg('label', 'run');
 const OUT = arg('out', '');
 const QUESTIONS = (arg('questions', '') || 'ステージはどこにありますか|あの、すみません|初めてのステージ、どうですか|ここの営業時間を教えてください').split('|');
 const GAP_MS = Number(arg('gap', 6500));
 
-const { chromium } = await import(pathToFileURL('repo/web/node_modules/playwright-core/index.mjs').href);
+const { chromium } = await import('playwright-core');
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   headless: true,
@@ -39,11 +38,11 @@ await page.waitForFunction(() => window.__app?.character?.vrm, null, { timeout: 
 await page.getByText('カメラなしで試す').click();
 await page.waitForTimeout(2000);
 
-// 場所をサンプル会場の受付にして、毎コマの記録を始める
+// 場所を見本の会場の受付にして、毎コマの記録を始める
 await page.evaluate(() => {
   const app = window.__app;
-  app.place.name = 'サンプル会場';
-  app.place.info = 'サンプル会場は、ステージの壁が大きな LED になっている会場。ここは入口。';
+  app.place.name = '見本の会場';
+  app.place.info = '見本の会場は、ステージの壁が大きな LED になっている会場。ここは入口。';
   for (const l of app.place.landmarks) if (l.name === '机') Object.assign(l, { name: 'ステージ', note: 'ステージ。壁一面が LED になっている' });
   const c = app.character;
   const em = c.vrm.expressionManager;

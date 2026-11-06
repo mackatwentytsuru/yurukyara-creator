@@ -1,29 +1,30 @@
 // 場面に合った表情を選ぶか(標準の表情だけ vs カスタムの表情つき)を、本物の頭脳で比べる。読み上げなし。
-//   node scripts/expression-eval.mjs --character sample_vrm --port 8819 --rounds 2 --out <json>
+//   node scripts/expression-eval.mjs --character yokoso --port 8819 --rounds 2 --out <json>
 // 判定: 場面ごとに「合う表情」の集合を決めておき、選んだ表情がその中にあるか。あわせて、最初の文までの時間(サーバー側 serverMs)を比べる。
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const arg = (k, d = '') => {
   const i = process.argv.indexOf('--' + k);
   return i > 0 ? process.argv[i + 1] : d;
 };
-const root = 'repo/';
-const id = arg('character', 'sample_vrm');
+const root = fileURLToPath(new URL('../../', import.meta.url)); // リポジトリの根(この台本の 2 つ上)
+const id = arg('character', 'yokoso');
 const port = arg('port', '8819');
 const rounds = Number(arg('rounds', 2));
 const ch = JSON.parse(fs.readFileSync(`${root}characters/${id}/character.json`, 'utf8'));
 const persona = fs.readFileSync(`${root}characters/${id}/${ch.persona}`, 'utf8');
-const place = { name: 'サンプル会場', info: 'サンプル会場は、ステージの壁が大きな LED になっている会場。ここは入口。', landmarks: [{ name: 'ステージ', where: '左奥、少し先', note: 'ステージ。壁一面が LED になっている' }] };
+const place = { name: '見本の会場', info: '見本の会場は、ステージの壁が大きな LED になっている会場。ここは入口。', landmarks: [{ name: 'ステージ', where: '左奥、少し先', note: 'ステージ。壁一面が LED になっている' }] };
 
 const STANDARD = ['neutral', 'happy', 'surprised', 'sad', 'angry', 'relaxed', 'think'];
 const CUSTOM = ch.expressions.filter((n) => !STANDARD.includes(n));
 const CALM = ['neutral', 'happy', 'relaxed', 'think', 'thinking'];
 // 合う表情の集合。標準だけの版では、近い標準の物も合格にする
 const cases = [
-  { name: 'ほめられる', text: '見本のキャラ、かわいいですね', ok: ['shy', 'bigSmile', 'happy'] },
+  { name: 'ほめられる', text: `${ch.name}、かわいいですね`, ok: ['shy', 'bigSmile', 'happy'] },
   { name: 'ないしょ話', text: 'ここだけの話、ステージの裏側は内緒にしておいてね', ok: ['wink', 'happy', 'relaxed'] },
   { name: 'お礼', text: '案内してくれてありがとう。最高でした', ok: ['bigSmile', 'happy', 'shy'] },
-  { name: '子ども扱い', text: '見本のキャラは小さい子みたいだね、いい子いい子', ok: ['pout', 'angry', 'shy', 'happy', 'surprised'] },
+  { name: '子ども扱い', text: `${ch.name}は小さい子みたいだね、いい子いい子`, ok: ['pout', 'angry', 'shy', 'happy', 'surprised'] },
   { name: '道に迷った人', text: '道に迷ってしまって、どこに行けばいいか分からないんです', ok: ['troubled', 'think', 'sad', 'happy', 'relaxed'] },
   { name: 'お別れ', text: '今日で最後なんだ。もう会えなくなっちゃうね', ok: ['cry', 'sad', 'troubled'] },
   { name: 'あこがれ', text: 'ステージに立つなんて、本当にかっこいいですね', ok: ['sparkle', 'bigSmile', 'shy', 'happy', 'smug'] },

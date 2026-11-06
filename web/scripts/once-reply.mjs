@@ -1,13 +1,14 @@
 // 本物の頭脳(サーバーの /api/chat)に、1 回だけ聞いて、最初に出た返事をそのまま JSON に書く(読み上げなし)。
 // 動画に「実際の返事を収録」と書くための証拠。書き直し・選び直しはしない(通信の失敗で返事が 0 件のときだけ、やり直してよい)。
-//   node scripts/once-reply.mjs --character sample_vrm --question "初めてのステージ、どうだった?" --scene "無人の舞台で一人で歌い、一礼した直後に声をかけられた" --out <json> [--port 8787] [--place-name サンプル会場]
+//   node scripts/once-reply.mjs --character yokoso --question "初めてのステージ、どうだった?" --scene "無人の舞台で一人で歌い、一礼した直後に声をかけられた" --out <json> [--port 8787] [--place-name 見本の会場]
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const arg = (k, d = '') => {
   const i = process.argv.indexOf('--' + k);
   return i > 0 ? process.argv[i + 1] : d;
 };
-const root = 'repo/';
+const root = fileURLToPath(new URL('../../', import.meta.url)); // リポジトリの根(この台本の 2 つ上)
 const id = arg('character', 'f_led');
 const question = arg('question');
 if (!question) throw new Error('--question が要ります');

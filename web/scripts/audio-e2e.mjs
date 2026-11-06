@@ -5,7 +5,6 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { makeSpeech, stereo } from './lib/stereoSim.mjs';
 
 const arg = (k, d) => {
@@ -42,7 +41,7 @@ function wav(l, r) {
   return buf;
 }
 
-const { chromium } = await import(pathToFileURL('repo/web/node_modules/playwright-core/index.mjs').href);
+const { chromium } = await import('playwright-core');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stereo-e2e-'));
 const x = makeSpeech({ fs: FS, length: LEN, seed: 4 });
 const rows = [];

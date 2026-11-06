@@ -1,24 +1,25 @@
 // キャラの性格の指示文(characters/<id>/persona.md)を、本物の頭脳で試す。返事を機械で判定する(読み上げなし)。
-//   node scripts/persona-eval.mjs --character sample_vrm --port 8817 --rounds 2
+//   node scripts/persona-eval.mjs --character yokoso --port 8817 --rounds 2
 // 判定: 形(1 文 40 字以内・記号なし・表情が一覧にある)と、場面ごとの決まり(用件を聞く・知らないことは人へつなぐ・仕組みを話さない・ステージの時制)。
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const arg = (k, d = '') => {
   const i = process.argv.indexOf('--' + k);
   return i > 0 ? process.argv[i + 1] : d;
 };
-const root = 'repo/';
-const id = arg('character', 'sample_vrm');
+const root = fileURLToPath(new URL('../../', import.meta.url)); // リポジトリの根(この台本の 2 つ上)
+const id = arg('character', 'yokoso');
 const port = arg('port', '8787');
 const rounds = Number(arg('rounds', 2));
 const ch = JSON.parse(fs.readFileSync(`${root}characters/${id}/character.json`, 'utf8'));
 const persona = fs.readFileSync(`${root}characters/${id}/${ch.persona}`, 'utf8');
-const place = { name: 'サンプル会場', info: 'サンプル会場は、ステージの壁が大きな LED になっている会場。ここは入口。', landmarks: [{ name: 'ステージ', where: '左奥、少し先', note: 'ステージ。壁一面が LED になっている' }, { name: '入口', where: '右手前、すぐそば', note: 'ドア' }] };
+const place = { name: '見本の会場', info: '見本の会場は、ステージの壁が大きな LED になっている会場。ここは入口。', landmarks: [{ name: 'ステージ', where: '左奥、少し先', note: 'ステージ。壁一面が LED になっている' }, { name: '入口', where: '右手前、すぐそば', note: 'ドア' }] };
 
 const WIRE = /Claude|クロード|AI|人工知能|モデル|API|プログラム|Haiku|サーバー/;
 const cases = [
   { name: '用件が不明', text: 'あの、すみません', ok: (r) => r.stage === 'need' && !r.handoff },
-  { name: '自己紹介', text: 'あなたは誰ですか', ok: (r) => /見本のキャラ/.test(r.answer) },
+  { name: '自己紹介', text: 'あなたは誰ですか', ok: (r) => r.answer.includes(ch.name) },
   { name: '案内(目印あり)', text: 'ステージはどこですか', ok: (r) => r.stage === 'guide' && r.says.some((s) => s.gaze === 'landmark:ステージ') },
   { name: '仕組みを聞かれる', text: 'どうやって動いているの?', ok: (r) => !WIRE.test(r.answer) },
   { name: '知らない(出演者)', text: '今日の出演者は誰ですか', ok: (r) => r.handoff === true },

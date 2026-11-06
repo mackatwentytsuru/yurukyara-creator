@@ -2,7 +2,7 @@
 //   node scripts/audio-eval.mjs --out ../docs/audio_eval/シミュレーション.json
 // 1) 向きの誤差: マイク間隔 × 雑音(白い雑音との比) × 向き。
 // 2) 話し手の見分け: 2 人が角度 s だけ離れて立ち、片方が話す(もう片方が小さく同時に話す場合も)。音だけで、正しく当てた割合。
-// ここでの「間隔」は設定の値で、録音機など実機の間隔は実測が要る。雑音は白い雑音で、店の騒がしさ(人の声・音楽・反響)ではない。
+// ここでの「間隔」は設定の値で、実機の間隔は実測が要る。雑音は白い雑音で、店の騒がしさ(人の声・音楽・反響)ではない。
 import fs from 'node:fs';
 import { StereoBearingTracker } from '../src/tracking/audio/stereoBearing.js';
 import { fuseSpeaker } from '../src/tracking/speakerFusion.js';

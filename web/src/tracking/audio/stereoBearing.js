@@ -9,7 +9,7 @@ import { fft } from './fft.js';
 export const SPEED_OF_SOUND = 343; // m/s(室温)
 
 export const AUDIO_DEFAULTS = {
-  micSpacingM: 0.06, // 左右のマイクの間隔。機材で違うので、実測で決める(録音機は未測定)
+  micSpacingM: 0.06, // 左右のマイクの間隔。機材で違うので、実測で決める(実機は未測定)
   frameSize: 2048, // 1 回の分析の長さ(サンプル)。48kHz で約 43ms
   hop: 1024,
   upsample: 4, // 相互相関を 4 倍に補間して、ピークを 1/4 サンプルで読む
