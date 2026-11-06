@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2D のキャラの見え方</title>
+<!-- 2D のキャラ(SVG の部品を板に描く)を、会話の画面と同じ部品(web/src/char2d)で 1 体だけ描く確かめの画面。
+     開き方: python creator/viewer/serve.py 8777 → http://127.0.0.1:8777/creator/d2/preview.html?parts=../../characters/norrie/2d/parts.json&live=1
+     record_preview.mjs は live を付けずに開き、window.__preview で 1 コマずつ進めて撮る(時間が決まるので、毎回同じ絵になる)。 -->
+<script type="importmap">
+{ "imports": { "three": "../../web/node_modules/three/build/three.module.js",
+               "three/addons/": "../../web/node_modules/three/examples/jsm/" } }
+</script>
+<style>
+  :root { --bg: #cdcdcd; --ink: #111; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font: 600 16px/1.4 "Yu Gothic UI", "Meiryo", sans-serif; }
+  canvas { display: block; }
+  #caption { position: fixed; left: 0; right: 0; bottom: 4%; text-align: center; font-size: clamp(18px, 5.2vw, 64px); letter-spacing: 0.04em; text-shadow: 0 0 6px #fff, 0 0 2px #fff; }
+  #status { position: fixed; left: 8px; top: 8px; font-size: 13px; opacity: 0.7; }
+</style>
+</head>
+<body>
+<div id="status">読み込み中…</div>
+<div id="caption"></div>
+<script type="module">
+import * as THREE from 'three';
+import { createSvg2DCharacter } from '../../web/src/char2d/index.js';
+
+const q = new URLSearchParams(location.search);
+const partsUrl = new URL(q.get('parts') ?? '../../characters/norrie/2d/parts.json', location.href);
+const bg = q.get('bg') ?? '#cdcdcd';
+document.documentElement.style.setProperty('--bg', bg);
+const status = document.getElementById('status');
+
+try {
+  const spec = await (await fetch(partsUrl)).json();
+  const svg = await (await fetch(new URL(spec.svg ?? 'body.svg', partsUrl))).text();
+  const character = await createSvg2DCharacter({ spec, svg, id: spec.id, name: spec.id });
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Number(q.get('dpr') ?? 1));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setClearColor(bg);
+  document.body.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.add(character.object3d);
+
+  // 全身が入るカメラ(正面)。fit = 画面の縦に入れる高さ(背の高さの倍率)
+  const h = character.heightM ?? 1;
+  const fov = 18;
+  const camera = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 50);
+  const fit = Number(q.get('fit') ?? 1.22);
+  const dist = (h * fit) / 2 / Math.tan(THREE.MathUtils.degToRad(fov / 2));
+  const lift = Number(q.get('lift') ?? 0.03);
+  camera.position.set(0, h * (0.5 - lift), dist);
+  camera.lookAt(0, h * (0.5 - lift), 0);
+  // 視線の先は見る人(カメラ)。?gaze=none なら、きょろきょろ(誰もいない時の動き)
+  if (q.get('gaze') !== 'none') character.lookAt([0, h * 0.9, dist]);
+
+  const caption = document.getElementById('caption');
+  const renderName = (() => {
+    const gl = renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+  })();
+  window.__preview = {
+    character,
+    renderer: renderName,
+    step(dt, n = 1) {
+      for (let i = 0; i < n; i++) character.update(dt);
+    },
+    render() {
+      renderer.render(scene, camera);
+    },
+    caption(text) {
+      caption.textContent = text ?? '';
+    },
+    blinkNow() {
+      character.blinkT = 0;
+      character.blinkTimer = 99;
+    },
+    noRandomBlink() {
+      character.blinkTimer = 9999;
+    },
+  };
+  status.textContent = q.get('quiet') === '1' ? '' : `${spec.id} / ${renderName}`;
+  if (q.get('live') === '1') {
+    let prev = performance.now();
+    renderer.setAnimationLoop((t) => {
+      character.update((t - prev) / 1000);
+      prev = t;
+      renderer.render(scene, camera);
+    });
+  } else {
+    character.update(1 / 30);
+    renderer.render(scene, camera);
+  }
+  window.__ready = true;
+} catch (err) {
+  status.textContent = `読み込めませんでした: ${err.message}`;
+  window.__error = err.message;
+}
+</script>
+</body>
+</html>

@@ -115,6 +115,14 @@ export function validateParts(spec, svg) {
     if (p.parent && p.parent !== 'root' && !spec.parts[p.parent]) problems.push(`部品 ${name} の親 ${p.parent} が無い`);
   }
   if (!spec.parts?.head) problems.push('head の部品が無い(顔の枠は head に付く)');
+  // 顔の上の動かない部品(鼻など)。<g id> と箱が要る。体の部品(parts)と同じ名前は使わない(二重に描かれる)
+  if (spec.faceLayers !== undefined && !Array.isArray(spec.faceLayers)) problems.push('faceLayers は [{ id, box }] の並び');
+  for (const [i, layer] of (Array.isArray(spec.faceLayers) ? spec.faceLayers : []).entries()) {
+    const name = layer?.id ?? `${i + 1} 番目`;
+    if (typeof layer?.id !== 'string' || !ids.has(layer.id)) problems.push(`顔の上の部品 ${name} の <g id> が SVG に無い`);
+    if (!isBox(layer?.box)) problems.push(`顔の上の部品 ${name} の box が正しくない`);
+    if (layer?.id && (spec.parts?.[layer.id] || String(layer.id).startsWith('face.'))) problems.push(`顔の上の部品 ${name} の名前が、体の部品か顔の枠と同じ`);
+  }
   for (const slot of ['eyes', 'mouth']) {
     if (!isBox(spec.face?.[slot]?.box)) problems.push(`顔の枠 ${slot} の box が無い`);
   }
