@@ -254,6 +254,13 @@ def finish_row(a, work, t0, t1, result, review=None):
     return 0 if row["ok"] else 1
 
 
+def tool_name(cmd):
+    """記録の actor に書く道具の名前。札の道具で包んだ命令(… -- <命令>)は、包まれた側の名前にする。"""
+    if "--" in cmd:
+        cmd = cmd[len(cmd) - cmd[::-1].index("--"):] or cmd
+    return os.path.basename(cmd[0] if len(cmd) == 1 else cmd[1])
+
+
 def cmd_tool(a):
     mark, why = gate_begin(a)
     if why:
@@ -262,7 +269,7 @@ def cmd_tool(a):
     p = subprocess.run(a.cmd, cwd=a.cwd, env=plan_env(gated_tag(a, mark)))
     t1 = time.time()
     row = {"run": os.path.basename(os.path.abspath(a.run)), "char": a.char, "stage": a.stage, "name": a.name,
-           "start": iso(t0), "end": iso(t1), "sec": round(t1 - t0, 1), "actor": "tool:" + os.path.basename(a.cmd[0] if len(a.cmd) == 1 else a.cmd[1]),
+           "start": iso(t0), "end": iso(t1), "sec": round(t1 - t0, 1), "actor": "tool:" + tool_name(a.cmd),
            "cost_usd": 0, "tokens": None, "ok": p.returncode == 0, "commit": commit(), "note": " ".join(a.cmd)[-200:], "review": mark}
     if a.upto != a.stage:
         row["upto"] = a.upto
