@@ -16,6 +16,11 @@
 - --split: 1 回の claude -p で数段まとめて頼んだとき、Bash の命令の形で段に分ける({"段の番号": "正規表現", …})。
   分けた段の時間は「その段の命令が最初に出てから、次の段の命令が出るまで」、量は、その間の応答の usage の合計。
 - claude を名前で止めない。時間切れは subprocess の timeout(自分で起こした子だけが止まる)。
+- 人の確認(契約 K3): キャラに確認の状態(creator/work/<id>/review/state.json)があれば、始める前に
+  review_state.py can-start で前の段の OK(ok か auto)を確かめ、無ければ流さずに終わりの番号 2 で止める(run.jsonl に書かない)。
+  --upto M で段 N〜M をまとめて頼むときは、途中に門(人が見る段 0・2・3・4・7)があれば止める。済んだら段を done にする
+  (門の無い段は auto の記録ができる)。門のある段が済んだら --publish-right(と --publish-png・--publish-views・--publish-sheet)でスマホに出す。
+  --review on は状態が無ければ止める、off は見ない(記録の review に off と残す)。既定 auto は状態があるときだけ見る。
 """
 import argparse
 import glob
@@ -31,6 +36,8 @@ from datetime import datetime, timezone, timedelta
 JST = timezone(timedelta(hours=9))
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DROP = ("ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY")
+sys.path.insert(0, os.path.join(REPO, "creator", "pipeline"))
+import review_gate as RG  # noqa: E402
 
 
 def iso(t):
@@ -44,8 +51,11 @@ def commit():
         return None
 
 
-def plan_env():
-    return {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_") and k not in DROP}
+def plan_env(gated=None):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_") and k not in DROP}
+    if gated:       # 確認はここで見た。中で呼ぶ段の道具(t07_talk など)は二重に見ない
+        env[RG.ENV_GATED] = gated
+    return env
 
 
 def add_line(run_dir, row):
@@ -121,7 +131,48 @@ def split_stages(log_path, pattern_map, first_stage=None):
     return spans
 
 
+def gate_begin(a):
+    """K3 の確かめ。戻り値 (review の印 on/off/none, 止める理由 or None)。"""
+    try:
+        seen = RG.begin(a.char, a.stage, a.upto, a.review, note=f"段 {a.stage}({a.name})を作っています")
+    except RG.GateClosed as e:
+        return None, str(e)
+    return ("on" if seen else ("off" if a.review == "off" else "none")), None
+
+
+def gate_finish(a, mark, ok):
+    """K3 の後始末。済んだ段を done に、門の段ならスマホに出す。"""
+    if mark != "on":
+        return
+    try:
+        gate = RG.finish(a.char, a.stage, a.upto, ok)
+    except RG.GateClosed as e:
+        print("確認の状態を進められませんでした:", e, file=sys.stderr)
+        return
+    if not ok or not gate:
+        return
+    if a.publish_right:
+        rc, out = RG.publish(a.char, gate, a.publish_right, a.publish_png, None, a.publish_views, a.publish_sheet)
+        print(out)
+        if rc:
+            print(f"{gate} をスマホに出せませんでした", file=sys.stderr)
+    else:
+        print(f"段 {a.upto} は門 {gate}(人が見る段)です。python creator/review/review_state.py publish {a.char} {gate} --right <絵> でスマホに出してください")
+
+
+def gated_tag(a, mark):
+    return f"{a.char}:{a.stage}-{a.upto}" if mark == "on" else None
+
+
+def stopped(a, why):
+    print(f"止めた: 段 {a.stage}({a.name})は始めません。{why}", file=sys.stderr)
+    return RG.EXIT_CLOSED
+
+
 def cmd_claude(a):
+    mark, why = gate_begin(a)
+    if why:
+        return stopped(a, why)
     work = os.path.join(a.run, f"{a.stage}_{a.name}")
     os.makedirs(work, exist_ok=True)
     prompt = open(a.prompt, encoding="utf-8").read()
@@ -137,7 +188,7 @@ def cmd_claude(a):
     t0 = time.time()
     result = {}
     with open(log, "w", encoding="utf-8") as lf:
-        p = subprocess.Popen(cmd, cwd=a.cwd, env=plan_env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        p = subprocess.Popen(cmd, cwd=a.cwd, env=plan_env(gated_tag(a, mark)), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=open(os.path.join(work, "stderr.txt"), "w", encoding="utf-8"),
                              text=True, encoding="utf-8", errors="replace")
         p.stdin.write(prompt)
@@ -162,7 +213,9 @@ def cmd_claude(a):
     t1 = time.time()
     with open(os.path.join(work, "result.json"), "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)
-    return finish_row(a, work, t0, t1, result)
+    rc = finish_row(a, work, t0, t1, result, mark)
+    gate_finish(a, mark, rc == 0)
+    return rc
 
 
 def cmd_redo(a):
@@ -173,7 +226,7 @@ def cmd_redo(a):
     return finish_row(a, work, ts[0] - 1, ts[-1], result)
 
 
-def finish_row(a, work, t0, t1, result):
+def finish_row(a, work, t0, t1, result, review=None):
     log = os.path.join(work, "log.jsonl")
     jc, jn = judge_costs(a.cwd if not a.judge_dir else a.judge_dir, t0)
     main_cost = result.get("total_cost_usd")
@@ -184,6 +237,10 @@ def finish_row(a, work, t0, t1, result):
            "tokens": usage_tokens(result.get("usage")), "turns": result.get("num_turns"),
            "ok": result.get("subtype") == "success" and not result.get("is_error", False),
            "commit": commit(), "note": "定額のプランで流した。cost_usd は定価に直した目安"}
+    if review:
+        row["review"] = review
+    if getattr(a, "upto", None) not in (None, a.stage):
+        row["upto"] = a.upto
     if a.split:
         sm = json.load(open(a.split, encoding="utf-8"))
         first = sm.pop("first", None)
@@ -197,13 +254,27 @@ def finish_row(a, work, t0, t1, result):
     return 0 if row["ok"] else 1
 
 
+def tool_name(cmd):
+    """記録の actor に書く道具の名前。札の道具で包んだ命令(… -- <命令>)は、包まれた側の名前にする。"""
+    if "--" in cmd:
+        cmd = cmd[len(cmd) - cmd[::-1].index("--"):] or cmd
+    return os.path.basename(cmd[0] if len(cmd) == 1 else cmd[1])
+
+
 def cmd_tool(a):
+    mark, why = gate_begin(a)
+    if why:
+        return stopped(a, why)
     t0 = time.time()
-    p = subprocess.run(a.cmd, cwd=a.cwd, env=plan_env())
+    p = subprocess.run(a.cmd, cwd=a.cwd, env=plan_env(gated_tag(a, mark)))
     t1 = time.time()
-    add_line(a.run, {"run": os.path.basename(os.path.abspath(a.run)), "char": a.char, "stage": a.stage, "name": a.name,
-                     "start": iso(t0), "end": iso(t1), "sec": round(t1 - t0, 1), "actor": "tool:" + os.path.basename(a.cmd[0] if len(a.cmd) == 1 else a.cmd[1]),
-                     "cost_usd": 0, "tokens": None, "ok": p.returncode == 0, "commit": commit(), "note": " ".join(a.cmd)[-200:]})
+    row = {"run": os.path.basename(os.path.abspath(a.run)), "char": a.char, "stage": a.stage, "name": a.name,
+           "start": iso(t0), "end": iso(t1), "sec": round(t1 - t0, 1), "actor": "tool:" + tool_name(a.cmd),
+           "cost_usd": 0, "tokens": None, "ok": p.returncode == 0, "commit": commit(), "note": " ".join(a.cmd)[-200:], "review": mark}
+    if a.upto != a.stage:
+        row["upto"] = a.upto
+    add_line(a.run, row)
+    gate_finish(a, mark, p.returncode == 0)
     return p.returncode
 
 
@@ -239,10 +310,20 @@ def main():
     c.add_argument("--add-dir", action="append")
     c.add_argument("--timeout", type=int, default=3000)
     c.add_argument("--light", action="store_true", help="--setting-sources project で流す(使う人の設定を読まない)")
+    for x in (c, t):
+        x.add_argument("--upto", type=int, help="1 回で段 --stage〜--upto をまとめて作る(途中に門があれば止める)")
+        x.add_argument("--review", choices=["auto", "on", "off"], default="auto",
+                       help="人の確認(K3)を見るか。auto = 確認の状態があるときだけ見る")
+        x.add_argument("--publish-right", help="門の段が済んだらスマホに出す絵(C0 は描いた SVG、C2 は正面の絵)")
+        x.add_argument("--publish-png")
+        x.add_argument("--publish-views")
+        x.add_argument("--publish-sheet")
     t.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
     if a.cmd_name == "tool" and a.cmd and a.cmd[0] == "--":
         a.cmd = a.cmd[1:]
+    if a.cmd_name in ("claude", "tool") and a.upto is None:
+        a.upto = a.stage
     sys.exit({"claude": cmd_claude, "redo": cmd_redo, "tool": cmd_tool, "sum": cmd_sum}[a.cmd_name](a) or 0)
 
 

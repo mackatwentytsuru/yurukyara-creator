@@ -1,5 +1,7 @@
 {
- "characters/yokoso/character.json": "7e4de0a86065d7929aeec3f2e3d0084ba90934b8ebee0ef52cd3c36686a2e956",
+ "characters/yokoso/2d/body.svg": "edc2606103e080b2f1274a5320147e120c0e0d0a76ba63e73fb1f6e3534c5a21",
+ "characters/yokoso/2d/parts.json": "5b32f38c50dfd33871a05d5158bb64b45bdb18f45a081a3d256e5d7b14913dd3",
+ "characters/yokoso/character.json": "5f49d642be86f1d71e84d7dfdb719b5e74884d385303940131768a9bdd97e44e",
  "characters/yokoso/model.glb": "8d6250e9e2bcd8f9c79437f4a11f915e3371f0491bbb45774ce6f768c5921bf2",
  "characters/yokoso/motions/bow.glb": "c08e969f445d93bfa802a7ed90cebb5c000f876ece791cafc3afdaa71240528f",
  "characters/yokoso/motions/idle.glb": "02e835922ed6e4aeaf134297f5f149829bebf53aae57ef20b8be3ee8fbbf1d50",
