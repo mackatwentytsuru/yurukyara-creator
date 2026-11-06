@@ -84,7 +84,7 @@ test('サーバーの記録・画面の出力・記憶・返事のどこにも�
     assert.equal(await call('/api/chat', { text: `声の鍵は ${FAKE_VOICE_KEY} です。${FAKE_VOICE_KEY}が好き`, history: [{ role: 'user', content: FAKE_CLAUDE_KEY }], character: { name: 'テスト', persona: HEX } }), 200);
     assert.equal(await call('/api/chat', { text: `ぼくは${HEX}です` }), 200);
     assert.equal(await call('/api/memory/reflect', { text: `${FAKE_VOICE_KEY}が好き。わたしの名前は${HEX}` }), 200);
-    assert.equal(await call('/api/tts', { text: FAKE_VOICE_KEY }), 503, '声の鍵がサーバーに無いので断る');
+    assert.equal(await call('/api/tts', { text: FAKE_VOICE_KEY }), 204, '声の鍵がサーバーに無いので、中身なし(204)で返す(console に赤い行を出さない。CRITux 25)');
     assert.equal(await call('/api/metrics', { totalMs: 5, note: FAKE_VOICE_KEY, brain: FAKE_VOICE_KEY }), 200);
     assert.equal(await call('/api/chat', `{"text":"${FAKE_VOICE_KEY}"`), 400, '壊れた本文');
     const list = await (await fetch(`${base}/api/memory`, { headers: { 'x-memory-key': memKey } })).text();

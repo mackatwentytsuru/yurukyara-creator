@@ -59,7 +59,9 @@ export async function streamSpeech(text, res, signal) {
     return;
   }
   if (!config.elevenKey) {
-    res.writeHead(503, { 'content-type': 'application/json' }).end('{"error":"読み上げの鍵がありません"}');
+    // 声の鍵が無いのは失敗ではない(字幕と「ピッ」で話す)。503 だとブラウザの console に毎回赤い行が出たので(CRITux 25)、
+    // 204(中身なし)と理由の印で返す。画面(speaker.js)はこれを見て、この画面の間は聞きに来ない
+    res.writeHead(204, { 'x-tts': 'off', 'x-tts-reason': 'no-key', 'cache-control': 'no-store' }).end();
     return;
   }
   if (!reserveChars(clean.length)) {
