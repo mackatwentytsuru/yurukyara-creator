@@ -10,6 +10,18 @@ const el = (tag, props = {}, ...children) => {
 };
 
 const KIND_LABEL = { name: '名前', like: '好きなもの', topic: '前の話', note: 'メモ' };
+const HAS_HEAD = /^[^\s:：]{1,10}(?::\s|：)/u; // 「名前: タロウ」「名前：タロウ」のように、見出しがもう付いている文(「12:30」は見出しではない)
+
+/**
+ * 一覧の 1 行に出す文。覚えた文がもう見出し(「名前: 」「好きなもの: 」「前に話したこと: 」)で始まっていれば、そのまま出す。
+ * 見出しの無い文だけ、種類の名前を前に付ける(「名前 名前: タロウ」と 2 回出さない。覚える文の形は変えない)。
+ * @param {{kind?:string, text?:string}} it
+ */
+export function itemLine(it) {
+  const text = String(it?.text ?? '').trim();
+  const label = KIND_LABEL[it?.kind];
+  return !text || !label || HAS_HEAD.test(text) ? text : `${label}: ${text}`;
+}
 
 /**
  * @param {HTMLElement} parent
@@ -48,7 +60,7 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
       ...(data.items ?? []).map((it) => {
         const x = el('button', { type: 'button', className: 'mem-item-forget', textContent: '消す', ariaLabel: `${it.text} を消す` });
         x.addEventListener('click', () => run(async () => (await forgetItem(it.id), refresh())));
-        return el('li', { className: 'mem-item' }, el('span', { textContent: `${KIND_LABEL[it.kind] ?? ''} ${it.text}`.trim() }), x);
+        return el('li', { className: 'mem-item' }, el('span', { textContent: itemLine(it) }), x);
       }),
     );
     if (!data.items?.length) list.append(el('li', { className: 'mem-empty', textContent: 'まだ何も覚えていません' }));
