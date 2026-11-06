@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TIERS, detectTier, applyTier } from '../src/stage/tiers.js';
+import { TIERS, detectTier, applyTier, deviceClass } from '../src/stage/tiers.js';
 
 const PC = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
@@ -48,4 +48,14 @@ test('段を当てると、画素の倍率を抑え、毛の層を返す', () =>
   assert.deepEqual(applyTier(stage, { ...TIERS.mid }, 3), { furLayers: 6 });
   assert.deepEqual(calls, [['pr', 1.5], ['resize']]);
   assert.deepEqual(applyTier(stage, { ...TIERS.high }, 1), {});
+});
+
+test('K6 の端末の種類: PC は desktop、スマホと iPad は mobile、Quest は xr', () => {
+  assert.equal(deviceClass(PC), 'desktop');
+  assert.equal(deviceClass(IPHONE), 'mobile');
+  assert.equal(deviceClass(ANDROID), 'mobile');
+  assert.equal(deviceClass(IPAD, 5), 'mobile');
+  assert.equal(deviceClass(IPAD, 0), 'desktop'); // 指で触れない Mac
+  assert.equal(deviceClass(QUEST), 'xr');
+  assert.equal(deviceClass(), 'desktop');
 });

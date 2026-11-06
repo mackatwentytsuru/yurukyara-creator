@@ -33,6 +33,13 @@ export function detectTier(env = {}) {
   return pick('high', 'PC');
 }
 
+/** 端末の種類(契約 K6 の device: desktop・mobile・xr)。段とは別に、種類だけを返す */
+export function deviceClass(ua = '', maxTouchPoints = 0) {
+  if (HEADSET_RE.test(ua)) return 'xr';
+  if (MOBILE_RE.test(ua) || (/Macintosh/.test(ua) && maxTouchPoints > 1)) return 'mobile';
+  return 'desktop';
+}
+
 /** ブラウザの中で、いまの端末の段を決める。renderer は three の WebGLRenderer(描画役の名前を読む) */
 export function detectTierInBrowser(renderer, params) {
   let rendererName = null;

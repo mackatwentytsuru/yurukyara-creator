@@ -4,20 +4,27 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#14121f" />
-  <title>話す受付 — 会話</title>
+  <title>ゆるキャラと話す</title>
   <link rel="stylesheet" href="/src/ui/style.css" />
 </head>
 <body>
-  <canvas id="stage" aria-label="受付のキャラクター"></canvas>
+  <canvas id="stage" aria-label="話すキャラクター"></canvas>
 
   <header class="top">
     <div class="chips" id="chips" aria-live="polite"></div>
-    <div class="modes" id="modes"></div>
+    <div class="top-row">
+      <div class="modes" id="modes"></div>
+      <details class="drawer" id="memoryDrawer" hidden>
+        <summary>覚えていること</summary>
+        <div class="drawer-body" id="memorySlot"></div>
+      </details>
+    </div>
   </header>
 
   <p id="align" class="align" role="status" hidden></p>
 
   <div class="subs">
+    <p id="brainNotice" class="brain-notice" role="status" hidden></p>
     <p id="shopBadge" class="shop-badge" role="status" hidden></p>
     <section id="caption" class="caption" aria-live="polite" hidden></section>
   </div>
@@ -29,7 +36,7 @@
     <dl class="thought-body" id="thoughtBody">
       <div class="row"><dt>見えた様子</dt><dd id="tSeen">—</dd></div>
       <div class="row"><dt>用件</dt><dd id="tIntent">—</dd></div>
-      <div class="row"><dt>店のデータ</dt><dd id="tShop">—</dd></div>
+      <div class="row" id="tShopRow" hidden><dt>店のデータ</dt><dd id="tShop">—</dd></div>
       <div class="row"><dt>返事</dt><dd id="tReply">—</dd></div>
       <div class="row"><dt>表情と動き</dt><dd id="tAct">—</dd></div>
     </dl>
@@ -54,10 +61,14 @@
 
   <div id="gate" class="gate">
     <div class="gate-card">
-      <h1>話す受付</h1>
+      <h1>ゆるキャラと話す</h1>
       <p class="lead">キャラが、あなたを目で追って、声で答えます。</p>
       <button id="startCam" class="primary" type="button">はじめる(カメラとマイクを使います)</button>
       <button id="startSim" class="ghost" type="button">カメラなしで試す(マウスで人を動かす)</button>
+      <label class="pass" id="passField" hidden>
+        <span>合言葉(あれば。無くても仮の頭脳で話せます)</span>
+        <input id="passInput" type="password" autocomplete="off" maxlength="200" />
+      </label>
       <p class="fine">カメラの映像は端末の外に出ません。位置を調べるだけに使い、保存もしません。</p>
       <p class="status" id="gateStatus" aria-live="polite"></p>
     </div>

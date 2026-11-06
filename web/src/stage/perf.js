@@ -5,8 +5,35 @@
 // URL の値: perfsec=測る秒数(既定 6)、perfwarm=測る前に待つ秒数(既定 2)。
 // 項目の決まりは K6(docs/metrics.md の先頭)。版を変えるときは schema を上げる。
 import { isSoftwareRenderer, readRendererInPage } from './gpuGuard.js';
+import { deviceClass } from './tiers.js';
 
 export const PERF_SCHEMA = 'perf/1';
+
+// 組み立てた時のコミット(VITE_COMMIT=<短い sha> を付けて vite build した時だけ入る。無ければ null。測りの道具が後で足す)
+const BUILD_COMMIT = import.meta.env?.VITE_COMMIT || null;
+
+/**
+ * 契約 K6 の 1 行(平らな欄)。コンソールには「PERF 」に続けて、この JSON を 1 行で出す。
+ * renderer が SwiftShader(CPU)の行は、測った値として使わない(K6)。
+ */
+export function k6Record(json, { commit = null, device = 'desktop' } = {}) {
+  return {
+    commit,
+    device,
+    renderer: json.renderer?.name ?? null,
+    id: json.character ?? null,
+    look: json.look ?? null,
+    tier: json.tier?.name ?? null,
+    seconds: json.timing?.sample_s ?? null,
+    fps_median: json.frames?.fps_median ?? null,
+    frame_ms_p50: json.frames?.frame_ms_median ?? null,
+    frame_ms_p95: json.frames?.frame_ms_p95 ?? null,
+    draw_calls: json.gl?.calls ?? null,
+    triangles: json.gl?.triangles ?? null,
+    load_ms: json.timing?.ready_ms ?? null,
+    glb_bytes: json.bytes?.model?.transfer ?? 0,
+  };
+}
 
 /** 並べた数の、p の位置の値(0〜1)。空なら null */
 export function quantile(sorted, p) {
@@ -122,8 +149,9 @@ export function startPerf({ stage, character, params, readyAt, tier = null }) {
     const json = {
       schema: PERF_SCHEMA,
       measured_at: new Date().toISOString(),
-      character: params.get('character') ?? params.get('char') ?? '_test',
+      character: params.get('character') ?? params.get('char') ?? character.id ?? null,
       kind: character.kind ?? null,
+      look: character.look ?? null,
       tier: tier ? { name: tier.name, reason: tier.reason, pixel_ratio_max: tier.pixelRatioMax, fur_layers: tier.furLayers } : null,
       url: location.pathname + location.search,
       ua: navigator.userAgent,
@@ -147,9 +175,11 @@ export function startPerf({ stage, character, params, readyAt, tier = null }) {
       bytes: summarizeResources(performance.getEntriesByType('resource')),
       js_heap_mb: performance.memory ? +(performance.memory.usedJSHeapSize / 1048576).toFixed(1) : null,
     };
+    json.k6 = k6Record(json, { commit: BUILD_COMMIT, device: deviceClass(navigator.userAgent, navigator.maxTouchPoints) });
     window.__perf = json;
     window.__perfDone = true;
     console.info(`[perf] ${JSON.stringify(json)}`);
+    console.info(`PERF ${JSON.stringify(json.k6)}`);
     showBox(json);
   }
 }

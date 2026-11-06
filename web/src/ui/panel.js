@@ -1,5 +1,40 @@
-// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示。
+// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ・合言葉。
 const $ = (id) => document.getElementById(id);
+
+/* ---------- 合言葉(契約 K5) ---------- */
+// 公開の URL で本物の頭脳を使うための合言葉。画面の入力欄で受け、URL には入れない。
+// このタブの中だけに持つ(sessionStorage。使えない時は、開いている間だけ)。会話の見出し x-demo-pass で送る。
+const PASS_STORE = 'yc.demoPass';
+const PASS_MAX = 200;
+let passMemo = '';
+
+export function getDemoPass() {
+  try {
+    return sessionStorage.getItem(PASS_STORE) ?? passMemo;
+  } catch {
+    return passMemo;
+  }
+}
+
+export function setDemoPass(value) {
+  passMemo = String(value ?? '').trim().slice(0, PASS_MAX);
+  try {
+    if (passMemo) sessionStorage.setItem(PASS_STORE, passMemo);
+    else sessionStorage.removeItem(PASS_STORE);
+  } catch {
+    // 保存が使えない窓: 開いている間だけ覚える
+  }
+  return passMemo;
+}
+
+/** 会話の通信に付ける見出し(合言葉が無ければ空) */
+export function demoPassHeaders() {
+  const p = getDemoPass();
+  return p ? { 'x-demo-pass': p } : {};
+}
+
+/** 仮の頭脳の知らせの決まりの文(理由が分からない時) */
+export const FALLBACK_BRAIN_NOTICE = '仮の頭脳です(本物の頭脳につながっていません)';
 
 const STAGE_LABEL = {
   greet: '声かけ',
@@ -65,6 +100,8 @@ export function createUi() {
   /** Claude が見た店のデータ(どの情報を、いつ更新された物として使ったか)を、考えの窓と字幕の上の札に出す */
   const showShop = (ev) => {
     if (!ev.shopLabel) return; // 店のデータを渡していない回
+    const row = $('tShopRow');
+    if (row) row.hidden = false; // 店のデータの行は、使った時だけ出す(ゆるキャラの会話では出ない)
     const used = ev.sources ?? [];
     if (!used.length) {
       els.shop.textContent = ev.handoff ? `使わず、スタッフへ(${ev.shopLabel})` : `使っていない(${ev.shopLabel})`;
@@ -167,6 +204,13 @@ export function createUi() {
     privacy(text, off = false) {
       $('privacyText').textContent = text;
       $('privacy').classList.toggle('off', off);
+    },
+    /** 仮の頭脳で話している時の知らせ(K5)。null で隠す。文字は textContent だけで入れる */
+    brainNotice(text) {
+      const el = $('brainNotice');
+      if (!el) return;
+      el.hidden = !text;
+      el.textContent = text ?? '';
     },
   };
 }
