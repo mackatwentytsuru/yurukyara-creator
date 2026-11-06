@@ -7,7 +7,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
 import { createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memory/store.mjs';
-import { createMemoryRoutes, isForgetRequest } from './memory/routes.mjs';
+import { createMemoryRoutes, forgetReplyEvents, isForgetRequest } from './memory/routes.mjs';
 import { extractFacts } from './memory/reflect.mjs';
 import { streamSpeech, ttsStatus } from './tts.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
@@ -16,7 +16,7 @@ import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
 
 const DIST = join(WEB_ROOT, 'dist');
-const LOG_DIR = join(WEB_ROOT, 'logs');
+const LOG_DIR = config.logDir;
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -136,10 +136,7 @@ async function handleChat(req, res) {
   // 記憶: 合鍵(ヘッダー)があれば、覚えていることを読み、この回の言葉から覚える事を足す
   const memoryKey = typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
   if (memoryKey && isForgetRequest(body.text)) {
-    const forgotten = memory.forgetAll(memoryKey);
-    send({ type: 'memory', forgotten });
-    send({ type: 'thought', seen: '', intent: '記憶を消す', stage: 'chat', handoff: false });
-    send({ type: 'say', text: forgotten ? 'わかった、覚えていたことは全部消したよ。' : 'まだ何も覚えていなかったよ。', expression: 'happy', motion: 'nod', gaze: 'person' });
+    for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey))) send(ev);
     send({ type: 'done', serverMs: Date.now() - t0 });
     return res.end();
   }

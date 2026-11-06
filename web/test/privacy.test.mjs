@@ -59,9 +59,14 @@ test('通信先は、自分のサーバー(/api/…)と、キャラ・場所の�
 const VARIABLE_FETCH = {
   'character/index.js': ['url'], // character.json(?character= で渡された物)
   'conversation/speaker.js': ['f.url'], // /api/fillers が返した、自分のサーバーの声のファイル
+  'conversation/elevenDirect.js': ['url'], // 使う人の声の鍵(BYOK)での読み上げ。宛先は下の EXTERNAL_OK の 1 つだけ(下の試験が見る)
   'main.js': ['character.personaUrl'], // キャラの persona.md
   'stage/loadPlace.js': ['url'], // place.js が渡す、自分のサーバーの place.json
 };
+
+// 画面のコードで、外へ直接つないでよいのは 1 か所だけ: 使う人が自分で入れた声の鍵での読み上げ(鍵を私たちのサーバーに送らないため)。
+// 送るのは読み上げる 1 文と、声とモデルの名前だけ。カメラ・追従・記憶の部品は読み込まない。
+const EXTERNAL_OK = { 'conversation/elevenDirect.js': 'https://api.elevenlabs.io/v1/text-to-speech/' };
 
 test('fetch の宛先は、文字で書いた許可済みの物か、確かめ済みの変数だけ(変数の宛先に画像を忍ばせられない)', () => {
   for (const f of files) {
@@ -74,9 +79,29 @@ test('fetch の宛先は、文字で書いた許可済みの物か、確かめ�
   }
 });
 
-test('外のサーバーの住所(http:// https:// ws://)を、画面のコードに書かない(import() も含めて)', () => {
+test('外のサーバーの住所(http:// https:// ws://)を、画面のコードに書かない(import() も含めて)。例外は声の鍵の読み上げの 1 か所だけ', () => {
   for (const f of files) {
-    assert.ok(!/\b(?:https?|wss?):\/\//.test(code(f)), `${relative(SRC, f)} に外の住所があります`);
+    const rel = relative(SRC, f).split('\\').join('/');
+    const found = [...code(f).matchAll(/\b(?:https?|wss?):\/\/[^\s'"`]*/g)].map((m) => m[0]);
+    const ok = EXTERNAL_OK[rel];
+    for (const url of found) assert.equal(url, ok, `${rel} に外の住所があります: ${url}`);
+  }
+});
+
+test('声の鍵(BYOK)の読み上げ: 送るのは読み上げる文・モデル・言葉だけ。ほかの部品を読み込まず、鍵を扱うのは決まったファイルだけ', () => {
+  const direct = code(join(SRC, 'conversation', 'elevenDirect.js'));
+  assert.ok(!/\bimport\b/.test(direct), 'elevenDirect.js は、ほかの部品を読み込まない');
+  const body = direct.match(/body: JSON\.stringify\(\{([^}]*)\}\)/);
+  assert.ok(body, '送る本文が 1 か所に書かれている');
+  const keys = [...body[1].matchAll(/(\w+):/g)].map((m) => m[1]).sort();
+  assert.deepEqual(keys, ['language_code', 'model_id', 'text']);
+  assert.match(direct, /credentials: 'omit'/, 'クッキーを送らない');
+  // 声の鍵を読む(voiceKey.js を読み込む)のは、読み上げと鍵の欄だけ。会話・記憶の通信は鍵を知らない
+  const users = files.filter((p) => /from '\.\/voiceKey\.js'|from '\.\.\/conversation\/voiceKey\.js'/.test(read(p))).map((p) => relative(SRC, p).split('\\').join('/')).sort();
+  assert.deepEqual(users, ['conversation/speaker.js', 'conversation/voiceKeyForm.js']);
+  for (const f of files) {
+    const rel = relative(SRC, f).split('\\').join('/');
+    if (rel !== 'conversation/elevenDirect.js') assert.ok(!code(f).includes('xi-api-key'), `${rel} が声の鍵の見出しを書いています`);
   }
 });
 

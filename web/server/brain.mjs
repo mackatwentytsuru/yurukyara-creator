@@ -4,10 +4,12 @@
 import { config } from './env.mjs';
 import { buildSystemBlocks, buildUserTurn, MOTIONS } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
-import { classifyInput, fixedReply, guardOutput, mentionsChild, turnGuard, SAFETY_VERSION } from './safety.mjs';
+import { classifyInput, distressDetail, fixedReply, guardOutput, mentionsChild, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { summarize } from './memory/reflect.mjs';
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
+// 「人間なの?」「AI なの?」など、相手が何者かを聞く言葉
+const ASKS_IF_HUMAN = /(人間なの|人間なん|人間ですか|にんげんなの|人なの\?|本物の人|AI\s*なの|AI\s*ですか|ロボットなの|中の人)/i;
 
 /** 1 行の JSON を直す。コードブロックや前後の文字が付いていても、できるだけ拾う */
 export function parseLine(line) {
@@ -194,6 +196,13 @@ export function* mockReply({ text, trigger, landmarks = [], seen, memory = null,
     yield { type: 'say', text: topic ? `${topic}の話の続き、しようか。` : 'どんなお話をしようか。', expression: 'happy', motion: 'tilt', gaze: 'person' };
     return;
   }
+  // 人間か AI かを聞かれたら、AI のキャラクターだと正直に答える(安全の決まり 5。仮の頭脳でも守る)
+  if (ASKS_IF_HUMAN.test(text)) {
+    yield { type: 'thought', seen: seen || '', intent: '人間かどうか', stage: 'chat', handoff: false };
+    yield { type: 'say', text: 'AI のキャラクターだよ。人間じゃないんだ。', expression: 'happy', motion: 'nod', gaze: 'person' };
+    yield { type: 'say', text: 'でも、お話はちゃんと聞くよ。', expression: 'happy', motion: 'tilt', gaze: 'person' };
+    return;
+  }
   const hit = landmarks.find((l) => text.includes(l.name));
   if (hit) {
     yield { type: 'thought', seen: seen || '', intent: `${hit.name}への案内`, stage: 'guide', handoff: false };
@@ -227,14 +236,21 @@ export function* mockReply({ text, trigger, landmarks = [], seen, memory = null,
   yield { type: 'say', text: 'もう少し聞かせてくれる?', expression: 'happy', motion: 'tilt', gaze: 'person' };
 }
 
-/** 会話 1 ターンを実行する。onEvent には thought / say が順に渡る。memory は { text, items }(覚えていること)、learned はこの回に覚えた事 */
-export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, memory = null, learned = [], forceMock = false }) {
+export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で流れて見えるように)。まとめて返す公開の関数は 0 にする
+
+/**
+ * 会話 1 ターンを実行する。onEvent には thought / say が順に渡る。memory は { text, items }(覚えていること)、learned はこの回に覚えた事。
+ * 仮の頭脳を強制するときは brain: 'mock'(forceMock: true と同じ)。鍵があっても本物を呼ばず、安全の層はいつも通す。
+ * paceMs は仮の頭脳の 1 文ごとの間(既定 120ms)。
+ */
+export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, memory = null, learned = [], forceMock = false, brain: want = 'auto', paceMs = MOCK_PACE_MS }) {
   const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
   const expressions = body.expressions?.length ? body.expressions : ['neutral', 'happy', 'surprised', 'sad', 'think'];
   // そのキャラが実際に使える動き(rig は、動きのファイルがある物だけ)
   const motions = Array.isArray(body.motions) && body.motions.length ? body.motions.filter((m) => typeof m === 'string').slice(0, 24) : MOTIONS;
   const limitCustom = oneCustomPerReply(expressions); // 特別な表情は、1 回の返事で 1 つまで
-  const brain = config.anthropicKey && !forceMock ? 'haiku' : 'mock'; // 上限に当たった回は、仮の頭脳で動き続ける
+  const mockOnly = forceMock || want === 'mock';
+  const brain = config.anthropicKey && !mockOnly ? 'haiku' : 'mock'; // 上限に当たった回・合言葉が無い回は、仮の頭脳で動き続ける
   let handoffFlagged = false;
   const emit = (obj) => {
     // 引き継ぎの印: 1 行目(用件つき)の物は「考え」として届く。2 行目以降の say に付いた handoff は届かないので、ここで別に知らせる
@@ -262,7 +278,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   const fixed = kind === 'emergency' || kind === 'distress' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
   if (fixed) {
     onEvent({ type: 'meta', brain, safety: kind, safetyVersion: SAFETY_VERSION });
-    for (const obj of fixedReply(kind, { child: mentionsChild(text) || mentionsChild(character.persona) })) emit(obj);
+    for (const obj of fixedReply(kind, { child: mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(text) })) emit(obj);
     return;
   }
 
@@ -270,7 +286,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     onEvent({ type: 'meta', brain: 'mock' });
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
     for (const obj of mockReply({ text, trigger, landmarks, seen: scene, memory, learned, history })) {
-      await new Promise((r) => setTimeout(r, 120));
+      if (paceMs > 0) await new Promise((r) => setTimeout(r, paceMs));
       emit(obj);
     }
     return;

@@ -3,6 +3,9 @@
 // その文が話し始める瞬間に、表情・動き・視線・字幕を合わせる。
 // 返事が来るまでの間は、うなずきでつなぐ。割り込まれたら cancel() で全部止める。
 import { streamChat } from './brainClient.js';
+import { redactSecrets } from './secrets.js';
+
+export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
 const FILLER_FRESH_MS = 4000; // 話し終わりの合図で先に出したあいづちは、この間なら、送るときに出し直さない
@@ -36,10 +39,12 @@ export class Dialogue {
    * @param {() => object} deps.getContext 見えている様子・キャラ・場所
    * @param {(spec:string, ms:number) => (number[]|null)} deps.setGaze 'person' | 'away' | 'landmark:名前'
    * @param {(entry:object) => void} deps.onMetric
+   * @param {(ev:object) => void} [deps.onEvent] サーバーから届いたイベントを全部渡す(記憶の札の onChatEvent など)
+   *   ui.notice(文) があれば、「仮の頭脳です」などの一言をそこへ出す
    */
-  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false }) {
+  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false, onEvent = null }) {
     // interview: インタビューの型(返事 2 文まで・台本にしない)で答えさせる(入口の LED の ?interview=1)
-    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview });
+    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview, onEvent });
     this.history = [];
     this.abort = null;
     this.timers = [];
@@ -86,7 +91,10 @@ export class Dialogue {
    * @param {{text?:string, trigger?:string|null, t0?:number, mode?:'voice'|'text'}} turn
    *   t0: ユーザーが話し終えた時刻(performance.now())。声でないときは送信した時刻
    */
-  async send({ text = '', trigger = null, t0 = performance.now(), mode = 'text' } = {}) {
+  async send({ text: raw = '', trigger = null, t0 = performance.now(), mode = 'text' } = {}) {
+    // 鍵らしい文字は、画面にもサーバーにも出さない(声の鍵を会話の欄に貼ってしまったとき)
+    const { text, count: secrets } = redactSecrets(raw);
+    if (secrets) this.ui.notice?.(SECRET_NOTICE);
     const pre = this.pre;
     this.pre = null;
     // 先に出したあいづちは、止めずに続ける(cancel は、前の返事とタイマーだけを止める)
@@ -151,12 +159,14 @@ export class Dialogue {
         body,
         (ev) => {
           if (id !== this.turnId) return;
+          this.onEvent?.(ev);
           if (ev.type === 'meta') {
             // meta は何度か届く(頭脳の種類・ヘッジとキャッシュの記録)。種類が入っているものだけ使う
             if (ev.brain) {
               this.brain = ev.brain;
               m.brain = ev.brain;
             }
+            if (ev.notice) this.ui.notice?.(ev.notice); // 「仮の頭脳です(…)」
           } else if (ev.type === 'thought') {
             thoughtEv = ev;
             this.ui.thought(ev);
@@ -171,10 +181,14 @@ export class Dialogue {
                 onFirstByte: (ms) => {
                   if (isFirst) m.ttsFirstByteMs = ms;
                 },
-                onStart: (tNow) => {
+                onStart: (tNow, info) => {
                   if (id !== this.turnId) return;
                   if (m.tAudio === null) m.tAudio = tNow;
-                  this._performSay(ev);
+                  this._performSay(ev, info);
+                },
+                // 声が無いときは、字幕を 1 字ずつ出す(レトロの文字送り)
+                onCrawl: (shown) => {
+                  if (id === this.turnId) this.ui.caption(shown);
                 },
               })
               .then(() => {
@@ -205,14 +219,14 @@ export class Dialogue {
     waitStart();
   }
 
-  _performSay(ev) {
+  _performSay(ev, info = {}) {
     // カスタムの表情は、漫符(頬の赤み・涙・汗)が値に比例して大きくなるので 1.0 で出す。標準は 0.9
     const weight = ev.expression === 'neutral' ? 0 : this.character.isCustomExpression?.(ev.expression) ? 1 : 0.9;
     this.character.setEmotion(ev.expression, weight);
     const pos = this.setGaze(ev.gaze, 2400); // 目印を見るときは、その場所(ワールド座標)が返る
     if (ev.motion && ev.motion !== 'none') this.character.play(ev.motion, pos ? { dx: pos[0], dz: pos[2] } : {});
     this.ui.say(ev);
-    this.ui.caption(ev.text);
+    this.ui.caption(info.crawl ? '' : ev.text); // 文字送りのときは空から始め、onCrawl が 1 字ずつ足す
   }
 
   _report(m) {

@@ -1,10 +1,15 @@
-// 読み上げ。サーバーの /api/tts から PCM(16bit・24kHz)を流し読みして、WebAudio で隙間なくつなぐ。
+// 読み上げ。PCM(16bit・24kHz)を流し読みして、WebAudio で隙間なくつなぐ。
+// - 声の取り先: 使う人の声の鍵(BYOK)があれば、ブラウザから声のサービスへ直接(鍵はサーバーへ送らない)。無ければ手元のサーバーの /api/tts
 // - 文ごとに取りに行き、前の文を話している間に次の文を用意する
 // - 出力の大きさ(RMS)から口の開きを作る
 // - stop() で、取得も再生も止める(割り込まれたとき)
-// - 読み上げが使えないとき(鍵なし・上限)は、音なしで同じ長さだけ口を動かす(字幕は出る)
+// - 声が使えないとき(鍵なし・上限・公開のリンク)は、レトロ RPG 風の「ピッ」と文字送りで話す(retroVoice.js)。音を切っていれば文字送りだけ
+import { getVoiceKey } from './voiceKey.js';
+import { DEFAULT_VOICE_ID, describeElevenError, fetchElevenPcm } from './elevenDirect.js';
+import { RETRO, crawlSchedule, scheduleRetro, voiceFor } from './retroVoice.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const SERVER_TTS_OFF = new Set([404, 405, 429, 501, 503]); // サーバーに声が無い・上限: この画面の間は聞きに行かない
 
 export class Speaker {
   constructor() {
@@ -12,6 +17,7 @@ export class Speaker {
     this.analyser = null;
     this.buf = null;
     this.nextTime = 0;
+    this.wallNext = 0; // 音が使えないときの、画面の時計での次の文の始まり(ms)
     this.sources = new Set();
     this.aborts = new Set();
     this.chain = Promise.resolve();
@@ -24,6 +30,20 @@ export class Speaker {
     this.fetchLog = [];
     this.fillers = []; // あいづちの声 { text, samples(Float32Array), ms }
     this.lastFiller = -1;
+    this.voiceId = DEFAULT_VOICE_ID; // 声の鍵(BYOK)で使う声
+    this.retro = true; // 声が無いとき「ピッ」を鳴らすか(false なら文字送りだけ)
+    this.retroVoice = voiceFor('');
+    this.serverTtsOff = null; // サーバーに声が無いと分かった理由(分かったら、この画面の間は聞きに行かない)
+    this.voiceKeyStatus = null; // 声の鍵で頼んだときの、最後の失敗の番号
+  }
+
+  /**
+   * キャラごとの声。voiceId は声の鍵(BYOK)で使う声、seed はレトロの「ピッ」の高さと音色を決める名前。
+   * @param {{voiceId?:string, seed?:string}} o
+   */
+  setVoice({ voiceId, seed } = {}) {
+    if (voiceId) this.voiceId = voiceId;
+    if (seed !== undefined) this.retroVoice = voiceFor(seed);
   }
 
   /** あいづちの声を、サーバーから読んでおく(前もって作られた物。無ければ何もしない) */
@@ -112,15 +132,16 @@ export class Speaker {
 
   /**
    * 1 文を追加する。すぐに音声の取得を始め、順番が来たら再生する。
+   * onStart(時刻, {crawl}) は話し始め。crawl が true なら、字幕は onCrawl(見えている文字) で 1 字ずつ届く(声が無いとき)
    * @returns {Promise<void>} この文を話し終えたら解決する
    */
-  enqueue(text, { onStart, onFirstByte } = {}) {
+  enqueue(text, { onStart, onFirstByte, onCrawl } = {}) {
     const epoch = this.epoch;
     this.pending += 1;
     const abort = new AbortController();
     this.aborts.add(abort);
     const chunks = this._pump(this._fetchPcm(text, abort.signal, onFirstByte));
-    const done = this.chain.then(() => (epoch === this.epoch ? this._play(text, chunks, epoch, onStart) : undefined));
+    const done = this.chain.then(() => (epoch === this.epoch ? this._play(text, chunks, epoch, onStart, onCrawl) : undefined));
     this.chain = done.catch(() => {}).finally(() => {
       this.aborts.delete(abort);
     });
@@ -166,20 +187,33 @@ export class Speaker {
 
   async *_fetchPcm(text, signal, onFirstByte) {
     const t0 = performance.now();
+    // 声の鍵(BYOK)があれば、声のサービスへ直接頼む(鍵は手元のサーバーに送らない)
+    const key = getVoiceKey();
+    if (!key && this.serverTtsOff) {
+      this.ttsError = this.serverTtsOff;
+      return;
+    }
     let res;
     try {
-      res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text }),
-        signal,
-      });
+      res = key
+        ? await fetchElevenPcm(text, { key, voiceId: this.voiceId, signal })
+        : await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text }),
+            signal,
+          });
     } catch (err) {
       if (signal.aborted) return;
       this.ttsError = '通信できません';
       return;
     }
     if (!res.ok) {
+      if (key) {
+        this.voiceKeyStatus = res.status;
+        this.ttsError = describeElevenError(res.status);
+        return;
+      }
       let reason = `読み上げが使えません (${res.status})`;
       try {
         reason = (await res.json()).error ?? reason;
@@ -187,8 +221,10 @@ export class Speaker {
         // そのまま
       }
       this.ttsError = reason;
+      if (SERVER_TTS_OFF.has(res.status)) this.serverTtsOff = reason;
       return;
     }
+    if (key) this.voiceKeyStatus = null;
     this.ttsError = null;
     const reader = res.body.getReader();
     let first = true;
@@ -220,13 +256,13 @@ export class Speaker {
     }
   }
 
-  async _play(text, chunks, epoch, onStart) {
+  async _play(text, chunks, epoch, onStart, onCrawl) {
     let started = false;
-    const begin = (startAt) => {
+    const begin = (startAt, info = { crawl: false }) => {
       started = true;
       const delay = Math.max(0, (startAt - this.ctx.currentTime) * 1000);
       this._later(() => {
-        if (epoch === this.epoch) onStart?.(performance.now());
+        if (epoch === this.epoch) onStart?.(performance.now(), info);
       }, delay);
     };
     for await (const samples of chunks) {
@@ -244,20 +280,44 @@ export class Speaker {
       src.onended = () => this.sources.delete(src);
       if (!started) begin(startAt);
     }
-    if (!started) {
-      // 音が取れなかった(鍵なし・上限・通信できない)。同じ長さだけ口を動かして字幕を出す
-      const now = this.ctx ? this.ctx.currentTime : 0;
-      const startAt = Math.max(now + 0.03, this.nextTime);
-      const dur = clamp(text.length * 0.16 + 0.4, 0.8, 8);
-      this.nextTime = startAt + dur;
-      if (this.ctx) begin(startAt);
-      else this._later(() => epoch === this.epoch && onStart?.(performance.now()), 0);
-      const startMs = performance.now() + Math.max(0, (startAt - now) * 1000);
-      this.fakeUntil = Math.max(this.fakeUntil, startMs + dur * 1000);
-    }
     // この文が終わるまで待つ(次の文は、その間に先に用意されている)
-    const wait = this.ctx ? Math.max(0, (this.nextTime - this.ctx.currentTime) * 1000) : 0;
+    const wait = !started ? this._retro(text, epoch, onStart, onCrawl) : this.ctx ? Math.max(0, (this.nextTime - this.ctx.currentTime) * 1000) : 0;
     await new Promise((resolve) => this._later(resolve, wait));
+  }
+
+  /**
+   * 声が取れなかった(鍵なし・上限・通信できない)文を、文字送りと「ピッ」で話す。
+   * 音が使えない(まだタップされていない・音を切っている)ときは、文字送りと口の動きだけ。
+   */
+  _retro(text, epoch, onStart, onCrawl) {
+    const info = { crawl: true };
+    const { steps, totalMs } = crawlSchedule(text);
+    const durMs = Math.max(totalMs, 400) + RETRO.tailMs;
+    let baseMs;
+    if (this.ctx) {
+      const now = this.ctx.currentTime;
+      const startAt = Math.max(now + 0.03, this.nextTime);
+      this.nextTime = startAt + durMs / 1000;
+      baseMs = Math.max(0, (startAt - now) * 1000);
+      if (this.retro && this.analyser) {
+        for (const osc of scheduleRetro(this.ctx, this.analyser, steps, this.retroVoice, startAt)) {
+          this.sources.add(osc);
+          osc.onended = () => this.sources.delete(osc);
+        }
+      } else {
+        this.fakeUntil = Math.max(this.fakeUntil, performance.now() + baseMs + totalMs); // 音なし: 文字が出ている間だけ口を動かす
+      }
+    } else {
+      // 音がまだ使えない(タップの前): 画面の時計で順番に並べる
+      const nowMs = performance.now();
+      const startMs = Math.max(nowMs + 30, this.wallNext);
+      this.wallNext = startMs + durMs;
+      baseMs = startMs - nowMs;
+      this.fakeUntil = Math.max(this.fakeUntil, startMs + totalMs);
+    }
+    this._later(() => epoch === this.epoch && onStart?.(performance.now(), info), baseMs);
+    for (const s of steps) this._later(() => epoch === this.epoch && onCrawl?.(s.shown), baseMs + s.atMs);
+    return baseMs + durMs;
   }
 
   _later(fn, ms) {
@@ -284,6 +344,7 @@ export class Speaker {
     for (const id of this.timers) clearTimeout(id);
     this.timers.clear();
     this.nextTime = 0;
+    this.wallNext = 0;
     this.fakeUntil = 0;
     this.pending = 0;
     this.chain = Promise.resolve();

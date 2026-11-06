@@ -1,6 +1,7 @@
 // 端末をまたぐ記憶の「合鍵」を、この端末に持つ。合鍵は URL に入れず、ヘッダー x-memory-key で送る。
 // 合鍵が無いと、サーバーの記憶は読めない。別の端末へは 6 桁の番号で渡す(10 分・1 回だけ)。
 // ブラウザの保存(localStorage)が使えない時は、この画面を開いている間だけ覚える。
+import { demoHeaders } from '../conversation/demoPass.js';
 
 const STORAGE = 'yc.memoryKey';
 const KEY_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -54,7 +55,7 @@ const api = {
   list: async () => read(await fetch('/api/memory', { headers: memoryHeaders() }), '記憶を読めません'),
   create: async () => read(await fetch('/api/memory/new', { method: 'POST' }), '合鍵を作れません'),
   forget: async (body) => read(await fetch('/api/memory', { method: 'DELETE', headers: jsonHeaders(), body: JSON.stringify(body) }), '記憶を消せません'),
-  pair: async (pass) => read(await fetch('/api/memory/pair', { method: 'POST', headers: { ...memoryHeaders(), ...(pass ? { 'x-app-pass': pass } : {}) } }), '番号を作れません'),
+  pair: async (pass) => read(await fetch('/api/memory/pair', { method: 'POST', headers: { ...memoryHeaders(), ...(pass ? { 'x-demo-pass': pass } : demoHeaders()) } }), '番号を作れません'),
   claim: async (code) => read(await fetch('/api/memory/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }) }), '番号を受け取れません'),
 };
 
@@ -83,7 +84,7 @@ export async function forgetAll() {
   return r;
 }
 
-/** 別の端末へ渡す 6 桁の番号を作る。合言葉(公開のとき)は画面の入力欄から受け、ヘッダーで送る */
+/** 別の端末へ渡す 6 桁の番号を作る。合言葉(公開のとき)は画面の入力欄から受け、見出し x-demo-pass で送る(空なら、会話の合言葉を使う) */
 export const pairCode = ({ pass = '' } = {}) => api.pair(pass);
 
 /** 番号を入れて、合鍵を受け取る。この端末の前の合鍵は置き換える */

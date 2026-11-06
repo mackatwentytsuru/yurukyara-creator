@@ -1,6 +1,7 @@
 // 記憶の入口(K4。くわしくは API.md)。合鍵はヘッダー x-memory-key で受ける(URL に入れない。記録にも書かない)。
 import { MemoryError, isKey, samePass } from './store.mjs';
 import { extractFacts } from './reflect.mjs';
+import { redactSecrets } from '../../src/conversation/secrets.js';
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 const FORGET_RE = /^(?:ぜんぶ|全部|みんな)?\s*(?:わすれて|忘れて|わすれてね|忘れてね|わすれてください|忘れてください)[。!！]?$/;
@@ -8,6 +9,15 @@ const FORGET_RE = /^(?:ぜんぶ|全部|みんな)?\s*(?:わすれて|忘れて|
 /** 「わすれて」だけの言葉か(会話から全部消す) */
 export function isForgetRequest(text) {
   return FORGET_RE.test(String(text ?? '').trim());
+}
+
+/** 会話の「わすれて」で全部消したときの返事(手元のサーバーと公開の関数で同じ形) */
+export function forgetReplyEvents(forgotten) {
+  return [
+    { type: 'memory', forgotten },
+    { type: 'thought', seen: '', intent: '記憶を消す', stage: 'chat', handoff: false },
+    { type: 'say', text: forgotten ? 'わかった、覚えていたことは全部消したよ。' : 'まだ何も覚えていなかったよ。', expression: 'happy', motion: 'nod', gaze: 'person' },
+  ];
 }
 
 /**
@@ -52,7 +62,7 @@ export function createMemoryRoutes({ store, config, limiter, readBody }) {
       }
       if (req.method === 'POST' && path === '/api/memory/pair') {
         if (!isKey(keyOf(req))) throw new MemoryError('合鍵の形が違います', 401, 'bad_key');
-        if (!canPair({ host: config.host, appPass: config.appPass, givenPass: req.headers['x-app-pass'] })) {
+        if (!canPair({ host: config.host, appPass: config.appPass, givenPass: req.headers['x-demo-pass'] ?? req.headers['x-app-pass'] })) {
           throw new MemoryError(config.appPass ? '合言葉が違うので、番号は作りません' : '合言葉が設定されていないので、番号は作りません', 403, 'no_pass');
         }
         return send(res, 200, store.pair(keyOf(req))), true;
@@ -64,7 +74,7 @@ export function createMemoryRoutes({ store, config, limiter, readBody }) {
       }
       if (req.method === 'POST' && path === '/api/memory/reflect') {
         const body = await readBody(req);
-        return send(res, 200, { added: store.add(keyOf(req), extractFacts(String(body.text ?? '').slice(0, 500))) }), true;
+        return send(res, 200, { added: store.add(keyOf(req), extractFacts(redactSecrets(String(body.text ?? '').slice(0, 500)).text)) }), true;
       }
       return send(res, 405, { error: 'この方法は使えません' }), true;
     } catch (err) {
