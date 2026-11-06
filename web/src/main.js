@@ -1,7 +1,7 @@
 // 会話の本体。キャラを出し、カメラで人を見つけて目と首で追い、話しかけられたら Claude に聞いて、声で答える。
 import * as THREE from 'three';
 import { createStage } from './scene.js';
-import { loadFirstCharacter, motionChoices } from './character/index.js';
+import { loadFirstCharacter, motionChoices, MAIN_CHARACTER } from './character/index.js';
 import { MediapipeSource, SimSource, PoseSource, BridgeSource } from './tracking/sources/index.js';
 import { AttentionPicker } from './tracking/attention.js';
 import { describeScene } from './tracking/geometry.js';
@@ -10,7 +10,8 @@ import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
 import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
-import { createUi, getDemoPass, setDemoPass, FALLBACK_BRAIN_NOTICE } from './ui/panel.js';
+import { createUi, FALLBACK_BRAIN_NOTICE } from './ui/panel.js';
+import { getDemoPass, setDemoPass } from './conversation/demoPass.js'; // 合言葉(S3。会話と記憶の通信に見出し x-demo-pass で付く)
 import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
 import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
 import { createArPlacement } from './arPlacement.js';
@@ -93,13 +94,11 @@ function setGaze(spec, ms = 2000) {
 
 /* ---------- 会話のイベント(記憶の札・仮の頭脳の知らせ) ---------- */
 let memory = null; // 記憶の札(S3 の mountMemoryPanel の返り値)
-let chatEventsSeen = false; // 会話の側(Dialogue)が onEvent でイベントを渡してくれるか
 let brainNoticeText = null; // イベントで届いた「仮の頭脳です(理由)」
 
-/** サーバーの会話のイベントを 1 つ受ける。Dialogue が onEvent を渡せるようになったら、ここに全部届く */
+/** サーバーの会話のイベントを 1 つ受ける。Dialogue の onEvent で、手元のサーバー(流れる形)も公開の関数(まとめた JSON)も全部届く */
 function onChatEvent(ev) {
-  chatEventsSeen = true;
-  memory?.onChatEvent(ev); // 覚えた・消したの知らせで一覧を読み直す
+  memory?.onChatEvent(ev); // 覚えた({type:'memory', added})・消したの知らせで一覧を読み直す
   if (ev?.type === 'meta') {
     if (ev.notice) brainNoticeText = ev.notice; // 上限・合言葉など、理由つきの知らせ(K5)
     else if (ev.brain === 'haiku') brainNoticeText = null;
@@ -118,16 +117,13 @@ function updateBrainNotice() {
   ui.brainNotice(currentBrain() === 'mock' ? (brainNoticeText ?? FALLBACK_BRAIN_NOTICE) : null);
 }
 
-// 会話のイベントがまだ届かない間は、返事のあとに合鍵を確かめて一覧を読み直す。
+// 記憶の引き出しを開いた時は、合鍵を確かめて一覧を読み直す(別の端末で消した・番号で受け取った後でも合うように)。
 // forgotten の形で渡すと、札は合鍵を確かめ(消えていれば作り直し)、一覧を読む(memoryPanel.js の onChatEvent)
 const resyncMemory = () => memory?.onChatEvent({ type: 'memory', forgotten: true });
 
-/** 会話を 1 回送る。どの入口(文字・声・ボタン・近づいた人・VR)も、ここを通す */
+/** 会話を 1 回送る。どの入口(文字・声・ボタン・近づいた人・VR)も、ここを通す。記憶の一覧は会話のイベントで読み直される */
 function talk(turn) {
-  return dialogue.send(turn).then(() => {
-    if (!chatEventsSeen) resyncMemory();
-    updateBrainNotice();
-  });
+  return dialogue.send(turn).then(updateBrainNotice);
 }
 
 /* ---------- 会話 ---------- */
@@ -137,7 +133,7 @@ const dialogue = new Dialogue({
   ui,
   setGaze,
   motionChoices,
-  onEvent: onChatEvent, // 会話の側が対応したら、サーバーのイベントが全部届く(まだの間は talk の後で読み直す)
+  onEvent: onChatEvent, // サーバーのイベントが全部届く(記憶の札・仮の頭脳の知らせ)
   interview: params.get('interview') === '1', // 入口のインタビューの型(返事 2 文まで)
   getContext: () => ({
     scene: sceneText(),
@@ -656,7 +652,7 @@ async function boot() {
     // 毛の層は重ね描きで、ソフト描画で 20 倍遅かった(実測)。端末の段で、スマホ・弱い端末・ヘッドセットは減らす(PC は今のまま)。?fur= で決め打ち
     const tierOverrides = applyTier(stage, app.tier, window.devicePixelRatio);
     if (Number(params.get('fur')) > 0) tierOverrides.furLayers = Number(params.get('fur'));
-    // ?character= は id・URL のどちらでもよい。無ければ主役 → 作例の順に、出せるキャラ。?look=2d|3d で見た目の方式(無ければ looks.default)
+    // ?character= は id・URL のどちらでもよい。無ければ主役ノリー → ようこそくんの順に、出せるキャラ。?look=2d|3d で見た目の方式(無ければ looks.default)
     const { character, id } = await loadFirstCharacter(params.get('character') ?? params.get('char'), { ...tierOverrides, look: params.get('look') ?? '' });
     app.character = character;
     app.characterId = id;
@@ -758,3 +754,7 @@ async function boot() {
 }
 
 boot();
+// 初めての会話(7 歩)と性格の画面(S4)。#modes に「性格」「はじめての会話」を出す。?onboard=1 で初めての会話を出す。案内役は主役ノリー
+import('./ui/onboarding/index.js')
+  .then((m) => m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER }))
+  .catch((err) => console.warn('初めての会話を用意できませんでした:', err.message));

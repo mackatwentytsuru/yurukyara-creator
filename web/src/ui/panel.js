@@ -1,37 +1,6 @@
-// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ・合言葉。
+// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ。
+// 合言葉(契約 K5)は会話の側の web/src/conversation/demoPass.js が 1 か所で持つ(会話と記憶の通信が同じ値を読む)。
 const $ = (id) => document.getElementById(id);
-
-/* ---------- 合言葉(契約 K5) ---------- */
-// 公開の URL で本物の頭脳を使うための合言葉。画面の入力欄で受け、URL には入れない。
-// このタブの中だけに持つ(sessionStorage。使えない時は、開いている間だけ)。会話の見出し x-demo-pass で送る。
-const PASS_STORE = 'yc.demoPass';
-const PASS_MAX = 200;
-let passMemo = '';
-
-export function getDemoPass() {
-  try {
-    return sessionStorage.getItem(PASS_STORE) ?? passMemo;
-  } catch {
-    return passMemo;
-  }
-}
-
-export function setDemoPass(value) {
-  passMemo = String(value ?? '').trim().slice(0, PASS_MAX);
-  try {
-    if (passMemo) sessionStorage.setItem(PASS_STORE, passMemo);
-    else sessionStorage.removeItem(PASS_STORE);
-  } catch {
-    // 保存が使えない窓: 開いている間だけ覚える
-  }
-  return passMemo;
-}
-
-/** 会話の通信に付ける見出し(合言葉が無ければ空) */
-export function demoPassHeaders() {
-  const p = getDemoPass();
-  return p ? { 'x-demo-pass': p } : {};
-}
 
 /** 仮の頭脳の知らせの決まりの文(理由が分からない時) */
 export const FALLBACK_BRAIN_NOTICE = '仮の頭脳です(本物の頭脳につながっていません)';
