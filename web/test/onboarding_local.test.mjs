@@ -74,7 +74,7 @@ test('枠の住所に合言葉は # の後ろだけ。知らせは作る画面�
   assert.equal(cleanMakeEvent({ src: 'yc-make', ev: 'checked', class: 'robot' }), null);
 });
 
-function harness() {
+function harness({ frameWaitMs } = {}) {
   const said = [];
   const stored = new Map();
   let offered = [];
@@ -93,6 +93,7 @@ function harness() {
       offered = a;
     },
     showCharacter: async () => true,
+    ...(frameWaitMs ? { frameWaitMs } : {}),
   });
   creator.listen((e) => fr.makeEvent(e));
   const send = async (data) => {
@@ -153,4 +154,16 @@ test('絵 → PC のチェック(人の絵)→ ゆるキャラにしてみる �
   assert.equal(h.fr.step, 1);
   assert.equal(h.fr.character, null);
   assert.ok(h.texts('guide').includes('じゃあ、もう一度。どんな子を生み出そうか?'));
+});
+
+test('作る画面から「開いた」の知らせが来なければ、黙らずに言う(来れば言わない)', async () => {
+  const quiet = harness({ frameWaitMs: 40 });
+  await quiet.fr.start();
+  await quiet.send({ ev: 'ready' });
+  await new Promise((r) => setTimeout(r, 120));
+  assert.ok(!quiet.texts('note').some((t) => t.includes('作る画面が開けません')));
+  const lost = harness({ frameWaitMs: 40 });
+  await lost.fr.start();
+  await new Promise((r) => setTimeout(r, 120));
+  assert.ok(lost.texts('note').some((t) => t.includes('serve_review.py --make --web')), 'PC のサーバーと許す元を確かめるよう言う');
 });

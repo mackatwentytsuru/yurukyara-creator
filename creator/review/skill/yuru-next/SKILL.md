@@ -18,6 +18,7 @@ allowed-tools: Read, Bash(python creator/review/yuru_make.py *), Bash(python cre
 - 1 回の /yuru-next で動かすのは 1 件だけ。同じ門のやり直しが 4 回目なら、道具が作らずに止める(人に聞く)。
 - 合言葉を聞かない・出さない。コミット・push・削除はしない。`sleep` で待たない。claude や node を名前で止めない。
 - **Bash の timeout は 600000(10 分)にする**(絵を描くのに 2〜5 分かかる。道具の中の絵の Claude は 9 分で止まる)。
+- **人への返事は日本語で書く**(使う人は英語を読まない。11-06 の本物の往復で、2 回目の返事が英語になった)。
 
 ## 進め方
 
@@ -60,3 +61,8 @@ allowed-tools: Read, Bash(python creator/review/yuru_make.py *), Bash(python cre
 - (11-06 S4w3)Playwright の route で頁を横取りして渡すと、Chrome は頁の場所が分からず、127.0.0.1 の枠を「手元の通信の確かめ」で止めた(ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS)。試験の頁も本物の小さなサーバーから配る。
 - (11-06 S4w3)段の道具の記録の note には、流した命令の終わり 200 字が入る。python の場所と作業場所の絶対パスが残らないよう、`python` と相対パスで渡す(K6: note にパスを書かない)。
 - (11-06 S4w3)C0 に出た直後は、名前(settings.md の 1 行目)を書く前の「新しい子」が見える。画面は make の状態が drawn になるまで 8 秒まで待ってから絵を出す。
+- (11-06 S4w3)本物の G1 の往復 1 回(画面なしの Chrome で作る画面を押し、/yuru-next は claude -p を 3 回。Haiku の 1 回は 8〜61 秒・3〜4 回のやりとり):
+  言葉「赤い帽子をかぶった、まるいおにぎりの子」→ 段 0 の絵(Sonnet・50 秒・定価に直して 0.27 ドル)→ 作る画面で「帽子を青にして」→ request.json →
+  描き直し(Sonnet・23 秒・0.14 ドル。帽子だけ青になり、ほかは同じ)→ この子にする → 0.json が ok(人・2 回目)→ 段 1 を始めてよい。run.jsonl に 2 行。
+- (11-06 S4w3)描き直しで名前が変わった(おむすび → おにぎりん)。前の回の settings.md を写し、頼みの文に「名前は変えない」と書いた(この直しの後は、本物では試していない)。
+- (11-06 S4w3)`claude -p "/yuru-next"` で、リポジトリのスキルがそのまま動く(`--setting-sources project --strict-mcp-config`、`--allowedTools` に道具 2 本と Read、`BASH_DEFAULT_TIMEOUT_MS=600000`)。CLAUDE_CODE_* と API の鍵を外して、定額のプランのログインで流した。

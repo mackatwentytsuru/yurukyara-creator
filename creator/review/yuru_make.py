@@ -242,8 +242,11 @@ def draw(cid, a, kind, feedback=None, extra=None):
     prev = ""
     if rnd > 1 and (prev_dir / "gen.py").exists():
         shutil.copyfile(prev_dir / "gen.py", folder / "gen.py")
+        if (prev_dir / "settings.md").exists():
+            shutil.copyfile(prev_dir / "settings.md", folder / "settings.md")
         prev = (f"\n- 前の回の絵: {rel(prev_dir / 'drawing.svg')}・{rel(prev_dir / 'drawing.png')}(Read で見る)。"
-                f"{rel(folder / 'gen.py')} は前の回の写し。申し送りに関わる所だけを直す(部品の名前と、ほかの所は保つ)")
+                f"{rel(folder / 'gen.py')} と settings.md は前の回の写し。申し送りに関わる所だけを直す(部品の名前と、ほかの所は保つ)。"
+                "名前(settings.md の 1 行目)は変えない(使う人には同じ子の直しに見える)")
     old_log = run_dir(cid) / "0_draw"
     if old_log.exists() and rnd > 1:           # 前の回の Claude の記録は、上書きされる前に回のフォルダへ移す
         shutil.move(str(old_log), str(prev_dir / "stage_log"))

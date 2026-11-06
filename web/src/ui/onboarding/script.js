@@ -22,6 +22,7 @@ export const WORDS_MAX = 60;
 export const NOTE_MAX = 40; // 直してほしい一言(K3 と同じ 40 字)
 export const SAY_MAX = 200;
 export const SNAPSHOT_VERSION = 1;
+export const FRAME_WAIT_MS = 10000; // 作る画面(枠)から「開いた」の知らせが来るのを待つ長さ
 
 const chars = (s) => [...String(s ?? '')].length;
 const clip = (s, n) => [...String(s ?? '').trim()].slice(0, n).join('');
@@ -134,6 +135,16 @@ export class FirstRun {
   _offerStart() {
     if (this.local) {
       this._offer([{ id: 'frame', kind: 'frame', label: 'PC の作る画面', url: this.d.creator.frameUrl }]);
+      // 作る画面が開けない(PC のサーバーが止まっている・この画面の元が許されていない)ときは、黙らずに言う
+      clearTimeout(this.frameTimer);
+      if (!this.frameReady) {
+        this.frameTimer = setTimeout(() => {
+          if (!this.frameReady && !this.done && this.step <= 1) {
+            this._say({ who: 'note', text: 'PC の作る画面が開けません。PC で serve_review.py --make --web <この画面の元> が動いているか確かめてね。' });
+          }
+        }, this.d.frameWaitMs ?? FRAME_WAIT_MS);
+        this.frameTimer?.unref?.(); // node の試験で、待つ間に終われなくならないように
+      }
       return;
     }
     this._offer([
@@ -488,6 +499,7 @@ export class FirstRun {
 
   async _finish() {
     this.done = true;
+    clearTimeout(this.frameTimer);
     this._go(8);
     await this._say({ who: 'guide', text: '準備ができたよ。いっぱい話してあげてね。' });
     this.d.offer([]);
@@ -507,6 +519,10 @@ export class FirstRun {
   async _onMake(ev) {
     if (!this.local || this.done || !ev || this.step > 3) return;
     switch (ev.ev) {
+      case 'ready':
+        this.frameReady = true;
+        clearTimeout(this.frameTimer);
+        return undefined;
       case 'sent':
         if (ev.from === 'words') {
           this.input = { from: 'words', words: clip(ev.words, WORDS_MAX) };
