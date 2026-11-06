@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>確かめる画面</title>
+<link rel="stylesheet" href="/r/assets/review.css">
+<script type="module" src="/r/assets/review.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="title-row">
+    <h1 id="name">読み込み中…</h1>
+    <span class="who">決めるのは人</span>
+  </div>
+  <ol class="steps" id="steps" aria-label="作る段"></ol>
+  <p class="activity" id="activity" hidden></p>
+  <p class="conn" id="conn" hidden>PC につながりません</p>
+</header>
+
+<nav class="gates" id="gates" aria-label="確かめる所"></nav>
+
+<main id="main">
+  <p class="notice" id="notice" hidden></p>
+  <section id="view" aria-live="polite"></section>
+</main>
+
+<div class="bar" id="bar">
+  <p class="bar-msg" id="barMsg" hidden></p>
+  <div class="bar-pending" id="pending" hidden>
+    <span id="pendingText">PC の受け取りを待っています…</span>
+    <button type="button" class="btn ghost" id="cancelBtn">取り消す</button>
+  </div>
+  <div class="bar-buttons" id="buttons">
+    <button type="button" class="btn redo" id="redoBtn">やり直し+一言</button>
+    <button type="button" class="btn ok" id="okBtn">OK</button>
+  </div>
+</div>
+
+<div class="sheet-back" id="sheetBack" hidden></div>
+<section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <h2 id="sheetTitle">やり直す</h2>
+  <p class="sheet-sub">よく使う言葉(いくつでも)</p>
+  <div class="tags" id="tags"></div>
+  <label class="sheet-sub" for="note">一言(<span id="noteMax">40</span> 字まで)</label>
+  <textarea id="note" rows="2" maxlength="80" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例: 目をもっと大きく"></textarea>
+  <p class="count"><span id="count">0/40</span><span id="focusText"></span></p>
+  <p class="hint">この一言は、人の感想として Claude に渡します(指示ではありません)。</p>
+  <div class="sheet-buttons">
+    <button type="button" class="btn ghost" id="sheetCancel">やめる</button>
+    <button type="button" class="btn ok" id="sendBtn" disabled>送る</button>
+  </div>
+</section>
+</body>
+</html>
