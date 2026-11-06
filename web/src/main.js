@@ -2,7 +2,11 @@
 import * as THREE from 'three';
 import { createStage } from './scene.js';
 import { loadFirstCharacter, motionChoices, MAIN_CHARACTER } from './character/index.js';
-import { MediapipeSource, SimSource, PoseSource, BridgeSource } from './tracking/sources/index.js';
+// 入力の差し替え口(tracking/sources/index.js の約束)。カメラの顔の部品(mediapipeSource.js)は重いので、ここでは読まず、
+// 「はじめる」を押した時に読む(最初の読み込みを軽くする。重さの表 L3)
+import { SimSource } from './tracking/sources/simSource.js';
+import { PoseSource } from './tracking/sources/poseSource.js';
+import { BridgeSource } from './tracking/sources/bridgeSource.js';
 import { AttentionPicker } from './tracking/attention.js';
 import { describeScene } from './tracking/geometry.js';
 import { Speaker } from './conversation/speaker.js';
@@ -679,7 +683,12 @@ async function boot() {
     // 待つと、初めて開いたブラウザで最初のコマが 0.6〜1 秒遅れた(重さの表 L3)。frame() は、まだ無い物(見せ方・入力)を飛ばす
     loopStartAt = performance.now();
     stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う
-    if (character.personaUrl) app.persona = await (await fetch(character.personaUrl)).text();
+    if (character.personaUrl) {
+      // 人格の文が無い(404・頁の代わり)時は空にする。届いた 404 の文や頁を、人格として頭脳に渡さない
+      const res = await fetch(character.personaUrl).catch(() => null);
+      app.persona = res?.ok && !/html|json/i.test(res.headers.get('content-type') ?? '') ? await res.text() : '';
+      if (!app.persona) console.warn(`人格の文を読めませんでした(${res?.status ?? '通信できない'}): ${character.personaUrl}`);
+    }
     status.textContent = '';
   } catch (err) {
     console.error(err);
@@ -704,6 +713,8 @@ async function boot() {
     buttons.forEach((b) => (b.disabled = true));
     status.textContent = pending;
     try {
+      // カメラの顔の部品は、押した時に読む(最初の読み込みに入れない)
+      const MediapipeSource = kind === 'camera' ? (await import('./tracking/sources/mediapipeSource.js')).MediapipeSource : null;
       const source =
         kind === 'camera'
           ? new MediapipeSource({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV })
