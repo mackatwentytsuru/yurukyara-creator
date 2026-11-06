@@ -193,6 +193,26 @@ class RewriteTest(unittest.TestCase):
         os.remove(self.terms)
         self.assertEqual(self.tool(os.path.join(self.root, "work3")).returncode, 2)
 
+    def test_reports_tip_files_changed_by_rules(self):
+        # 先の版の a.txt に語がある → 規則が言い換える → 「規則で中身が変わった」に名前が出る(終わりの番号は 0 のまま)
+        work = os.path.join(self.root, "w7")
+        r = self.tool(work, "--keep", "main", "--keep", "archive/old:before-pivot", "--strip-ai-images", mailmap=False)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        rep = self.report(work)
+        self.assertEqual(rep["branches"]["main"]["changed_by_rules"], ["a.txt"])
+        self.assertEqual(rep["branches"]["main"]["changed_by_rules_count"], 1)
+        self.assertEqual(rep["branches"]["before-pivot"]["changed_by_rules"], ["a.txt"])  # 語の無い notes・shop・絵は変わらない
+        self.assertIn("規則で中身が変わった先のファイル", r.stdout)
+        self.assertNotIn(WORD, r.stdout)
+        # 先の版から語を外しておけば 0(古い版だけが言い換わる)
+        put(self.repo, "a.txt", "ここはふつうの話\n")
+        sh(self.repo, "git", "commit", "-q", "-am", "語を外す")
+        work2 = os.path.join(self.root, "w8")
+        r2 = self.tool(work2, "--keep", "main", mailmap=False)
+        self.assertEqual(r2.returncode, 0, r2.stdout + r2.stderr)
+        self.assertEqual(self.report(work2)["branches"]["main"]["changed_by_rules"], [])
+        self.assertNotIn("規則で中身が変わった先のファイル", r2.stdout)
+
     def test_refuses_rename_onto_existing_branch(self):
         sh(self.repo, "git", "branch", "before-pivot")
         r = self.tool(os.path.join(self.root, "w5"), "--keep", "main", "--keep", "archive/old:before-pivot", mailmap=False)
