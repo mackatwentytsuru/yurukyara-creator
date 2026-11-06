@@ -111,10 +111,16 @@ test('会話の「わすれて」(印 via: chat)の後に「受け取りまし�
   assert.match(q('mem-status').textContent, /^受け取りました/);
   // 会話で「わすれて」(サーバーの forgetReplyEvents が付ける印)
   items = [];
+  const before = calls.length;
   panel.onChatEvent({ type: 'memory', forgotten: true, via: 'chat' });
   assert.equal(q('mem-status').textContent, '全部わすれました');
   await settle();
   assert.equal(q('mem-status').textContent, '全部わすれました', '読み直しの後も古い知らせに戻らない');
+  assert.deepEqual(
+    calls.slice(before).map((c) => `${c.method} ${c.url}`),
+    ['POST /api/memory/new'],
+    '消えた合鍵を確かめに行かず(404 を出さず)、新しい合鍵を作る',
+  );
   // 何も覚えていなかった時は、知らせを消すだけ
   panel.onChatEvent({ type: 'memory', forgotten: false, via: 'chat' });
   assert.equal(q('mem-status').textContent, '');

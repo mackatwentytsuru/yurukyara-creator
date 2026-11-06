@@ -1,7 +1,7 @@
 // 記憶の札(画面の部品)。覚えていることの一覧・1 つずつ消す・全部わすれる・別の端末へ渡す番号・番号を入れる。
 // 使い方(S5 が main.js に 1 行で付ける): mountMemoryPanel(document.body) → 返り値の onChatEvent を会話のイベントに渡す。
 // 文字は textContent だけで入れる(覚えた言葉に HTML が入っていても、そのまま文字として出す)。
-import { claimCode, ensureKey, forgetAll, forgetItem, listMemory, pairCode } from './memoryKey.js';
+import { claimCode, clearKey, ensureKey, forgetAll, forgetItem, listMemory, pairCode } from './memoryKey.js';
 
 const el = (tag, props = {}, ...children) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -134,6 +134,10 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
       if (ev.via === 'chat' && Object.hasOwn(ev, 'forgotten')) {
         clearCode();
         say(ev.forgotten ? '全部わすれました' : '');
+        // サーバーの記録はもう無いので、確かめに行かずに合鍵を捨てて作り直す(確かめると 404 が console に赤く出た。本物の画面で見た)
+        clearKey();
+        run(async () => render(await ensureKey()));
+        return;
       }
       if (Object.hasOwn(ev, 'forgotten')) run(async () => render(await ensureKey()));
       else run(refresh);
