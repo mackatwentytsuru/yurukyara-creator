@@ -12,7 +12,6 @@ import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
-import { createGazeRelay } from './gazeRelay.mjs';
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = join(WEB_ROOT, 'logs');
@@ -44,13 +43,6 @@ const stt = createStt();
 const sttLimiter = createLimiter({ file: join(LOG_DIR, 'stt_usage.json'), dailyCap: 3000, perMinute: 40 });
 stt.check().then((ok) => console.log(`聞き取り(サーバー): ${ok ? 'faster-whisper' : 'なし(pip install faster-whisper で使えます)'}`));
 
-// 視線の橋(床のカメラ → 客の向き)の UDP を受けて、入口のページ(?source=bridge)に渡す。GAZE_UDP_PORT があるときだけ。
-// 受けるのは自分の端末から(GAZE_UDP_HOST の既定 127.0.0.1)。カメラの機械が別なら、GAZE_UDP_HOST=0.0.0.0 にする。
-const gazeRelay = process.env.GAZE_UDP_PORT ? createGazeRelay({ port: Number(process.env.GAZE_UDP_PORT), host: process.env.GAZE_UDP_HOST ?? '127.0.0.1' }) : null;
-gazeRelay
-  ?.start()
-  .then((p) => console.log(`視線の受け口: UDP ${p}`))
-  .catch((e) => console.warn('視線の受け口を開けませんでした:', e.message));
 
 const json = (res, status, obj) => res.writeHead(status, { 'content-type': MIME['.json'] }).end(JSON.stringify(obj));
 
@@ -194,19 +186,6 @@ const handler = async (req, res) => {
       }
       return json(res, 404, { error: '見つかりません' });
     }
-    if (path.startsWith('/api/gaze')) {
-      if (!gazeRelay) return json(res, 404, { error: '視線の受け口は使っていません(GAZE_UDP_PORT)' });
-      if (req.method === 'GET' && path === '/api/gaze/now') return json(res, 200, gazeRelay.current());
-      if (req.method === 'GET' && path === '/api/gaze') return json(res, 200, gazeRelay.status());
-      if (req.method === 'GET' && path === '/api/gaze/points') return json(res, 200, gazeRelay.points());
-      if (req.method === 'POST' && path === '/api/gaze/aim') {
-        const r = gazeRelay.setAim(await readBody(req, 1024));
-        return r ? json(res, 200, r) : json(res, 400, { error: '向きの形が違います({az, el} 度 か {off: true})' });
-      }
-      if (req.method === 'POST' && path === '/api/gaze/mark') return json(res, 200, gazeRelay.mark());
-      if (req.method === 'POST' && path === '/api/gaze/unmark') return json(res, 200, gazeRelay.unmark((await readBody(req, 1024)).all === true));
-      return json(res, 405, { error: 'この方法は使えません' });
-    }
     if (req.method === 'POST' && path === '/api/chat') return await handleChat(req, res);
     if (req.method === 'POST' && path === '/api/tts') {
       const body = await readBody(req);
@@ -237,16 +216,6 @@ const handler = async (req, res) => {
         if (sendFile(res, REPO_ROOT, path)) return;
         return json(res, 404, { error: '見つかりません' });
       }
-      // キオスクの画面(kiosk/web)。設定(kiosk/config.json)も同じ道で渡す
-      if (path === '/kiosk' || path === '/kiosk/') return sendFile(res, join(REPO_ROOT, 'kiosk', 'web'), 'index.html') || json(res, 404, { error: '見つかりません' });
-      if (path === '/kiosk/config.json') return sendFile(res, join(REPO_ROOT, 'kiosk'), 'config.json') || json(res, 404, { error: '見つかりません' });
-      // 顔の検出の速さの確認の画面(kiosk/web/fps.html)に、MediaPipe の JS を渡す
-      if (path === '/kiosk/mp/vision_bundle.mjs') return sendFile(res, join(WEB_ROOT, 'node_modules', '@mediapipe', 'tasks-vision'), 'vision_bundle.mjs') || json(res, 404, { error: '見つかりません' });
-      // 声の向きの部品(web/src/tracking/audio)を、マイクの確認の画面へ渡す(同じ物を 2 か所に写さない)
-      if (path.startsWith('/kiosk/lib/')) return sendFile(res, join(WEB_ROOT, 'src', 'tracking', 'audio'), path.slice('/kiosk/lib/'.length)) || json(res, 404, { error: '見つかりません' });
-      // 声の入出力(kiosk/web/io.js)が使う、聞き取りと読み上げの部品(web/src/conversation)も同じ物を渡す
-      if (path.startsWith('/kiosk/conv/')) return sendFile(res, join(WEB_ROOT, 'src', 'conversation'), path.slice('/kiosk/conv/'.length)) || json(res, 404, { error: '見つかりません' });
-      if (path.startsWith('/kiosk/')) return sendFile(res, join(REPO_ROOT, 'kiosk', 'web'), path.slice('/kiosk/'.length)) || json(res, 404, { error: '見つかりません' });
       if (sendFile(res, DIST, path === '/' ? 'index.html' : path)) return;
       if (sendFile(res, DIST, 'index.html')) return;
       return json(res, 404, { error: '先に npm run build をしてください' });

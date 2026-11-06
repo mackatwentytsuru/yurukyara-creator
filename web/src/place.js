@@ -1,6 +1,6 @@
 // 場所の目印。本物の場所データ(places/<id>/place.json)が無いときの、試し用の場所。
 // 単位はメートル、y が上、キャラは原点で +z を向く。お客さんから見て右が +x、手前が +z。
-import { loadPlace } from '../../place/web/loadPlace.js'; // 場所の柱が出している入口(docs/共通の決まり.md)
+import { loadPlace } from './stage/loadPlace.js'; // 場所の柱が出している入口(docs/共通の決まり.md)
 import * as THREE from 'three';
 import { describeDirection, landmarksForPrompt } from './tracking/geometry.js';
 

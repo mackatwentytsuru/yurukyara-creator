@@ -15,10 +15,10 @@ import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
 import { createArPlacement } from './arPlacement.js';
 import { createVrStage } from './vrStage.js';
 import { createVrPanel } from './ui/vrPanel.js';
-import { createAlignFlow } from '../../place/web/alignFlow.js'; // 撮った部屋を現実に重ねる手順(場所の柱)
+import { createAlignFlow } from './stage/alignFlow.js'; // 撮った部屋を現実に重ねる手順(場所の柱)
 // 見せ方(画面・AR・VR)の切りかえは、場所の柱が出している入口(docs/共通の決まり.md)
-import { createPresentation } from '../../place/web/modes.js';
-import { mountModeButtons } from '../../place/web/modeButtons.js';
+import { createPresentation } from './stage/modes.js';
+import { mountModeButtons } from './stage/modeButtons.js';
 
 const params = new URLSearchParams(location.search);
 const GAIN = Number(params.get('gain') ?? 2); // 視線の振れ幅の倍率

@@ -48,7 +48,7 @@ Claude は、1 行に 1 つの JSON で、まず `thought`(見えた様子・用
 | `MediapipeSource` | 画面(screen)。端末のカメラ。既定 |
 | `SimSource` | カメラなしの試し。マウスの位置が人の位置 |
 | `PoseSource` | AR(iPhone の殻アプリ)・VR(Quest)。外から位置を受け取る。`?source=pose` で始める |
-| `BridgeSource` | 入口の LED。床のカメラの視線の橋(`kiosk/tools/eye_camera/gaze_bridge.py`)の向きを、サーバーの `/api/gaze/now` から読む。`?source=bridge` で始める |
+| `BridgeSource` | 入口の LED。床のカメラの視線の橋(archive の線にあります)の向きを、サーバーの `/api/gaze/now` から読む。`?source=bridge` で始める |
 
 `PoseSource` へは、ページの `window.conversation` から渡します。
 
@@ -67,7 +67,7 @@ conversation.setPeople([{ id: 'a', position: [x, y, z], speaking: true }]);  // 
 
 ## 見せ方(画面・AR・VR)
 
-切りかえの入口は場所の柱の `place/web/modes.js`(`createPresentation`)です。`web/` は次をつないでいます。
+切りかえの入口は `web/src/stage/modes.js`(`createPresentation`)です。`web/` は次をつないでいます。
 
 - 画面: 既定。入力は MediaPipe かマウス。
 - AR(iPhone の殻アプリ): ページが殻の中だと分かると、すぐ AR に入ります。殻の姿勢が `PoseSource` に届き(カメラは使わない)、キャラは見ている方向の 1.6m 先の床に立ち、床をタップするとそこへ移ります。撮った部屋は隠します(AR の世界と重ならないため)。
@@ -80,7 +80,7 @@ iPhone の殻から開く HTTPS(同じネットワークに公開するときだ
 
 ```bash
 cd web && npm run build
-HOST=0.0.0.0 PORT=8443 TLS_CERT=../place/.certs/192.168.x.x.crt TLS_KEY=../place/.certs/192.168.x.x.key   ANTHROPIC_API_KEY=… ELEVENLABS_API_KEY=… node server/index.mjs
+HOST=0.0.0.0 PORT=8443 TLS_CERT=<証明書> TLS_KEY=<鍵のファイル>   ANTHROPIC_API_KEY=… ELEVENLABS_API_KEY=… node server/index.mjs
 # 殻が開く URL: https://<この PC の IP>:8443/?source=pose&place=<id>
 ```
 
@@ -125,25 +125,6 @@ npm run measure -- 10       # 返事までの時間(頭脳と声)を 10 回測�
 - 声の聞き取りは、いまはブラウザ内蔵の聞き取り(Chrome は Google、Safari は Apple のサービス)で、音がそのサービスへ送られます。画面にも出しています。
 - サーバーが記録するのは、返事の時間の数字(`logs/latency.jsonl`)と読み上げの文字数だけです。
 
-## 入口の LED(縦長)で動かす
+## 入口の LED(縦長)について
 
-床のカメラ(別の機械でもよい)→ 視線の橋 → UDP → このサーバー → 縦長のページのキャラの目と首。カメラの絵はこのサーバーにもページにも来ない(向きの数字だけ)。
-
-```bash
-cd web
-GAZE_UDP_PORT=5331 node server/index.mjs        # 視線の受け口(UDP 5331)。カメラの機械が別なら GAZE_UDP_HOST=0.0.0.0
-# ブラウザを縦長の全画面で(LED の比 236:300 など):
-#   http://127.0.0.1:8787/?character=sample_vrm&source=bridge&autostart=1&interview=1&auto=0&led=1
-python kiosk/tools/ue_link/video_gaze.py play --file rec.mp4 --port 5331     # 録画で試す(本物のカメラなら run_eye の結果を視線の橋で)
-```
-
-| 引数 | 意味 |
-|---|---|
-| `?source=bridge` | 床のカメラの向きで追う(この端末のカメラは使わない) |
-| `?autostart=1` | ゲートを飛ばして始める(LED の前で人がボタンを押さない) |
-| `?interview=1` | インタビューの型(返事 2 文まで・台本にしない) |
-| `?led=1` | 顔にかぶる「Claude の考え」と、操作の帯を隠す(字幕と注意書きは残す) |
-
-**キャラの差し替え**は `?character=<id>` の 1 か所(人型の VRM ができたら `characters/<id>/` に置いて id を替える)。
-
-**校正**(床の 5〜6 点): スマホで `/kiosk/aim.html` を開き、矢印でキャラの向きを「自分を見ている」と感じる所に合わせて「この向きで記録」→「点を保存」→ `python kiosk/tools/eye_camera/gaze_calib.py --points gaze_points.json --geometry <いまの幾何> --out <新しい幾何>`。記録には、視線の橋を画素つき(`GazeBridge(with_pixels=True)`、`video_gaze.py play --with-pixels`)で動かす。API: `POST /api/gaze/aim {az, el}` か `{off:true}`・`POST /api/gaze/mark`・`POST /api/gaze/unmark`・`GET /api/gaze/points`・`GET /api/gaze`(状態)。
+入口の LED のキオスク(床のカメラの視線の橋・`/kiosk` の画面)は、この main には入っていません。git の線 `before-pivot` にあります。画面の `?source=bridge` は、その橋が無いと使えません。

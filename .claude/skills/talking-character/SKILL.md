@@ -102,7 +102,7 @@ Claude を使わない部分(doctor → builder → 骨 → `check_all.sh` → `
 - 一覧の絵(`s01`〜`s04`)の日本語の見出しは `creator/pipeline/fontpath.py` が字体を探す(Windows の Meiryo、Mac の Hiragino Sans GB)。ここが `C:\Windows\Fonts` 決め打ちで、Mac では `OSError: cannot open resource` で落ちた。
 - `check_all.sh` の最後の「Terminated」の表示は、bash 以外の sh で出る。`{ kill; wait; } 2>/dev/null` でまとめて捨てている。
 - `check_all.sh` の ③ が `sash 浮き` で落ちるのは OS の差ではない。第 5 引数に体に付く部品の名前(`sash`)を渡すと通る。
-- `web/` の build は `place/web/` を読む(`../../place/web/...`)。リポジトリの一部だけを写すときは `place/web` も入れる。
+- `web/` の build は `web/src/stage/`(AR・部屋重ねの部品)を読む。リポジトリの一部だけを写すときは `web/src/stage` も入れる。
 - ここまで偽物なし(Mac の実機で Blender と Chrome を動かした)。同じ builder のブラウザの正面の絵を Windows の絵と目で比べ、同じに見えた(数字では比べていない)。頭脳は仮の頭脳で試した。
 
 ## 6. Quest 3 でも話させる(頼まれたら)
@@ -121,3 +121,10 @@ Claude を使わない部分(doctor → builder → 骨 → `check_all.sh` → `
 見た目は判定役より使う人の目が優先する。直してほしい所を聞いて、builder の数字を直して、3 から回す。
 
 学んだことは `hand-built-character` スキルに書き足す。
+
+## main をゆるキャラだけに整えたときの知見(2026-11-06)
+- 柱を外すときは、先に `grep` で「残す側が外す側のファイルを読んでいないか」を見る。`web/src/main.js` が `place/web/` の 8 ファイル(alignFlow・align・modes・xr・nativeAR・modeButtons・loadPlace・placeSchema)を読んでいたので、`web/src/stage/` へ移して直した。
+- 試験が、外すフォルダの見本やスキルを読むことがある(`memory.test.mjs` は `kiosk/memory/sample`、`shop/rules.mjs` は shop-guide スキル)。外す前に `node --test` を流して、落ちた所を直す。
+- プライバシーの試験は `web/src` の `fetch(変数)` を許可リストで見る。移した部品の `fetch(url)` は `VARIABLE_FETCH` に足す。
+- 他のスレッドが動いている作業コピーは動かさない。main の整理は別の worktree でやり、元の作業コピーは別の線(archive)に切り替えるだけにすると、未コミットの変更も絶対パスの台本も壊れない。
+- 別の worktree には `web/node_modules`(junction)と、`tools/prepush_terms.local.txt`(git 無視)を写さないと、`npm test` と `prepush_check` が動かない。

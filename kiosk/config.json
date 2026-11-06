@@ -1,8 +1,0 @@
-{
-  "_comment": "キオスクの画面と試験が同じ設定で頭脳に聞くための共通の設定。画面(kiosk/web)と試験(kiosk/eval/run.mjs)の両方が読む。",
-  "characterId": "sample_vrm",
-  "scene": "お客さんは入口の案内画面の前に立ち、文字で話しかけている",
-  "placeInfo": "ここは店の入口にある案内画面。お客さんは文字(または後から足す声)で質問する。案内は店のデータ・店の記憶にあることだけ。",
-  "idleResetSeconds": 90,
-  "historyTurns": 6
-}

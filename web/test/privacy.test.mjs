@@ -59,6 +59,7 @@ const VARIABLE_FETCH = {
   'character/index.js': ['url'], // character.json(?character= で渡された物)
   'conversation/speaker.js': ['f.url'], // /api/fillers が返した、自分のサーバーの声のファイル
   'main.js': ['character.personaUrl'], // キャラの persona.md
+  'stage/loadPlace.js': ['url'], // place.js が渡す、自分のサーバーの place.json
 };
 
 test('fetch の宛先は、文字で書いた許可済みの物か、確かめ済みの変数だけ(変数の宛先に画像を忍ばせられない)', () => {

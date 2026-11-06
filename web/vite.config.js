@@ -4,13 +4,13 @@ import { defineConfig } from 'vite';
 const API = 'http://localhost:8787';
 
 export default defineConfig({
-  // 場所の柱(../place/web)も同じ three を使うよう、1 つにまとめる
+  // three を 1 つにまとめる(src/stage の AR の部品も同じ three を使う)
   resolve: { dedupe: ['three'] },
   server: {
     fs: { allow: ['..'] },
     host: true,
     port: 5173,
-    proxy: { '/api': API, '/characters': API, '/places': API },
+    proxy: { '/api': API, '/characters': API },
   },
   build: { target: 'es2022', chunkSizeWarningLimit: 1500 },
 });

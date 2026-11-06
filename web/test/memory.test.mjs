@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createShop, normalizeFacts, renderMemory, renderShopData, resolveSources, MEMORY_CATEGORIES } from '../server/shop/index.mjs';
 
-const SAMPLE = join(import.meta.dirname, '..', '..', 'kiosk', 'memory', 'sample', 'venue.json');
+const SAMPLE = join(import.meta.dirname, '..', 'server', 'shop', 'memory_sample', 'venue.json');
 const raw = () => JSON.parse(readFileSync(SAMPLE, 'utf8'));
 
 test('見本の記憶は、分類ごとにそろう。取得日の無い事実・本文の無い事実は捨てる', () => {
