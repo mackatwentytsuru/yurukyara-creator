@@ -58,6 +58,9 @@
     "default": "3d",
     "3d": {
       "at": "top"
+    },
+    "2d": {
+      "parts": "2d/parts.json"
     }
   },
   "origin": {

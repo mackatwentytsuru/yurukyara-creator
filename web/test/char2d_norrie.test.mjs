@@ -2,6 +2,8 @@
 // 協力者が手で描いた正面の絵を、色と形をそのままに部品へ分けて描き直した物(characters/norrie/2d)。
 // 合格: 部品の点検 0 件・元の絵の 6 色だけ・決めた部品の <g id> がそろう・前歯 2 本が口の形に残る・
 //       動きの意図(K2)の列 10 個が最後まで動く・まばたき・口 3 形・7 表情・鼻が顔と一緒に動く・腕は頭の前に出ない。
+// 判定(judge_final)の直し 2026-11-07: おじぎで蝶ネクタイが半分以上見える・手を振る腕は 2 枚でひじで曲がり、肩の継ぎ目は胴が隠す・
+//       後ろ姿の板(背中の筋)・考え中のまま話しても考え中の口のまま。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -53,16 +55,20 @@ test('色は元の絵の 6 色だけ(焦げ茶・クリーム・黒・白・ピ�
 
 test('部品は分かれている: 耳・頭・顔・鼻・目・口・体・お腹・腕・手袋・蝶ネクタイ・しっぽ', () => {
   const ids = new Set(listGroupIds(svg));
-  for (const id of ['tail', 'body', 'torso', 'belly', 'arm_r', 'arm_l', 'sleeve_r', 'sleeve_l', 'glove_r', 'glove_l', 'bowtie', 'head', 'ear_r', 'ear_l', 'head_fur', 'face_cream', 'muzzle']) {
+  for (const id of ['tail', 'body', 'torso', 'belly', 'arm_r', 'arm_l', 'sleeve_r', 'sleeve_l', 'forearm_r', 'forearm_l', 'glove_r', 'glove_l', 'bowtie', 'head', 'ear_r', 'ear_l', 'head_fur', 'face_cream', 'muzzle', 'back']) {
     assert.ok(ids.has(id), `<g id="${id}"> が無い`);
   }
   // 手袋は白、蝶ネクタイは緑、しっぽはクリーム色
   assert.match(extractGroup(svg, 'glove_r'), /fill="#FFFFFF"/);
   assert.match(extractGroup(svg, 'bowtie'), /fill="#249867"/);
   assert.match(extractGroup(svg, 'tail'), /fill="#F0E9DE"/);
-  // 体の部品の前後: しっぽ < 体 < 腕 < 蝶ネクタイ < 頭
+  // 体の部品の前後: しっぽ < 上腕(胴の後ろ。肩の継ぎ目を胴が隠す)< 体 < 前腕(袖の下と手袋)< 蝶ネクタイ < 頭
   const z = (n) => spec.parts[n].z;
-  assert.ok(z('tail') < z('body') && z('body') < z('arm_r') && z('arm_r') < z('bowtie') && z('bowtie') < z('head'));
+  for (const s of ['r', 'l']) {
+    assert.ok(z('tail') < z(`arm_${s}`) && z(`arm_${s}`) < z('body') && z('body') < z(`forearm_${s}`) && z(`forearm_${s}`) < z('bowtie') && z('bowtie') < z('head'), `前後 ${s}`);
+    assert.equal(spec.parts[`forearm_${s}`].parent, `arm_${s}`, '前腕は上腕に付く');
+  }
+  assert.match(extractGroup(svg, 'forearm_r'), /<g id="glove_r">/, '手袋は前腕の部品');
 });
 
 test('ふつうの顔は元の絵のまま: 黒い丸い目 2 つと、前歯 2 本の見える口', () => {
@@ -218,8 +224,126 @@ test('部品の画像は部品の箱の大きさだけ作る(全身の大きさ�
   const px = spec.pxPerUnit ** 2;
   const total = sizes.reduce((a, s) => a + s.w * s.h, 0) / px;
   const fullArea = spec.viewBox[2] * spec.viewBox[3];
-  assert.ok(total < fullArea * 1.6, `部品の面積の合計 ${Math.round(total)} が全身 1.6 枚分 ${Math.round(fullArea * 1.6)} より少ない`);
+  // 後ろ姿の板は全身 1 枚(正面とは別に数える)
+  const [, , bw, bh] = spec.back.box;
+  const back = bw * bh;
+  assert.ok(total - back < fullArea * 1.6, `正面の部品の面積の合計 ${Math.round(total - back)} が全身 1.6 枚分 ${Math.round(fullArea * 1.6)} より少ない`);
+  assert.ok(back <= fullArea, `後ろ姿の板 ${back} は全身 1 枚分 ${fullArea} まで`);
   assert.equal(c.kind, '2d');
   assert.ok(c.object3d.getObjectByName('2d:head'));
-  assert.ok(Buffer.byteLength(svg) < 120_000, `SVG ${Buffer.byteLength(svg)} バイト`);
+  assert.ok(Buffer.byteLength(svg) < 130_000, `SVG ${Buffer.byteLength(svg)} バイト`);
+});
+
+// ---- 判定(judge_final 2026-11-07)の直し ----
+
+/** 板(mesh)の上下のふち(ワールド座標の y)。板の箱の上と下 */
+function boardYRange(c, groupName) {
+  c.object3d.updateWorldMatrix(true, true);
+  const mesh = c.groups[groupName].children[0];
+  const h = mesh.geometry.parameters.height / 2;
+  const top = new THREE.Vector3(0, h, 0).applyMatrix4(mesh.matrixWorld).y;
+  const bottom = new THREE.Vector3(0, -h, 0).applyMatrix4(mesh.matrixWorld).y;
+  return { top, bottom };
+}
+
+test('おじぎ: 緑の蝶ネクタイは胸に残り、半分以上見える(頭は下げずに、顔を少しつぶして下を向く)', () => {
+  const { c } = make();
+  c.lookAt([0, 1.0, 2]);
+  run(c, 0.5);
+  const rest = { head: c.groups.head.scale.y * c.upper.scale.y, face: c.face.position.y };
+  assert.equal(c.play('bow'), true);
+  let worst = 1;
+  let squash = 1;
+  let faceDown = 0;
+  run(c, 2.0, (cc) => {
+    const bow = boardYRange(cc, 'bowtie');
+    const head = boardYRange(cc, 'head');
+    // 蝶ネクタイの見える割合 = 頭の下のふちより下にある部分
+    const visible = Math.max(0, Math.min(1, (Math.min(bow.top, head.bottom) - bow.bottom) / (bow.top - bow.bottom)));
+    worst = Math.min(worst, visible);
+    squash = Math.min(squash, (cc.groups.head.scale.y * cc.upper.scale.y) / rest.head);
+    faceDown = Math.min(faceDown, cc.face.position.y - rest.face);
+  });
+  assert.ok(worst >= 0.5, `おじぎの間ずっと、蝶ネクタイが半分以上見える(いちばん隠れた時 ${(worst * 100).toFixed(0)}%)`);
+  assert.ok(worst >= 0.8, `ほとんど隠れない (${(worst * 100).toFixed(0)}%)`);
+  assert.ok(squash < 0.95, `顔を少しつぶす (${squash.toFixed(3)})`);
+  assert.ok(faceDown < -0.01, `顔が下を向く (${faceDown.toFixed(3)})`);
+});
+
+test('手を振る: 腕は上腕と前腕の 2 枚で、ひじで曲がって前腕が上を向く。上腕は胴の後ろ(肩の継ぎ目を胴が隠す)', () => {
+  const { c } = make();
+  const arm = c.groups.arm_r;
+  const fore = c.groups.forearm_r;
+  assert.equal(fore.parent, arm, '前腕は上腕の子(ひじで上腕に付く)');
+  // 止まっている時は曲げない(元の絵の形のまま)
+  run(c, 0.5);
+  assert.ok(Math.abs(arm.rotation.z) < 0.05 && Math.abs(fore.rotation.z) < 0.05, '止まっている時はまっすぐ');
+  // 上腕の板は胴の板より奥、前腕の板は胴より手前
+  const order = (g) => g.children[0].renderOrder;
+  assert.ok(order(arm) < order(c.groups.body) && order(c.groups.body) < order(fore));
+  c.play('wave');
+  let upMin = 0;
+  let bendMin = 0;
+  let pawUp = false;
+  let foreBehind = false;
+  const bendSeen = new Set();
+  run(c, 2.2, (cc) => {
+    upMin = Math.min(upMin, arm.rotation.z);
+    bendMin = Math.min(bendMin, fore.rotation.z);
+    bendSeen.add(Math.round(fore.rotation.z * 10));
+    // 大きく曲げた時は、前腕が上腕の後ろ(ひじの丸が前に出て、前腕の線の元を隠す)
+    if (fore.rotation.z < -1.5 && order(fore) < order(arm)) foreBehind = true;
+    // 手袋(前腕の先)がひじより上にあるか
+    cc.object3d.updateWorldMatrix(true, true);
+    const elbow = fore.getWorldPosition(new THREE.Vector3());
+    const paw = fore.children[0].getWorldPosition(new THREE.Vector3());
+    if (paw.y > elbow.y + 0.05) pawUp = true;
+  });
+  assert.ok(upMin < -1.2, `上腕が肩で上がる (${upMin.toFixed(2)})`);
+  assert.ok(bendMin < -1.8, `ひじで曲がる (${bendMin.toFixed(2)})`);
+  assert.ok(pawUp, '前腕が上を向く(手袋がひじより上)');
+  assert.ok(bendSeen.size > 6, '前腕を振る(角度が行き来する)');
+  assert.ok(foreBehind, '大きく曲げた時は、前腕が上腕の後ろに回る');
+  // 振り終わったら元に戻る
+  run(c, 0.6);
+  assert.ok(Math.abs(arm.rotation.z) < 0.05 && Math.abs(fore.rotation.z) < 0.05, '振り終わったら元の形');
+  assert.ok(order(c.groups.body) < order(fore), '戻ったら前腕は胴の前(手袋がお腹の前)');
+});
+
+test('後ろ姿の板: 向こうを向くと背中の筋が見える(前の板は表だけ・後ろ姿の板は裏向き)', () => {
+  const { c } = make();
+  assert.ok(c.back, '後ろ姿の板がある');
+  const backMesh = c.back.children[0];
+  assert.equal(backMesh.name, '2d:back');
+  assert.equal(backMesh.material.side, THREE.FrontSide);
+  assert.equal(c.groups.head.children[0].material.side, THREE.FrontSide, '前の板は表だけ(後ろから見ると消える)');
+  assert.ok(Math.abs(c.back.rotation.y - Math.PI) < 1e-9, '後ろ向き');
+  // 後ろ姿の絵: 茶色の背中・クリーム色の筋・黒い線だけ(色を足さない)
+  const g = extractGroup(svg, 'back');
+  const colors = new Set([...g.matchAll(/fill="(#[0-9A-Fa-f]{3,6})"/g)].map((m) => full(m[1])));
+  assert.deepEqual([...colors].sort(), ['#000000', '#50403c', '#f0e9de']);
+  // 向こうを向く動き: 途中で後ろ向き、終わると正面
+  assert.equal(c.play('turn'), true);
+  const seen = [];
+  run(c, 3.0, (cc) => seen.push(cc.state2d.facing));
+  assert.ok(seen.includes('back'), '後ろ姿が出る');
+  assert.equal(seen.at(-1), 'front', '最後は正面に戻る');
+  assert.ok(seen.filter((f) => f === 'back').length >= 30, `後ろ姿を 1 秒以上見せる (${seen.filter((f) => f === 'back').length} コマ)`);
+  // 向いたままにもできる
+  assert.equal(c.setFacing('back'), true);
+  run(c, 1.0);
+  assert.equal(c.state2d.facing, 'back');
+  c.setFacing('front');
+  run(c, 1.0);
+  assert.equal(c.state2d.facing, 'front');
+});
+
+test('考え中のまま話しても、口は考え中の形のまま開く(笑顔の口に替わらない)', () => {
+  const { c } = make();
+  c.setEmotion('think', 1);
+  for (const [level, want] of [[0, 'face.think.mouth_closed'], [0.3, 'face.think.mouth_half'], [0.9, 'face.think.mouth_open']]) {
+    c.setMouth(level);
+    run(c, 0.6);
+    assert.deepEqual(visibleMouth(c), [want], `口 ${level}`);
+  }
 });

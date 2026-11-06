@@ -54,12 +54,18 @@ groups['body'] = (
     f'<g id="belly">{fill(M["belly_fill"], "cream")}</g>'
     f'<g id="body_line">{ink(M["body_ink"])}</g>'
 )
+# 腕は 2 枚: 上腕(arm_*。胴の後ろ。ひじの先は丸く線つき)と前腕(forearm_*。ひじから下の袖と手袋。胴の前)
 for s in ('r', 'l'):
     groups[f'arm_{s}'] = (
-        f'<g id="sleeve_{s}">{fill(M[f"sleeve_{s}_fill"], "brown")}</g>'
-        f'<g id="glove_{s}">{fill(M[f"glove_{s}_fill"], "white")}</g>'
-        f'<g id="arm_{s}_line">{ink(M[f"arm_{s}_ink"])}</g>'
+        f'<g id="sleeve_{s}">{fill(M[f"upper_{s}_fill"], "brown")}</g>'
+        f'<g id="arm_{s}_line">{ink(M[f"upper_{s}_ink"])}</g>'
     )
+    groups[f'forearm_{s}'] = (
+        f'<g id="forearm_sleeve_{s}">{fill(M[f"fore_{s}_fill"], "brown")}</g>'
+        f'<g id="glove_{s}">{fill(M[f"glove_{s}_fill"], "white")}</g>'
+        f'<g id="forearm_{s}_line">{ink(M[f"fore_{s}_ink"])}</g>'
+    )
+JOINTS = json.loads(str(M['joints']))
 groups['bowtie'] = fill(M['bow_fill'], 'green', eps=0.8) + ink(M['bow_ink'])
 groups['head'] = (
     f'<g id="ear_r">{fill(M["ear_r_fill"], "brown")}{ink(M["ear_r_ink"])}</g>'
@@ -189,17 +195,25 @@ face['face.angry.mouth_closed'] = strokes([f'M{P(AXIS - 18, 349)} Q{P(AXIS, 342,
 face['face.angry.mouth_half'] = blk(f'M{P(AXIS - 20, 343)} L{P(AXIS + 20, 343)} Q{P(AXIS + 16, 362, AXIS, 362)} Q{P(AXIS - 16, 362, AXIS - 20, 343)}Z') + f'<rect x="{AXIS - 7}" y="343" width="14" height="6" rx="1.5" fill="#FFF"/>'
 face['face.angry.mouth_open'] = blk(f'M{P(AXIS - 22, 341)} L{P(AXIS + 22, 341)} Q{P(AXIS + 19, 370, AXIS, 370)} Q{P(AXIS - 19, 370, AXIS - 22, 341)}Z') + f'<rect x="{AXIS - 8}" y="341" width="16" height="7" rx="1.5" fill="#FFF"/>'
 face['face.think.mouth_closed'] = strokes([f'M{P(AXIS - 16, 348)} Q{P(AXIS - 6, 340, AXIS + 3, 347)} Q{P(AXIS + 11, 354, AXIS + 19, 344)}'], 7)
+# 考え中のまま話す時の口(半分・開き)。閉じた口と同じ波の形のまま開く(笑顔の口にしない)。前歯は上のふちの真ん中
+face['face.think.mouth_half'] = blk(f'M{P(AXIS - 17, 347)} Q{P(AXIS - 6, 336, AXIS + 3, 343)} Q{P(AXIS + 11, 349, AXIS + 20, 342)}'
+                                    f' Q{P(AXIS + 17, 357, AXIS + 4, 357)} Q{P(AXIS - 10, 357, AXIS - 17, 347)}Z') + f'<rect x="{AXIS - 6}" y="340.5" width="12" height="5" rx="1.5" fill="#FFF"/>'
+face['face.think.mouth_open'] = blk(f'M{P(AXIS - 19, 346)} Q{P(AXIS - 7, 333, AXIS + 3, 341)} Q{P(AXIS + 12, 347, AXIS + 22, 340)}'
+                                    f' Q{P(AXIS + 19, 368, AXIS + 4, 368)} Q{P(AXIS - 13, 368, AXIS - 19, 346)}Z') + f'<rect x="{AXIS - 7}" y="338.5" width="14" height="6" rx="1.5" fill="#FFF"/>'
 
 # ---------- 箱 ----------
 def box_of(*names):
     return bbox(*[M[n] for n in names])
 
 
+# 前後(z): しっぽ 0 < 上腕 0.5 < 体 1 < 前腕 2 < 蝶ネクタイ 3 < 頭 5
 parts = {
     'tail': {'box': box_of('tail_fill', 'tail_ink'), 'z': 0},
+    'arm_r': {'box': box_of('upper_r_fill', 'upper_r_ink'), 'z': 0.5},
+    'arm_l': {'box': box_of('upper_l_fill', 'upper_l_ink'), 'z': 0.5},
     'body': {'box': box_of('torso_fill', 'belly_fill', 'body_ink'), 'z': 1},
-    'arm_r': {'box': box_of('sleeve_r_fill', 'glove_r_fill', 'arm_r_ink'), 'z': 2},
-    'arm_l': {'box': box_of('sleeve_l_fill', 'glove_l_fill', 'arm_l_ink'), 'z': 2},
+    'forearm_r': {'box': box_of('fore_r_fill', 'glove_r_fill', 'fore_r_ink'), 'z': 2, 'parent': 'arm_r'},
+    'forearm_l': {'box': box_of('fore_l_fill', 'glove_l_fill', 'fore_l_ink'), 'z': 2, 'parent': 'arm_l'},
     'bowtie': {'box': box_of('bow_fill', 'bow_ink'), 'z': 3},
     'head': {'box': box_of('ear_r_fill', 'ear_l_fill', 'ear_r_ink', 'ear_l_ink', 'head_fur_fill', 'face_cream_fill', 'head_ink'), 'z': 5},
 }
@@ -208,19 +222,31 @@ foot_y = float(ys.max() + 1) - 2.0          # 足の線の下のふち(少し上
 top_y = float(np.where(M['ear_r_ink'] | M['ear_l_ink'])[0].min()) - 4
 vh = round(foot_y - top_y)
 vy = round(foot_y - vh)
-half_w = max(AXIS - min(p['box'][0] for p in parts.values()), max(p['box'][0] + p['box'][2] for p in parts.values()) - AXIS) + 4
+# 横の広さは、腕が 1 枚だった時と同じ(袖・手袋・腕の線の全部)で決める(座標を前と同じに保つ)
+whole_arms = [box_of(f'sleeve_{s}_fill', f'glove_{s}_fill', f'arm_{s}_ink') for s in ('r', 'l')]
+boxes = [p['box'] for p in parts.values()] + whole_arms
+half_w = max(AXIS - min(b[0] for b in boxes), max(b[0] + b[2] for b in boxes) - AXIS) + 4
 vw = round(half_w * 2)
 vx = AXIS - vw / 2
-# 回る中心(元の絵の座標)
+# 回る中心(元の絵の座標)。腕は 肩(上腕)と ひじ(前腕)
 parts['body']['pivot'] = [AXIS, foot_y]
 parts['head']['pivot'] = [AXIS, 452]
-cxs, cys = centroid(M['sleeve_r_fill'] & (np.mgrid[0:H, 0:W][0] < 490))
-parts['arm_r']['pivot'] = [round(cxs + 6, 1), 474]
-parts['arm_l']['pivot'] = [round(2 * AXIS - (cxs + 6), 1), 474]
+for s in ('r', 'l'):
+    parts[f'arm_{s}']['pivot'] = JOINTS[s]['shoulder']
+    parts[f'forearm_{s}']['pivot'] = JOINTS[s]['elbow']
 cxt, _ = centroid(M['tail_fill'] & (np.mgrid[0:H, 0:W][0] > 820))
 parts['tail']['pivot'] = [round(cxt, 1), 860]
 for p in parts.values():
     p['box'] = [int(v) for v in p['box']]
+
+# ---------- 後ろ姿の板(向こうを向いた時に出す。後ろ姿の絵から。norrie_back.py の出力)----------
+B = dict(np.load(os.path.join(WORK, 'back_masks.npz')))
+BSHIFT = int(B['shift'])
+back_svg = (fill(B['back_brown'], 'brown', eps=1.2) + fill(B['back_cream'], 'cream', eps=1.2)
+            + ink(B['back_ink'] | B['back_stripe'], eps=0.8))
+_bys, _bxs = np.where(B['back_brown'] | B['back_cream'] | B['back_ink'] | B['back_stripe'])
+bb = [int(_bxs.min()) - 3, int(_bys.min()) - 3, int(_bxs.max() - _bxs.min()) + 7, int(_bys.max() - _bys.min()) + 7]
+back_part = {'id': 'back', 'box': [bb[0] + BSHIFT, bb[1], bb[2], bb[3]], 'drawing': 'back'}
 
 face_boxes = {
     'eyes': [round(AXIS - 74), round(cy_eye - 31), 148, 62],
@@ -241,20 +267,27 @@ spec = {
     'face': {k: {'box': v} for k, v in face_boxes.items()},
     'faceLayers': [{'id': 'muzzle', 'box': mz}],
     'blink': {'noBlink': ['happy', 'relaxed']},
-    'arms': {'front': False},
-    'gains': {'arm': 0.7, 'faceParallax': 0.3},
+    # front: 腕を頭の前に出さない。foreBehind: 前腕をこの角度(ラジアン)より大きく曲げたら、上腕の後ろへ回す(ひじの丸が前に出る)
+    'arms': {'front': False, 'foreBehind': 0.6},
+    # 腕は 2 枚(arm 上腕の効き・elbow ひじで曲げる最大・swing 前腕の振り)。
+    # おじぎは蝶ネクタイを胸に残す: 頭は下げず(bowHoldHead・bowHeadDrop)、顔を少しつぶして下へ(bowHeadSquash・bowFaceDrop)
+    'gains': {'arm': 0.62, 'elbow': 2.2, 'swing': 0.6, 'faceParallax': 0.3,
+              'bowSquash': 0.22, 'bowHoldHead': 1, 'bowHeadDrop': 0.02, 'bowHeadSquash': 0.08, 'bowHeadGrow': 0.02, 'bowFaceDrop': 0.03},
+    'back': back_part,
     'expressionFallback': {},
-    'source': {'drawing': 'front', 'drawn_by': '協力者', 'palette': COL},
+    'source': {'drawing': 'front', 'back': 'back', 'drawn_by': '協力者', 'palette': COL},
 }
 
 # ---------- SVG ----------
 head = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{f1(vx)} {vy} {vw} {vh}" width="{vw}" height="{vh}">\n'
         '<!-- ノリー(セスジキノボリカンガルーの執事見習い)の 2D。協力者が手で描いた正面の絵から、色と形をそのままに部品へ分けて描き直した。\n'
-        '     部品は <g id>。顔は face.<表情>.<枠>(枠 = eyes・brows・mouth_closed・mouth_half・mouth_open)、鼻は muzzle。色は元の絵の 6 色だけ。 -->\n')
-order = ['tail', 'body', 'arm_r', 'arm_l', 'bowtie', 'head']
+        '     部品は <g id>。顔は face.<表情>.<枠>(枠 = eyes・brows・mouth_closed・mouth_half・mouth_open)、鼻は muzzle。色は元の絵の 6 色だけ。\n'
+        '     腕は上腕(arm_*)と前腕(forearm_*)の 2 枚。back は三面図の後ろ姿の絵から(向こうを向いた時に出す板。背中の筋)。 -->\n')
+order = ['tail', 'arm_r', 'arm_l', 'body', 'forearm_r', 'forearm_l', 'bowtie', 'head']
 body = ''.join(f'<g id="{k}">{groups[k]}</g>\n' for k in order)
 body += f'<g id="muzzle">{muzzle}</g>\n'
 body += ''.join(f'<g id="{k}">{v}</g>\n' for k, v in face.items())
+body += f'<g id="back" transform="translate({BSHIFT} 0)">{back_svg}</g>\n'
 svg = head + body + '</svg>\n'
 os.makedirs(OUT, exist_ok=True)
 with open(os.path.join(OUT, 'body.svg'), 'w', encoding='utf-8', newline='\n') as f:
