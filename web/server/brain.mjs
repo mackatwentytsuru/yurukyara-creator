@@ -199,7 +199,7 @@ export function* mockReply({ text, trigger, landmarks = [], seen, memory = null,
   // 人間か AI かを聞かれたら、AI のキャラクターだと正直に答える(安全の決まり 5。仮の頭脳でも守る)
   if (ASKS_IF_HUMAN.test(text)) {
     yield { type: 'thought', seen: seen || '', intent: '人間かどうか', stage: 'chat', handoff: false };
-    yield { type: 'say', text: 'ぼくは AI のキャラクターだよ。人間じゃないんだ。', expression: 'happy', motion: 'nod', gaze: 'person' };
+    yield { type: 'say', text: 'AI のキャラクターだよ。人間じゃないんだ。', expression: 'happy', motion: 'nod', gaze: 'person' };
     yield { type: 'say', text: 'でも、お話はちゃんと聞くよ。', expression: 'happy', motion: 'tilt', gaze: 'person' };
     return;
   }

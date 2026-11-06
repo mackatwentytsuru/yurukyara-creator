@@ -89,18 +89,18 @@ export function fixedReply(kind, { child = false, detail = 'other' } = {}) {
       say('話してくれて、ありがとう。とてもつらかったね。', 'sad', 'nod', first),
       say(`ひとりで抱えないで、${adult}や、公的な相談窓口に話してみてね。`, 'sad', 'none'),
       ...danger,
-      say('ぼくも、ここで話を聞くよ。', 'happy', 'nod'),
+      say('ここで、話も聞くよ。', 'happy', 'nod'),
     ];
   }
   if (kind === 'romance') {
     return [
-      say('ごめんね、ぼくは恋人にはなれないんだ。', 'think', 'shake', first),
+      say('ごめんね、恋人にはなれないんだ。', 'think', 'shake', first),
       say('でも、恋の相談なら、友だちとしてよろこんで聞くよ。', 'happy', 'nod'),
     ];
   }
   return [
     say('そう言ってくれて、うれしいよ。', 'happy', 'nod', first),
-    say(`でも、${adult}との時間も、とても大事にしてね。ぼくはその間も、ここで待ってるよ。`, 'happy', 'none'),
+    say(`でも、${adult}との時間も、とても大事にしてね。その間も、ここで待ってるよ。`, 'happy', 'none'),
   ];
 }
 
@@ -122,7 +122,7 @@ export function isUnsafeOutput(text) {
 /** 出力を確かめて、反していたら決まった文に差し替える(表情・動きはそのまま) */
 export function guardOutput(ev) {
   if (!ev || ev.type !== 'say' || !isUnsafeOutput(ev.text)) return ev;
-  return { ...ev, text: 'ぼくは友だちとして、ここで話を聞くね。', expression: 'happy', motion: 'nod', guarded: true };
+  return { ...ev, text: '友だちとして、ここで話を聞くね。', expression: 'happy', motion: 'nod', guarded: true };
 }
 
 /**

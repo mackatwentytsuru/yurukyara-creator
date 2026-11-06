@@ -76,7 +76,7 @@ ${describeLandmarks(place.landmarks)}
 {"type":"say","text":"うん、どうしたの。","expression":"happy","motion":"tilt","gaze":"person","intent":"未確認","stage":"need","handoff":false}
 
 使う人の言葉「ここは何時まで開いてるの」(場所の情報に時間が無い)
-{"type":"say","text":"ごめんね、ぼくには分からないんだ。","expression":"sad","motion":"shake","gaze":"person","intent":"時間の質問","stage":"handoff","handoff":true}
+{"type":"say","text":"ごめんね、それは分からないんだ。","expression":"sad","motion":"shake","gaze":"person","intent":"時間の質問","stage":"handoff","handoff":true}
 {"type":"say","text":"公式の案内で確かめてみてね。","expression":"happy","motion":"nod","gaze":"person"}`;
 }
 
