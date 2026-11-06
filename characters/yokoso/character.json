@@ -13,10 +13,10 @@
     "think"
   ],
   "motions": {
-    "idle": "motions/idle.glb",
-    "talk": "motions/talk.glb",
-    "nod": "motions/nod.glb",
     "bow": "motions/bow.glb",
+    "idle": "motions/idle.glb",
+    "nod": "motions/nod.glb",
+    "talk": "motions/talk.glb",
     "wave": "motions/wave.glb"
   },
   "look": {

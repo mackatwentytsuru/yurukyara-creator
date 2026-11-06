@@ -8,7 +8,8 @@ B=$BLENDER
 mkdir -p $W/built $W/face2 $W/rig2
 "$B" -b -P $HERE/../builders/$ID.py -- $W/built/${ID}_built.blend "$@" 2>&1 | grep -E "^BUILD|Traceback" | grep -v unregister
 STYLE=led; [ "$ID" = "d_lantern" ] && STYLE=paper
-$PY $HERE/f01_face_atlas.py $STYLE $W/face2 > /dev/null
+FACEARGS=""; [ -f $HERE/../specs/${ID}_face.args ] && FACEARGS=$(cat $HERE/../specs/${ID}_face.args)
+$PY $HERE/f01_face_atlas.py $STYLE $W/face2 $FACEARGS > /dev/null
 "$B" -b -P $HERE/b03_rig.py -- $HERE/../specs/${ID}_built.json $W/built/${ID}_built.blend - $W/face2 $W/rig2 2>&1 | grep -E "^B03" | cut -c1-80
 rm -rf $W/views2; "$B" -b -P $HERE/b05_render.py -- $W/rig2/model.glb $W/views2 --size 600 2>&1 | grep -E "B05" | cut -c1-10
 # 動きの確かめ(大きな一覧)

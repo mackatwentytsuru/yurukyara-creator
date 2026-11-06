@@ -10,7 +10,13 @@ def silhouette(im):
             return al > 128
     a = np.array(im.convert("RGB")).astype(int)
     bg = np.median(np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]]), axis=0)
-    return (np.abs(a - bg).sum(axis=2) > 40)
+    m = (np.abs(a - bg).sum(axis=2) > 40)
+    if bg.min() > 235:
+        # 白い背景の絵の、足元の薄い影(色味のない明るい灰色)は体ではない。これを体と数えると、外接箱の高さが伸びて IoU が下がり、抜けの検査(s05)が影の所を抜けと出す
+        a_max, a_min = a.max(axis=2), a.min(axis=2)
+        m &= ~(((a_max - a_min) < 18) & (a_max > 120))
+    from scipy import ndimage as ndi
+    return ndi.binary_fill_holes(m)     # 白い文字・目のハイライトなど、体の中の穴は体に数える
 
 
 def norm_mask(m, size=500):

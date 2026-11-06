@@ -1,8 +1,9 @@
-"""ようこそくん(たすきを掛けた緑のぬいぐるみ)。受付に立つキャラの見本。
-スキルだけの試験で作業役が書いた builder を元に、輪郭・肩・たすきを直した。
-使い方: blender -b -P creator/builders/yokoso.py -- <出力.blend> <作業フォルダ>
-作業フォルダには sash.png と sash.json を先に作っておく(creator/pipeline/t01_band_texture.py)。rig.json もここに書く。"""
+"""ようこそくん(緑の毛足のぬいぐるみ。大きな丸い頭、小さな丸い胴、短い丸い腕、短い脚に丸い足、赤いたすき)の手組み builder。
+元の絵: Claude が SVG で描いた絵(creator/samples/yokoso_元の絵.svg を 1254×1254 に撮った PNG)。
+作業フォルダには sash.png と sash.json を先に作っておく(creator/pipeline/t01_band_texture.py)。
+使い方: blender -b -P yokoso.py -- <出力.blend> work=<作業フォルダ>"""
 import json
+import math
 import os
 import sys
 
@@ -11,13 +12,12 @@ from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pipeline"))
 import m00_prims as P  # noqa: E402
-import m01_wrap as W   # noqa: E402
+import m01_wrap as W  # noqa: E402
 
-ARGV = sys.argv[sys.argv.index("--") + 1:]
-OUT, WORK = ARGV[0], ARGV[1]
-S = 1203.0            # 画素 → メートル(全高 1.0m)
-CX, FY = 622, 1230
-FX = 625              # 顔の左右の中心
+# 絵の高さ(足の底 1142 〜 頭のてっぺん 97)= 1046px を 1.0m に割りあてる
+S = 1046.0
+CX, FY = 626.5, 1142.0
+WORK = "."
 
 
 def X(px):
@@ -32,258 +32,294 @@ def R(px):
     return px / S
 
 
+# 画素のまま。半径は (横 rx, 奥行き ry, 縦 rz)
 D = dict(
-    head=[(27, 6), (33, 75), (45, 118), (60, 158), (100, 227), (140, 274), (180, 307), (220, 334), (260, 353),
-          (300, 367), (340, 374), (380, 377), (420, 374), (460, 366), (500, 350), (540, 325), (580, 288), (610, 230),
-          (628, 120), (636, 6)],
-    head_depth=0.95,
-    torso=[(500, 190), (560, 222), (600, 248), (615, 262), (630, 286), (645, 302), (660, 310), (700, 306), (780, 303), (860, 310), (940, 303),
-           (980, 288), (1020, 266), (1050, 236), (1070, 185), (1080, 90), (1082, 6)],
-    # 肩(py 600〜660)は、元の絵の輪郭の首から腕の上へまっすぐ下がる線に合わせた(細いと、腕の付け根の上に抜けが出た)
-    torso_depth=0.85,
-    arm_root=(400, 690), arm_tip=(188, 812), arm_r=86,
-    foot_c=(473, 1150), foot_r=(116, 108, 82), foot_dx=149, leg_dx=139,
-    eye_c=((442, 347), (808, 347)), eye_r=(50, 10, 74),
-    hl=((455, 305), (797, 306)), hl_r=13,
-    cheek=((369, 447), (878, 447)), cheek_r=(50, 46),
-    mouth_ends=(540, 708), mouth_top=422, mouth_sag=36, mouth_t=11,
+    head_c=(627, 420), head_r=(342, 330, 322),
+    body_c=(627, 868), body_r=(226, 205, 172),
+    arm_root=(486, 800), arm_tip=(380, 892), arm_r=62,
+    shoulder_c=(486, 780), hand_c=(346, 924), hand_r=(72, 66, 72),
+    leg_c=(552, 1042), leg_r=(58, 56, 62),
+    foot_c=(526, 1092), foot_r=(96, 86, 50),
+    eye_dx=122, eye_c=430, eye_r=(42, 68),
+    light_off=(-12, -28), light_r=15,
+    mouth_a=(587, 520), mouth_b=(627, 568), mouth_c=(667, 520), mouth_w=6.5,
+    cheek_dx=209, cheek_y=540, cheek_r=(58, 44),
+    sash_text_fill=1.0, sash_w_scale=1.0,
 )
+SASH_SEG = 120
 
-
-TEXT_FILL = 0.92   # 面の曲がりで前の部分が見かけより長いので、字を少し大きく載せる
-SASH_SEG = 240     # 帯の長さ方向の分け数(一周)
+GREEN = (138, 186, 40)
+CHEEK = (255, 140, 166)
+SASH = (208, 44, 40)
 
 
 def group(ob, bone):
-    vg = ob.vertex_groups.new(name=bone)
+    vg = ob.vertex_groups.get(bone) or ob.vertex_groups.new(name=bone)
     vg.add([v.index for v in ob.data.vertices], 1.0, "REPLACE")
 
 
-def secs(rows, depth, cx=0.0):
-    return [dict(z=Z(py), cx=cx, cy=0.0, rx=R(h), ry=R(h) * depth) for py, h in rows]
+class Head:
+    """頭の楕円体の式。顔の部品を面に載せる。"""
+
+    def __init__(self):
+        hc, hr = D["head_c"], D["head_r"]
+        self.cx, self.zc = X(hc[0]), Z(hc[1])
+        self.rx, self.ry, self.rz = R(hr[0]), R(hr[1]), R(hr[2])
+
+    def surf_y(self, x, z):
+        v = 1.0 - ((x - self.cx) / self.rx) ** 2 - ((z - self.zc) / self.rz) ** 2
+        return -self.ry * math.sqrt(max(v, 0.0))
+
+    def tilt_deg(self, x, z):
+        """面の法線が -Y からどれだけ横へ傾くか(Z まわり)。+X 側で正。"""
+        y = self.surf_y(x, z)
+        nx = (x - self.cx) / self.rx ** 2
+        ny = y / self.ry ** 2
+        return math.degrees(math.atan2(nx, -ny))
+
+
+def build_face(H, mats):
+    out = {}
+    # ---- 目(縦長の楕円)+ ハイライト 1 つ ----
+    parts = []
+    er = D["eye_r"]
+    for sign in (-1, 1):
+        ex = X(627 + sign * D["eye_dx"])
+        ez = Z(D["eye_c"])
+        ys = H.surf_y(ex, ez)
+        ang = H.tilt_deg(ex, ez)
+        a = math.radians(ang)
+        ey = ys - 0.010
+        e = P.superquadric(f"eye{sign}", (R(er[0]), 0.006, R(er[1])), (1.0, 1.0), (ex, ey, ez), rot_deg=(0, 0, ang),
+                           mat=mats["black"], seg=(40, 20))
+        parts.append(e)
+        lx, lz = R(D["light_off"][0]), -R(D["light_off"][1])
+        cx_ = ex + lx * math.cos(a) + 0.0045 * math.sin(a)
+        cy_ = ey + lx * math.sin(a) - 0.0045 * math.cos(a)
+        l = P.superquadric(f"light{sign}", (R(D["light_r"]), 0.004, R(D["light_r"])), (1.0, 1.0),
+                           (cx_, cy_, ez + lz), rot_deg=(0, 0, ang), mat=mats["white"], seg=(24, 12))
+        parts.append(l)
+        # 面に沈めた極小の球(m03 の「浮き」を避ける)
+        s = P.superquadric(f"eyesink{sign}", (0.004, 0.004, 0.004), (1.0, 1.0), (ex, ys + 0.008, ez - 0.02), mat=mats["black"], seg=(8, 6))
+        parts.append(s)
+    eyes = P.join(parts, "Eyes")
+    gL = eyes.vertex_groups.new(name="eye_L")
+    gR = eyes.vertex_groups.new(name="eye_R")
+    for v in eyes.data.vertices:   # +X 側 = eye_L
+        (gL if v.co.x > 0 else gR).add([v.index], 1.0, "REPLACE")
+    eyes.shape_key_add(name="Basis")
+    bl = eyes.shape_key_add(name="eye_blink")
+    zc = Z(D["eye_c"])
+    for i, v in enumerate(eyes.data.vertices):
+        bl.data[i].co = Vector((v.co.x, v.co.y, zc + (v.co.z - zc) * 0.06))
+    bl.value = 0.0
+    out["Eyes"] = eyes
+
+    # ---- 口: 笑った線(黒い管)+ 口の中(基準では点につぶれている楕円)----
+    a, b, c = D["mouth_a"], D["mouth_b"], D["mouth_c"]
+    pts = []
+    n = 13
+    for k in range(n):
+        t = k / (n - 1)
+        px = (1 - t) ** 2 * a[0] + 2 * (1 - t) * t * b[0] + t * t * c[0]
+        py = (1 - t) ** 2 * a[1] + 2 * (1 - t) * t * b[1] + t * t * c[1]
+        x, z = X(px), Z(py)
+        pts.append((x, H.surf_y(x, z) - 0.016, z))
+    rw = R(D["mouth_w"])
+    tube = P.tube("smile", pts, [rw] * n, mat=mats["black"], n=12)
+    ntube = len(tube.data.vertices)
+    mz = Z(548)
+    mcx = X(627)
+    inner = P.superquadric("inner", (R(34), 0.006, R(26)), (1.0, 1.0), (mcx, H.surf_y(mcx, mz) - 0.012, mz), mat=mats["inner"], seg=(24, 12))
+    ninner = len(inner.data.vertices)
+    inner_full = [v.co.copy() for v in inner.data.vertices]
+    ctr = Vector((mcx, H.surf_y(mcx, mz) - 0.012, mz))
+    for v in inner.data.vertices:    # 基準では点につぶす
+        v.co = ctr.copy()
+    sink = P.superquadric("mouthsink", (0.004, 0.004, 0.004), (1.0, 1.0), (mcx, H.surf_y(mcx, Z(530)) + 0.008, Z(530)), mat=mats["black"], seg=(8, 6))
+    mo = P.join([tube, inner, sink], "Mouth")
+    base = [v.co.copy() for v in mo.data.vertices]
+    mo.shape_key_add(name="Basis")
+
+    def key(name, fn):
+        k = mo.shape_key_add(name=name)
+        for i, p in enumerate(base):
+            k.data[i].co = fn(i, p.copy())
+        k.value = 0.0
+
+    def on_surface(p0, x1, z1):
+        """動かした先の頭の面に合わせて奥行きを直す(面からの距離は、動かす前のまま)。"""
+        off = p0.y - H.surf_y(p0.x, p0.z)
+        return Vector((x1, H.surf_y(x1, z1) + off, z1))
+
+    def open_fn(i, p):
+        if i < ntube:
+            t = 1.0 - min(1.0, abs(p.x - mcx) / R(42)) ** 2
+            return on_surface(p, p.x, p.z - 0.020 * t)
+        if i < ntube + ninner:
+            f = inner_full[i - ntube]
+            return on_surface(f, f.x, f.z - 0.012)
+        return p
+    key("mouth_open", open_fn)
+
+    def wide_fn(i, p):
+        if i < ntube:
+            return on_surface(p, mcx + (p.x - mcx) * 1.35, p.z + 0.004 * min(1.0, abs(p.x - mcx) / R(42)))
+        return p
+    key("mouth_wide", wide_fn)
+
+    def o_fn(i, p):
+        if i < ntube:
+            return on_surface(p, mcx + (p.x - mcx) * 0.35, mz + (p.z - mz) * 0.35)
+        if i < ntube + ninner:
+            f = inner_full[i - ntube]
+            return on_surface(f, mcx + (f.x - mcx) * 0.62, f.z + 0.002)
+        return p
+    key("mouth_o", o_fn)
+    out["Mouth"] = mo
+    return out
 
 
 def main():
+    global WORK
+    argv = sys.argv[sys.argv.index("--") + 1:]
+    out = argv[0]
+    for kv in argv[1:]:
+        k, v = kv.split("=", 1)
+        if k == "work":
+            WORK = v
+        else:
+            D[k] = eval(v)
     band = json.load(open(WORK + "/sash.json", encoding="utf-8"))
     bpy.ops.wm.read_factory_settings(use_empty=True)
     fz = WORK + "/fuzz"
     os.makedirs(fz, exist_ok=True)
-    green = P.fuzz_material("Green", (124, 168, 68), fz, grain=0.12, normal_strength=1.0)
-    black = P.material("Black", (18, 18, 20), rough=0.45, spec=0.3)
-    white = P.material("White", (250, 250, 250), rough=0.5, spec=0.2)
-    inner = P.material("Inner", (110, 24, 34), rough=0.6, spec=0.2)
+    green = P.fuzz_material("Green", GREEN, fz, grain=0.12, normal_strength=1.0)
+    mats = dict(
+        black=P.material("Black", (18, 18, 20), rough=0.35, spec=0.4),
+        white=P.material("White", (252, 252, 252), rough=0.4, spec=0.3),
+        inner=P.material("Inner", (96, 20, 30), rough=0.6, spec=0.2),
+    )
 
-    # --- 体 ---
-    head = P.loft("head", secs(D["head"], D["head_depth"]), mat=green, n=64, refine=4)
-    P.auto_uv(head, 7.0)
+    # ---- 体: 頭・胴・脚・足・腕 ----
+    hc, hr = D["head_c"], D["head_r"]
+    head = P.superquadric("head", tuple(R(v) for v in hr), (1.0, 1.0), (X(hc[0]), 0, Z(hc[1])), mat=green, seg=(64, 40))
+    P.auto_uv(head, tile=4.0)
     group(head, "head")
-    torso = P.loft("torso", secs(D["torso"], D["torso_depth"]), mat=green, n=64, refine=4)
-    P.auto_uv(torso, 7.0)
+    bc, br = D["body_c"], D["body_r"]
+    torso = P.superquadric("torso", tuple(R(v) for v in br), (1.0, 1.0), (X(bc[0]), 0, Z(bc[1])), mat=green, seg=(64, 40))
+    P.auto_uv(torso, tile=4.0)
     group(torso, "body")
-    arms = {}
-    for side, name, sx in ((1, "arm_L", 1), (-1, "arm_R", -1)):
-        rx_, ry_ = D["arm_root"]
-        tx_, ty_ = D["arm_tip"]
-        root = (X(CX + sx * (CX - rx_)), 0.0, Z(ry_))
-        tip = (X(CX + sx * (CX - tx_)), 0.0, Z(ty_))
-        a = W.limb(name, [torso], root, tip, R(D["arm_r"]), R(D["arm_r"]) * 0.93, mat=green, flare=1.2)   # 付け根を丸めたので、肩の上の抜けを太らせてふさぐ(1.08 では抜け 165 px)
-        P.auto_uv(a, 7.0)
-        group(a, name)
-        arms[name] = a
     feet = {}
-    for name, sx in (("leg_L", 1), ("leg_R", -1)):
-        fc = D["foot_c"]
-        f = P.superquadric(name + "_foot", tuple(R(v) for v in D["foot_r"]), (0.8, 0.95),
-                           (sx * R(D["foot_dx"]), -0.012, Z(fc[1])), mat=green, seg=(48, 24))
-        P.auto_uv(f, 7.0)
-        leg = P.superquadric(name + "_leg", (R(104), R(96), R(76)), (0.8, 1.0), (sx * R(D["leg_dx"]), -0.006, Z(1080)), mat=green, seg=(48, 24))
-        P.auto_uv(leg, 7.0)
-        group(leg, name)
-        group(f, name)
-        feet[name] = P.join([f, leg], name + "_foot")
+    for sign, nm in ((-1, "leg_R"), (1, "leg_L")):
+        lc, lr = D["leg_c"], D["leg_r"]
+        leg = P.superquadric(nm + "_leg", tuple(R(v) for v in lr), (1.0, 1.0), (X(627 + sign * abs(lc[0] - 627)), 0, Z(lc[1])), mat=green, seg=(32, 20))
+        fc, fr = D["foot_c"], D["foot_r"]
+        foot = P.superquadric(nm + "_foot", tuple(R(v) for v in fr), (1.0, 1.0), (X(627 + sign * abs(fc[0] - 627)), -0.02, Z(fc[1])), mat=green, seg=(40, 24))
+        lf = P.join([leg, foot], nm + "_part")
+        P.auto_uv(lf, tile=4.0)
+        group(lf, nm)
+        feet[nm] = lf
+    arms = {}
+    for sign, nm in ((-1, "arm_R"), (1, "arm_L")):
+        rt, tp = D["arm_root"], D["arm_tip"]
+        root = (X(627 + sign * abs(rt[0] - 627)), 0.0, Z(rt[1]))
+        tip = (X(627 + sign * abs(tp[0] - 627)), 0.0, Z(tp[1]))
+        # 丸い腕: 胴の中から手へ、太さの変わらない管(W.limb は付け根を面の外へ出すので、小さな丸い胴では肩に抜けが残った)
+        pts = [(root[0] + (tip[0] - root[0]) * t, 0.0, root[2] + (tip[2] - root[2]) * t) for t in (0.0, 0.25, 0.5, 0.75, 1.0)]
+        arm = P.tube(nm + "_sleeve", pts, [R(D["arm_r"])] * 5, mat=green, n=28)
+        pivot = [round(v, 4) for v in root]
+        hcx, hcy = D["hand_c"]
+        hand = P.superquadric(nm + "_hand", tuple(R(v) for v in D["hand_r"]), (1.0, 1.0),
+                              (X(627 + sign * abs(hcx - 627)), 0.0, Z(hcy)), mat=green, seg=(40, 24))
+        arm = P.join([arm, hand], nm + "_part")
+        arm["pivot"] = pivot
+        P.auto_uv(arm, tile=4.0)
+        group(arm, nm)
+        arms[nm] = arm
 
-    # --- たすき ---
-    bvh_t = W.body_bvh([torso])
+    # ---- 顔 ----
+    H = Head()
+    face = build_face(H, mats)
+    group(face["Mouth"], "head")
+    cx_ = R(D["cheek_dx"])
+    for sign in (-1, 1):
+        x = sign * cx_
+        z = Z(D["cheek_y"])
+        ang = math.degrees(math.asin(max(-0.99, min(0.99, x / (H.rx * math.sqrt(max(1 - ((z - H.zc) / H.rz) ** 2, 0.01)))))))
+        ck = W.soft_patch(f"cheek{sign}", [head], ang, z, R(D["cheek_r"][0]), R(D["cheek_r"][1]), CHEEK, fz,
+                          clearance=0.014, hardness=0.35, opacity=0.95)
+        group(ck, "head")
+
+    # ---- たすき: 元の絵から測った前の道 → 閉じた 1 本の輪 ----
+    bvh = W.body_bvh([torso])
     axis = W._axis_of([torso])
-    path = []
-    for (px, py) in band["path"][1:-1]:   # 端の点は胴の外。3D では面の分だけ長くなるので、ここで字が前に収まる
-        z = Z(py)
+    bw = R(br[0])
+
+    def ang_at(xm, zm):
         lo, hi = -89.0, 89.0
         for _ in range(40):
             mid = (lo + hi) / 2
-            loc, _n = W._hit(bvh_t, axis, mid, z)
-            if loc.x < X(px):
+            loc, _ = W._hit(bvh, axis, mid, zm)
+            if loc.x - axis[0] < xm:
                 lo = mid
             else:
                 hi = mid
-        path.append(((lo + hi) / 2, z))
-    sash_m = P.material("SashRed", (203, 20, 19), rough=0.9, spec=0.1)
+        return (lo + hi) / 2
+    front = []
+    for (px, py) in band["path"]:
+        xm, zm = X(px), Z(py)
+        dz = (zm - Z(bc[1])) / R(br[2])
+        half = bw * math.sqrt(max(1 - dz * dz, 0.0))
+        if abs(xm - X(bc[0])) < half * 0.93:     # 胴の外の点(道の両端)は捨てる
+            front.append((ang_at(xm - X(bc[0]) + axis[0], zm), zm))
+    sash_m = P.material("SashRed", SASH, rough=0.85, spec=0.15)
     nt = sash_m.node_tree
-    b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
     tx = nt.nodes.new("ShaderNodeTexImage")
     tx.image = bpy.data.images.load(WORK + "/sash.png")
     tx.image.colorspace_settings.name = "sRGB"
-    nt.links.new(tx.outputs["Color"], b.inputs["Base Color"])
-    # 帯は、肩の上と背中を回って閉じた 1 本の輪。前の道(元の絵から測った)に、傾いた輪の式
-    # z = c + A sin(角度) + B cos(角度) を合わせ、肩の上・腰の横・背中をその続きにする。
-    # 前の版は、前の道の端から背中へ手で点を足した開いた帯で、肩の上が空き(端が斜めに切れて見えた)、
-    # 腰の横で道が急に下へ折れて、帯が胴から浮いてふくらんで見えた。
-    tx.extension = "EXTEND"   # 字は前の部分だけ。残りは絵の端の無地(t01 が端を無地にそろえる)を伸ばす
-    loop, fit_err = W.tilted_loop([torso], path)
-    sash = W.wrap_band("sash", [torso], loop, R(band["width_px"]), thick=0.006, clearance=0.005, mat=sash_m,
-                       seg=SASH_SEG, rows=10, closed=True, over=[arms["arm_R"]], under=[head, arms["arm_L"]])  # 肩の側(-X)の腕の付け根にかぶせ、頭と左腕の下にもぐる
-    W.band_text_uv(sash, loop, SASH_SEG, path[0][0], path[-1][0], TEXT_FILL)
-    print(f"BUILD sash fit_err_mm={fit_err * 1000:.1f} shoulder_z={loop[len(loop) // 4][1]:.3f} hip_z={loop[3 * len(loop) // 4][1]:.3f}")
+    tx.extension = "EXTEND"
+    nt.links.new(tx.outputs["Color"], bsdf.inputs["Base Color"])
+    # 平面(tilted_loop)は、小さく丸い胴では、傾きが急で肩と腰の横が胴の底へ出て当たらなかった。
+    # 前は測った道、背中は端の高さから反対の端へなめらかに戻す、閉じた 1 本の道にする。
+    a1, z1 = front[-1]
+    a0, z0 = front[0]
+    loop = []
+    for k in range(36):
+        ang = -180.0 + 10.0 * k
+        if a0 <= ang <= a1:
+            z = float(__import__("numpy").interp(ang, [f[0] for f in front], [f[1] for f in front]))
+        else:
+            u = (ang - a1) % 360.0
+            t = u / ((a0 + 360.0) - a1)
+            sm = t * t * (3 - 2 * t)
+            z = z1 + (z0 - z1) * sm
+        loop.append((ang, z))
+    fit_err = 0.0
+    sash = W.wrap_band("sash", [torso], loop, R(band["width_px"]) * D["sash_w_scale"], thick=0.006, clearance=0.005, mat=sash_m,
+                       seg=SASH_SEG, rows=10, closed=True, over=[arms["arm_R"]], under=[head, arms["arm_L"], arms["arm_R"]])
+    W.band_text_uv(sash, loop, SASH_SEG, front[0][0], front[-1][0], D["sash_text_fill"])
+    print(f"BUILD sash fit_err_mm={fit_err * 1000:.1f} front_pts={len(front)} a0={front[0][0]:.1f} a1={front[-1][0]:.1f}")
     group(sash, "body")
 
-    # --- 顔 ---
-    hbvh = W.body_bvh([head])
+    body_parts = [head, torso, *arms.values(), *feet.values(), sash]
+    W.bake_ao(body_parts, occluders=[head, torso, *arms.values(), *feet.values()], samples=32, dist=0.2, strength=0.6)
 
-    def surf_y(xm, zm):
-        loc = hbvh.ray_cast(Vector((xm, -3.0, zm)), Vector((0, 1, 0)), 6.0)[0]
-        return loc.y
-
-    def conform(ob, cy):
-        """頂点ごとに、頭の面へ沿わせる(中心の奥行き cy からのずれは保つ)。"""
-        for v in ob.data.vertices:
-            v.co.y = surf_y(v.co.x, v.co.z) + (v.co.y - cy)
-
-    eyes = []
-    for i, (ec, nm) in enumerate(zip(D["eye_c"], ("eye_L", "eye_R"))):
-        # 画像の右 = +X = eye_L
-        nm = "eye_L" if ec[0] > FX else "eye_R"
-        xm, zm = X(ec[0]), Z(ec[1])
-        ys = surf_y(xm, zm)
-        er = D["eye_r"]
-        e = P.superquadric(f"eye{i}", (R(er[0]), R(er[1]), R(er[2])), (1.0, 1.0), (xm, ys, zm), mat=black, seg=(32, 16))
-        conform(e, ys)
-        group(e, nm)
-        eyes.append(e)
-        hc = D["hl"][i]
-        hx, hz = X(hc[0]), Z(hc[1])
-        h = P.superquadric(f"hl{i}", (R(D["hl_r"]), 0.006, R(D["hl_r"])), (1, 1), (hx, surf_y(hx, hz) - 0.013, hz), mat=white, seg=(16, 8))
-        conform(h, surf_y(hx, hz))
-        group(h, nm)
-        eyes.append(h)
-    eo = P.join(eyes, "Eyes")
-    eo.shape_key_add(name="Basis")
-    bl = eo.shape_key_add(name="eye_blink")
-    centers = {"eye_L": Z(D["eye_c"][1][1]), "eye_R": Z(D["eye_c"][0][1])}
-    zc = Z(D["eye_c"][0][1])
-    for i, v in enumerate(eo.data.vertices):
-        bl.data[i].co = Vector((v.co.x, v.co.y, zc + (v.co.z - zc) * 0.07))
-    bl.value = 0.0
-
-    # 口: 笑った線(管)+ 口の中(開くと見える)
-    x0, x1 = D["mouth_ends"]
-    pts, rad = [], []
-    N = 14
-    for k in range(N + 1):
-        px = x0 + (x1 - x0) * k / N
-        u = (px - (x0 + x1) / 2) / ((x1 - x0) / 2)
-        py = D["mouth_top"] + D["mouth_sag"] * (1 - u * u)
-        xm, zm = X(px), Z(py)
-        pts.append((xm, surf_y(xm, zm) + 0.000, zm))
-        rad.append(R(D["mouth_t"]) * (0.8 + 0.2 * (1 - u * u)))
-    mt = P.tube("mouth_line", pts, rad, mat=black, n=10, ry_scale=0.8)
-    group(mt, "head")
-    mx = X((x0 + x1) / 2)
-    mzc = Z(D["mouth_top"] + D["mouth_sag"] - 6)
-    mi = P.superquadric("mouth_in", (R(64), 0.005, R(30)), (1, 1), (mx, surf_y(mx, mzc) - 0.002, mzc), mat=inner, seg=(24, 12))
-    conform(mi, surf_y(mx, mzc))
-    group(mi, "head")
-    mi.vertex_groups.new(name="tmp_inner").add([v.index for v in mi.data.vertices], 1.0, "REPLACE")
-    mo = P.join([mt, mi], "Mouth")
-    tmp = mo.vertex_groups["tmp_inner"].index
-    inner_idx = set()
-    for v in mo.data.vertices:
-        if any(g.group == tmp for g in v.groups):
-            inner_idx.add(v.index)
-    mo.vertex_groups.remove(mo.vertex_groups["tmp_inner"])
-    mo.shape_key_add(name="Basis")
-    cen = Vector((mx, 0, mzc))
-
-    def key(name, fn):
-        k = mo.shape_key_add(name=name)
-        for i, v in enumerate(mo.data.vertices):
-            k.data[i].co = fn(i, Vector(v.co))
-        k.value = 0.0
-        return k
-
-    top_line = Z(D["mouth_top"])
-    # Basis で口の中は点にしておく(開くと広がる)。Basis を直接つぶす
-    basis = mo.data.shape_keys.key_blocks["Basis"]
-    for i in inner_idx:
-        v = mo.data.vertices[i].co
-        basis.data[i].co = Vector((cen.x + (v.x - cen.x) * 0.02, v.y, cen.z + (v.z - cen.z) * 0.02))
-    for i, v in enumerate(mo.data.vertices):
-        v.co = basis.data[i].co
-
-    def f_open(i, c):
-        if i in inner_idx:
-            b0 = Vector(basis.data[i].co)
-            return Vector((cen.x + (b0.x - cen.x) * 50, b0.y, cen.z + (b0.z - cen.z) * 50 - 0.0))
-        return c
-    # 口の中は元の座標の 50 倍(= 本来の大きさ)に戻す
-    key("mouth_open", f_open)
-
-    def f_wide(i, c):
-        if i in inner_idx:
-            b0 = Vector(basis.data[i].co)
-            return Vector((cen.x + (b0.x - cen.x) * 50 * 0.8, b0.y, cen.z + (b0.z - cen.z) * 20))
-        return Vector((mx + (c.x - mx) * 1.22, c.y, c.z + 0.0))
-    key("mouth_wide", f_wide)
-
-    def f_o(i, c):
-        if i in inner_idx:
-            b0 = Vector(basis.data[i].co)
-            return Vector((cen.x + (b0.x - cen.x) * 50 * 0.4, b0.y, cen.z + (b0.z - cen.z) * 50 * 1.2))
-        return Vector((mx + (c.x - mx) * 0.45, c.y, c.z - R(14)))
-    key("mouth_o", f_o)
-
-    # ほお
-    cheeks = []
-    for nm, (cxp, cyp) in zip(("cheek_R", "cheek_L"), D["cheek"]):
-        zm = Z(cyp)
-        # 角度: 頭の面で x が合う角度を二分法で探す
-        ax = W._axis_of([head])
-        lo, hi = -89.0, 89.0
-        for _ in range(40):
-            mid = (lo + hi) / 2
-            loc, _n = W._hit(hbvh, ax, mid, zm)
-            if loc.x < X(cxp):
-                lo = mid
-            else:
-                hi = mid
-        c = W.soft_patch(nm, [head], (lo + hi) / 2, zm, R(D["cheek_r"][0]), R(D["cheek_r"][1]), (238, 150, 148),
-                         fz, clearance=0.003, hardness=0.75, opacity=1.0, axis=ax)
-        group(c, "head")
-        cheeks.append(c)
-
-    # 首の下・腕の付け根の影
-    W.bake_ao([head, torso, *arms.values(), *feet.values(), sash], occluders=[head, torso, *arms.values(), *feet.values()], samples=32, dist=0.2, strength=0.6)
-
-    # --- 骨の spec ---
-    pa = {k: W.pivot_of(v) for k, v in arms.items()}
-    spec = dict(
-        height_m=1.0,
-        bones=[
-            dict(name="root", at=[0, 0, 0], parent=None),
-            dict(name="body", at=[0, 0, round(Z(1010), 4)], parent="root"),
-            dict(name="head", at=[0, 0, round(Z(610), 4)], parent="body"),
-            dict(name="arm_L", at=[round(pa["arm_L"][0], 4), 0, round(pa["arm_L"][2] + 0.0, 4)], parent="body"),
-            dict(name="arm_R", at=[round(pa["arm_R"][0], 4), 0, round(pa["arm_R"][2] + 0.0, 4)], parent="body"),
-            dict(name="leg_L", at=[round(R(D["foot_dx"]), 4), 0, round(Z(1100), 4)], parent="root"),
-            dict(name="leg_R", at=[-round(R(D["foot_dx"]), 4), 0, round(Z(1100), 4)], parent="root"),
-            dict(name="eye_L", at=[round(X(D["eye_c"][1][0]), 4), -0.2, round(Z(D["eye_c"][1][1]), 4)], parent="head"),
-            dict(name="eye_R", at=[round(X(D["eye_c"][0][0]), 4), -0.2, round(Z(D["eye_c"][0][1]), 4)], parent="head"),
-        ],
-        roles=dict(root="root", body="body", head="head", arm_L="arm_L", arm_R="arm_R", leg_L="leg_L", leg_R="leg_R"),
-        motion=dict(only=["idle", "talk", "nod", "bow", "wave"], arm_amp=0.6),
-    )
-    json.dump(spec, open(WORK + "/rig.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    bpy.ops.wm.save_as_mainfile(filepath=OUT)
-    print("BUILD yokoso ok")
+    rig = {
+        "root": [0, 0, 0],
+        "body": [0, 0, round(Z(bc[1]), 4)],
+        "head": [0, 0, round(Z(735), 4)],
+        "arm_L": [round(v, 4) for v in list(arms["arm_L"]["pivot"])],
+        "arm_R": [round(v, 4) for v in arms["arm_R"]["pivot"]],
+        "leg_L": [round(X(627 + abs(D["leg_c"][0] - 627)), 4), 0, round(Z(1000), 4)],
+        "leg_R": [round(X(627 - abs(D["leg_c"][0] - 627)), 4), 0, round(Z(1000), 4)],
+        "eye_L": [round(X(627 + D["eye_dx"]), 4), round(H.surf_y(X(627 + D["eye_dx"]), Z(D["eye_c"])), 4), round(Z(D["eye_c"]), 4)],
+        "eye_R": [round(X(627 - D["eye_dx"]), 4), round(H.surf_y(X(627 - D["eye_dx"]), Z(D["eye_c"])), 4), round(Z(D["eye_c"]), 4)],
+    }
+    json.dump(rig, open(WORK + "/rig_at.json", "w"), indent=1)
+    bpy.ops.wm.save_as_mainfile(filepath=out)
+    print("BUILD yokoso ok", json.dumps(rig))
 
 
 if __name__ == "__main__":

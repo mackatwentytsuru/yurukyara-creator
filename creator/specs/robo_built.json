@@ -1,0 +1,17 @@
+{
+  "id": "robo",
+  "height_m": 1.0,
+  "bones": [
+    {"name": "root",  "at": [0, 0, 0],             "parent": null},
+    {"name": "body",  "at": [0, 0, 0.328],         "parent": "root"},
+    {"name": "head",  "at": [0, 0, 0.463],         "parent": "body"},
+    {"name": "arm_L", "at": [0.1613, 0, 0.4189],   "parent": "body"},
+    {"name": "arm_R", "at": [-0.1613, 0, 0.4189],  "parent": "body"},
+    {"name": "leg_L", "at": [0.0582, 0, 0.205],    "parent": "root"},
+    {"name": "leg_R", "at": [-0.0582, 0, 0.205],   "parent": "root"},
+    {"name": "eye_L", "at": [0.082, -0.2026, 0.7099],  "parent": "head"},
+    {"name": "eye_R", "at": [-0.084, -0.2026, 0.7099], "parent": "head"}
+  ],
+  "roles": {"root": "root", "body": "body", "head": "head", "arm_L": "arm_L", "arm_R": "arm_R", "leg_L": "leg_L", "leg_R": "leg_R"},
+  "motion": {"only": ["idle", "talk", "nod", "bow", "wave"], "arm_amp": 0.6}
+}

@@ -20,7 +20,8 @@ fs.mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   // 毛の殻で三角形が数十万になると CPU での 1 コマが長く、GPU の見張りに落とされる(Target crashed)。撮影では見張りを切る
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-watchdog'],
+  // CHECK_GPU=1 なら GPU(d3d11)で描く(CPU の swiftshader は作業用 PC の CPU を占める。GPU の札を取ってから使う)
+  args: process.env.CHECK_GPU ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-watchdog'],
 });
 const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
 const errors = [];

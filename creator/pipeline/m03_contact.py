@@ -4,6 +4,8 @@
   全部の物について、ほかの物(毛羽の殻は除く)を体として測る。
   --hug に書いた物(帯・襟・たすき): 全体が体の面の近くにある物。「面の近くが 8 割以上、0.4 cm より深く埋まる点なし」で合格。
   それ以外(耳・腕など): 付け根だけ埋まる物。「埋まる点が 2〜60%」で合格。0 なら宙に浮いている、多すぎれば体に飲まれている。
+  本体(外接箱の体積がいちばん大きい物 1 つ)は、ほかの物の「体」になる側なので、浮きの判定をしない(手足が全部体に付いていても、
+  本体の頂点が手足の中に 2% 入るとは限らない。平らな面の多い箱の胴で、浮きと誤って落ちた)。手足が体から離れていれば、手足のほうが落ちる。
 内外の決め方: 物ごとに 3 方向の光線の交差回数を数え、奇数が多数なら内側。部品が重なっていても、物ごとに見るので数え間違えない。
 """
 import json
@@ -87,6 +89,11 @@ def main():
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH" and o.data.polygons and not o.name.startswith(skip)
               and not o.get("surface_only")]   # 毛羽の殻と当て布は、部品の印で除く(古い物のために名前でも除く)
     trees = {o.name: bvh_of(o) for o in meshes}
+
+    def box_volume(o):
+        d = [max(c) - min(c) for c in zip(*[tuple(v) for v in world_verts(o)])]
+        return d[0] * d[1] * d[2]
+    root = max(meshes, key=box_volume).name if len(meshes) > 1 else None
     out = {}
     for o in meshes:
         bodies = [t for n, t in trees.items() if n != o.name]
@@ -95,6 +102,9 @@ def main():
         r = measure(o, bodies, near)
         r["kind"] = "沿う物" if o.name in hug else "付け根が埋まる物"
         r["why_failed"] = judge(r, o.name in hug)
+        if o.name == root and not hug.intersection({o.name}):
+            r["kind"] = "本体(最大の物。浮きは見ない)"
+            r["why_failed"] = [w for w in r["why_failed"] if "浮き" not in w]
         out[o.name] = r
         print("M03", "OK  " if not r["why_failed"] else "NG  ", o.name, r["kind"], "埋まり", r["inside_ratio"], "面の近く",
               r["near_ratio"], "最深", r["max_depth_cm"], "cm", "最大のすきま", r["max_gap_cm"], "cm", "".join(r["why_failed"]))

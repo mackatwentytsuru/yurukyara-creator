@@ -258,14 +258,22 @@ def tilted_loop(body, front, step=10.0, axis=None, tilt_back=None):
         A = np.stack([np.ones(len(P)), P[:, 0]], 1)
         c, a = np.linalg.lstsq(A, P[:, 2] - b * P[:, 1], rcond=None)[0]
     err = float(np.sqrt(np.mean((c + a * P[:, 0] + b * P[:, 1] - P[:, 2]) ** 2)))
+    zs = [v.co.z for o in body for v in o.data.vertices]
+    zlo, zhi = min(zs) + 2e-3, max(zs) - 2e-3
     loop = []
     for i in range(int(round(360 / step))):
         ang = -180.0 + i * step
-        z = c
-        for _ in range(12):                      # 面の点の位置が高さで変わるので、数回まわして平面に載せる
+        # 平面と面の交わりの高さを、二分法で求める。くりかえし代入(z を平面の式で更新)は、丸い小さな胴で傾きが急だと
+        # 行ったり来たりして、体に当たらない高さへ飛んだ(ようこそくんの作り直しで、角度 81 度で例外)
+        lo, hi = zlo, zhi
+        for _ in range(40):
+            z = (lo + hi) / 2
             loc, _ = _hit(bvh, axis, ang, z)
-            z = c + a * (loc.x - axis[0]) + b * (loc.y - axis[1])
-        loop.append((ang, float(z)))
+            if z - (c + a * (loc.x - axis[0]) + b * (loc.y - axis[1])) < 0:
+                lo = z
+            else:
+                hi = z
+        loop.append((ang, float((lo + hi) / 2)))
     return loop, err
 
 

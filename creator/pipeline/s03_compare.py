@@ -1,6 +1,6 @@
 """段 9c: 元の絵と作った物を並べた一覧を作り、輪郭の重なり(IoU)を測る。
 
-使い方: python s03_compare.py <元の絵> <作った物の正面の絵> <出力.png> "<見出し>" [<もう 1 枚の絵> ...]
+使い方: python s03_compare.py <元の絵> <作った物の正面の絵> <出力.png> "<見出し>" [<もう 1 枚の絵> ...] [--names 名前,…] [--mask <輪郭用の絵>]
 - 元の絵・作った物・(あれば)ほかの版を、同じ高さにそろえて横に並べ、大きな見出しをつける。
 - 輪郭の重なり: 背景(縁の色)でない部分を体とみなし、外接箱の高さをそろえて重ねた IoU を、元の絵と各版のあいだで出す。
 """
@@ -38,6 +38,11 @@ def main():
         i = args.index("--names")
         names_arg = args[i + 1].split(",")
         del args[i:i + 2]
+    mask_path = None
+    if "--mask" in args:   # 輪郭の数字は、この絵(同じ絵から床の影などを除いた物)で測る。見せる絵は元の絵のまま
+        i = args.index("--mask")
+        mask_path = args[i + 1]
+        del args[i:i + 2]
     orig, built, out, title = args[:4]
     others = args[4:]
     paths = [orig, built] + others
@@ -51,7 +56,7 @@ def main():
     d = ImageDraw.Draw(sheet)
     d.rectangle([0, 0, W, head], fill=(22, 34, 58))
     d.text((30, 18), title, font=ImageFont.truetype(FONT, 96), fill=(255, 255, 255))
-    base = norm_mask(silhouette(Image.open(orig)))
+    base = norm_mask(silhouette(Image.open(mask_path or orig)))
     x = 0
     fl = ImageFont.truetype(FONT, 46)
     for nm, im, p in zip(names, ims, paths):

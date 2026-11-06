@@ -1,6 +1,7 @@
-"""q_robot(クリーム色の胴に青緑の差し色、顔が黒い画面のロボット)。お店の入口に立つ案内役。
-元の絵(1254px。全高 1203px = 1.0m)の画素から測って組んだ。硬い樹脂の質感なので毛足(fuzz)は使わない。
-使い方: blender -b -P creator/builders/q_robot.py -- <出力.blend> <作業フォルダ>   (rig.json を作業フォルダに書く)"""
+"""ロボくん(クリーム色の胴に青緑の差し色、顔が黒い画面の、硬い樹脂の案内ロボット)の手組み builder。
+元の絵: Claude が SVG で描いた絵(creator/samples/robo_元の絵.svg を 1254×1254 に撮った PNG)。全高 1048px(足の底 1115 〜 蝶ネクタイでなくアンテナの玉の上 68)= 1.0m。
+硬い樹脂なので毛足(fuzz)は使わない。
+使い方: blender -b -P robo.py -- <出力.blend> work=<作業フォルダ>"""
 import json
 import math
 import os
@@ -11,12 +12,11 @@ from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pipeline"))
 import m00_prims as P  # noqa: E402
-import m01_wrap as W   # noqa: E402
+import m01_wrap as W  # noqa: E402
 
-ARGV = sys.argv[sys.argv.index("--") + 1:]
-OUT, WORK = ARGV[0], ARGV[1]
-S = 1203.0
-CX, FY = 626, 1223
+S = 1048.0
+CX, FY = 627.0, 1115.0
+WORK = "."
 
 
 def X(px):
@@ -31,245 +31,220 @@ def R(px):
     return px / S
 
 
-# 胴の高さごとの半幅(px)。腕・肩を除いた輪郭から読んだ
-TORSO = [(1042, 125), (1030, 150), (1010, 182), (985, 203), (960, 212), (900, 219), (860, 218), (820, 214),
-         (780, 208), (720, 207), (680, 203), (660, 199), (640, 190), (620, 178), (600, 165), (586, 150)]
-HEAD = [(592, 170), (591, 212), (587, 230), (574, 241), (555, 244), (525, 248), (500, 249), (420, 249), (340, 248), (300, 240), (260, 221),
-        (236, 192), (220, 165), (210, 135)]
+# 画素のまま。半径は (横 rx, 奥行き ry, 縦 rz)
 D = dict(
-    head_depth=0.84, torso_depth=0.72,
-    screen_c=(626, 420), screen_h=(197, 147),
-    eye_c=((527, 407), (728, 407)), eye_r=35,
-    mouth_ends=(583, 672), mouth_top=460, mouth_sag=28, mouth_t=5,
-    ear_c=(384, 425), ear_r=(42, 70, 79),
-    ant_ball=(627, 68, 45), ant_stem=(626, 17), ant_cap=(626, 208),
-    bow_c=(626, 645),
-    btn_c=(627, 755), btn_r=43,
-    shoulder_c=(420, 692), arm_path=((440, 688), (404, 706), (366, 780), (344, 850), (338, 884)), arm_r=46,
-    cuff_c=(343, 852), hand_c=(335, 920), hand_r=(54, 50, 52),
-    leg_x=93, leg_c=1085, foot_c=(516, 1176), foot_r=(97, 98, 48),
+    head_c=(627, 405), head_r=(280, 205, 215), head_e=(0.3, 0.3),
+    screen_c=(627, 405), screen_r=(222, 160), screen_e=(0.3, 0.3),
+    eye_c=((539, 371), (713, 371)), eye_r=50,
+    mouth_a=(556, 466), mouth_b=(627, 528), mouth_c=(698, 466), mouth_w=10,
+    antenna_stem=(627, 168), antenna_stem_r=(10, 10, 27), ball_c=(627, 106), ball_r=38,
+    ear_c=(338, 400), ear_r=(50, 76, 76),
+    neck_c=(627, 630), neck_r=(98, 58, 12),
+    torso_c=(627, 771), torso_r=(140, 105, 135), torso_e=(0.45, 0.45), pants_z=800,
+    button_y=(716, 766), button_r=22,
+    bow_c=(627, 664), knot_r=(26, 18, 28), wing_c=(570, 662), wing_r=(64, 15, 31), wing_tilt=-8,
+    pad_c=(458, 676), pad_r=(70, 62, 54), pad_tilt=18,
+    arm_a=(462, 692), arm_b=(404, 830), arm_r=52, cuff_c=(398, 834), cuff_r=(53, 11), cuff_tilt=22.3,
+    joint_c=(478, 724), joint_r=(50, 46, 48), hand_c=(382, 896), hand_r=(56, 52, 56),
+    leg_x=566, leg_c_z=965, leg_r=(36, 36, 86),
+    foot_c=(534, 1062), foot_r=(92, 100, 54),
 )
+
+CREAM = (226, 206, 160)
+TEAL = (36, 160, 158)
+RED = (205, 46, 40)
+SCREEN = (16, 26, 38)
+GLOW = (255, 238, 196)
 
 
 def group(ob, bone):
-    vg = ob.vertex_groups.new(name=bone)
+    vg = ob.vertex_groups.get(bone) or ob.vertex_groups.new(name=bone)
     vg.add([v.index for v in ob.data.vertices], 1.0, "REPLACE")
 
 
-def secs(rows, depth, e, grow=0.0):
-    return [dict(z=Z(py), cx=0.0, cy=0.0, rx=R(h + grow), ry=R(h + grow) * depth, e=e) for py, h in rows]
-
-
-def interp(rows, py):
-    rows = sorted(rows)
-    for (y0, h0), (y1, h1) in zip(rows, rows[1:]):
-        if y0 <= py <= y1:
-            return h0 + (h1 - h0) * (py - y0) / (y1 - y0)
-    return rows[0][1] if py < rows[0][0] else rows[-1][1]
-
-
 def main():
+    global WORK
+    argv = sys.argv[sys.argv.index("--") + 1:]
+    out = argv[0]
+    for kv in argv[1:]:
+        k, v = kv.split("=", 1)
+        if k == "work":
+            WORK = v
+        else:
+            D[k] = eval(v)
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    cream = P.material("Cream", (228, 204, 167), rough=0.55, spec=0.35)
-    teal = P.material("Teal", (52, 126, 115), rough=0.5, spec=0.4)
-    red = P.material("Red", (194, 68, 52), rough=0.45, spec=0.4)
-    screen_m = P.material("Screen", (40, 41, 39), rough=0.4, spec=0.25)
-    glow = P.material("Glow", (255, 238, 168), rough=0.5, emit=1.0, spec=0.1)
-    halo = P.material("Halo", (58, 52, 36), rough=0.6, emit=0.2, spec=0.1)
+    cream = P.material("Cream", CREAM, rough=0.3, spec=0.55)
+    teal = P.material("Teal", TEAL, rough=0.25, spec=0.6)
+    red = P.material("Red", RED, rough=0.22, spec=0.6)
+    screen_m = P.material("Screen", SCREEN, rough=0.12, spec=0.8)
+    glow = P.material("Glow", GLOW, rough=0.5, emit=0.8)
+    dim = P.material("GlowDim", (230, 170, 100), rough=0.5, emit=0.9)
 
-    # --- 頭 ---
-    head = P.loft("head", secs(HEAD, D["head_depth"], 0.7), mat=cream, n=64, refine=4)
+    # ---- 頭: 角の丸い四角 ----
+    hc, hr = D["head_c"], D["head_r"]
+    head = P.superquadric("head", tuple(R(v) for v in hr), D["head_e"], (X(hc[0]), 0, Z(hc[1])), mat=cream, seg=(64, 48))
     group(head, "head")
-    hbvh = W.body_bvh([head])
-
-    def hy(xm, zm):
-        return hbvh.ray_cast(Vector((xm, -3.0, zm)), Vector((0, 1, 0)), 6.0)[0].y
-
-    def conform(ob, cy):
-        for v in ob.data.vertices:
-            v.co.y = hy(v.co.x, v.co.z) + (v.co.y - cy)
-
-    sc_c, sc_h = D["screen_c"], D["screen_h"]
-    screen = P.superquadric("screen", (R(sc_h[0]), 0.012, R(sc_h[1])), (0.5, 0.55),
-                            (X(sc_c[0]), hy(X(sc_c[0]), Z(sc_c[1])), Z(sc_c[1])), mat=screen_m, seg=(64, 32))
-    conform(screen, hy(X(sc_c[0]), Z(sc_c[1])))
-    for v in screen.data.vertices:
-        v.co.y -= 0.004
+    front = -R(hr[1])
+    sc, sr = D["screen_c"], D["screen_r"]
+    screen = P.superquadric("screen", (R(sr[0]), 0.010, R(sr[1])), D["screen_e"], (X(sc[0]), front - 0.004, Z(sc[1])),
+                            mat=screen_m, seg=(48, 24))
     group(screen, "head")
-    for sx in (1, -1):
-        ear = P.superquadric(f"ear{sx}", tuple(R(v) for v in D["ear_r"]), (0.7, 0.8),
-                             (X(CX + sx * (CX - D["ear_c"][0])), 0, Z(D["ear_c"][1])), mat=teal, seg=(40, 24))
-        group(ear, "head")
-    bx, by_, br = D["ant_ball"]
-    ball = P.superquadric("ant_ball", (R(br), R(br), R(br)), (1, 1), (X(bx), 0, Z(by_)), mat=red, seg=(32, 16))
-    group(ball, "head")
-    stem = P.tube("ant_stem", [(X(626), 0, Z(205 - 10 * k)) for k in range(11)], [R(D["ant_stem"][1])] * 11, mat=teal, n=16)
-    group(stem, "head")
-    cap = P.superquadric("ant_cap", (R(58), R(58), R(40)), (0.8, 1.0), (X(626), 0, Z(208)), mat=teal, seg=(32, 16))
-    group(cap, "head")
-
-    # --- 胴(上はクリーム、下は青緑) ---
-    cream_rows = [(py, interp(TORSO, py)) for py in range(586, 861, 14)]
-    teal_rows = [(py, interp(TORSO, py)) for py in range(846, 1043, 14)] + [(1042, 125)]
-    tors_c = P.loft("torso_top", secs(cream_rows, D["torso_depth"], 0.9), mat=cream, n=64, refine=3)
-    group(tors_c, "body")
-    tors_t = P.loft("torso_low", secs(teal_rows, D["torso_depth"], 0.9, grow=2.0), mat=teal, n=64, refine=3)
-    group(tors_t, "body")
-    bvh_t = W.body_bvh([tors_c, tors_t])
-
-    def ty(xm, zm):
-        return bvh_t.ray_cast(Vector((xm, -3.0, zm)), Vector((0, 1, 0)), 6.0)[0].y
-
-    bc = D["btn_c"]
-    btn = P.superquadric("button", (R(D["btn_r"]), 0.010, R(D["btn_r"])), (1.0, 1.0),
-                         (X(bc[0]), ty(X(bc[0]), Z(bc[1])), Z(bc[1])), mat=teal, seg=(40, 16))
-    cy0 = ty(X(bc[0]), Z(bc[1]))
-    for v in btn.data.vertices:
-        v.co.y = ty(v.co.x, v.co.z) + (v.co.y - cy0) - 0.004
-    group(btn, "body")
-    # 蝶ネクタイ
-    bw = D["bow_c"]
-    bparts = []
-    ykn = ty(X(bw[0]), Z(bw[1]))
-    for sx in (1, -1):
-        wx = X(CX + sx * 62)
-        w = P.superquadric(f"bow_w{sx}", (R(40), 0.020, R(45)), (0.7, 0.8),
-                           (wx, ty(wx, Z(bw[1])) - 0.004, Z(bw[1])), mat=red, seg=(32, 16))
-        for v in w.data.vertices:   # 外へ向かって開く(結び目側は細い)
-            side = (v.co.x - wx) * sx
-            v.co.z = Z(bw[1]) + (v.co.z - Z(bw[1])) * (0.75 + 0.30 * (side / R(40) + 1) / 2)
-        bparts.append(w)
-    knot = P.superquadric("bow_knot", (R(27), 0.026, R(36)), (0.7, 0.8), (X(bw[0]), ykn - 0.012, Z(bw[1])), mat=red, seg=(24, 12))
-    bparts.append(knot)
-    for o in bparts:
-        group(o, "body")
-
-    # --- 腕(画像の右 = +X = arm_L) ---
-    arms = {}
-    for name, sx in (("arm_L", 1), ("arm_R", -1)):
-        def mx(px, sx=sx):
-            return X(CX + sx * (CX - px))
-        path = []
-        for (x0_, y0_), (x1_, y1_) in zip(D["arm_path"], D["arm_path"][1:]):
-            for k in range(4):
-                path.append((x0_ + (x1_ - x0_) * k / 4, y0_ + (y1_ - y0_) * k / 4))
-        path.append(D["arm_path"][-1])
-        a = P.tube(name, [(mx(px), 0.0, Z(py)) for px, py in path], [R(D["arm_r"])] * (len(path) - 1) + [R(D["arm_r"]) * 0.95], mat=cream, n=24)
-        a["pivot"] = [mx(D["arm_path"][0][0]), 0.0, Z(D["arm_path"][0][1])]
-        group(a, name)
-        pad = P.superquadric(name + "_pad", (R(46), R(52), R(50)), (0.7, 0.8), (mx(D["shoulder_c"][0]), 0, Z(D["shoulder_c"][1])),
-                             rot_deg=(0, sx * 12, 0), mat=teal, seg=(40, 24))
-        group(pad, name)
-        ang = math.degrees(math.atan2(D["arm_path"][-3][0] - D["arm_path"][-1][0], D["arm_path"][-1][1] - D["arm_path"][-3][1]))
-        cuff = P.ring(name + "_cuff", R(45), R(8), (mx(D["cuff_c"][0]), 0, Z(D["cuff_c"][1])), mat=teal, seg=(40, 12),
-                      squash=1.7, rot_deg=(0, sx * ang, 0), sq=0.6)
-        group(cuff, name)
-        hand = P.superquadric(name + "_hand", tuple(R(v) for v in D["hand_r"]), (0.9, 0.95),
-                              (mx(D["hand_c"][0]), 0, Z(D["hand_c"][1])), mat=cream, seg=(40, 24))
-        group(hand, name)
-        arms[name] = a
-
-    # --- 脚と足 ---
-    for name, sx in (("leg_L", 1), ("leg_R", -1)):
-        leg = P.tube(name + "_leg", [(sx * R(D["leg_x"]), -0.003, Z(1030 + 10 * k)) for k in range(12)], [R(53)] * 12, mat=cream, n=28)
-        group(leg, name)
-        fc, fr = D["foot_c"], D["foot_r"]
-        foot = P.superquadric(name + "_foot", tuple(R(v) for v in fr), (0.7, 0.9), (sx * R(CX - fc[0]), -0.012, Z(fc[1])), mat=teal, seg=(48, 24))
-        group(foot, name)
-
-    # --- 顔(光る目・笑う口) ---
-    eyes = []
-    for i, (ec, nm) in enumerate(zip(D["eye_c"], ("eye_R", "eye_L"))):
-        xm, zm = X(ec[0]), Z(ec[1])
-        ys = hy(xm, zm)
-        e = P.superquadric(f"eye{i}", (R(D["eye_r"]), 0.006, R(D["eye_r"])), (1, 1), (xm, ys, zm), mat=glow, seg=(32, 16))
-        conform(e, ys)
-        for v in e.data.vertices:
-            v.co.y -= 0.019
-        group(e, nm)
-        eyes.append(e)
-        h = P.superquadric(f"eyehalo{i}", (R(D["eye_r"] * 1.3), 0.004, R(D["eye_r"] * 1.3)), (1, 1), (xm, ys, zm), mat=halo, seg=(32, 16))
-        conform(h, ys)
-        for v in h.data.vertices:
-            v.co.y -= 0.0165
-        group(h, nm)
-        eyes.append(h)
-    eo = P.join(eyes, "Eyes")
-    eo.shape_key_add(name="Basis")
-    bl = eo.shape_key_add(name="eye_blink")
+    sfront = front - 0.004 - 0.010     # 画面の前面
+    # ---- 目(光る円)と口(光る笑った線)----
+    parts = []
+    ey = sfront - 0.004
+    for (px, py) in D["eye_c"]:
+        e = P.superquadric(f"eye{px}", (R(D["eye_r"]), 0.005, R(D["eye_r"])), (1.0, 1.0), (X(px), ey, Z(py)), mat=glow, seg=(40, 20))
+        parts.append(e)
+        parts.append(P.superquadric(f"eyesink{px}", (0.004, 0.004, 0.004), (1.0, 1.0), (X(px), sfront + 0.012, Z(py) - 0.01), mat=screen_m, seg=(8, 6)))
+    eyes = P.join(parts, "Eyes")
+    gL = eyes.vertex_groups.new(name="eye_L")
+    gR = eyes.vertex_groups.new(name="eye_R")
+    for v in eyes.data.vertices:
+        (gL if v.co.x > 0 else gR).add([v.index], 1.0, "REPLACE")
+    eyes.shape_key_add(name="Basis")
+    bl = eyes.shape_key_add(name="eye_blink")
     zc = Z(D["eye_c"][0][1])
-    for i, v in enumerate(eo.data.vertices):
-        bl.data[i].co = Vector((v.co.x, v.co.y, zc + (v.co.z - zc) * 0.08))
+    for i, v in enumerate(eyes.data.vertices):
+        bl.data[i].co = Vector((v.co.x, v.co.y, zc + (v.co.z - zc) * 0.06))
     bl.value = 0.0
 
-    x0, x1 = D["mouth_ends"]
-    pts, rad = [], []
-    N = 14
-    for k in range(N + 1):
-        px = x0 + (x1 - x0) * k / N
-        u = (px - (x0 + x1) / 2) / ((x1 - x0) / 2)
-        py = D["mouth_top"] + D["mouth_sag"] * (1 - u * u)
-        xm, zm = X(px), Z(py)
-        pts.append((xm, hy(xm, zm) - 0.018, zm))
-        rad.append(R(D["mouth_t"]) * (0.75 + 0.25 * (1 - u * u)))
-    mt = P.tube("mouth_line", pts, rad, mat=glow, n=10, ry_scale=0.6)
-    group(mt, "head")
-    mx_ = X((x0 + x1) / 2)
-    mzc = Z(D["mouth_top"] + D["mouth_sag"] - 8)
-    mi = P.superquadric("mouth_in", (R(50), 0.006, R(26)), (1, 1), (mx_, hy(mx_, mzc), mzc), mat=glow, seg=(24, 12))
-    conform(mi, hy(mx_, mzc))
-    for v in mi.data.vertices:
-        v.co.y -= 0.018
-    group(mi, "head")
-    mi.vertex_groups.new(name="tmp_inner").add([v.index for v in mi.data.vertices], 1.0, "REPLACE")
-    mo = P.join([mt, mi], "Mouth")
-    tmp = mo.vertex_groups["tmp_inner"].index
-    inner_idx = {v.index for v in mo.data.vertices if any(g.group == tmp for g in v.groups)}
-    mo.vertex_groups.remove(mo.vertex_groups["tmp_inner"])
+    a, b, c = D["mouth_a"], D["mouth_b"], D["mouth_c"]
+    n = 13
+    pts = []
+    for k in range(n):
+        t = k / (n - 1)
+        px = (1 - t) ** 2 * a[0] + 2 * (1 - t) * t * b[0] + t * t * c[0]
+        py = (1 - t) ** 2 * a[1] + 2 * (1 - t) * t * b[1] + t * t * c[1]
+        pts.append((X(px), ey, Z(py)))
+    tube = P.tube("smile", pts, [R(D["mouth_w"])] * n, mat=glow, n=12)
+    ntube = len(tube.data.vertices)
+    mcx, mz = X(627), Z(492)
+    inner = P.superquadric("inner", (R(48), 0.005, R(30)), (1.0, 1.0), (mcx, ey, mz), mat=dim, seg=(24, 12))
+    ninner = len(inner.data.vertices)
+    inner_full = [v.co.copy() for v in inner.data.vertices]
+    ctr = Vector((mcx, ey, mz))
+    for v in inner.data.vertices:
+        v.co = ctr.copy()
+    sink = P.superquadric("mouthsink", (0.004, 0.004, 0.004), (1.0, 1.0), (mcx, sfront + 0.012, Z(520)), mat=screen_m, seg=(8, 6))
+    mo = P.join([tube, inner, sink], "Mouth")
+    base = [v.co.copy() for v in mo.data.vertices]
     mo.shape_key_add(name="Basis")
-    cen = Vector((mx_, 0, mzc))
-    basis = mo.data.shape_keys.key_blocks["Basis"]
-    for i in inner_idx:
-        v = mo.data.vertices[i].co
-        basis.data[i].co = Vector((cen.x + (v.x - cen.x) * 0.02, v.y, cen.z + (v.z - cen.z) * 0.02))
-    for i, v in enumerate(mo.data.vertices):
-        v.co = basis.data[i].co
 
     def key(name, fn):
         k = mo.shape_key_add(name=name)
-        for i, v in enumerate(mo.data.vertices):
-            k.data[i].co = fn(i, Vector(v.co))
+        for i, p in enumerate(base):
+            k.data[i].co = fn(i, p.copy())
         k.value = 0.0
 
-    def inner(i, fx, fz):
-        b0 = Vector(basis.data[i].co)
-        return Vector((cen.x + (b0.x - cen.x) * fx, b0.y, cen.z + (b0.z - cen.z) * fz))
+    def open_fn(i, p):
+        if i < ntube:
+            t = 1.0 - min(1.0, abs(p.x - mcx) / R(80)) ** 2
+            return Vector((p.x, p.y, p.z - 0.022 * t))
+        if i < ntube + ninner:
+            f = inner_full[i - ntube]
+            return Vector((f.x, f.y, f.z - 0.004))
+        return p
+    key("mouth_open", open_fn)
+    key("mouth_wide", lambda i, p: Vector((mcx + (p.x - mcx) * 1.3, p.y, p.z + 0.004 * min(1.0, abs(p.x - mcx) / R(80)))) if i < ntube else p)
 
-    key("mouth_open", lambda i, c: inner(i, 50, 50) if i in inner_idx else c)
-    key("mouth_wide", lambda i, c: inner(i, 40, 20) if i in inner_idx else Vector((mx_ + (c.x - mx_) * 1.22, c.y, c.z)))
-    key("mouth_o", lambda i, c: inner(i, 20, 60) if i in inner_idx else Vector((mx_ + (c.x - mx_) * 0.45, c.y, c.z - R(14))))
+    def o_fn(i, p):
+        if i < ntube:
+            return Vector((mcx + (p.x - mcx) * 0.3, p.y, mz + (p.z - mz) * 0.3))
+        if i < ntube + ninner:
+            f = inner_full[i - ntube]
+            return Vector((mcx + (f.x - mcx) * 0.55, f.y, f.z))
+        return p
+    key("mouth_o", o_fn)
+    group(mo, "head")
 
-    # --- 骨 ---
-    pa = {k: W.pivot_of(v) for k, v in arms.items()}
-    spec = dict(
-        height_m=1.0,
-        bones=[
-            dict(name="root", at=[0, 0, 0], parent=None),
-            dict(name="body", at=[0, 0, round(Z(1000), 4)], parent="root"),
-            dict(name="head", at=[0, 0, round(Z(600), 4)], parent="body"),
-            dict(name="arm_L", at=[round(pa["arm_L"][0], 4), 0, round(pa["arm_L"][2], 4)], parent="body"),
-            dict(name="arm_R", at=[round(pa["arm_R"][0], 4), 0, round(pa["arm_R"][2], 4)], parent="body"),
-            dict(name="leg_L", at=[round(R(D["leg_x"]), 4), 0, round(Z(1050), 4)], parent="root"),
-            dict(name="leg_R", at=[-round(R(D["leg_x"]), 4), 0, round(Z(1050), 4)], parent="root"),
-            dict(name="eye_L", at=[round(X(D["eye_c"][1][0]), 4), -0.2, round(Z(D["eye_c"][1][1]), 4)], parent="head"),
-            dict(name="eye_R", at=[round(X(D["eye_c"][0][0]), 4), -0.2, round(Z(D["eye_c"][0][1]), 4)], parent="head"),
-        ],
-        roles=dict(root="root", body="body", head="head", arm_L="arm_L", arm_R="arm_R", leg_L="leg_L", leg_R="leg_R"),
-        motion=dict(only=["idle", "talk", "nod", "bow", "wave"], arm_amp=0.6),
-    )
-    json.dump(spec, open(WORK + "/rig.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    bpy.ops.wm.save_as_mainfile(filepath=OUT)
-    print("BUILD q_robot ok")
+    # ---- アンテナ・耳当て・首 ----
+    stem = P.superquadric("stem", tuple(R(v) for v in D["antenna_stem_r"]), (0.6, 1.0), (X(D["antenna_stem"][0]), 0, Z(D["antenna_stem"][1])), mat=teal, seg=(24, 12))
+    ball = P.superquadric("ball", (R(D["ball_r"]),) * 3, (1.0, 1.0), (X(D["ball_c"][0]), 0, Z(D["ball_c"][1])), mat=red, seg=(40, 24))
+    group(stem, "head")
+    group(ball, "head")
+    for sign in (-1, 1):
+        ear = P.superquadric(f"ear{sign}", tuple(R(v) for v in D["ear_r"]), (1.0, 1.0), (X(627 + sign * abs(D["ear_c"][0] - 627)), 0, Z(D["ear_c"][1])), mat=teal, seg=(32, 20))
+        group(ear, "head")
+    neck = P.superquadric("neck", tuple(R(v) for v in D["neck_r"]), (0.7, 1.0), (X(D["neck_c"][0]), 0, Z(D["neck_c"][1])), mat=cream, seg=(24, 12))
+    group(neck, "body")
+
+    # ---- 胴: クリーム色。下の半分の面だけ青緑(パンツ形)----
+    tc, tr = D["torso_c"], D["torso_r"]
+    torso = P.superquadric("torso", tuple(R(v) for v in tr), D["torso_e"], (X(tc[0]), 0, Z(tc[1])), mat=cream, seg=(64, 40))
+    torso.data.materials.append(teal)
+    zp = Z(D["pants_z"])
+    for p in torso.data.polygons:
+        zc_ = sum(torso.data.vertices[i].co.z for i in p.vertices) / len(p.vertices)
+        # 腰の線をゆるく弧にする(中央が低い)
+        xc_ = sum(torso.data.vertices[i].co.x for i in p.vertices) / len(p.vertices)
+        p.material_index = 1 if zc_ < zp - 0.012 * (1 - (xc_ / R(tr[0])) ** 2) else 0
+    group(torso, "body")
+    tfront = -R(tr[1])
+    for i, py in enumerate(D["button_y"]):
+        bt = P.superquadric(f"button{i}", (R(D["button_r"]), 0.008, R(D["button_r"])), (1.0, 1.0), (X(627), tfront - 0.003, Z(py)), mat=teal, seg=(24, 12))
+        group(bt, "body")
+    # 蝶ネクタイ
+    knot = P.superquadric("knot", tuple(R(v) for v in D["knot_r"]), (0.7, 0.7), (X(D["bow_c"][0]), tfront - 0.008, Z(D["bow_c"][1])), mat=red, seg=(24, 16))
+    wings = [knot]
+    for sign in (-1, 1):
+        wc, wr = D["wing_c"], D["wing_r"]
+        wg = P.superquadric(f"wing{sign}", tuple(R(v) for v in wr), (1.0, 1.0), (X(627 + sign * abs(wc[0] - 627)), tfront - 0.002, Z(wc[1])),
+                            rot_deg=(0, sign * D["wing_tilt"] * -1, 0), mat=red, seg=(32, 16))
+        wings.append(wg)
+    bow = P.join(wings, "bow")
+    group(bow, "body")
+
+    # ---- 腕・肩のパッド・手首の輪・手 / 脚と足 ----
+    arms = {}
+    for sign, nm in ((-1, "arm_R"), (1, "arm_L")):
+        def sx(px):
+            return X(627 + sign * abs(px - 627))
+        a0, a1 = D["arm_a"], D["arm_b"]
+        pts = [(sx(a0[0]) + (sx(a1[0]) - sx(a0[0])) * t, 0.0, Z(a0[1]) + (Z(a1[1]) - Z(a0[1])) * t) for t in (0.0, 0.25, 0.5, 0.75, 1.0)]
+        arm = P.tube(nm + "_sleeve", pts, [R(D["arm_r"])] * 5, mat=cream, n=28)
+        cc = D["cuff_c"]
+        cuff = P.ring(nm + "_cuff", R(D["cuff_r"][0]), R(D["cuff_r"][1]), (sx(cc[0]), 0, Z(cc[1])), mat=teal, seg=(48, 16), squash=1.3, sq=0.6,
+                      rot_deg=(0, sign * -D["cuff_tilt"], 0))
+        hcn = D["hand_c"]
+        hand = P.superquadric(nm + "_hand", tuple(R(v) for v in D["hand_r"]), (1.0, 1.0), (sx(hcn[0]), 0.0, Z(hcn[1])), mat=cream, seg=(40, 24))
+        pc = D["pad_c"]
+        pad = P.superquadric(nm + "_pad", tuple(R(v) for v in D["pad_r"]), (1.0, 1.0), (sx(pc[0]), 0.0, Z(pc[1])),
+                             rot_deg=(0, sign * D["pad_tilt"], 0), mat=teal, seg=(40, 24))
+        jc = D["joint_c"]
+        joint = P.superquadric(nm + "_joint", tuple(R(v) for v in D["joint_r"]), (1.0, 1.0), (sx(jc[0]), 0.0, Z(jc[1])), mat=cream, seg=(32, 20))
+        arm = P.join([arm, cuff, hand, pad, joint], nm + "_part")
+        arm["pivot"] = [round(v, 4) for v in (sx(pc[0]), 0.0, Z(pc[1]))]
+        group(arm, nm)
+        arms[nm] = arm
+    legs = {}
+    for sign, nm in ((-1, "leg_R"), (1, "leg_L")):
+        lx = X(627 + sign * abs(D["leg_x"] - 627))
+        leg = P.superquadric(nm + "_leg", tuple(R(v) for v in D["leg_r"]), (0.5, 1.0), (lx, 0, Z(D["leg_c_z"])), mat=cream, seg=(32, 20))
+        fc, fr = D["foot_c"], D["foot_r"]
+        foot = P.superquadric(nm + "_foot", tuple(R(v) for v in fr), (1.0, 1.0), (X(627 + sign * abs(fc[0] - 627)), -0.03, Z(fc[1])), mat=teal, seg=(48, 24))
+        lf = P.join([leg, foot], nm + "_part")
+        group(lf, nm)
+        legs[nm] = lf
+
+    body_parts = [head, torso, neck, bow, *arms.values(), *legs.values()]
+    W.bake_ao(body_parts, occluders=body_parts, samples=32, dist=0.2, strength=0.5)
+
+    eyez = Z(D["eye_c"][0][1])
+    rig = {
+        "root": [0, 0, 0],
+        "body": [0, 0, round(Z(tc[1]), 4)],
+        "head": [0, 0, round(Z(630), 4)],
+        "arm_L": list(arms["arm_L"]["pivot"]), "arm_R": list(arms["arm_R"]["pivot"]),
+        "leg_L": [round(X(627 + abs(D["leg_x"] - 627)), 4), 0, round(Z(900), 4)],
+        "leg_R": [round(X(627 - abs(D["leg_x"] - 627)), 4), 0, round(Z(900), 4)],
+        "eye_L": [round(X(713), 4), round(ey, 4), round(eyez, 4)],
+        "eye_R": [round(X(539), 4), round(ey, 4), round(eyez, 4)],
+    }
+    json.dump(rig, open(WORK + "/rig_at.json", "w"), indent=1)
+    bpy.ops.wm.save_as_mainfile(filepath=out)
+    print("BUILD robo ok", json.dumps(rig))
 
 
-main()
+if __name__ == "__main__":
+    main()

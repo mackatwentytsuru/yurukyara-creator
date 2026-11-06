@@ -70,8 +70,16 @@ def main():
             if miss:
                 warns.append(f"動き {name} の骨名が model に無い: {sorted(miss)[:4]}")
     mo = cj.get("mouth", {})
-    if mo.get("kind") != "morph":
-        errs.append('mouth.kind は "morph"(口をシェイプキーで動かすとき)。ないと口の開きが動かない')
+    if mo.get("kind") == "atlas":
+        # 光る点・紙の顔(体に貼った顔の面 Face に、顔の表の列を選ばせる)。型 f_led・d_lantern
+        fc = cj.get("face", {})
+        node_names = {n.get("name") for n in g.get("nodes", [])}
+        if fc.get("mesh") not in node_names:
+            errs.append(f"mouth.kind が atlas なのに、顔の面 '{fc.get('mesh')}' が model にない")
+        if not os.path.exists(os.path.join(pack, fc.get("atlas", "face_atlas.png"))):
+            errs.append("mouth.kind が atlas なのに、顔の表の絵(face.atlas)がない")
+    elif mo.get("kind") != "morph":
+        errs.append('mouth.kind は "morph"(口をシェイプキーで動かすとき)か "atlas"(顔の面の表)。ないと口の開きが動かない')
     elif mo.get("morph") not in morphs:
         errs.append(f"mouth.morph '{mo.get('morph')}' が model のモーフターゲットにない(あるもの: {sorted(morphs)})")
     bl = cj.get("blink", {})

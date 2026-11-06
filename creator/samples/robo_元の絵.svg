@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254" width="1254" height="1254">
+<defs>
+  <filter id="blur4" filterUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254"><feGaussianBlur stdDeviation="4"/></filter>
+  <filter id="blur8" filterUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254"><feGaussianBlur stdDeviation="8"/></filter>
+  <filter id="blur14" filterUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254"><feGaussianBlur stdDeviation="14"/></filter>
+  <filter id="blur26" filterUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254"><feGaussianBlur stdDeviation="26"/></filter>
+  <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+
+  <radialGradient id="gCream" cx="0.5" cy="0.5" r="0.7" fx="0.34" fy="0.22">
+    <stop offset="0" stop-color="#fffaf0"/><stop offset="0.35" stop-color="#fbeed0"/>
+    <stop offset="0.75" stop-color="#eedaa8"/><stop offset="1" stop-color="#d4b97f"/>
+  </radialGradient>
+  <linearGradient id="gCreamV" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff6e0"/><stop offset="0.6" stop-color="#f0dcb0"/><stop offset="1" stop-color="#cfb27a"/>
+  </linearGradient>
+  <linearGradient id="gCreamH" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#e0c78f"/><stop offset="0.28" stop-color="#fff6de"/><stop offset="0.65" stop-color="#f6e4b8"/><stop offset="1" stop-color="#d2b57c"/>
+  </linearGradient>
+  <radialGradient id="gTeal" cx="0.5" cy="0.5" r="0.7" fx="0.34" fy="0.22">
+    <stop offset="0" stop-color="#7be6df"/><stop offset="0.4" stop-color="#2fbdb8"/>
+    <stop offset="0.8" stop-color="#17908f"/><stop offset="1" stop-color="#0c666b"/>
+  </radialGradient>
+  <linearGradient id="gTealV" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#47cdc6"/><stop offset="0.6" stop-color="#1fa3a2"/><stop offset="1" stop-color="#0d6c70"/>
+  </linearGradient>
+  <linearGradient id="gTealH" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#14868a"/><stop offset="0.3" stop-color="#55d6cf"/><stop offset="0.7" stop-color="#22aaa8"/><stop offset="1" stop-color="#0d6c70"/>
+  </linearGradient>
+  <radialGradient id="gRed" cx="0.5" cy="0.5" r="0.7" fx="0.34" fy="0.25">
+    <stop offset="0" stop-color="#ff7d6a"/><stop offset="0.45" stop-color="#ea3b30"/><stop offset="1" stop-color="#a5121a"/>
+  </radialGradient>
+  <linearGradient id="gRedW" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ff5a48"/><stop offset="0.6" stop-color="#d92a2b"/><stop offset="1" stop-color="#9c1118"/>
+  </linearGradient>
+  <linearGradient id="gScreen" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#1c2733"/><stop offset="0.5" stop-color="#0b1118"/><stop offset="1" stop-color="#05080c"/>
+  </linearGradient>
+  <radialGradient id="gEyeGlow" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#fffdf0"/><stop offset="0.7" stop-color="#fff0c8"/><stop offset="1" stop-color="#ffe3a0"/>
+  </radialGradient>
+  <clipPath id="clipTorso"><rect x="487" y="636" width="280" height="270" rx="84"/></clipPath>
+  <clipPath id="clipHead"><rect x="347" y="190" width="560" height="430" rx="120"/></clipPath>
+  <clipPath id="clipScreen"><rect x="405" y="245" width="444" height="320" rx="86"/></clipPath>
+</defs>
+
+<rect width="1254" height="1254" fill="#ffffff"/>
+
+<!-- 足元の薄い影 -->
+<ellipse cx="627" cy="1122" rx="340" ry="28" fill="#000" opacity="0.2" filter="url(#blur14)"/>
+<ellipse cx="627" cy="1114" rx="230" ry="14" fill="#000" opacity="0.16" filter="url(#blur8)"/>
+
+<!-- 脚(クリーム色の柱)と足(青緑の丸いくつ) -->
+<rect x="530" y="880" width="72" height="170" rx="30" fill="url(#gCreamH)"/>
+<rect x="652" y="880" width="72" height="170" rx="30" fill="url(#gCreamH)"/>
+<ellipse cx="534" cy="1062" rx="92" ry="54" fill="url(#gTeal)"/>
+<ellipse cx="720" cy="1062" rx="92" ry="54" fill="url(#gTeal)"/>
+<ellipse cx="500" cy="1038" rx="42" ry="14" transform="rotate(-8 500 1038)" fill="#e6fffb" opacity="0.65" filter="url(#blur4)"/>
+<ellipse cx="686" cy="1038" rx="42" ry="14" transform="rotate(-8 686 1038)" fill="#e6fffb" opacity="0.5" filter="url(#blur4)"/>
+<!-- 脚の付け根の影 -->
+<rect x="530" y="880" width="72" height="26" rx="12" fill="#000" opacity="0.18" filter="url(#blur8)"/>
+<rect x="652" y="880" width="72" height="26" rx="12" fill="#000" opacity="0.18" filter="url(#blur8)"/>
+
+<!-- 胴(クリーム色)と、下半分の青緑のパンツ形 -->
+<rect x="487" y="636" width="280" height="270" rx="84" fill="url(#gCreamH)"/>
+<rect x="487" y="636" width="280" height="270" rx="84" fill="url(#gCream)" opacity="0.55"/>
+<g clip-path="url(#clipTorso)">
+  <path d="M470 796 Q627 826 784 796 L784 920 L676 920 Q676 868 627 868 Q578 868 578 920 L470 920 Z" fill="url(#gTealH)"/>
+  <path d="M470 796 Q627 826 784 796" fill="none" stroke="#0b5b60" stroke-width="5" opacity="0.5"/>
+  <path d="M484 806 Q627 836 770 806" fill="none" stroke="#baf6ee" stroke-width="5" opacity="0.55" filter="url(#blur4)"/>
+  <ellipse cx="560" cy="838" rx="52" ry="14" transform="rotate(-8 560 838)" fill="#e6fffb" opacity="0.5" filter="url(#blur8)"/>
+  <!-- 頭が胴に落とす影 -->
+  <ellipse cx="627" cy="650" rx="190" ry="34" fill="#4d3b14" opacity="0.38" filter="url(#blur14)"/>
+</g>
+<ellipse cx="552" cy="690" rx="46" ry="22" transform="rotate(-18 552 690)" fill="#fff" opacity="0.7" filter="url(#blur8)"/>
+<!-- 青緑の丸いボタン -->
+<circle cx="627" cy="716" r="22" fill="url(#gTeal)"/><circle cx="620" cy="709" r="7" fill="#e6fffb" opacity="0.85" filter="url(#blur4)"/>
+<circle cx="627" cy="766" r="22" fill="url(#gTeal)"/><circle cx="620" cy="759" r="7" fill="#e6fffb" opacity="0.85" filter="url(#blur4)"/>
+
+<!-- 腕(丸い。手首に青緑の輪、手は丸いミトン形)と肩のパッド -->
+<path d="M452 704 L402 826" stroke="url(#gCreamH)" stroke-width="104" stroke-linecap="round" fill="none"/>
+<path d="M802 704 L852 826" stroke="url(#gCreamH)" stroke-width="104" stroke-linecap="round" fill="none"/>
+<ellipse cx="398" cy="832" rx="58" ry="22" transform="rotate(-22 398 832)" fill="url(#gTealV)"/>
+<ellipse cx="856" cy="832" rx="58" ry="22" transform="rotate(22 856 832)" fill="url(#gTealV)"/>
+<circle cx="382" cy="896" r="56" fill="url(#gCream)"/>
+<circle cx="872" cy="896" r="56" fill="url(#gCream)"/>
+<ellipse cx="360" cy="878" rx="22" ry="12" transform="rotate(-35 364 866)" fill="#fff" opacity="0.8" filter="url(#blur4)"/>
+<ellipse cx="850" cy="878" rx="22" ry="12" transform="rotate(35 846 866)" fill="#fff" opacity="0.6" filter="url(#blur4)"/>
+<ellipse cx="458" cy="676" rx="70" ry="52" transform="rotate(-18 458 676)" fill="url(#gTeal)"/>
+<ellipse cx="796" cy="676" rx="70" ry="52" transform="rotate(18 796 676)" fill="url(#gTeal)"/>
+<ellipse cx="438" cy="656" rx="30" ry="12" transform="rotate(-24 438 656)" fill="#eafffb" opacity="0.85" filter="url(#blur4)"/>
+<ellipse cx="776" cy="656" rx="30" ry="12" transform="rotate(24 776 656)" fill="#eafffb" opacity="0.6" filter="url(#blur4)"/>
+
+<!-- 耳当て(青緑の丸) -->
+<ellipse cx="338" cy="400" rx="50" ry="76" fill="url(#gTealH)"/>
+<ellipse cx="916" cy="400" rx="50" ry="76" fill="url(#gTealH)"/>
+<ellipse cx="324" cy="366" rx="14" ry="30" fill="#eafffb" opacity="0.75" filter="url(#blur4)"/>
+<ellipse cx="902" cy="366" rx="14" ry="30" fill="#eafffb" opacity="0.5" filter="url(#blur4)"/>
+
+<!-- アンテナ(青緑の軸と赤い玉) -->
+<rect x="617" y="120" width="20" height="82" rx="10" fill="url(#gTealH)"/>
+<circle cx="627" cy="106" r="38" fill="url(#gRed)"/>
+<ellipse cx="614" cy="92" rx="13" ry="9" transform="rotate(-30 614 92)" fill="#fff" opacity="0.85" filter="url(#blur4)"/>
+
+<!-- 頭(角の丸い四角) -->
+<rect x="347" y="190" width="560" height="430" rx="120" fill="url(#gCream)"/>
+<rect x="347" y="190" width="560" height="430" rx="120" fill="url(#gCreamV)" opacity="0.35"/>
+<g clip-path="url(#clipHead)">
+  <ellipse cx="480" cy="226" rx="180" ry="30" transform="rotate(-8 480 226)" fill="#fff" opacity="0.75" filter="url(#blur14)"/>
+  <ellipse cx="627" cy="640" rx="330" ry="46" fill="#7a5a1c" opacity="0.28" filter="url(#blur26)"/>
+  <rect x="860" y="230" width="30" height="330" rx="14" fill="#7a5a1c" opacity="0.14" filter="url(#blur14)"/>
+</g>
+<path d="M392 214 Q 440 198 520 198" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" opacity="0.8" filter="url(#blur4)"/>
+
+<!-- 首と赤い蝶ネクタイ(頭の上に重ねる) -->
+<g transform="translate(0,24)">
+<rect x="570" y="600" width="114" height="50" rx="20" fill="url(#gCreamH)"/>
+<path d="M627 640 C 590 600 520 590 512 622 C 506 662 560 690 627 650 Z" fill="url(#gRedW)"/>
+<path d="M627 640 C 664 600 734 590 742 622 C 748 662 694 690 627 650 Z" fill="url(#gRedW)"/>
+<path d="M600 632 C 570 616 540 618 536 632" fill="none" stroke="#ff9d90" stroke-width="6" stroke-linecap="round" opacity="0.7" filter="url(#blur4)"/>
+<rect x="601" y="616" width="52" height="56" rx="20" fill="url(#gRed)"/>
+<ellipse cx="616" cy="632" rx="10" ry="6" fill="#ffd2c9" opacity="0.85" filter="url(#blur4)"/>
+</g>
+
+<!-- 顔の画面(黒い画面。まるい目 2 つと笑った口が、クリーム色に光る) -->
+<rect x="397" y="237" width="460" height="336" rx="92" fill="#cdb27a" opacity="0.55"/>
+<rect x="405" y="245" width="444" height="320" rx="86" fill="url(#gScreen)"/>
+<g clip-path="url(#clipScreen)">
+  <path d="M405 245 L610 245 L470 565 L405 565 Z" fill="#9bd5ff" opacity="0.07"/>
+  <ellipse cx="500" cy="270" rx="120" ry="16" transform="rotate(-6 500 270)" fill="#fff" opacity="0.2" filter="url(#blur8)"/>
+</g>
+<g filter="url(#glow)">
+  <circle cx="540" cy="372" r="50" fill="url(#gEyeGlow)"/>
+  <circle cx="714" cy="372" r="50" fill="url(#gEyeGlow)"/>
+  <path d="M556 466 Q627 528 698 466" fill="none" stroke="#fff3d0" stroke-width="20" stroke-linecap="round"/>
+</g>
+</svg>

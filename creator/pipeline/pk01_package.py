@@ -87,7 +87,7 @@ def main():
                    "mouth": {"kind": "atlas", "mesh": "Face", "cols": atlas["cols"], "levels": [0.08, 0.3, 0.6]},
                    "face": {"mesh": "Face", "atlas": "face_atlas.png", "cols": atlas["cols"], "rows": atlas["rows"],
                             "blink_row": atlas["blink_row"]}})
-        print("WARN model に mouth_open がなく atlas の口で書いた。pk02 は通らない")
+        print("WARN model に mouth_open がなく atlas の口で書いた(pk02 は atlas の口も通す)")
     else:
         sys.exit("model.glb に mouth_open のモーフがなく、face/face_atlas.json もない。口の作りが決められない")
     if a.persona:

@@ -227,6 +227,9 @@ def main():
             fn.links.new(ft.outputs["Color"], fb.inputs["Base Color"])
             fn.links.new(ft.outputs["Alpha"], fb.inputs["Alpha"])
             fb.inputs["Roughness"].default_value = 0.9
+            if f.get("emission"):   # 内側から光る紙(提灯)では、顔の色も少し光らせ、影で沈まないようにする
+                fn.links.new(ft.outputs["Color"], fb.inputs["Emission Color"])
+                fb.inputs["Emission Strength"].default_value = f["emission"]
             try:
                 fmat.surface_render_method = "BLENDED"
             except Exception:

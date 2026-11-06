@@ -1,7 +1,7 @@
 """検査を通った pack を characters/<id>/ に置き、会話の画面(web/)から呼べるようにする。
 
 使い方: python creator/pipeline/pk04_install.py <pack のフォルダ> <id> [--name 表示の名前] [--persona 性格の文.md] [--force]
-置く物: model.glb、motions/、character.json、persona.md(無ければ、書き足す前提のひな形)。作業用の .blend は置かない。
+置く物: model.glb、motions/、character.json、顔の表(face.atlas があれば)、persona.md(無ければ、書き足す前提のひな形)。作業用の .blend は置かない。
 呼び方: http://localhost:8787/?character=<id>
 """
 import argparse
@@ -40,6 +40,9 @@ def main():
     shutil.copyfile(os.path.join(args.pack, char["model"]), os.path.join(dest, char["model"]))
     for rel in char["motions"].values():
         shutil.copyfile(os.path.join(args.pack, rel), os.path.join(dest, rel))
+    atlas = (char.get("face") or {}).get("atlas")   # 顔の表(光る点・紙の顔)。置かないと、顔の面が空になる
+    if atlas and os.path.exists(os.path.join(args.pack, atlas)):
+        shutil.copyfile(os.path.join(args.pack, atlas), os.path.join(dest, atlas))
     char["id"] = args.id
     if args.name:
         char["name"] = args.name
