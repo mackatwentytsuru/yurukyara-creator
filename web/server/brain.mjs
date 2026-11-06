@@ -6,10 +6,14 @@ import { buildSystemBlocks, buildUserTurn, MOTIONS } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 import { classifyInput, distressDetail, fixedReply, guardOutput, mentionsChild, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { summarize } from './memory/reflect.mjs';
-import { firstGreeting } from './greeting.mjs';
+import { aizuchi, exampleReply, firstGreeting } from './greeting.mjs';
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
-const GREETING_MOTIONS = ['bow', 'nod']; // 初めてのあいさつの 1 文目はおじぎ、2 文目はうなずき(無いキャラは none に落ちる)
+const GREETING_MOTIONS = ['bow', 'nod', 'wave']; // 初めてのあいさつの 1 文目はおじぎ、2 文目はうなずき、3 文目は手をふる(無いキャラは none に落ちる)
+const EXAMPLE_MOTIONS = ['nod', 'tilt', 'none']; // 話し方の例の返事
+const AIZUCHI_MOTIONS = ['nod', 'tilt'];
+// 分からない・できないと言う文は、考える顔にする(話し方の例・あいづち)
+const UNSURE = /(あれれ|わかりマセン|わかりません|わからない|分からない|調べられ|できマセン|できない)/;
 // 「人間なの?」「AI なの?」など、相手が何者かを聞く言葉
 const ASKS_IF_HUMAN = /(人間なの|人間なん|人間ですか|にんげんなの|人なの\?|本物の人|AI\s*なの|AI\s*ですか|ロボットなの|中の人)/i;
 
@@ -189,8 +193,25 @@ export async function callHaikuHedged({ system, messages, signal, onText, hedgeM
  * 仮の頭脳。鍵が無いときと、画面だけ確かめたいときに使う(固定の言い回し。お金はかからない)。
  * 覚えていること(memory)があれば、名前を呼んで話の続きにふれる。目印の名前が話に出たら案内する。
  * 人格の文(persona)に「初めてのあいさつ」の節があれば、はじめての「こんにちは」「はじめまして」にその文で名乗る。
+ * 「話し方の例」の合図の言葉が入っていれば、その子の言葉で返す。どれでもなければ「あいづち」の節(無ければ決まった文)。
+ * 安全の層が先: runTurn を通さずに直接呼ばれても(公開の関数の仮の頭脳など)、つらい話・恋人役・依存の言葉には決まった返事を返し、
+ * 返す文も出力の確かめを通す。runTurn は先に決まった返事を返すので、ここの守りは二重の守り。
  */
-export function* mockReply({ text, trigger, landmarks = [], seen, memory = null, learned = [], history = [], persona = '' }) {
+export function* mockReply(o) {
+  const { text, trigger, seen, persona = '' } = o;
+  const kind = trigger === 'approach' ? null : classifyInput(text);
+  if (kind) {
+    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(text) || mentionsChild(persona), detail: distressDetail(text) });
+    const { intent, stage, handoff, safety, ...line } = first;
+    yield { type: 'thought', seen: seen || '', intent, stage, handoff, safety };
+    yield line;
+    yield* rest;
+    return;
+  }
+  for (const ev of mockLines(o)) yield ev.type === 'say' ? guardOutput(ev) : ev;
+}
+
+function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learned = [], history = [], persona = '' }) {
   const { name, topic } = summarize(memory?.items ?? []);
   const san = name ? `${name}さん` : '';
   if (trigger === 'approach') {
@@ -241,7 +262,21 @@ export function* mockReply({ text, trigger, landmarks = [], seen, memory = null,
     yield { type: 'say', text: '今日は、どんなお話をしようか。', expression: 'happy', motion: 'tilt', gaze: 'person' };
     return;
   }
+  // 人格の「話し方の例」の合図の言葉が入っていれば、その子の言葉で返す
+  const example = exampleReply(persona, text);
+  if (example.length) {
+    yield { type: 'thought', seen: seen || '', intent: '話し方の例', stage: 'chat', handoff: false };
+    for (const [i, line] of example.entries()) {
+      yield { type: 'say', text: line, expression: UNSURE.test(line) ? 'think' : 'happy', motion: EXAMPLE_MOTIONS[i] ?? 'none', gaze: 'person' };
+    }
+    return;
+  }
   yield { type: 'thought', seen: seen || '', intent: '雑談', stage: 'chat', handoff: false };
+  const own = aizuchi(persona); // その子のあいづち(無ければ決まった文)
+  if (own.length) {
+    for (const [i, line] of own.entries()) yield { type: 'say', text: line, expression: i === 0 ? 'think' : 'happy', motion: AIZUCHI_MOTIONS[i] ?? 'none', gaze: 'person' };
+    return;
+  }
   yield { type: 'say', text: 'そうなんだ。', expression: 'think', motion: 'nod', gaze: 'person' };
   yield { type: 'say', text: 'もう少し聞かせてくれる?', expression: 'happy', motion: 'tilt', gaze: 'person' };
 }
@@ -295,7 +330,8 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   if (brain === 'mock') {
     onEvent({ type: 'meta', brain: 'mock' });
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
-    for (const obj of mockReply({ text, trigger, landmarks, seen: scene, memory, learned, history, persona: character.persona ?? '' })) {
+    // 安全の層と出力の確かめは、ここ(上と emit)で通すので、守りの包みの無い台本を使う(差し替えの印 guarded が消えないように)
+    for (const obj of mockLines({ text, trigger, landmarks, seen: scene, memory, learned, history, persona: character.persona ?? '' })) {
       if (paceMs > 0) await new Promise((r) => setTimeout(r, paceMs));
       emit(obj);
     }

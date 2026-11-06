@@ -1,32 +1,96 @@
-// 人格の文(characters/<id>/persona.md)の「初めてのあいさつ」の節から、はじめて会った人に言う文を取り出す。
-// - 本物の頭脳には、人格の文ごと渡るので、この節を手本にして名乗る(言い回しは頭脳に任せる)
+// 人格の文(characters/<id>/persona.md)の節から、仮の頭脳が言う文を取り出す。
+// - 「## 初めてのあいさつ」: はじめて会った人に言う文(3 文まで)
+// - 「## 話し方の例」: 1 行に 1 つ、左の「」が使う人の言葉の例(合図)、→ の右の「」が返事。仮の頭脳は、合図の言葉が入っていればその返事を言う
+// - 「## あいづち」: 話がよく分からないときの返事(仮の頭脳の、最後の返事)
+// - 本物の頭脳には、人格の文ごと渡るので、どの節も手本にして話す(言い回しは頭脳に任せる)
 // - 仮の頭脳(鍵なし・上限・公開のリンクで合言葉なし)は、ここで取り出した文をそのまま言う
-// - 人格の欄から安全の決まりを上書きしようとする行は、先に sanitizePersona で外す(どの文も安全の層の下)
-import { sanitizePersona } from './safety.mjs';
+// - 人格の欄から安全の決まりを上書きしようとする行は、先に sanitizePersona で外す(どの文も安全の層の下)。返事の文は出力の確かめも通す
+import { isUnsafeOutput, sanitizePersona } from './safety.mjs';
 
 export const GREETING_MAX_LINES = 3;
 export const GREETING_LINE_MAX = 40; // 指示文の決まり(1 文は 40 字以内)と同じ
+export const EXAMPLES_MAX = 8;
+export const AIZUCHI_MAX_LINES = 2;
 
-const HEAD = /^#{1,6}\s*初めてのあいさつ/u;
 const ITEM = /^[-*・]\s*(.+)$/u;
+const QUOTED = /「([^「」]+)」/gu;
+const clip = (s) => Array.from(String(s).trim()).slice(0, GREETING_LINE_MAX).join('');
+
+/** 節の中の行(見出しの次から、次の見出しの前まで)。節が無ければ空 */
+function sectionLines(persona, name) {
+  const lines = sanitizePersona(persona).text.split('\n');
+  const head = new RegExp(`^#{1,6}\\s*${name}`, 'u');
+  const at = lines.findIndex((l) => head.test(l.trim()));
+  if (at < 0) return [];
+  const out = [];
+  for (const raw of lines.slice(at + 1)) {
+    const line = raw.trim();
+    if (line.startsWith('#')) break; // 次の見出しで終わり
+    out.push(line);
+  }
+  return out;
+}
+
+/** 節の「- 」の行の中身を、max 文まで・1 文 40 字までで返す */
+function sectionItems(persona, name, max) {
+  const out = [];
+  for (const line of sectionLines(persona, name)) {
+    const m = line.match(ITEM);
+    if (!m) continue;
+    const text = clip(m[1]);
+    if (text) out.push(text);
+    if (out.length >= max) break;
+  }
+  return out;
+}
 
 /**
  * @param {string} persona 人格の文(画面が足す「性格と話し方」の節が後ろに付いていてもよい)
  * @returns {string[]} 言う文(無ければ空)
  */
 export function firstGreeting(persona) {
-  const lines = sanitizePersona(persona).text.split('\n');
-  const at = lines.findIndex((l) => HEAD.test(l.trim()));
-  if (at < 0) return [];
+  return sectionItems(persona, '初めてのあいさつ', GREETING_MAX_LINES);
+}
+
+// 合図の言葉を比べるときの揺れ(漢字とかな)をそろえる。少しだけ。外れたら、あいづちになるだけ
+const FOLD = [['誰', 'だれ'], ['何', 'なに'], ['貴方', 'あなた'], ['君', 'きみ'], ['好き', 'すき'], ['物', 'もの'], ['疲れ', 'つかれ'], ['眠', 'ねむ'], ['天気', 'てんき']];
+
+/** 比べるための形: 全角と半角をそろえ、漢字の揺れを少しそろえ、空白と記号を外す */
+export function foldForMatch(s) {
+  let t = String(s ?? '').normalize('NFKC').toLowerCase();
+  for (const [a, b] of FOLD) t = t.split(a).join(b);
+  return t.replace(/[\s、。,.!?…・「」『』()~〜]/gu, '');
+}
+
+/**
+ * 「## 話し方の例」の手本。合図は 2 字以上、返事は 3 文まで・1 文 40 字まで。安全の決まりに反する返事の文は外す。
+ * @returns {{cues:string[], replies:string[]}[]}
+ */
+export function talkExamples(persona) {
   const out = [];
-  for (const raw of lines.slice(at + 1)) {
-    const line = raw.trim();
-    if (line.startsWith('#')) break; // 次の見出しで終わり
+  for (const line of sectionLines(persona, '話し方の例')) {
     const m = line.match(ITEM);
-    if (!m) continue;
-    const text = Array.from(m[1].trim()).slice(0, GREETING_LINE_MAX).join('');
-    if (text) out.push(text);
-    if (out.length >= GREETING_MAX_LINES) break;
+    const arrow = m ? m[1].indexOf('→') : -1;
+    if (arrow < 0) continue;
+    const cues = [...m[1].slice(0, arrow).matchAll(QUOTED)].map((q) => foldForMatch(q[1])).filter((c) => Array.from(c).length >= 2);
+    const replies = [...m[1].slice(arrow + 1).matchAll(QUOTED)]
+      .map((q) => clip(q[1]))
+      .filter((t) => t && !isUnsafeOutput(t))
+      .slice(0, GREETING_MAX_LINES);
+    if (cues.length && replies.length) out.push({ cues, replies });
+    if (out.length >= EXAMPLES_MAX) break;
   }
   return out;
+}
+
+/** 使う人の言葉に合図が入っている、最初の手本の返事。無ければ空 */
+export function exampleReply(persona, text) {
+  const said = foldForMatch(text);
+  if (!said) return [];
+  return talkExamples(persona).find((ex) => ex.cues.some((c) => said.includes(c)))?.replies ?? [];
+}
+
+/** 「## あいづち」の文(話がよく分からないとき)。無ければ空 */
+export function aizuchi(persona) {
+  return sectionItems(persona, 'あいづち', AIZUCHI_MAX_LINES).filter((t) => !isUnsafeOutput(t));
 }

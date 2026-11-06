@@ -15,20 +15,18 @@ async function turn(body, opts = {}) {
   return { events, said: events.filter((e) => e.type === 'say') };
 }
 
-test('ノリー: はじめての「はじめまして」に、人格の文の初めてのあいさつで名乗る(1 文目はおじぎ)', async () => {
+test('ノリー: はじめての「はじめまして」に、人格の文の初めてのあいさつで名乗る(おじぎ → うなずき → 手をふる)', async () => {
   const { events, said } = await turn({ text: 'はじめまして', character: { name: 'ノリー', persona: PERSONA } });
   assert.equal(events[0].type, 'meta');
   assert.equal(events[0].brain, 'mock');
-  assert.deepEqual(said.map((s) => s.text), ['はじめまして! ノリーと申しマス。', '執事見習いデス。ノリ、がんばりマス!']);
-  assert.equal(said[0].motion, 'bow');
-  assert.equal(said[1].motion, 'nod');
+  assert.deepEqual(said.map((s) => s.text), ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリ、がんばりマス! なにをお手伝いしまショウ?']);
+  assert.deepEqual(said.map((s) => s.motion), ['bow', 'nod', 'wave']);
   assert.equal(events.find((e) => e.type === 'thought').stage, 'greet');
 });
 
-test('おじぎの動きが無いキャラでは none に落ちる', async () => {
+test('おじぎ・手をふる動きが無いキャラでは none に落ちる', async () => {
   const { said } = await turn({ text: 'こんにちは', motions: ['none', 'nod'], character: { name: 'ノリー', persona: PERSONA } });
-  assert.equal(said[0].motion, 'none');
-  assert.equal(said[1].motion, 'nod');
+  assert.deepEqual(said.map((s) => s.motion), ['none', 'nod', 'none']);
 });
 
 test('話の途中のあいさつ・覚えている人へのあいさつは、初めてのあいさつにしない', async () => {
