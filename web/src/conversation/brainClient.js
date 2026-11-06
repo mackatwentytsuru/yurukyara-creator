@@ -1,4 +1,6 @@
 // サーバーの /api/chat(Server-Sent Events)を読んで、イベントを 1 つずつ渡す。
+// 記憶の合鍵があれば、ヘッダーで一緒に送る(サーバーが覚えていることを読み、この回の言葉から覚える)。
+import { memoryHeaders } from '../ui/memoryKey.js';
 
 /**
  * @param {object} body サーバーに渡す内容
@@ -8,7 +10,7 @@
 export async function streamChat(body, onEvent, signal) {
   const res = await fetch('/api/chat', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...memoryHeaders() },
     body: JSON.stringify(body),
     signal,
   });

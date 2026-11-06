@@ -49,15 +49,16 @@ test('仮の頭脳: 目印の名前が出たら案内し、その場所を見る
   assert.equal(last.motion, 'point');
 });
 
-test('仮の頭脳: 分からない話は人につなぐ', () => {
+test('仮の頭脳: 分からない話は、聞き返して続ける(人につながない・接客の言葉を使わない)', () => {
   const evs = [...mockReply({ text: 'ええと、天気は?', landmarks: [] })];
-  assert.equal(evs[0].handoff, true);
+  assert.equal(evs[0].stage, 'chat');
+  assert.ok(evs.every((e) => !/\u30b9\u30bf\u30c3\u30d5|\u5e97|\u304a\u5ba2/.test(e.text ?? '')));
 });
 
 test('指示文に、表情・動き・目印・出力の形が入っている', () => {
   const sys = buildSystemPrompt({
     character: { name: 'テスト', persona: '明るい' },
-    place: { name: '試しの店', landmarks: [{ name: '入口', where: '手前' }] },
+    place: { name: '試しの広場', landmarks: [{ name: '入口', where: '手前' }] },
     expressions,
   });
   assert.match(sys, /テスト/);
@@ -69,7 +70,7 @@ test('指示文に、表情・動き・目印・出力の形が入っている',
 test('ユーザーの発話に見えている様子が付く', () => {
   const t = buildUserTurn({ text: 'こんにちは', scene: '1 人が見えている' });
   assert.match(t, /見えている様子】1 人/);
-  assert.match(t, /お客さんの言葉】こんにちは/);
+  assert.match(t, /使う人の言葉】こんにちは/);
   assert.match(buildUserTurn({ trigger: 'approach', scene: '' }), /近づいてきた/);
 });
 

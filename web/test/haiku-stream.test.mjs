@@ -66,7 +66,9 @@ test('Haiku の流れから thought と say を 1 行ずつ取り出す(途中�
     assert.equal(sent.body.model, 'claude-haiku-5-5');
     assert.equal(sent.body.stream, true);
     assert.match(sent.body.messages.at(-1).content, /1 人が見えている/);
-    assert.match(sent.body.system[0].text, /お手洗い: 左奥/);
+    assert.match(sent.body.system[0].text, /安全の決まり/, '1 段目は安全の決まり');
+    assert.match(sent.body.system[1].text, /お手洗い: 左奥/);
+    assert.equal(sent.body.system[1].cache_control.type, 'ephemeral');
     assert.equal(sent.headers['x-api-key'], 'test-key-not-real');
   });
 });
@@ -89,38 +91,17 @@ test('API がエラーを返したら、分かる言葉で例外にする', asyn
   }
 });
 
-test('「スタッフにつなぎます」と言ったのに handoff が false のとき、あとから handoff の印が届く。お客さんに「聞いて」と案内するだけなら足さない', async () => {
-  const promise = [
-    '{"type":"say","text":"ロッカーのことですね。","expression":"happy","motion":"nod","gaze":"person","intent":"ロッカー","stage":"guide","handoff":false,"cite":[]}\n',
-    '{"type":"say","text":"わたしでは分からないので、スタッフにつなぎますね。","expression":"happy","motion":"bow","gaze":"person"}\n',
-  ];
-  await withFakeApi(promise, async (runTurn) => {
-    const events = [];
-    await runTurn({ text: 'ロッカーはありますか', place: { name: '試し' } }, { onEvent: (e) => events.push(e), signal: new AbortController().signal });
-    const h = events.filter((e) => e.type === 'handoff');
-    assert.equal(h.length, 1);
-    assert.equal(h[0].reason, 'unknown');
-    assert.ok(events.findIndex((e) => e.type === 'handoff') < events.findLastIndex((e) => e.type === 'say'), '2 文目を出す前に印が届く');
-  });
-  const advice = ['{"type":"say","text":"くわしくは、スタッフにお聞きくださいね。","expression":"happy","motion":"nod","gaze":"person","intent":"飲食","stage":"guide","handoff":false,"cite":[]}\n'];
-  await withFakeApi(advice, async (runTurn) => {
-    const events = [];
-    await runTurn({ text: '食べ物は', place: { name: '試し' } }, { onEvent: (e) => events.push(e), signal: new AbortController().signal });
-    assert.equal(events.filter((e) => e.type === 'handoff').length, 0);
-  });
-});
-
 test('2 行目以降の say に付いた handoff(intent なし)も、引き継ぎの印として届く。reason もそのまま', async () => {
   const lines = [
-    '{"type":"say","text":"ロッカーのことですね。","expression":"thinking","motion":"none","gaze":"away","intent":"ロッカー","stage":"need","handoff":false,"cite":[]}\n',
-    '{"type":"say","text":"分かりません。","expression":"sad","motion":"none","gaze":"person"}\n',
-    '{"type":"say","text":"お待ちくださいね。","expression":"happy","motion":"bow","gaze":"person","handoff":true,"reason":"booking"}\n',
+    '{"type":"say","text":"ロッカーのことだね。","expression":"thinking","motion":"none","gaze":"away","intent":"ロッカー","stage":"need","handoff":false}\n',
+    '{"type":"say","text":"分からないんだ。","expression":"sad","motion":"none","gaze":"person"}\n',
+    '{"type":"say","text":"公式の案内で確かめてね。","expression":"happy","motion":"bow","gaze":"person","handoff":true,"reason":"emergency"}\n',
   ];
   await withFakeApi(lines, async (runTurn) => {
     const events = [];
     await runTurn({ text: 'ロッカーは', place: { name: '試し' } }, { onEvent: (e) => events.push(e), signal: new AbortController().signal });
     const h = events.filter((e) => e.type === 'handoff');
     assert.equal(h.length, 1);
-    assert.equal(h[0].reason, 'booking');
+    assert.equal(h[0].reason, 'emergency');
   });
 });

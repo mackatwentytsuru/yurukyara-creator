@@ -6,7 +6,9 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createRe
 import { extname, join, normalize, sep } from 'node:path';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
-import { createShop, SHOP_KEYS, SHOP_LABELS, MEMORY_CATEGORIES } from './shop/index.mjs';
+import { createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memory/store.mjs';
+import { createMemoryRoutes, isForgetRequest } from './memory/routes.mjs';
+import { extractFacts } from './memory/reflect.mjs';
 import { streamSpeech, ttsStatus } from './tts.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
@@ -37,7 +39,9 @@ const claudeLimiter = createLimiter({
   perMinute: config.claudePerMinute,
 });
 
-const shop = createShop();
+// 端末をまたぐ記憶(合鍵・6 桁の番号・一覧・わすれて)
+const memory = createMemoryStore({ backend: fileBackend(config.memoryDir), pepper: config.memoryPepper });
+const memoryLimiter = createLimiter({ file: join(LOG_DIR, 'memory_usage.json'), dailyCap: 2000, perMinute: 10 });
 
 const stt = createStt();
 const sttLimiter = createLimiter({ file: join(LOG_DIR, 'stt_usage.json'), dailyCap: 3000, perMinute: 40 });
@@ -129,21 +133,44 @@ async function handleChat(req, res) {
   res.on('close', () => ac.abort());
   const send = (ev) => res.write(`data: ${JSON.stringify(ev)}\n\n`);
   const t0 = Date.now();
-  // 本物の Claude を呼ぶときだけ、回数の上限を数える(仮の頭脳は無料)
+  // 記憶: 合鍵(ヘッダー)があれば、覚えていることを読み、この回の言葉から覚える事を足す
+  const memoryKey = typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
+  if (memoryKey && isForgetRequest(body.text)) {
+    const forgotten = memory.forgetAll(memoryKey);
+    send({ type: 'memory', forgotten });
+    send({ type: 'thought', seen: '', intent: '記憶を消す', stage: 'chat', handoff: false });
+    send({ type: 'say', text: forgotten ? 'わかった、覚えていたことは全部消したよ。' : 'まだ何も覚えていなかったよ。', expression: 'happy', motion: 'nod', gaze: 'person' });
+    send({ type: 'done', serverMs: Date.now() - t0 });
+    return res.end();
+  }
+  let recalled = null;
+  let learned = [];
+  if (memoryKey) {
+    recalled = memory.recall(memoryKey);
+    try {
+      learned = memory.add(memoryKey, extractFacts(body.text));
+    } catch {
+      learned = []; // 合鍵の記憶が無い(消えた・7 日たった)ときは、覚えずに話す
+    }
+    if (learned.length) send({ type: 'memory', added: learned.map(({ id, kind, text }) => ({ id, kind, text })) });
+  }
+  // 本物の Claude を呼ぶときだけ、回数の上限を数える(仮の頭脳は無料)。上限に当たったら、仮の頭脳で話し続ける
   const client = req.socket.remoteAddress ?? 'unknown';
-  const paid = Boolean(config.anthropicKey);
+  let paid = Boolean(config.anthropicKey);
   if (paid) {
     const slot = claudeLimiter.take(client);
     if (!slot.ok) {
-      send({ type: 'error', message: slot.message, reason: slot.reason });
-      return res.end();
+      send({ type: 'meta', limited: true, reason: slot.reason, notice: `仮の頭脳です(${slot.message})` });
+      paid = false;
     }
   }
   try {
     const afterMs = config.hedgeExperiment && Number.isFinite(body.hedgeMs) ? body.hedgeMs : config.hedgeMs;
     await runTurn(body, {
       signal: ac.signal,
-      shop,
+      memory: recalled,
+      learned,
+      forceMock: !paid,
       onEvent: (ev) => send({ ...ev, serverMs: Date.now() - t0 }),
       // 2 本目も 1 回として、1 日・1 分の上限に数える。足りなければ送らない
       hedge: { afterMs: paid ? afterMs : 0, take: () => claudeLimiter.take(client).ok },
@@ -158,17 +185,17 @@ async function handleChat(req, res) {
   res.end();
 }
 
+const memoryRoutes = createMemoryRoutes({ store: memory, config, limiter: memoryLimiter, readBody });
+
 const useTls = Boolean(config.tlsCert && config.tlsKey);
 const handler = async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const path = decodeURIComponent(url.pathname);
   try {
+    if (await memoryRoutes(req, res, path, url)) return;
     if (req.method === 'GET' && path === '/api/status') {
-      const snap = await shop.snapshot();
       return json(res, 200, {
-        shop: snap
-          ? { available: true, label: snap.source.label, venue: snap.venue, memory: snap.memory ? { label: snap.memory.source.label, categories: MEMORY_CATEGORIES.filter(([k]) => snap.memory.categories[k]).map(([k, label]) => ({ key: `m_${k}`, label, count: snap.memory.categories[k].items.length })), notFound: snap.memory.missing } : null, sections: SHOP_KEYS.filter((k) => snap.sections[k]).map((k) => ({ key: k, label: SHOP_LABELS[k], updatedAt: snap.sections[k].updatedHm })) }
-          : { available: false },
+        memory: { notice: MEMORY_NOTICE, pairing: Boolean(config.appPass) || ['127.0.0.1', '::1', 'localhost'].includes(config.host) },
         brain: config.anthropicKey ? 'haiku' : 'mock',
         model: config.model,
         tts: ttsStatus(),

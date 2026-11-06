@@ -1,101 +1,139 @@
-import test from 'node:test';
+// 端末をまたぐ記憶の試験(合鍵・6 桁の番号・一覧・わすれて・7 日)。サーバーを立てずに、記憶の本体だけを試す。
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createShop, normalizeFacts, renderMemory, renderShopData, resolveSources, MEMORY_CATEGORIES } from '../server/shop/index.mjs';
+import { createMemoryStore, fileBackend, mapBackend, isKey, MAX_FAILS, PAIR_TTL_MS, RETENTION_MS, GLOBAL_FAIL_LIMIT, NOTICE } from '../server/memory/store.mjs';
+import { extractFacts, summarize } from '../server/memory/reflect.mjs';
+import { canPair, isForgetRequest } from '../server/memory/routes.mjs';
 
-const SAMPLE = join(import.meta.dirname, '..', 'server', 'shop', 'memory_sample', 'venue.json');
-const raw = () => JSON.parse(readFileSync(SAMPLE, 'utf8'));
+const clock = (t0 = Date.parse('2026-11-06T20:00:00+09:00')) => {
+  let t = t0;
+  return { now: () => t, add: (ms) => (t += ms) };
+};
 
-test('見本の記憶は、分類ごとにそろう。取得日の無い事実・本文の無い事実は捨てる', () => {
-  const m = normalizeFacts(raw());
-  assert.ok(m.categories.hours.items.length === 3);
-  assert.equal(m.categories.pricing.items[0].confidence, 'high');
-  const bad = normalizeFacts({ facts: [{ category: '料金', fact: '入場料は 1 円です。' }, { category: '料金', fact: '', fetchedAt: '2026-11-04' }] });
-  assert.equal(bad, null, '取得日が無ければ使わない');
+test('合鍵は 43 字の乱数で、毎回ちがう。形の違う合鍵は断る', () => {
+  const s = createMemoryStore({ backend: mapBackend() });
+  const a = s.create().key;
+  const b = s.create().key;
+  assert.ok(isKey(a) && isKey(b));
+  assert.notEqual(a, b);
+  assert.throws(() => s.list('short'), { status: 401 });
+  assert.throws(() => s.list('x'.repeat(43)), { status: 404 });
 });
 
-test('見つからなかった分類(fact が null)は残り、事実が 1 つでもあれば「見つからなかった」にならない', () => {
-  const m = normalizeFacts(raw());
-  assert.deepEqual(m.missing, ['rental']);
-  const both = normalizeFacts({ facts: [{ category: '料金', fact: null }, { category: '料金', fact: '入場料は 2,000 円です。', fetchedAt: '2026-11-04' }] });
-  assert.deepEqual(both.missing, []);
-});
-
-test('日本語の分類名・英語のキー・m_ つきのキーのどれでも同じ分類になる。知らない分類は捨てる', () => {
-  const f = (category) => ({ category, fact: '事実です。', fetchedAt: '2026-11-04' });
-  const m = normalizeFacts({ facts: [f('料金'), f('pricing'), f('m_pricing'), f('天気')] });
-  assert.equal(m.categories.pricing.items.length, 3);
-  assert.equal(Object.keys(m.categories).length, 1);
-});
-
-test('確度・季節の変わり方が決まった値でないときは、いちばん低い確度(low)・変わらない(fixed)に落ちる', () => {
-  const m = normalizeFacts({ facts: [{ category: '料金', fact: '入場料は 2,000 円です。', fetchedAt: '2026-11-04', confidence: '確実', volatility: '毎日' }] });
-  assert.equal(m.categories.pricing.items[0].confidence, 'low');
-  assert.equal(m.categories.pricing.items[0].volatility, 'fixed');
-});
-
-test('頭脳に渡す文: 出典・取得日・確度が付き、記憶にない分類はスタッフへと書く。時刻で変わらない(キャッシュが効く)', () => {
-  const m = normalizeFacts(raw());
-  const a = renderMemory(m);
-  assert.match(a, /\[m_hours\] 営業時間・定休日/);
-  assert.match(a, /出典 見本の公式サイト \/ 取得 2026-11-04/);
-  assert.match(a, /確度 低/);
-  assert.match(a, /貸切・イベント利用\(調べたが見つからなかった\)/);
-  assert.equal(a, renderMemory(normalizeFacts(raw())));
-});
-
-test('今日のデータが無くても、店の記憶だけで動く。何も無ければ null', async () => {
+test('サーバーのファイルには合鍵そのものが残らない(名前はハッシュ)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mem-'));
-  const memFile = join(dir, 'v.json');
-  writeFileSync(memFile, JSON.stringify(raw()));
-  const none = { load: async () => { throw new Error('取れない'); } };
-  const shop = createShop({ source: none, memoryFile: memFile, now: () => Date.parse('2026-11-04T18:00:00+09:00') });
-  const snap = await shop.snapshot();
-  assert.ok(snap.memory);
-  assert.deepEqual(Object.keys(snap.sections), []);
-  const text = renderShopData(snap);
-  assert.match(text, /データにないもの\n今日のショー/);
-  assert.match(text, /# 店の記憶/);
-  assert.equal(await createShop({ source: none, memoryFile: '', now: Date.now }).snapshot(), null);
-  assert.equal(await createShop({ source: none, memoryFile: join(dir, 'ない.json'), now: Date.now }).snapshot(), null);
+  const s = createMemoryStore({ backend: fileBackend(dir), pepper: 'p' });
+  const { key } = s.create();
+  s.add(key, [{ kind: 'name', text: '名前: タロウ' }]);
+  const files = readdirSync(dir);
+  assert.equal(files.length, 1);
+  assert.ok(!files[0].includes(key));
+  assert.ok(!readFileSync(join(dir, files[0]), 'utf8').includes(key));
 });
 
-test('画面に出す参照: m_ の名前は「店の記憶: 分類」と取得日(MM/DD)になり、確度が低い分類は stale', async () => {
-  const shop = createShop({ source: { load: async () => ({ sections: {} }) }, memoryFile: SAMPLE, now: () => Date.parse('2026-11-04T18:00:00+09:00') });
-  const snap = await shop.snapshot();
-  const src = resolveSources(snap, ['m_hours', 'm_access', 'm_nothing', 'shows']);
-  assert.deepEqual(src.map((x) => x.key), ['m_hours', 'm_access']);
-  assert.equal(src[0].label, '店の記憶: 営業時間・定休日');
-  assert.equal(src[0].updatedAt, '11/04');
-  assert.equal(src[0].stale, false);
-  assert.equal(src[1].stale, true, '行き方には確度が低い事実がある');
-  assert.equal(src[1].confidence, 'low');
+test('覚える・一覧・1 つ消す・全部わすれる', () => {
+  const s = createMemoryStore({ backend: mapBackend() });
+  const { key, notice } = s.create();
+  assert.equal(notice, NOTICE);
+  assert.match(NOTICE, /7 日/);
+  s.add(key, extractFacts('わたしはタロウ。カレーが好き'));
+  const items = s.list(key).items;
+  assert.deepEqual(items.map((i) => i.text), ['名前: タロウ', '好きなもの: カレー', '前に話したこと: カレーの話']);
+  assert.equal(s.forgetItem(key, items[1].id), true);
+  assert.equal(s.list(key).items.length, 2);
+  assert.equal(s.forgetAll(key), true);
+  assert.throws(() => s.list(key), { status: 404 });
+  assert.equal(s.recall(key).text, '');
 });
 
-test('分類の一覧は 13 個で、cite の名前(m_ つき)が重ならない', () => {
-  assert.equal(MEMORY_CATEGORIES.length, 13);
-  assert.equal(new Set(MEMORY_CATEGORIES.map(([k]) => k)).size, 13);
+test('名前は置き換え、同じ事は重ねない', () => {
+  const s = createMemoryStore({ backend: mapBackend() });
+  const { key } = s.create();
+  s.add(key, [{ kind: 'name', text: '名前: タロウ' }]);
+  s.add(key, [{ kind: 'name', text: '名前: ハナコ' }, { kind: 'like', text: '好きなもの: 犬' }, { kind: 'like', text: '好きなもの: 犬' }]);
+  assert.deepEqual(s.list(key).items.map((i) => i.text), ['名前: ハナコ', '好きなもの: 犬']);
 });
 
-test('事実のある分類の中の「見つからなかった」は、その分類に印として残り、頭脳に渡る', () => {
-  const m = normalizeFacts({ facts: [
-    { category: '行き方', fact: '駅から歩いて 4 分です。', fetchedAt: '2026-11-04' },
-    { category: '行き方', fact: null, note: '駐車場の情報は見つからなかった' },
-    { category: '貸切・イベント利用', fact: null, note: '貸切の条件は見つからなかった' },
-  ] });
-  assert.deepEqual(m.gaps, { access: ['駐車場の情報は見つからなかった'] });
-  assert.match(renderMemory(m), /【調べたが見つからなかった】駐車場の情報は見つからなかった/);
-  assert.match(renderMemory(m), /貸切・イベント利用\(調べたが見つからなかった\)/);
+test('7 日: 使わずに 7 日たつと、記録ごと消える。使えば延びる', () => {
+  const c = clock();
+  const s = createMemoryStore({ backend: mapBackend(), now: c.now });
+  const { key } = s.create();
+  s.add(key, [{ kind: 'like', text: '好きなもの: 犬' }]);
+  c.add(RETENTION_MS - 1000);
+  assert.equal(s.list(key).items.length, 1, '7 日の直前はある');
+  c.add(RETENTION_MS - 1000);
+  assert.equal(s.list(key).items.length, 0, '書いてから 7 日たった事は消える(記録は使ったので残る)');
+  c.add(RETENTION_MS + 1);
+  assert.throws(() => s.list(key), { status: 404 });
 });
 
-test('cite が付かなかった答えに、重なった言葉・数字から根拠を後付けする(2 語に満たなければ付けない・最大 2 つ)', async () => {
-  const shop = createShop({ source: { load: async () => ({ sections: {} }) }, memoryFile: SAMPLE, now: () => Date.parse('2026-11-04T18:00:00+09:00') });
-  const snap = await shop.snapshot();
-  const { inferCite } = await import('../server/shop/index.mjs');
-  assert.deepEqual(inferCite(snap, '営業時間は 18 時から 23 時までです。定休日は毎週月曜日ですよ。'), ['m_hours']);
-  assert.ok(inferCite(snap, '最寄りは、あおぞら駅の北口です。歩いて約 4 分です。').includes('m_access'));
-  assert.deepEqual(inferCite(snap, 'ありがとうございます。またお話ししましょう。'), []);
-  assert.deepEqual(inferCite(null, '営業時間は 18 時です'), []);
+test('番号: 6 けた・10 分で切れる・1 回しか使えない', () => {
+  const c = clock();
+  const s = createMemoryStore({ backend: mapBackend(), now: c.now });
+  const { key } = s.create();
+  const p = s.pair(key);
+  assert.match(p.code, /^[0-9]{6}$/);
+  assert.equal(p.ttlSec, 600);
+  assert.equal(s.claim(p.code, 'B').key, key);
+  assert.throws(() => s.claim(p.code, 'B'), { status: 400 }, '2 回目は使えない');
+  const p2 = s.pair(key);
+  c.add(PAIR_TTL_MS + 1);
+  assert.throws(() => s.claim(p2.code, 'C'), { status: 400 }, '10 分で切れる');
+});
+
+test('番号: 新しく出すと前の番号は使えない。わすれると番号も消える', () => {
+  const s = createMemoryStore({ backend: mapBackend() });
+  const { key } = s.create();
+  const a = s.pair(key);
+  const b = s.pair(key);
+  if (a.code !== b.code) assert.throws(() => s.claim(a.code, 'X'), { status: 400 });
+  s.forgetAll(key);
+  assert.throws(() => s.claim(b.code, 'Y'), { status: 400 });
+  assert.equal(s.activeCodes(), 0);
+});
+
+test('番号: 同じ接続元が 5 回間違えたら 10 分止める(正しい番号でも)', () => {
+  const c = clock();
+  const s = createMemoryStore({ backend: mapBackend(), now: c.now });
+  const { key } = s.create();
+  const p = s.pair(key);
+  const wrong = p.code === '000000' ? '111111' : '000000';
+  for (let i = 0; i < MAX_FAILS; i++) assert.throws(() => s.claim(wrong, 'evil'), { status: 400 });
+  assert.throws(() => s.claim(p.code, 'evil'), { status: 429 });
+  assert.equal(s.claim(p.code, 'friend').key, key, 'ほかの接続元は使える');
+});
+
+test('番号: 全部の接続元で合わせて間違いが多すぎたら、今ある番号を全部取り消す(総当たりの守り)', () => {
+  const s = createMemoryStore({ backend: mapBackend() });
+  const { key } = s.create();
+  const p = s.pair(key);
+  const wrong = p.code === '000000' ? '111111' : '000000';
+  for (let i = 0; i < GLOBAL_FAIL_LIMIT; i++) assert.throws(() => s.claim(wrong, `ip${i}`));
+  assert.equal(s.activeCodes(), 0);
+  assert.throws(() => s.claim(p.code, 'friend'), { status: 400 });
+});
+
+test('合言葉: 設定があれば合う時だけ。無ければ、この端末だけで待ち受けている時だけ番号を作る', () => {
+  assert.equal(canPair({ host: '127.0.0.1', appPass: '', givenPass: '' }), true);
+  assert.equal(canPair({ host: '0.0.0.0', appPass: '', givenPass: '' }), false);
+  assert.equal(canPair({ host: '0.0.0.0', appPass: 'abc', givenPass: 'abc' }), true);
+  assert.equal(canPair({ host: '127.0.0.1', appPass: 'abc', givenPass: 'abd' }), false);
+  assert.equal(canPair({ host: '127.0.0.1', appPass: 'abc', givenPass: undefined }), false);
+});
+
+test('覚える言葉の取り出し: 名前・好きなもの。つらい話は覚えない', () => {
+  assert.deepEqual(extractFacts('ぼくはカレーが好き'), [{ kind: 'like', text: '好きなもの: カレー' }, { kind: 'topic', text: '前に話したこと: カレーの話' }]);
+  assert.deepEqual(extractFacts('タロウって呼んで').map((f) => f.text), ['名前: タロウ']);
+  assert.deepEqual(extractFacts('わたしはハナコです').map((f) => f.text), ['名前: ハナコ']);
+  assert.deepEqual(extractFacts('もう死にたい。わたしはタロウ'), []);
+  assert.deepEqual(extractFacts('こんにちは'), []);
+  assert.deepEqual(summarize([{ kind: 'name', text: '名前: タロウ' }, { kind: 'topic', text: '前に話したこと: カレーの話' }]), { name: 'タロウ', topic: 'カレー' });
+});
+
+test('「わすれて」だけの言葉を見分ける(ほかの文の中の「忘れて」は消さない)', () => {
+  for (const t of ['わすれて', '忘れて', '全部わすれて', 'ぜんぶ忘れてください。']) assert.equal(isForgetRequest(t), true, t);
+  for (const t of ['宿題を忘れてた', 'わすれてもいいよ、また話そう', '']) assert.equal(isForgetRequest(t), false, t);
 });
