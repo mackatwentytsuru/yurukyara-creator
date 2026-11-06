@@ -342,6 +342,8 @@ async function refreshStatus() {
   } catch {
     app.status = null;
   }
+  // 声のサーバーが無い所(公開の URL・声の鍵の無いサーバー)では /api/tts を聞かない(console に 404 を出さない。S3 の頼み・CRITux 25)
+  speaker.setServerVoice(Boolean(app.status?.tts?.available));
 }
 
 function updateChips() {
