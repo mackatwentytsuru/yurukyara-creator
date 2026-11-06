@@ -35,7 +35,7 @@ python creator/setup/doctor.py --write
 
 足りない物と直し方が出る。自分で直せる物(`pip install pillow numpy`、`cd web && npm install`)は直して、もう一度流す。Blender が見つからないときだけ、入っている場所を聞いて `--blender <実行ファイル>` で渡す。入っていなければ、入れてもらう(自分で入れない)。
 
-判定役は、何も設定しなければ新しい文脈の Claude を使う。別の AI を使いたい人は `creator/pipeline/j01_judge.py` の先頭を見る。
+判定役は、新しい文脈の Claude(Haiku 5.5 と Sonnet 5.5、各 3 回)だけ。決まりは `creator/pipeline/j01_judge.py` の先頭。2 つとも同じ系統なので、通っても目で確かめる。
 
 ## 3. 作る
 

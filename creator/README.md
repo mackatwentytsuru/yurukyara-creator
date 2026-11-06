@@ -24,7 +24,7 @@ Claude が元の絵を見て部品の一覧(形・色・位置・大きさ)を�
 | 比べ | `s03_compare.py` | 元の絵と作った物を並べ、輪郭の重なり(IoU)を測る | |
 | 10 | `pk01_package.py`・`pk04_install.py` | `characters/<id>/` に並べて `character.json` を書く | |
 | 検査 | `check_all.sh` | 形式・予算・埋まりと浮き・抜け・ブラウザ・視線を 1 回で。直すたびの様子は `check/history/` に残る | Blender・Chrome |
-| 判定 | `j01_judge.py` | 作り手以外の目で、同じキャラか・色・部分を判定(既定は新しい文脈の Claude) | claude |
+| 判定 | `j01_judge.py` | 作り手以外の目で、同じキャラか・毛足・色・部分を判定(判定役は Claude だけ。別の文脈の Haiku 5.5 と Sonnet 5.5 を各 3 回、2 人とも 2 回以上はいで合格) | claude |
 | 話す | `web_talk_check.mjs` | 会話の画面で読み込み・返事・口・表情か動きを確かめる | Chrome |
 
 骨と重みはキャラごとの `creator/specs/<id>_built.json`(位置は外接箱に対する割合)で決める。
