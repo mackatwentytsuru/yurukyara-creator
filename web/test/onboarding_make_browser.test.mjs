@@ -126,8 +126,8 @@ async function findChrome() {
   }
 }
 
-async function openPage(browser, web, make, token, width) {
-  const ctx = await browser.newContext({ viewport: { width, height: 844 }, deviceScaleFactor: 2, hasTouch: width < 720, isMobile: width < 720, reducedMotion: 'reduce' });
+async function openPage(browser, web, make, token, width, height = 844) {
+  const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: width < 720, isMobile: width < 720, reducedMotion: 'reduce' });
   const page = await ctx.newPage();
   const errors = [];
   page.on('requestfailed', (r) => errors.push(`通信の失敗 ${r.failure()?.errorText ?? ''}`));
@@ -277,6 +277,58 @@ test('作る道(幅 400): 絵 → ゆるキャラチェック(人の絵)→ ゆ�
   } finally {
     await browser.close();
     make.proc.kill();
+    web.proc.kill();
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+// PC(1280×720): 札は下の帯(会話の欄と「送る」)の上。作る画面は暗い色で、絵を左・ボタンを右に並べ、枠を巻かずに「直したい」まで見える(CRITux 14・22)
+test('作る道(PC 1280×720): 札が下の帯を隠さず、作る画面の「直したい」まで巻かずに見える', { skip: SLOW || (!HAS_PY && 'python と Pillow が無い'), timeout: 180_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const work = mkdtempSync(join(tmpdir(), 'fr-make-'));
+  const token = randomBytes(16).toString('hex');
+  const web = await startWeb();
+  const make = await startMake(work, token, web.base);
+  try {
+    const { ctx, page, errors } = await openPage(browser, web.base, make.base, token, 1280, 720);
+    try {
+      // 会話の画面(main.js)が測る上の段と下の帯の高さのまね(1280×720 の実測に近い値)
+      await page.evaluate(() => {
+        document.documentElement.style.setProperty('--top-h', '96px');
+        document.documentElement.style.setProperty('--bottom-h', '110px');
+      });
+      const frame = await frameOf(page);
+      await frame.fill('#words', '赤い提灯の子');
+      await frame.click('#wordsBtn');
+      await frame.waitForSelector('#waiting:not([hidden])');
+      const pc1 = await pcNext(work, '--fake-draw');
+      assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
+      await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
+      await frame.waitForFunction(() => document.getElementById('pic').naturalWidth > 0, null, { timeout: 10_000 });
+      const sheet = await page.$eval('.fr-sheet', (e) => {
+        const b = e.getBoundingClientRect();
+        return { top: Math.round(b.top), bottom: Math.round(b.bottom) };
+      });
+      assert.ok(sheet.bottom <= 720 - 110 - 11, `札が下の帯にかかる ${JSON.stringify(sheet)}`);
+      assert.ok(sheet.top >= 96, `札が上の段にかかる ${JSON.stringify(sheet)}`);
+      const inner = await frame.evaluate(() => {
+        const vh = innerHeight;
+        const bottom = (id) => Math.round(document.getElementById(id).getBoundingClientRect().bottom);
+        return { vh, ok: bottom('okBtn'), note: bottom('noteBtn'), again: bottom('againBtn'), bg: getComputedStyle(document.body).backgroundColor, sh: document.documentElement.scrollHeight };
+      });
+      assert.ok(inner.note <= inner.vh && inner.ok <= inner.vh, `「この子にする」「直したい」が枠の下に隠れた ${JSON.stringify(inner)}`);
+      assert.equal(inner.bg, 'rgb(29, 26, 46)', '作る画面は会話の画面と同じ暗い色');
+      await fits(page, frame, 'PC 3 歩目');
+      await shot(page, 'make1280_3_c0');
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      return { sheet, inner };
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    make.proc.kill(); // 自分で起こした PID だけ
     web.proc.kill();
     rmSync(work, { recursive: true, force: true });
   }

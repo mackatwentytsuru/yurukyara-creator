@@ -41,6 +41,15 @@ input[type="text"] { font: inherit; font-size: 16px; min-height: 48px; width: 10
   .mk-fig img { width: min(140px, 40vw); }
   main { gap: 8px; padding-top: 8px; }
 }
+/* 横に広くて背の低い枠(PC の札。1280×720 で枠の高さ 260px ほど): 一言の欄と送るを 1 行にして、巻かずに「直したい」まで見せる */
+@media (min-width: 380px) and (max-height: 420px) {
+  #noteForm { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; }
+  #noteForm .mk-label { grid-column: 1 / -1; font-size: 13px; }
+  #noteForm .mk-count { display: none; }
+  #noteForm .mk-btn { width: auto; }
+  #c0 { row-gap: 8px; }
+  #c0 .mk-fig figcaption { font-size: 12px; }
+}
 /* 絵だけの小さな枠(view=pic): 枠いっぱいに絵だけ */
 html.mk-pic, html.mk-pic body { height: 100%; overflow: hidden; background: #fff; }
 html.mk-pic main { padding: 0; height: 100%; display: block; }
