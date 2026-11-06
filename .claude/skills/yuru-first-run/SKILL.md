@@ -12,13 +12,14 @@ description: 会話の画面の「初めての会話」(最初の設計の決め
 → 3 こんな子ができたよ(この子にする・直したい・やり直す)→ 4 性格(おまかせで始める。「この子、少し○○みたい!」)
 → 5 初めてのあいさつ(頭脳の返事)→ 6 声が無ければ文字送りとレトロ音で話す → 7 鍵を入れると本物の声で「声が出せるようになったよ、ありがとう!」
 
-## 付け方(main.js は S5 だけが書く。S4 のファイルが dev に入った後に 1 行)
+## 付け方(main.js は S5 だけが書く。今の 1 行)
 ```js
-import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost: $('modes') }));
+import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER }));
 ```
+- 主役(案内役)の決まり `MAIN_CHARACTER`(id と表示の名前)は `web/src/character/defaults.js`(S5。three を読まない)の 1 か所だけ。index.js・script.js はそこから import し、**S4 のファイルに id や名前を写さない**(11-06 S4w4 で写しを消した。試験 `web/test/onboarding_main_character.test.mjs` が、写しが無いこと・案内役を渡さない時は主役になることを見張る)。
 - 「性格」「はじめての会話」のボタンが #modes に出る。初めての会話は `?onboard=1` で出る(`auto: true` で初めての端末にも出る。既定は出さない=ほかの試験を邪魔しない)。
 - 性格はキャラの id ごとに localStorage `yc.persona.v1.<id>`。頭脳へは `app.persona`(persona.md の後ろに設定の文を足す)で渡る。
-- 案内役は主役のノリー(セスジキノボリカンガルーの執事見習い。id `norrie`。自分を「ノリ」と呼び、少しカタコト)。舞台に出ていれば character.json の名前を使う。最初の一言は「はじめまして! 執事見習いのノリーデス。…ノリ、がんばりマス!」。
+- 案内役は主役のノリー(セスジキノボリカンガルーの執事見習い。`MAIN_CHARACTER` = id `norrie`。自分を「ノリ」と呼び、少しカタコト)。舞台に出ていれば character.json の名前を使う。最初の一言は「はじめまして! 執事見習いのノリーデス。…ノリ、がんばりマス!」(案内役が主役の時だけ。ほかの子を guide に渡すと、ふつうに名乗る。主役を替えたら、この 1 文も替える)。
 
 ## 受け口(差しかえられる物)
 - `creator`(creators.js):
@@ -38,6 +39,9 @@ import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost
 - 見た目: 選択肢の欄の高さが変わると会話の欄の見える高さも変わり、最後の文が隠れた → offer の後に必ず一番下までスクロール(試験で「最後の文が見える」を確かめる)。PC は右下の札にして真ん中のキャラを隠さない。スマホは 3 歩目から札を低く(58% / 最低 440px)。入力は 16px(iPhone で拡大しない)。押す所は 44px 以上。性格の画面は「返事」の箱を上に貼りつけ、下の設定を選ぶ間も返事が見える。
 - できた子を舞台に出すのは `?character=<id>&onboard=1` で読み込み直す。前に sessionStorage へ小さな控え(絵と絵の住所は入れない)を置き、3 歩目「この子はどうかな?」から続ける。
 - おまかせは種つきの乱数(settings.js の seededRandom)。試験では種を渡して同じ結果にする。
+- **7 歩目で鍵を入れない方のボタンは「鍵なしで続ける」**(id `later`)。札の右上の「あとで」(初めての会話ごと閉じる)と同じ名前だと、7 歩目に「あとで」が 2 つ並ぶ(11-06 S4w4、撮影の練習で見つけた)。
+- **スマホ(幅 719 まで)では、初めての会話の間だけ「Claude の考え」(.thought)を隠す**(styles.js、`html.fr-open`)。上の段の札(頭脳・声・カメラ・人・あいづち)が 2 行になると、考えの欄が「性格」「はじめての会話」「覚えていること」に重なり、押せず見た目も崩れた。会話は札に出るので要らない。PC はそのまま。初めての会話の外(ふつうの会話)の重なりは S5 の持ち物(style.css)。
+- **`?character=<まだ無い子>&onboard=1` は舞台が空のまま始まる。** 読めなかった理由はゲートに出るが、初めての会話の間はゲートを隠す(fr-open)ので見えない。主役 norrie が開発の線に入るまでは、`?onboard=1`(既定の順 norrie → ようこそくん)で開く。
 
 ## 試験(全部 web/ で。編集ごとのフックの試験は 7〜8 秒。重い画面の試験は YC_BROWSER_TESTS=1 のときだけ)
 - `node --test test/onboarding_local.test.mjs` … 画面なし・通信なし、1 秒。手元の場所の確かめ・# の合言葉・枠の住所と知らせの選り分け・知らせで 1〜4 歩
@@ -46,7 +50,9 @@ import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost
 - `YC_BROWSER_TESTS=1 node --test test/onboarding_browser.test.mjs` … 画面なしの Chrome、約 50 秒(だから編集ごとには流さない。合わせの門と、画面を直した時に流す)。幅 390(文字送りと音を本当に)・400・1280 で 7 歩、絵の入口、「性格」ボタン。横のはみ出し 0・押す所 44px 以上・本文 16px 以上・最後の文が見える。`FR_SHOTS_DIR=<フォルダ>` で写真を残す(リポジトリの外に)
 - `node --test test/onboarding_s3voice.test.mjs` … S3 の声の部品がある線でだけ動く(無ければ飛ばす)。鍵の形・確かめ・覚えない、と、Chrome で鍵なし=レトロ、鍵あり=声(声のサービスへの通信は横取りして外へ出さない)
 - 本物の頭脳・本物の声のサービスは試験で呼ばない。
+- **本物の画面での通し(撮影の練習、11-06 S4w4)**: リポジトリの外の `<板>\work\S4\shoot_1107\rehearse_main.mjs <リポジトリ> <出力> [舞台のキャラ]`。先に `node node_modules/vite/bin/vite.js build`(dist)。会話のサーバーを空いた番号・鍵なし(仮の頭脳)で自分で起こし、自分の PID だけ止める。WebGL を描くので GPU の Chrome(`gpuGuard.js` の GPU_ARGS。CPU の描画なら止まる)で、機械の GPU の札を取ってから流す(5〜8 分。札の待ちを含む)。中身: PC でタロウとカレー → 番号 → iPhone 幅で番号を入れて続き →「わすれて」、と、iPhone 幅で 7 歩(性格を 1 つ変える・鍵は入れない)。押す所の真ん中に別の物が重なっていないか(elementFromPoint)も見る(44px と横のはみ出しだけでは、重なりを見逃した)。
+  - 本物の画面では `window.__firstRun`(試しの画面の `window.__fr` とは別)。舞台の読み上げ(S3 の speaker)がある時、キャラの文の音と文字送りは speaker が受け持つ。
 
 ## 確かめていない事
-- 本物の iPhone の Safari・Android・Quest のブラウザでの見た目と音(画面なしの Chrome の幅だけ)。本物の Haiku での「性格を変えた後の返事」。
+- 本物の iPhone の Safari・Android・Quest のブラウザでの見た目と音(画面なしの Chrome の幅だけ)。本物の Haiku での「性格を変えた後の返事」。iPhone のキーボードが出た時に、札の下のボタンが隠れないか。
 - スマホから本当の作る道: 会話の画面が https(Tailscale)だと、作る画面(http)の枠は混ざった中身として止まる見込み。同じ Wi-Fi の http(vite の 5173 と作る道のサーバーの --lan)なら動く見込みだが、試していない。PC の画面では通した。

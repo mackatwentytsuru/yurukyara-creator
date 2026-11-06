@@ -30,6 +30,10 @@ description: 公開の前に、語・期間・数字・鍵・履歴を点検し�
 - 写しの中で「土 20:00 の形」を作る: `git clone --mirror` → `git -C <写し> worktree add <場所> yurukyara-dev` で流れの線を合わせ、`update-ref` で main を早送り。写しの中だけなので push は要らない。
 - 書き換えた開発の線の新しい写しで、README の「3 行で試す」を流す(`npm ci` → 組み立て → 鍵を外して手元のサーバーを自分で起こし、画面・キャラ・会話が答えるか)。止めるのは起こした子の PID だけ。
 - 台本は `python -m git_filter_repo` で filter-repo を呼ぶ。filter-repo を利用者の場所に入れていると、`python -I` では読めない(-I は利用者の場所も外す)。書き換えの台本は -I を付けずに流す。
+- 練習で合わせる線は決め打ちしない。開発の線より先のコミットがある `w/*` を、合わせの順で全部(`git rev-list --count HEAD..<線>` が 0 なら飛ばす)。2 本の線(開発の線と保管の線)をそれぞれ clone して確かめる。保管の線が本流の祖先なら、`--all` で見るコミットは同じになる(clone は全部の線を remotes に持つ)。
+- **先の版で規則が中身を変えたファイルを数える**(台本の report.json の `branches.<線>.changed_by_rules`)。本流で 0 本が合格。規則は試験の見本の値(LAN の IP など)も言い換え、その試験が落ちる(11/6 23:16 の練習で 1 本)。持ち主に「その場で組み立てる形」に直してもらう。保管の線は持ち主が直さないので多くて当たり前(39 本)。
+- 書き換えた開発の線の写しで、合わせの門と同じ試験を全部流す(`YC_BROWSER_TESTS=1 npm test`・フックの試験と壊す試験・`tools/test_*.py`・作例の検査 K0 と K1・段の門・作る道と確認画面・描く道具・2D の部品。台本はリポジトリの外に置く)。`node --test` だけでは、Python の試験・作例の検査・フックの壊す試験の落ちを見落とす。
+- 時間: 3 本の線・269 コミットで、書き換え 24 秒。練習の全部(写し・合わせ・書き換え・数え・2 本の確かめ・3 行で試す)で 2 分、門と同じ試験で 3 分。
 
 ## 公開の組み立て(Vercel)
 - Vercel は `web/dist` だけを配る。手元のサーバーはリポジトリの頭の `characters/` を直接配るので、手元で動いても公開では 404 になる。`web/vite.config.js` の組み立ての時だけの部品(`generateBundle` で `emitFile`)で `dist/characters/` へ写し、`web/api/_test/build_characters.test.mjs` で写す物の決まりを試す。
@@ -37,6 +41,13 @@ description: 公開の前に、語・期間・数字・鍵・履歴を点検し�
 - 環境変数は次の配りからだけ効く(足したら Redeploy)。Standard Protection は本番の名前以外の配りを守る(書き換えの前の古い配りも)。
 - 取り込むとすぐ既定の線(main)が配られる。GitHub の main が古い版の間は取り込まない(本人のカードに順番を書く)。
 - 組み立てた中身(dist の JS など)も公開前の語で数える。大文字と小文字を区別しない語が、使っている部品の中の名前(プロパティの名前など)に当たる事がある。その語だけ先読みで外して、本当の語は当たるままにする(当たる・当たらない例を 4〜6 個流して確かめる)。
+
+## 改行(`.gitattributes`。審査の人は Windows で取り出すかもしれない)
+- md・mjs・js・json・css・html・svg・txt・py・sh などは `text eol=lf`、絵・形・音・動画・字体は `binary`、ほかは `* text=auto`。`eol=lf` は利用者の `core.autocrlf=true` より強い。
+- 足す前に、索引の中身が変わらない事を仮の索引で見る: 索引を写して `GIT_INDEX_FILE=<写し> git add --renormalize .` → `git diff --cached --stat` が `.gitattributes` だけ。`git ls-files --eol` に `i/crlf` が無ければ変わらない。
+- 確かめは新しい作業フォルダで: `git ls-files --eol` の `w/crlf` が 0、絵と形は取り出した物の hash が索引の blob と同じ、`YC_BROWSER_TESTS=1 npm test` が全部通る。外す時は `git worktree remove --force` と `prune`。
+- 今の作業フォルダを LF に取り出し直す: `git checkout-index -f -a` だけでは変わらない(日付と大きさが同じ物は飛ばす)。先に `git ls-files -z | xargs -0 touch` → `git checkout-index --force --all --index`。`git status` が空のまま。
+- 中身を丸ごと比べる試験や、ファイルの hash を基準にする検査は、改行をそろえてから比べる(基準を CRLF の木で取ると、Mac・Linux と LF の Windows で落ちる。作例の検査 K0 の body.svg がそれだった)。
 
 ## 試験を python -I で流す
 - git の pre-push は `python -I` で呼ぶ。-I は台本のフォルダを読み込みの道に足さないので、同じフォルダの部品は `sys.path.insert(0, <台本のフォルダ>)` で読む。試験は `tools/test_isolated_mode.py`(写した 3 本を小さな偽のリポジトリで -I で呼び、手元の空のリポジトリへの送りで pre-push の 1 行も通す)。
@@ -48,7 +59,7 @@ description: 公開の前に、語・期間・数字・鍵・履歴を点検し�
 - わざと壊す試験(`node tools/hooks/test/mutation.mjs`)を、見張りを足すたびに増やす。壊し方が当たらない(置き換えの文字が古い)時も「見逃し」と数える。
 
 ## 期間の表・数字の表・公開の関数
-- 期間の表: `tools/provenance.py --public-md docs/期間の表.md`。比べる相手のパスは台本の外にだけ書く。「前に作った」の語の手がかりは中身を読んで `--checked` で理由を付ける。表は HEAD を見るので、コミットの後に作り直す。ファイルを足したら本数が変わるので、もう 1 回作り直す(442 本で 1 分ほど)。
+- 期間の表: `tools/provenance.py --public-md docs/期間の表.md`。比べる相手のパスは台本の外にだけ書く。「前に作った」の語の手がかりは中身を読んで `--checked` で理由を付ける。表は HEAD を見るので、コミットの後に作り直す。ファイルを足したら本数が変わるので、もう 1 回作り直す(454 本で 1 分ほど。札 `--kind cpu --procs 6`)。
 - 数字の表: `tools/metrics.py … --check-numbers` で出どころの無い数字 0。同じ入力なら 1 文字も変わらない。
 - 公開の関数: 合言葉なし・違う・上限・数えられない・頭脳の失敗は、断らずに仮の頭脳で答え、理由と「仮の頭脳です」を返す。
 
@@ -56,4 +67,5 @@ description: 公開の前に、語・期間・数字・鍵・履歴を点検し�
 - Bash の heredoc で Python を流し、文字列の中の `\n` を含む置き換えをすると、合わずに止まる事がある。複数行の置き換えは Edit の道具でする。heredoc の中で台本の文を作ると、引用符つきの `<<'EOF'` でも `\n` が本物の改行になって壊れた。改行は `chr(10)` で書く。
 - 司令室のカード: `hub.py edit` は中身を 1 つも変えない直しを受け付けない(`--note` だけは不可)。詳しい手順は 600 字まで。書いた時刻は `date` で測ってから書く(推しはかった時刻を書いて、訂正を足すことになった)。
 - このセッションは `.claude` の下に書けない(設定の守り)。スキル・点検役の案は板に置き、書ける人に渡す。命令で迂回しない。
-- 札の道具の `run` で bash を呼ぶ時は、Git の bash の場所(`cygpath -m /usr/bin/bash.exe`)を渡す。ただの `bash` は別の bash になり、Windows のパスが見えない。
+- 札の道具の `run` で bash を呼ぶ時は、Git の bash の場所(`cygpath -m /usr/bin/bash.exe`)を渡す。ただの `bash` は別の bash になり、Windows のパスが見えない(`sh <台本>` で渡すと Git の sh で動いた)。
+- 提出の下書き(リポジトリの外に置く): 欄に貼る所を、2 つの語の一覧(termlist)と「言わない言葉」で数えて 0 にする。確かめていない事は【確かめ待ち】の印で残し、司令塔が外す。出す・公開するのは本人だけ。
