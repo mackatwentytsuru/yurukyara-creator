@@ -19,7 +19,7 @@ characters/*/model.vrm
 !.env.example
 web/dist/
 
-# Megascans などの素材の縮小版(Fab 標準ライセンス。素材の単体の再配布は禁止なので、公開のリポジトリに入れない)
+# 手元だけで試す素材(使用条件で再配布できない物)。公開のリポジトリに入れない
 creator/viewer/assets_local/
 
 # 作る段の作業フォルダ(段の記録・確認の状態・フックの記録。コミットしない)
