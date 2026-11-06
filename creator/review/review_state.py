@@ -30,6 +30,21 @@ STAGES = [
 ]
 GATES = {"C0": [0], "C2": [2], "C3": [3, 4], "C5": [7]}
 GATE_LABEL = {"C0": "絵", "C2": "形", "C3": "色と材質", "C5": "話す"}
+# 画面に出す「いまの様子」の言葉(内部の言葉 段 0・C0 などを出さない。D7)
+STAGE_DOING = {0: "絵を描いています", 1: "絵を読んでいます", 2: "形を作っています", 3: "色と材質を作っています",
+               4: "模様を作っています", 5: "骨を入れています", 6: "動きを作っています", 7: "話す用意をしています"}
+STAGE_NEXT = {0: "絵を描きます", 1: "絵を読みます", 2: "形を作ります", 3: "色と材質を作ります",
+              4: "模様を作ります", 5: "骨を入れます", 6: "動きを作ります", 7: "話す用意をします"}
+_STAGE_WORD = re.compile(r"段\s*(\d)\s*(?:[((][^))]*[))])?")
+_GATE_WORD = re.compile(r"\b(C0|C2|C3|C5)\b\s*(絵|形|色と材質|話す)?")
+
+
+def plain_words(text):
+    """画面に出す文から、内部の言葉(段 0(draw)・C0 など)を、ふつうの言葉に置きかえる(D7)。"""
+    if not text:
+        return text
+    t = _STAGE_WORD.sub(lambda m: STAGES[int(m.group(1))][2] if int(m.group(1)) < len(STAGES) else "", str(text))
+    return _GATE_WORD.sub(lambda m: m.group(2) or f"{GATE_LABEL[m.group(1)]}の確認", t)
 GATE_STAGE_KEY = {"C0": "draw", "C2": "shape", "C3": "material", "C5": "talk"}
 TAGS = {
     "C0": ["言葉と違う", "かわいくない", "ゆるさが足りない", "顔が違う", "色が違う", "部品が足りない", "部品が多い", "線が多い"],
@@ -293,7 +308,7 @@ def set_stage(cid, n, status, note=None):
         ok, why = can_start(cid, n)
         if not ok:
             raise ReviewError("gate_closed", why + "。スマホで確かめてから進めます", 409)
-        st["current"] = {"stage": n, "activity": (note or f"段 {n}({STAGES[n][2]})を作っています")[:80], "since": now_iso()}
+        st["current"] = {"stage": n, "activity": (plain_words(note) or STAGE_DOING.get(n, "作っています"))[:80], "since": now_iso()}
     s = st["stages"][n]
     s["status"] = status
     s["note"] = (note or None) and note[:80]
@@ -309,7 +324,7 @@ def set_stage(cid, n, status, note=None):
 
 def set_activity(cid, text):
     st = load_state(cid)
-    st["current"]["activity"] = (text or None) and text[:80]
+    st["current"]["activity"] = (text or None) and plain_words(text)[:80]
     st["current"]["since"] = now_iso()
     return save_state(cid, st)
 
@@ -399,7 +414,7 @@ def publish(cid, gate, right, left=None, png=None, views=None, sheet=None, overl
               "bundle_hash": bundle_hash(man), "decided": None, "notice": None})
     for n in GATES[gate]:
         st["stages"][n]["status"] = "waiting"
-    st["current"] = {"stage": GATES[gate][-1], "activity": f"{gate} {GATE_LABEL[gate]}を出しました。スマホで見てください", "since": now_iso()}
+    st["current"] = {"stage": GATES[gate][-1], "activity": f"{GATE_LABEL[gate]}の確認を出しました。スマホで見てください", "since": now_iso()}
     save_state(cid, st)
     log(cid, "publish", gate=gate, round=rnd)
     return man
@@ -571,13 +586,13 @@ def claim(cid):
             write_stage_record(cid, n, "ok", "human", gate, req["round"], rid, note, req["tags"], None)
         nxt = ns[-1] + 1 if ns[-1] < 7 else None
         out_next = None if nxt is None else {"stage": nxt, "key": STAGES[nxt][1], "why": f"{gate} が OK"}
-        st["current"] = {"stage": nxt, "activity": f"{gate} は OK。次は段 {nxt} です" if nxt is not None else "すべて済みました", "since": now_iso()}
+        st["current"] = {"stage": nxt, "activity": f"{GATE_LABEL[gate]}は OK。次は{STAGE_NEXT.get(nxt, '次の段に進みます')}" if nxt is not None else "すべて済みました", "since": now_iso()}
     else:
         for n in ns:
             st["stages"][n]["status"] = "stale"
         write_stage_record(cid, ns[0], "redo", "human", gate, req["round"], rid, note, req["tags"], fb)
         out_next = {"stage": ns[0], "key": STAGES[ns[0]][1], "range": ns, "why": f"{gate} のやり直し"}
-        st["current"] = {"stage": ns[0], "activity": f"{gate} のやり直しを受け取りました", "since": now_iso()}
+        st["current"] = {"stage": ns[0], "activity": f"{GATE_LABEL[gate]}のやり直しを受け取りました", "since": now_iso()}
     st["history"].append({"at": now_iso(), "gate": gate, "round": req["round"], "result": req["decision"], "request_id": rid, "reason": None})
     save_state(cid, st)
     write_json(d / "history" / f"{rid}.json", req)
@@ -745,7 +760,7 @@ def set_make(cid, status=None, check=None, choice=None, notice=None, activity=No
     mk["updated_at"] = now_iso()
     st["make"] = mk
     if activity:
-        st["current"]["activity"] = activity[:80]
+        st["current"]["activity"] = plain_words(activity)[:80]
         st["current"]["since"] = now_iso()
     return save_state(cid, st)
 

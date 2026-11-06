@@ -30,7 +30,7 @@ function said(guide) {
   const lines = [];
   const fr = new FirstRun({
     ...(guide === undefined ? {} : { guide }),
-    creator: createSampleCreator({ main: MAIN_CHARACTER, exists: async () => true }),
+    creator: createSampleCreator({ main: MAIN_CHARACTER }),
     persona: { get: () => null, set: () => {}, random: () => ({}) },
     talk: async () => ({ lines: [], brain: 'mock' }),
     voice: {},

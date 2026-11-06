@@ -45,10 +45,13 @@ function segmented(label, entries, current, onPick, { className = 'yp-seg', with
  * @param {(settings:object)=>void} o.onSave
  * @param {()=>void} [o.onCancel]
  * @param {HTMLElement} [o.parent]
+ * @param {boolean} [o.lockTone] 人格の文で話し方が決まっている子(主役ノリーなど)。口調は「この子の話し方」から動かさない(D6)
  */
-export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body }) {
+export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body, lockTone = false }) {
   injectStyles(parent.ownerDocument);
-  let s = normalize(initial);
+  // 話し方の決まった子は、口調をいつも own にする(覚えた設定・おまかせ・古い保存でも。「これにする」で主役の話し方を上書きしない)
+  const fix = (v) => (lockTone ? normalize({ ...normalize(v), tone: 'own', ending: '' }) : normalize(v));
+  let s = fix(initial);
   let tries = 0;
   let timer = null;
   const back = el('div', { className: 'yp-back' });
@@ -58,9 +61,20 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   const presets = segmented('性格', PRESET_ORDER.map((k) => [k, { label: PRESETS[k].label, hint: PRESETS[k].text.split('。')[0] }]), s.preset, (k) => update(applyPreset(s, k)), { className: 'yp-presets', withHint: true });
   // 口調は 4 つ(この子の話し方・フレンドリー・ていねい・独特の語尾)。スマホでは 2 つずつ 2 段に並べる(.yp-tones)
   const tone = segmented('口調', TONE_ORDER.map((k) => [k, TONES[k]]), s.tone, (k) => {
+    if (lockTone) return; // 話し方の決まった子は変えない(ボタンも押せない)
     if (k === 'ending') update({ ...s, tone: 'ending', ending: s.ending || endingIn.value || 'にゃ' });
     else update({ ...s, tone: k });
   }, { className: 'yp-seg yp-tones' });
+  // 話し方の決まった子: 口調の列を「この子の話し方」で止め、理由を書く(司令塔の決め D6・CRITux 11)
+  const toneLock = el('p', { className: 'yp-note yp-tone-lock', textContent: `${characterName}の話し方は、この子の人格の文で決まっています(一人称や文の終わり)。ここでは変えられません。性格・元気さ・長さ・声は変えられます。` });
+  toneLock.hidden = !lockTone;
+  if (lockTone) {
+    tone.box.dataset.locked = 'true';
+    for (const b of tone.box.querySelectorAll('button')) {
+      b.disabled = true;
+      b.setAttribute('aria-disabled', 'true');
+    }
+  }
   const endingIn = el('input', { type: 'text', className: 'yp-ending-in', maxLength: 8, placeholder: '例: にゃ', autocomplete: 'off', value: s.ending || '' });
   const endingMsg = el('span', { className: 'yp-note', textContent: 'ひらがな・カタカナで 4 字まで' });
   const endingRow = el('label', { className: 'yp-ending', hidden: s.tone !== 'ending' }, el('span', { textContent: '語尾' }), endingIn);
@@ -95,7 +109,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
     el('p', { className: 'yp-lead', textContent: '選ぶと、すぐ上の返事が変わります。' }),
     el('div', { className: 'yp-try' }, el('div', { className: 'yp-try-row' }, tryIn, tryBtn), reply, note),
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '性格' }), presets.box),
-    el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '口調' }), tone.box, endingRow, endingMsg),
+    el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '口調' }), tone.box, toneLock, endingRow, endingMsg),
     el('div', { className: 'yp-group' }, el('div', { className: 'yp-label yp-energy-head' }, el('span', { textContent: '元気さ' }), energyOut), el('div', { className: 'yp-energy' }, energyIn)),
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '返事の長さ' }), length.box),
     el(
@@ -146,7 +160,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   }
 
   function update(next) {
-    s = normalize(next);
+    s = fix(next);
     sync();
     if (brain() === 'mock') {
       clearTimeout(timer);
@@ -158,6 +172,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
 
   tryBtn.addEventListener('click', runPreview);
   randomBtn.addEventListener('click', () => update({ ...random(), voice: s.voice }));
+  panel.dataset.toneLocked = String(lockTone);
   const close = () => {
     clearTimeout(timer);
     tries += 1;
@@ -165,7 +180,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   };
   saveBtn.addEventListener('click', () => {
     close();
-    onSave(normalize(s));
+    onSave(fix(s));
   });
   cancelBtn.addEventListener('click', () => {
     close();
@@ -180,5 +195,5 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   if (brain() === 'mock') runPreview();
   else note.textContent = '本物の頭脳です。「返事を試す」を押すと Claude に聞きます(1 回分の利用になります)。';
   saveBtn.focus({ preventScroll: true });
-  return { element: panel, close, get settings() { return normalize(s); }, preview: runPreview };
+  return { element: panel, close, get settings() { return fix(s); }, preview: runPreview };
 }

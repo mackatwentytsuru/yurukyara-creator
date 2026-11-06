@@ -105,7 +105,7 @@ try {
     "--sheet", sample("robo_8方向.png"), "--metric", "iou_front=正面の重なり(IoU)=0.86").code, 0);
 
   await step("C2: 画面が C2 に替わり、仕切りが range で動く", async () => {
-    await page.waitForFunction(() => document.querySelector(".gate-tab[aria-selected='true']").textContent.startsWith("C2"), null, { timeout: 8000 });
+    await page.waitForFunction(() => document.querySelector(".gate-tab[aria-selected='true']").textContent.startsWith("形"), null, { timeout: 8000 });
     await page.waitForSelector(".compare");
     await page.fill("input[type=range]", "20");
     await page.dispatchEvent("input[type=range]", "input");
