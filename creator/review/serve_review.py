@@ -1,10 +1,17 @@
 """スマホの確認画面(C0 絵・C2 形)を配り、人の OK・やり直しを request.json に書く、小さなサーバー。
 
-使い方: python creator/review/serve_review.py <id> [--port 8790] [--lan | --bind <アドレス>] [--hours 8]
+使い方: python creator/review/serve_review.py <id> [--port 8796] [--lan | --bind <アドレス>] [--hours 8]
+        python creator/review/serve_review.py --make [--web http://localhost:5173] [--allow-origin <元>…] [--port 8796]
 - 既定は 127.0.0.1 だけで待つ。--lan は外へ出る道のアドレス、--bind は決めたアドレス(0.0.0.0 にはしない)。
 - 合言葉は起動のたびに作り、画面にも記録にも出さない。この PC のブラウザで http://127.0.0.1:<番号>/qr を開くと、
   スマホで読む QR と入口の URL が出る(その画面にだけ)。
-- 書いてよいのは request.json だけ(K3。creator/review/schema/README.md)。state.json は読むだけ。
+- 書いてよいのは request.json と make.json だけ(K3。creator/review/schema/README.md)。state.json は読むだけ
+  (--make の「作って」の時だけ、review_state.make_new が新しい子の state.json を作る)。
+- --make: 初めての会話(会話の画面の 1〜3 歩)から、言葉か絵 1 枚で新しい子を受け付ける。受けた子が、この画面の子になる。
+  入力と絵は、この PC のサーバーが配る「作る画面」(/m/)の中だけで扱う(会話の画面のコードは絵にも通信にも触らない)。
+  会話の画面は /m/ を枠(iframe)に入れ、状態の知らせ(postMessage)だけを受け取る。/m/ を枠に入れてよいのは --allow-origin の元
+  (--web の元と、この PC の 5173・8787 は既定で入る)だけ。枠の中は Cookie が使えないので、合言葉は見出し X-YC-Key で送る
+  (合言葉は枠の URL の # の後ろで渡す。# はサーバーに送られない)。よその元からの呼び出し(CORS)は受けない。
 """
 import argparse
 import hmac
@@ -26,6 +33,7 @@ import review_state as rs  # noqa: E402
 
 PAGE_DIR = Path(__file__).resolve().parent / "page"
 ASSET_RE = re.compile(r"^[a-z0-9_]+\.(js|css)$")
+MAKE_PAGE = "make.html"
 FILE_RE = re.compile(r"^/api/review/file/(C0|C2|C3|C5)/r(\d{1,3})/([a-z0-9_]{1,48}\.(?:png|jpg|svg|json))$")
 TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml", ".json": "application/json",
          ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8"}
@@ -33,6 +41,8 @@ CSP_PAGE = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 's
             "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 CSP_SVG = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"
 BODY_MAX = 8 * 1024
+MAKE_MAX = 6 * 1024 * 1024       # 「作って」の本文(絵の base64 を含む)。絵そのものは 4MB まで(review_state)
+DEFAULT_WEB_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8787", "http://127.0.0.1:8787")
 WRITE_GAP_S = 1.0
 WRITE_PER_HOUR = 60
 FAIL_WINDOW_S = 600
@@ -75,6 +85,20 @@ class Gate:
 
     def has(self, sid):
         return bool(sid) and sid in self.sessions and not self.expired()
+
+    def check_key(self, ip, given):
+        """見出し X-YC-Key の合言葉(よその元からの呼び出し)。True / False / "blocked"。間違いは合言葉の入口と同じに数える。"""
+        with self.lock:
+            now = time.time()
+            recent = [t for t in self.fails.get(ip, []) if now - t < FAIL_WINDOW_S]
+            self.fails[ip] = recent
+            if self.fail_total >= FAIL_TOTAL or len(recent) >= FAIL_PER_IP:
+                return "blocked"
+            if given and not self.expired() and hmac.compare_digest(given.encode(), self.token.encode()):
+                return True
+            recent.append(now)
+            self.fail_total += 1
+            return False
 
     def allow_write(self, sid):
         with self.lock:
@@ -119,7 +143,18 @@ def client_kind(ua):
     return "other"
 
 
-def make_handler(cid, gate, write_lock, hosts, bind_public, port):
+class Current:
+    """いまの子の id。--make のときは「作って」を受けるたびに新しい子に替わる(1 台で 1 人が作る前提)。"""
+
+    def __init__(self, cid, make):
+        self.id = cid
+        self.make = make
+
+
+def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=None):
+    same = {f"http://{h}" for h in hosts}
+    allow = set(allow) - same
+
     class H(BaseHTTPRequestHandler):
         server_version = "yc-review"
         sys_version = ""
@@ -131,14 +166,15 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
             sys.stderr.write(f"{self.command} {path} {code}\n")
 
         # ---------- 返す ----------
-        def _send(self, code, body=b"", ctype="application/json; charset=utf-8", extra=None, csp=CSP_PAGE):
+        def _send(self, code, body=b"", ctype="application/json; charset=utf-8", extra=None, csp=CSP_PAGE, frame_ok=False):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("X-Frame-Options", "DENY")
+            if not frame_ok:   # 枠に入れてよいのは /m/ の作る画面だけ(frame-ancestors で元を決める)
+                self.send_header("X-Frame-Options", "DENY")
             self.send_header("Content-Security-Policy", csp)
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
@@ -174,8 +210,27 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
         def _loopback(self):
             return self.client_address[0] in ("127.0.0.1", "::1")
 
+        def _origin_kind(self):
+            """None(Origin 無し)/ "same"(この PC のサーバーの画面)/ "bad"(よその元。許した元も、/m/ を枠に入れてよいだけ)。"""
+            origin = self.headers.get("Origin")
+            if origin is None:
+                return None
+            return "same" if origin in same else "bad"
+
+        def _key_ok(self):
+            given = self.headers.get("X-YC-Key")
+            if not given:
+                return False
+            r = gate.check_key(self.client_address[0], given)
+            if r == "blocked":
+                self._blocked = True
+                return False
+            return bool(r)
+
         def _can_read(self):
-            return gate.has(self._sid()) or (not bind_public and self._loopback())
+            if self._origin_kind() == "bad":
+                return False
+            return gate.has(self._sid()) or self._key_ok() or (not bind_public and self._loopback())
 
         # ---------- GET ----------
         def do_HEAD(self):
@@ -196,6 +251,13 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
                 return self._send(303, b"", extra={"Location": "/r/"})
             if p == "/r/":
                 return self._file(PAGE_DIR / "index.html")
+            if p in ("/m", "/m/"):
+                if not cur.make:
+                    return self._err(404, "not_found", "ありません")
+                fa = " ".join(sorted(allow)) or "'none'"
+                csp = CSP_PAGE.replace("frame-ancestors 'none'", f"frame-ancestors {fa}")
+                body = (PAGE_DIR / MAKE_PAGE).read_bytes()
+                return self._send(200, body, "text/html; charset=utf-8", csp=csp, frame_ok=True)
             if p.startswith("/r/assets/"):
                 name = p[len("/r/assets/"):]
                 if not ASSET_RE.match(name):
@@ -206,9 +268,14 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
             if gate.expired():
                 return self._err(401, "expired", "時間切れです。serve_review.py を起動し直してください")
             if not self._can_read():
+                if getattr(self, "_blocked", False):
+                    return self._err(429, "rate", "合言葉の試しが多すぎます。しばらく待つか、起動し直してください")
                 return self._err(401, "auth", "合言葉の入口から開いてください")
             if p == "/api/review/state":
                 return self._state()
+            if cur.id is None:
+                return self._err(404, "not_found", "まだ子がいません")
+            cid = cur.id
             m = re.match(r"^/api/review/bundle/(C0|C2|C3|C5)$", p)
             if m:
                 return self._bundle(m.group(1), parse_qs(url.query).get("round", [None])[0])
@@ -247,31 +314,49 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
                 qr = segno.make(url, error="m").svg_inline(scale=6)
             except ImportError:
                 qr = ""
+            first = ""
+            if cur.make and web:
+                from html import escape
+                link = f"{web.rstrip('/')}/?onboard=1#yc-make=http://127.0.0.1:{port}&yc-key={gate.token}"
+                first = ("<h2 style='font-size:18px'>この PC の初めての会話(言葉か絵で作る)</h2>"
+                         f"<p style='word-break:break-all'><a href='{escape(link, quote=True)}'>{escape(link)}</a></p>"
+                         "<p>開くと、初めての会話の 1〜3 歩の中に、この PC の作る画面が出ます。言葉か絵を入れたら、"
+                         "Claude Code で /yuru-next と打ってください。</p>")
             html = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                     "<title>確認画面の入口</title><body style='font:16px sans-serif;margin:24px'>"
-                    f"<h1 style='font-size:20px'>スマホで読む QR({cid})</h1>{qr}"
-                    f"<p style='word-break:break-all'>{url}</p>"
+                    f"<h1 style='font-size:20px'>スマホで読む QR({cur.id or '作る道'})</h1>{qr}"
+                    f"<p style='word-break:break-all'>{url}</p>{first}"
                     "<p>この画面は人にだけ見せてください。撮影のあとは serve_review.py を止めて、合言葉を捨ててください。</p></body>")
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8",
                        csp="default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'")
 
         def _state(self):
+            cid = cur.id
+            if cid is None:  # --make で、まだ「作って」が来ていない
+                return self._json(200, {"state": None, "pending": None, "make": None, "tags": {g: rs.TAGS[g] for g in ("C0", "C2")},
+                                        "note_max": rs.NOTE_MAX, "words_max": rs.WORDS_MAX,
+                                        "server": {"mode": "live", "can_write": gate.has(self._sid()) or self._key_ok(),
+                                                   "lan": bind_public, "make": cur.make}})
             st = rs.load_state(cid)
             pend = rs.pending(cid)
-            etag = f'"{st["rev"]}-{1 if pend else 0}"'
+            mk = rs.load_make(cid)
+            choice = (mk or {}).get("choice") or {}
+            etag = f'"{st["rev"]}-{1 if pend else 0}-{1 if choice else 0}"'
             if self.headers.get("If-None-Match") == etag:
                 self.send_response(304)
                 self.send_header("ETag", etag)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            can_write = gate.has(self._sid()) and not gate.expired()
-            self._json(200, {"state": st, "pending": pend, "tags": {g: rs.TAGS[g] for g in ("C0", "C2")},
-                             "note_max": rs.NOTE_MAX,
-                             "server": {"mode": "live", "can_write": can_write, "lan": bind_public}},
+            can_write = (gate.has(self._sid()) or self._key_ok()) and not gate.expired()
+            make = ({"from": mk["from"], "created_at": mk["created_at"], "choice": choice.get("value")} if mk else None)
+            self._json(200, {"state": st, "pending": pend, "make": make, "tags": {g: rs.TAGS[g] for g in ("C0", "C2")},
+                             "note_max": rs.NOTE_MAX, "words_max": rs.WORDS_MAX,
+                             "server": {"mode": "live", "can_write": can_write, "lan": bind_public, "make": cur.make}},
                        extra={"ETag": etag})
 
         def _bundle(self, g, rnd):
+            cid = cur.id
             st = rs.load_state(cid)
             n = int(rnd) if rnd and rnd.isdigit() else st["gates"][g]["round"]
             p = rs.review_dir(cid) / g / f"r{n}" / "manifest.json"
@@ -281,7 +366,7 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
             self._json(200, {"manifest": man, "hash": rs.bundle_hash(man)})
 
         def _bundle_file(self, g, n, name):
-            bdir = (rs.review_dir(cid) / g / f"r{n}").resolve()
+            bdir = (rs.review_dir(cur.id) / g / f"r{n}").resolve()
             man_p = bdir / "manifest.json"
             if not man_p.is_file():
                 return self._err(404, "not_found", "ありません")
@@ -295,25 +380,31 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
 
         # ---------- POST ----------
         def do_POST(self):
+            path = urlsplit(self.path).path
+            limit = MAKE_MAX if path == "/api/review/make" and cur.make else BODY_MAX
             # 先に本文を読み切る(読まずに断ると、残りが次の呼び出しとして読まれる。実測)
             try:
                 size = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 size = -1
-            if size < 0 or size > BODY_MAX:
+            if size < 0 or size > limit:
                 self.close_connection = True
                 return self._err(413, "too_large", "大きすぎます")
             raw = self.rfile.read(size) if size else b""
             if not self._host_ok():
                 return self._err(421, "host", "この名前では開けません")
-            origin = self.headers.get("Origin")
-            if origin is not None and origin not in {f"http://{h}" for h in hosts}:
+            if self._origin_kind() == "bad":
                 return self._err(403, "origin", "よそのページからは押せません")
             if gate.expired():
                 return self._err(401, "expired", "時間切れです。serve_review.py を起動し直してください")
             sid = self._sid()
-            if not gate.has(sid):
+            # スマホの確認画面は Cookie、枠の中の作る画面は見出しの合言葉(枠の中は Cookie が使えない)
+            authed = gate.has(sid) or self._key_ok()
+            if not authed:
+                if getattr(self, "_blocked", False):
+                    return self._err(429, "rate", "合言葉の試しが多すぎます。しばらく待つか、起動し直してください")
                 return self._err(401, "auth", "合言葉の入口から開いてください")
+            bucket = sid if gate.has(sid) else "key:" + self.client_address[0]
             ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip()
             if ctype != "application/json" or self.headers.get("X-YC") != "1":
                 return self._err(400, "bad_request", "送り方が違います")
@@ -321,16 +412,24 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
                 body = json.loads(raw.decode("utf-8"))
             except (UnicodeDecodeError, ValueError):
                 return self._err(400, "bad_request", "本文の形が違います")
-            if not gate.allow_write(sid):
+            if not gate.allow_write(bucket):
                 return self._err(429, "rate", "少し待ってから押してください")
-            path = urlsplit(self.path).path
             try:
                 with write_lock:
+                    if path == "/api/review/make" and cur.make:
+                        rec = rs.make_new(body, client_kind(self.headers.get("User-Agent")))
+                        cur.id = rec["id"]
+                        return self._json(201, {"id": rec["id"], "make_id": rec["make_id"]})
+                    if cur.id is None:
+                        return self._err(404, "not_found", "まだ子がいません")
+                    if path == "/api/review/make/choice" and cur.make:
+                        rs.make_choice(cur.id, body)
+                        return self._json(200, {"ok": True})
                     if path == "/api/review/decision":
-                        req = rs.make_request(cid, body, client_kind(self.headers.get("User-Agent")))
+                        req = rs.make_request(cur.id, body, client_kind(self.headers.get("User-Agent")))
                         return self._json(201, {"request_id": req["request_id"]})
                     if path == "/api/review/cancel":
-                        rs.cancel_request(cid, (body or {}).get("request_id"))
+                        rs.cancel_request(cur.id, (body or {}).get("request_id"))
                         return self._json(200, {"ok": True})
             except rs.ReviewError as e:
                 return self._err(e.status, e.reason, e.msg)
@@ -340,18 +439,38 @@ def make_handler(cid, gate, write_lock, hosts, bind_public, port):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="スマホの確認画面(C0・C2)")
-    ap.add_argument("id")
+    ap = argparse.ArgumentParser(description="スマホの確認画面(C0・C2)と、初めての会話の作る道")
+    ap.add_argument("id", nargs="?")
     ap.add_argument("--port", type=int, default=8796)
     ap.add_argument("--bind")
     ap.add_argument("--lan", action="store_true")
     ap.add_argument("--hours", type=float, default=8)
+    ap.add_argument("--make", action="store_true", help="初めての会話から、言葉か絵 1 枚で新しい子を受け付ける")
+    ap.add_argument("--web", help="初めての会話の画面の元(例 http://localhost:5173)。/qr に入口を出し、作る画面を枠に入れてよい元にする")
+    ap.add_argument("--allow-origin", action="append", default=[], help="作る画面(/m/)を枠に入れてよい元(何回でも)")
     args = ap.parse_args(argv)
-    try:
-        rs.load_state(args.id)
-    except rs.ReviewError as e:
-        print(f"{e.msg}。先に review_state.py init を流してください", file=sys.stderr)
+    if not args.id and not args.make:
+        print("子の id か --make のどちらかを渡してください", file=sys.stderr)
         return 2
+    if args.id:
+        try:
+            rs.load_state(args.id)
+        except rs.ReviewError as e:
+            print(f"{e.msg}。先に review_state.py init を流してください", file=sys.stderr)
+            return 2
+    origins = list(args.allow_origin)
+    if args.make:
+        origins += list(DEFAULT_WEB_ORIGINS)
+    if args.web:
+        w = urlsplit(args.web)
+        if w.scheme not in ("http", "https") or not w.netloc:
+            print("--web は http(s)://名前:番号 の形にしてください", file=sys.stderr)
+            return 2
+        origins.append(f"{w.scheme}://{w.netloc}")
+    for o in origins:
+        if not re.match(r"^https?://[A-Za-z0-9.\-\[\]:]+$", o) or o.endswith("/"):
+            print(f"元の形が違います: {o}(例 http://localhost:5173)", file=sys.stderr)
+            return 2
     bind = args.bind or (lan_address() if args.lan else "127.0.0.1")
     if bind in ("0.0.0.0", "::"):
         print("0.0.0.0 にはつなぎません。--lan か決まったアドレスを使ってください", file=sys.stderr)
@@ -387,11 +506,12 @@ def main(argv=None):
     hosts = [f"127.0.0.1:{port}", f"localhost:{port}"] if bind == "127.0.0.1" else [f"{bind}:{port}"]
     if bind != "127.0.0.1":
         hosts = [f"127.0.0.1:{port}", f"localhost:{port}"] + hosts
-    srv.RequestHandlerClass = make_handler(args.id, gate, threading.Lock(), hosts, bind != "127.0.0.1", port)
+    srv.RequestHandlerClass = make_handler(Current(args.id, args.make), gate, threading.Lock(), hosts, bind != "127.0.0.1", port,
+                                           allow=origins, web=args.web)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(json.dumps({"pid": os.getpid(), "port": port, "id": args.id, "at": rs.now_iso()}))
     where = "この PC の中だけ" if bind == "127.0.0.1" else "同じネットワークの中だけ"
-    print(f"確認画面: {args.id}({where}。{args.hours:g} 時間で切れます)")
+    print(f"確認画面: {args.id or '作る道(初めての会話から言葉か絵で作る)'}({where}。{args.hours:g} 時間で切れます)")
     print(f"PORT {port}")
     print(f"スマホで開くには、この PC のブラウザで http://127.0.0.1:{port}/qr を開き、QR を読んでください。")
     print("合言葉は、その画面にだけ出し、記録しません。止めるときは Ctrl+C。", flush=True)

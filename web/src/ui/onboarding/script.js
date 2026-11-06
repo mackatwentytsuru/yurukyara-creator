@@ -2,6 +2,9 @@
 // 1 どんな子を生み出そうか? → 2 ゆるキャラチェック → 3 こんな子ができたよ → 4 性格 → 5 初めてのあいさつ
 // → 6 声が無ければ文字送りとレトロ音 → 7 鍵を入れると「声が出せるようになったよ、ありがとう!」
 // 画面・頭脳・声・作る道は、外から渡す(deps)。台本は「言う → 待つ → 選ばせる」をくり返すだけ。
+// 作る道が 'local'(手元の PC)のときは、1〜3 歩が本当の作る道になる。入力と絵は PC が配る「作る画面」の枠の中だけで扱い
+// (言葉か絵 → PC のゆるキャラチェック → 段 0 の絵 → C0 で「この子にする」か「直したい(一言)」= K3 の request.json → PC の /yuru-next)、
+// 台本は枠からの知らせ(makeEvent)を受けて、案内役の言葉と歩みを進める。
 import { PRESETS, summary, normalize } from '../persona/settings.js';
 import { styleLines, MOCK_NOTICE } from '../persona/preview.js';
 
@@ -19,14 +22,15 @@ export const WORDS_MAX = 60;
 export const NOTE_MAX = 40; // 直してほしい一言(K3 と同じ 40 字)
 export const SAY_MAX = 200;
 export const SNAPSHOT_VERSION = 1;
+export const FRAME_WAIT_MS = 10000; // 作る画面(枠)から「開いた」の知らせが来るのを待つ長さ
 
 const chars = (s) => [...String(s ?? '')].length;
 const clip = (s, n) => [...String(s ?? '').trim()].slice(0, n).join('');
 
 /**
  * @typedef {{who:'guide'|'char'|'user'|'note', text:string, img?:string, expression?:string, motion?:string, voice?:boolean}} Line
- * @typedef {{id:string, label:string, kind?:'button'|'text'|'file'|'key'|'persona', primary?:boolean, capture?:boolean,
- *   placeholder?:string, max?:number, submit?:string, remember?:boolean}} Action
+ * @typedef {{id:string, label:string, kind?:'button'|'text'|'file'|'key'|'persona'|'frame', primary?:boolean, capture?:boolean,
+ *   placeholder?:string, max?:number, submit?:string, remember?:boolean, url?:string}} Action
  */
 export class FirstRun {
   /**
@@ -57,11 +61,18 @@ export class FirstRun {
     this.busy = false;
     this.done = false;
     this.mockNoted = false;
+    this.makeQueue = Promise.resolve(); // 作る画面の知らせを 1 つずつ順に受ける
+    this.progressSeen = new Set();
     this.log = []; // 試験と確かめのための、言った文の記録
   }
 
   get guideName() {
-    return this.d.guide?.name || 'ねこ';
+    return this.d.guide?.name || 'ノリー';
+  }
+
+  /** 1〜3 歩が手元の PC の本当の作る道で、入力を PC の作る画面(枠)でするか */
+  get local() {
+    return this.d.creator?.mode === 'local' && Boolean(this.d.creator.frameUrl);
   }
 
   async _say(...lines) {
@@ -106,15 +117,36 @@ export class FirstRun {
   async start() {
     this._go(1);
     const sample = this.d.creator.mode === 'sample';
+    const nori = this.d.guide?.id === 'norrie';
     await this._say(
-      { who: 'guide', text: `はじめまして。${this.guideName}だよ。きみだけのゆるキャラを、いっしょに生み出そう。` },
+      {
+        who: 'guide',
+        text: nori
+          ? `はじめまして! 執事見習いの${this.guideName}デス。きみだけのゆるキャラを生み出すお手伝い、ノリ、がんばりマス!`
+          : `はじめまして。${this.guideName}だよ。きみだけのゆるキャラを、いっしょに生み出そう。`,
+      },
       { who: 'guide', text: 'どんな子を生み出そうか?' },
       sample ? { who: 'note', text: 'この画面では、もう作ってある見本の子を出します。新しく作るのは、手元の PC の Claude Code です。写真や絵は、この端末の外に送りません。' } : null,
+      this.local ? { who: 'note', text: '下の「PC の作る画面」に、言葉か絵を入れてね。手元の PC の Claude Code が描きます(Claude が見るので、言葉と絵は Anthropic に送られます)。' } : null,
     );
     this._offerStart();
   }
 
   _offerStart() {
+    if (this.local) {
+      this._offer([{ id: 'frame', kind: 'frame', label: 'PC の作る画面', url: this.d.creator.frameUrl }]);
+      // 作る画面が開けない(PC のサーバーが止まっている・この画面の元が許されていない)ときは、黙らずに言う
+      clearTimeout(this.frameTimer);
+      if (!this.frameReady) {
+        this.frameTimer = setTimeout(() => {
+          if (!this.frameReady && !this.done && this.step <= 1) {
+            this._say({ who: 'note', text: 'PC の作る画面が開けません。PC で serve_review.py --make --web <この画面の元> が動いているか確かめてね。' });
+          }
+        }, this.d.frameWaitMs ?? FRAME_WAIT_MS);
+        this.frameTimer?.unref?.(); // node の試験で、待つ間に終われなくならないように
+      }
+      return;
+    }
     this._offer([
       { id: 'photo', label: '写真を撮る', kind: 'file', capture: true },
       { id: 'pick', label: '絵を選ぶ', kind: 'file' },
@@ -467,10 +499,97 @@ export class FirstRun {
 
   async _finish() {
     this.done = true;
+    clearTimeout(this.frameTimer);
     this._go(8);
     await this._say({ who: 'guide', text: '準備ができたよ。いっぱい話してあげてね。' });
     this.d.offer([]);
     this.d.onDone?.();
+  }
+
+  /* ---------- 手元の PC の作る道: 作る画面(枠)からの知らせで進む ---------- */
+
+  /** 作る画面からの知らせ(creators.js の cleanMakeEvent を通した物)を、順に受ける */
+  makeEvent(ev) {
+    this.makeQueue = this.makeQueue.then(() => this._onMake(ev)).catch(async (err) => {
+      await this._say({ who: 'note', text: `うまく進めませんでした(${err?.message ?? err})` });
+    });
+    return this.makeQueue;
+  }
+
+  async _onMake(ev) {
+    if (!this.local || this.done || !ev || this.step > 3) return;
+    switch (ev.ev) {
+      case 'ready':
+        this.frameReady = true;
+        clearTimeout(this.frameTimer);
+        return undefined;
+      case 'sent':
+        if (ev.from === 'words') {
+          this.input = { from: 'words', words: clip(ev.words, WORDS_MAX) };
+          await this._say({ who: 'user', text: this.input.words });
+          this.skipped.add(2);
+          this._go(3);
+        } else {
+          this.input = { from: 'picture' };
+          await this._say({ who: 'user', text: '(絵を渡した)' });
+          this._go(2);
+        }
+        return this._say({ who: 'guide', text: 'PC の Claude Code に渡したよ。PC で /yuru-next と打つと、描き始めるよ(数分かかります)。' });
+      case 'progress':
+      case 'error':
+        if (!ev.text || this.progressSeen.has(ev.text)) return undefined;
+        this.progressSeen.add(ev.text);
+        return this._say({ who: 'note', text: ev.text });
+      case 'checked':
+        return this._checkedLocal(ev);
+      case 'chose':
+        await this._say({ who: 'user', text: ev.choice === 'redraw' ? '主役を描き直してもらう' : 'ゆるキャラにしてみる' });
+        return this._say({ who: 'guide', text: 'PC の Claude Code に伝えたよ。描けたら見せるね。' });
+      case 'drawn':
+        this._go(3);
+        this.character = { id: ev.id, name: ev.name, sample: false, local: true, round: ev.round, note: this.d.creator.note ?? '' };
+        return this._say(
+          { who: 'guide', text: ev.round > 1 ? '直してみたよ。どうかな?' : 'こんな子ができたよ。どうかな?' },
+          { who: 'note', text: '下の画面で「この子にする」か「直したい(一言)」を選んでね。' },
+        );
+      case 'decided':
+        if (ev.decision === 'redo') {
+          await this._say({ who: 'user', text: ev.note || '(直したい)' });
+          return this._say({ who: 'guide', text: 'PC の Claude Code に伝えたよ。直ったら、また見せるね。' });
+        }
+        if (ev.id && this.character?.id !== ev.id) this.character = { id: ev.id, name: ev.name, sample: false, local: true, round: ev.round, note: this.d.creator.note ?? '' };
+        await this._say(
+          { who: 'guide', text: `${this.character?.name ?? 'この子'}にけってい! OK を PC に伝えたよ。` },
+          { who: 'note', text: '形・色・骨・動き(段 1〜6)は、PC の Claude Code が続けて作ります(数十分かかります)。それまでは、絵のまま話します。' },
+        );
+        return this._persona();
+      case 'restart':
+        this.input = null;
+        this.check = null;
+        this.character = null;
+        this.skipped.clear();
+        this._go(1);
+        return this._say({ who: 'guide', text: 'じゃあ、もう一度。どんな子を生み出そうか?' });
+      default:
+        return undefined;
+    }
+  }
+
+  async _checkedLocal(ev) {
+    this._go(2);
+    this.check = { class: ev.class, by: ev.by, message: ev.message };
+    if (ev.by === 'pixels') await this._say({ who: 'note', text: '判定役の答えが割れたので、絵の数字で決めました。違うと思ったら「別の絵にする」を選べます。' });
+    if (ev.class === 'yuru') return this._say({ who: 'guide', text: 'ゆるキャラにぴったりの絵だね。この絵から作るよ。' });
+    if (ev.class === 'human') {
+      return this._say(
+        { who: 'guide', text: 'これはちょっとリアルな写真みたい。ゆるキャラにしてみる?' },
+        { who: 'note', text: '髪や服の色、目立つ物などの特徴を生かして、ゆるキャラに描き直します。どんな写真でもきれいに作れるわけではありません。下の画面で選んでね。' },
+      );
+    }
+    return this._say(
+      { who: 'guide', text: 'いろんな物が描いてあるね。主役を 1 つ選んで、描き直してみる?' },
+      { who: 'note', text: '下の画面で選んでね。' },
+    );
   }
 
   /** 読み込み直しをまたいで続けるための、小さな状態(絵そのものと、絵の URL は残さない) */

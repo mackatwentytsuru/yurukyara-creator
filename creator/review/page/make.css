@@ -1,0 +1,32 @@
+/* 作る画面(初めての会話の札の中の枠)。狭い幅(320〜400px)を先に考える */
+:root { --bg: #fffdf8; --text: #2a2622; --muted: #6b635b; --line: #e3dbd0; --accent: #d9622b; --ok: #2f8f5b; --err: #b3261e; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1d1b19; --text: #f3eee8; --muted: #b9b0a6; --line: #3a352f; --accent: #f08a4b; --ok: #5cc28a; --err: #f2b8b5; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+main { padding: 10px 12px 14px; display: grid; gap: 10px; }
+.mk-where { margin: 0; font-size: 13px; color: var(--muted); }
+main:not([data-phase="input"]) .mk-where { display: none; }
+.mk-part { display: grid; gap: 8px; }
+.mk-part[hidden] { display: none; }
+.mk-row { display: grid; gap: 6px; }
+.mk-label { font-size: 14px; color: var(--muted); }
+input[type="text"] { font: inherit; font-size: 16px; min-height: 48px; width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); }
+.mk-count { margin: 0; font-size: 12px; color: var(--muted); text-align: right; }
+.mk-count.over { color: var(--err); font-weight: 600; }
+.mk-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mk-btn { position: relative; font: inherit; font-size: 16px; min-height: 48px; width: 100%; padding: 10px 12px; border-radius: 14px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; text-align: center; line-height: 1.35; color: var(--text); background: transparent; border: 1px solid var(--line); overflow-wrap: anywhere; }
+.mk-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.mk-btn.ghost { border-style: dashed; color: var(--muted); }
+.mk-btn:disabled { opacity: 0.5; cursor: default; }
+.mk-btn input[type="file"] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.mk-btn:focus-within, .mk-btn:focus-visible, input[type="text"]:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+.mk-big { margin: 0; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.mk-hint, .mk-act { margin: 0; font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.mk-act:empty { display: none; }
+.mk-fig { margin: 0; display: grid; gap: 4px; justify-items: center; }
+.mk-fig img { width: min(200px, 56vw); aspect-ratio: 1; object-fit: contain; border-radius: 14px; background: #fff; border: 1px solid var(--line); }
+.mk-fig figcaption { font-size: 13px; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
+.mk-err { margin: 0; color: var(--err); font-size: 14px; overflow-wrap: anywhere; }

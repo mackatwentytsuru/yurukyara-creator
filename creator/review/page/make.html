@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>作る画面</title>
+<link rel="stylesheet" href="/r/assets/make.css">
+<script type="module" src="/r/assets/make.js"></script>
+</head>
+<body>
+<main id="mk" data-phase="input">
+  <p class="mk-where">この PC の Claude Code が描きます。言葉と絵は Claude が見るので、Anthropic に送られます。</p>
+
+  <section id="input" class="mk-part">
+    <form id="wordsForm" class="mk-row" autocomplete="off">
+      <label class="mk-label" for="words">どんな子?(<span id="wordsMax">60</span> 字まで)</label>
+      <input id="words" type="text" maxlength="120" placeholder="例: 赤い提灯の子" enterkeyhint="send" autocomplete="off">
+      <p class="mk-count" id="wordsCount">0 / 60</p>
+      <button type="submit" class="mk-btn primary" id="wordsBtn" disabled>これで作る</button>
+    </form>
+    <div class="mk-two">
+      <label class="mk-btn" data-act="photo"><input type="file" id="photo" accept="image/*" capture="environment">写真を撮る</label>
+      <label class="mk-btn" data-act="pick"><input type="file" id="pick" accept="image/*">絵を選ぶ</label>
+    </div>
+  </section>
+
+  <section id="waiting" class="mk-part" hidden>
+    <p class="mk-big">PC の Claude Code に渡しました。</p>
+    <p class="mk-hint">PC の Claude Code で <b>/yuru-next</b> と打つと進みます。</p>
+    <p class="mk-act" id="activity" aria-live="polite"></p>
+  </section>
+
+  <section id="check" class="mk-part" hidden>
+    <p class="mk-big" id="checkMsg"></p>
+    <button type="button" class="mk-btn primary" id="chooseBtn"></button>
+    <button type="button" class="mk-btn" id="otherBtn">別の絵にする</button>
+  </section>
+
+  <section id="c0" class="mk-part" hidden>
+    <figure class="mk-fig"><img id="pic" alt="Claude が描いた絵"><figcaption id="picCap"></figcaption></figure>
+    <button type="button" class="mk-btn primary" id="okBtn">この子にする</button>
+    <form id="noteForm" class="mk-row" autocomplete="off">
+      <label class="mk-label" for="note">直したい所を一言(<span id="noteMax">40</span> 字まで。人の感想として渡します)</label>
+      <input id="note" type="text" maxlength="80" placeholder="例: 帽子を青にして" enterkeyhint="send" autocomplete="off">
+      <p class="mk-count" id="noteCount">0 / 40</p>
+      <button type="submit" class="mk-btn" id="noteBtn" disabled>直したい(一言を送る)</button>
+    </form>
+    <button type="button" class="mk-btn ghost" id="againBtn">やり直す(別の子にする)</button>
+  </section>
+
+  <section id="done" class="mk-part" hidden>
+    <p class="mk-big" id="doneMsg"></p>
+  </section>
+
+  <p class="mk-err" id="err" hidden></p>
+</main>
+</body>
+</html>
