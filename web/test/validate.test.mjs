@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { LIMITS, ValidationError, sanitizeChatBody, sanitizeMetric } from '../server/validate.mjs';
 import { PoseSource } from '../src/tracking/sources/poseSource.js';
 
-const ok = { text: 'お手洗いはどこ', scene: '1 人', character: { name: 'A', persona: 'p' }, place: { name: '店', info: '', landmarks: [{ name: '入口', where: '手前、約 2.5m', note: '' }] }, expressions: ['happy'], motions: ['nod'] };
+const ok = { text: 'お手洗いはどこ', scene: '1 人', character: { name: 'A', persona: 'p' }, place: { name: '広場', info: '', landmarks: [{ name: '入口', where: '手前、約 2.5m', note: '' }] }, expressions: ['happy'], motions: ['nod'] };
 
 test('正しい本文は、そのまま通る', () => {
   const c = sanitizeChatBody({ ...ok, history: [{ role: 'user', content: 'こんにちは' }] });

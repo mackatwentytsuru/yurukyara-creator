@@ -70,7 +70,6 @@ export function sanitizeChatBody(raw) {
     motions: choiceList(raw.motions, 24),
   };
   clean.expressionHints = hintMap(raw.expressionHints, clean.expressions);
-  clean.useShop = raw.useShop !== false; // 店のデータを渡すか(比べる試験のときだけ false)
   // 試験用の遅延の指定は、有限の数で範囲内の物だけ
   if (Number.isFinite(raw.hedgeMs)) clean.hedgeMs = Math.min(Math.max(raw.hedgeMs, 0), 10_000);
   return clean;

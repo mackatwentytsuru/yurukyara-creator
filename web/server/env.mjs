@@ -42,4 +42,14 @@ export const config = {
   tlsCert: process.env.TLS_CERT ?? '', // 証明書があれば HTTPS で配る(iPhone のカメラとマイクに必要)
   tlsKey: process.env.TLS_KEY ?? '',
   devVrmPath: process.env.DEV_VRM_PATH ?? '',
+  // 端末をまたぐ記憶の置き場所(既定は web/logs/memory。git に入らない)。公開のときは KV に替える
+  memoryDir: process.env.MEMORY_DIR ?? join(WEB_ROOT, 'logs', 'memory'),
+  // 記憶の名前(合鍵のハッシュ)に混ぜる秘密。無くても動く。値はどこにも書かない
+  get memoryPepper() {
+    return process.env.MEMORY_PEPPER ?? '';
+  },
+  // 合言葉。あれば番号づくりに要る。無いときは、この端末だけで待ち受けている時だけ番号を作る
+  get appPass() {
+    return process.env.APP_PASSPHRASE ?? '';
+  },
 };
