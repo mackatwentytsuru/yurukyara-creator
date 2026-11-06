@@ -21,3 +21,6 @@ kiosk/eval/results/private_*
 
 # キオスク: 見守りカメラの接続設定(アドレス・アカウント)は、公開のリポジトリに入れない
 kiosk/.secrets/
+
+# Megascans などの素材の縮小版(Fab 標準ライセンス。素材の単体の再配布は禁止なので、公開のリポジトリに入れない)
+creator/viewer/assets_local/

@@ -13,6 +13,7 @@ import * as THREE from 'three';
  *   look: 名前の付いた設定のまとまり(試しの設定で、既定ではない。判定の数字は creator/skilltest/結果表.md)。ほかの値を書くと、そちらが優先。
  *     "fleece" = 布の写真の房 + 半透明の毛先。"teddy"(Poly Haven Curly Teddy Natural)・"felt"(ambientCG Fabric034)= 面そのものに素材の法線・ラフネス・明暗を貼る + 殻の房。
  *   material: 素材の名前(assets/ の下のフォルダ)。surface: true で、面そのものに素材の法線・ラフネス・細かい明暗を貼る(色は元の絵のまま)。surfaceNormal・surfaceShade・surfaceFlat: その強さ。layers: 0 で殻なし(面だけ)。assetBase: 素材の置き場の URL(試し用)。
+ *     "megaclay"(Clay Toy Bear)・"megarug"(Historic Bazaar Rug Fabric)・"meghat"(Urban Camping Gear Hat Fabric)= Megascans を持っている人向けのおまけ。teddy・felt と同じ仕組みで、絵は assets_local/<look 名>/(git に入らない置き場、.gitignore 済み)。絵が無いときは警告だけ出して既定の見た目に戻る。
  *   soft: 毛先を半透明でぼかす幅(0 で切る)。輪郭と面の粒が画素で切れて砂に見えるのを防ぐ。rim: 真横を向いた面を明るくする強さ(毛は光を透かすので、輪郭が暗くならない)。tipAlpha: いちばん外の毛の濃さ。
  *   photo: true で、布の写真(assets/fleece、Poly Haven「Polar Fleece」CC0)の房を毛の高さと明暗に使う。photoRepeat: 写真 1 枚がキャラの高さの何倍か。photoHeight: 高さのうち写真の割合。photoContrast: 写真の明暗の強さ。photoNormal: 写真の法線の強さ。
  *   thin: 薄い部品の毛を短くする目安(毛の長さの何倍の厚みまでを「薄い」とするか。既定 0 = 働かない。葉は 0.67 に縮んだがマントには効かず、sheen=0.0 の決まりのほうが効いたので既定は切った)。厚みが毛の長さの thin 倍より薄い部品は、その割合だけ毛を短くする(下限 0.2)。葉・マント・角の縁の針のような毛羽立ちを防ぐ。
@@ -37,13 +38,32 @@ const FUR_LOOKS = {
   fleece: { ...SHELL_LOOK, material: 'fleece' },
   teddy: { ...SHELL_LOOK, material: 'curly_teddy_natural', surface: true },
   felt: { ...SHELL_LOOK, material: 'fabric034', surface: true },
+  // Megascans などを持っている人向けのおまけ。絵は assets_local/<look 名>/(git に入らない置き場)。無ければ既定の見た目に戻る。surfaceNormal は絵ごとの法線の傾きに合わせてある
+  megaclay: { ...SHELL_LOOK, material: 'megaclay', surface: true, local: true, surfaceNormal: 1.0, surfaceShade: 1.5 },
+  megarug: { ...SHELL_LOOK, material: 'megarug', surface: true, local: true, surfaceNormal: 0.5, surfaceShade: 1.5 },
+  meghat: { ...SHELL_LOOK, material: 'meghat', surface: true, local: true, surfaceNormal: 0.6, surfaceShade: 1.5 },
 };
 const SURFACE_DEFAULTS = { surfaceNormal: 0.6, surfaceShade: 2.0, surfaceFlat: 0.95 }; // 面そのものに貼るときの法線の強さ・明暗の強さ・色の絵の筋を消す割合(殻の flat と同じ)
 
+/** assets_local の絵があるか(1 回だけ確かめる)。無い・読めないときは false。applyFur は同期で呼ばれるので、同期の問い合わせにしてある。 */
+function localAssetsPresent(material, assetBase) {
+  try {
+    const base = assetBase ?? new URL('./assets_local', import.meta.url).href;
+    return ['detail', 'height', 'normal', 'rough'].every((kind) => {
+      const x = new XMLHttpRequest();
+      x.open('HEAD', `${base}/${material}/${material}_${kind}.jpg`, false);
+      x.send();
+      return x.status >= 200 && x.status < 300;
+    });
+  } catch {
+    return false;
+  }
+}
+
 /** 布の写真を読む。読み終わる前は灰色 1 色なので、撮るときは読み終わりを待つ。ラフネスは面に貼るときだけ読む。 */
-function loadPhoto(material, withRough, assetBase) {
+function loadPhoto(material, withRough, assetBase, local = false) {
   const loader = new THREE.TextureLoader();
-  const base = assetBase ?? new URL('./assets', import.meta.url).href;
+  const base = assetBase ?? new URL(local ? './assets_local' : './assets', import.meta.url).href;
   const load = (kind, srgb = false) => {
     const tex = loader.load(`${base}/${material}/${material}_${kind}.jpg`);
     tex.wrapS = THREE.RepeatWrapping;
@@ -277,6 +297,13 @@ function layerMaterial(source, hairs, layer, cfg, photo) {
 
 /** 毛の殻を足す。戻り値は足した層の数。 */
 export function applyFur(scene, options = {}) {
+  // 素材の絵が無い look(Megascans を持っていない)は、エラーにせず既定の見た目({})に戻る
+  const wanted = FUR_LOOKS[options.look];
+  if (wanted?.local && !localAssetsPresent(wanted.material, options.assetBase)) {
+    console.warn(`fur look "${options.look}": assets_local/${wanted.material}/ に絵が無いので、既定の見た目にします`);
+    const { look, ...rest } = options;
+    options = rest;
+  }
   const size = new THREE.Box3().setFromObject(scene).getSize(new THREE.Vector3());
   const cfg = {
     length: Math.max(size.y, 1e-3) * LENGTH_OF_HEIGHT,
@@ -304,13 +331,14 @@ export function applyFur(scene, options = {}) {
     photoNormal: 0.5,
     material: 'fleece',
     surface: false,
+    local: false,
     assetBase: null,
     ...SURFACE_DEFAULTS,
     ...(FUR_LOOKS[options.look] ?? {}),
     ...options,
   };
   const hairs = makeHairHeights();
-  const photo = cfg.photo || cfg.surface ? loadPhoto(cfg.material, cfg.surface, cfg.assetBase) : null;
+  const photo = cfg.photo || cfg.surface ? loadPhoto(cfg.material, cfg.surface, cfg.assetBase, Boolean(cfg.local)) : null;
   const targets = [];
   const faceParts = [];
   scene.traverse((o) => {
