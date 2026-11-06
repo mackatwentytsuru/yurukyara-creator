@@ -17,7 +17,8 @@ description: 会話の画面の「初めての会話」(最初の設計の決め
 import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER }));
 ```
 - 主役(案内役)の決まり `MAIN_CHARACTER`(id と表示の名前)は `web/src/character/defaults.js`(S5。three を読まない)の 1 か所だけ。index.js・script.js はそこから import し、**S4 のファイルに id や名前を写さない**(11-06 S4w4 で写しを消した。試験 `web/test/onboarding_main_character.test.mjs` が、写しが無いこと・案内役を渡さない時は主役になることを見張る)。
-- 「性格」「はじめての会話」のボタンが #modes に出る。初めての会話は `?onboard=1` で出る(`auto: true` で初めての端末にも出る。既定は出さない=ほかの試験を邪魔しない)。
+- 「性格」「はじめての会話」のボタンが #modes に出る。初めての会話は `?onboard=1` で出る(印があっても出る。入口なしですぐ始まる)。
+- **初めての訪問は、入口を閉じた後に自動で出る**(11-07 合わせ⑦から。S5 の main.js の `gateClosed` が `api.start()`。決まりは `web/src/stage/firstVisit.js` の `shouldOpenFirstRun`: 印 `yc.onboarded.v1`(終わり = done・あとで = later)が無い時だけ。`?auto=0`・`?onboard=0/1`・led・autostart・headset・perf では出さない)。mountFirstRun の `auto: true` は使っていない。入口には「はじめてなら、このあと「はじめての会話」(7 歩)が始まります。…」(`#gateFirst`)が出る。
 - 性格はキャラの id ごとに localStorage `yc.persona.v2.<id>`(settings.js の `STORE_PREFIX`。試験と練習の道具は文字を写さずこれを読む)。頭脳へは `app.persona`(persona.md の後ろに設定の文を足す)で渡る。11-07 S4w6 で v1 → v2(v1 のおまかせが主役に付けた語尾を読まないため。v1 の保存は捨てる)。
 - 案内役は主役のノリー(セスジキノボリカンガルーの執事見習い。`MAIN_CHARACTER` = id `norrie`。自分を「ノリ」と呼び、少しカタコト)。舞台に出ていれば character.json の名前を使う。最初の一言は「はじめまして! 執事見習いのノリーデス。…ノリ、がんばりマス!」(案内役が主役の時だけ。ほかの子を guide に渡すと、ふつうに名乗る。主役を替えたら、この 1 文も替える)。
 
@@ -73,6 +74,8 @@ import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost
   - 本物の画面では `window.__firstRun`(試しの画面の `window.__fr` とは別)。舞台の読み上げ(S3 の speaker)がある時、キャラの文の音と文字送りは speaker が受け持つ。
   - 版 S4w7(11-07): 見本はその場で入れ替わる(`__app.characterId` が d_lantern になり、頁の読み込み 0 回)・見本の「直したい」の説明・終わると舞台は主役・アドレスに onboard が無い・入口が出ない・読み込み直しても 7 歩なし(`afterClose`・`reloadNoRestart`)、当たらない言葉(m20c: 正直に言う → 見本から選ぶ → あとで)、PC 1280×720 で「送る」と会話の欄が札に隠れない・考えの箱が出ない(m20d)、絵の入口は「ノリーで続きを試す」・絵が札に残る・4 歩目は「おっとり」・口調の列が止まる(m20b)、幅 390 の 1 歩目で上の段と札の間 150px 以上(m20_0)。
   - **頁の読み込みを数えるのは `page.on('load')`**。`framenavigated` は `history.replaceState`(閉じた時に onboard=1 を消す)でも出るので、読み込み直していないのに 1 回と数えた(11-07 S4w7 の 1 回目)。
+  - 版 S4w7b(11-07 07:00): 合わせ⑦(S5 の入口と初めての訪問の 7 歩)の後、S4w7 のままでは 8/10 だった(入口のボタンの文字を丸ごと比べた 1 行と、その番号を使う次の場面)。直し 2 つで 10/10: ① 入口の「カメラなしで試す」は役と意味で探す(`page.getByRole('button', { name: /カメラなしで試す/ })` が 1 つ・id が `startSim`・`.btn-main` の頭が「カメラなしで試す」)。下の小さい説明(`.btn-sub`)は端末で変わる(PC「マウスを動かすと、その向きを見ます」・指の端末「画面を指でなぞると、その向きを見ます」)ので比べず、記録に残して手順の紙に写す ② 入口の後は、新しい browser context ごとに 7 歩の札が出る。記憶の場面と性格のボタンの前に、`getByRole('dialog', { name: 'はじめての会話' })` が見えるまで待ち(onboarding の読み込みの後に出る。最大 8 秒)、中の `getByRole('button', { name: 'あとで', exact: true })` を押す。押した後は札が消え、印が `later`。出なければ「出ない」と残す(本人の端末は前に押していれば出ない。失敗ではない)。
+  - 本人の撮影の手順の紙(`video_1107\撮影1回目_本人の手順.md`、作ったのは S7)は、練習の結果(result.json の `gate.main`・`gate.sub`・`first_run`・返事の文)から言葉を写して直す。前の版は板の `shoot_1107\撮影1回目_本人の手順_1106控え.md`。4 の撮影(記憶)は「あとで」を押す・6 の撮影(7 歩)は押さない、を紙の頭に書く。
 
 ## 確かめていない事
 - 本物の iPhone の Safari・Android・Quest のブラウザでの見た目と音(画面なしの Chrome の幅だけ)。本物の Haiku での「性格を変えた後の返事」。iPhone のキーボードが出た時に、札の下のボタンが隠れないか。
@@ -90,3 +93,8 @@ import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost
 - 画面のコードの通信の約束(privacy の試験)は、リンク(README)や人格の文の読み込みにも効く。外の住所は頁の `<link rel="help">` から読み、人格の文は main.js(S5)に `app.readPersona` を頼む。試験を書き換えてくぐらない。
 - Bash の heredoc で Python に正規表現(`\b`)を渡すと、`\b` が後退の文字(0x08)になってファイルに入った(見えない)。直しの台本は Write の道具でファイルに書いてから流す。入った時は `grep -c $'\x08'` で見つかる。
 - 板の頼み: `work\S4\頼み_S5_w7.md`(main.js に `app.swapCharacter`・`app.readPersona`、index.html に `<link rel="help">`、`#startSim` の id はそのまま、`--top-h`・`--bottom-h` はそのまま)。
+
+## 11-07 S4w7b の学び(合わせ⑦の後)
+- 試験の見本の住所・名前は、作り物の部品からその場で組み立てる(`ip(192, 168, 1, 20)`・`tsName('home-pc', 'example-tail')`)。本物の機械の名前を書かない。既定の語の一覧(push の点検)は通っても、公開前の語の一覧(参考の門)で当たる。
+- 語の点検は 2 つの一覧で、行の番号だけを出す(`termlist.load` と `first_hit` を読む小さな台本。語は画面にも報告にも出さない)。木の全部は `PREPUSH_TERMS=<公開前の語の一覧> python -I tools/prepush_check.py`(当たった語を出すので、出力の「…」の中を伏せる)。当たった行を直す時も、語を打たずに行の形(正規表現)で探して替える。
+- 開発の線は、取り込む間にも進む(司令塔がスキルを置いたコミット)。`git merge yurukyara-dev` の後に `git log -1` で実際の先を記録する(頼みの文の sha と違ってよい。早送りなら同じ物の子)。

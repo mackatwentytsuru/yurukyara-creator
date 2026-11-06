@@ -96,6 +96,16 @@ description: ゆるキャラの画面(3D と 2D の板)を「軽いのにきれ�
 - `node work\S5\tools\w7_check.mjs <web> <port> <出力> [--only gate,thought,reply,act,public,touch]`: 入口(390・PC。初めての訪問 → 7 歩 → あとで → 読み込み直して 2 回目)・考えの窓(390 × 3D・2D。開いた時の重なりと切り替え)・字幕(話し終わって 2.6 秒後に全部の文が出ているか)・表情と動き(英字が無いか)・公開の URL のまね・指でなぞる。直す前と後を同じ道具で撮り、json を比べる(この道具は合否を出さない)。GPU の札の中で。
 - 新しい試験は、直す前の木の写し(`git worktree add --detach <写し> <前のコミット>`、新しい部品と試験だけ写す)で流して落ちるのを見る(第 7 波: 24 件中 6 件が落ちた)。写しは `git worktree remove --force` で消す。
 
+## 声のサーバーの有無を読み上げに渡す(CRITux 25 の公開の側。2026-11-07 S5w7b)
+- main.js の `refreshStatus()` は、`/api/status` を読んだ後(読めなかった時も)に `speaker.setServerVoice(Boolean(app.status?.tts?.available))` を呼ぶ(起動の 1 回と 15 秒ごと)。公開の URL(`/api/status` も `/api/tts` も無い)と声の鍵の無いサーバーでは、読み上げは初めから文字送りと「ピッ」で話し、`/api/tts` を 1 回も聞かない(console に 404 が出ない)。声の鍵のあるサーバーは今までどおり。読めなかった後にまた読めたら、この知らせで止めた分だけ戻す(429 などサーバーが答えた理由は残す。speaker.js の決まり)。
+- 試験: 動きは S3 の `web/test/voice_server_off.test.mjs`、main.js の形は `web/test/place_server_voice.test.mjs`(直す前の main.js では 1 件落ちる)。画面では、鍵なしのサーバーで初めての訪問の 7 歩を 6 秒話させても `/api/tts` 0 回(下の first_visit_check が数える)。
+
+## 撮影の前の用意(2026-11-07 S5w7b。撮影サーバー 8799)
+- 順: 自分の線へ `git merge yurukyara-dev`(**合わせの後も司令塔のスキルのコミットで先へ進む。取り込んだ id を報告に書く**)→ CPU の札で `npx.cmd vite build`(サーバーは web/dist を配る。組み立て直さないと古い画面のまま)→ 確かめ(下)→ 撮影サーバー → https の入口。
+- **default_check・layout_check・first_visit_check はサーバーを起こさない。** 道具ごとに空いた番号(8841〜8844 など)で鍵なしのサーバーを `start_server.mjs` で起こし、終わったらその PID だけを止める(続けて同じサーバーを使うと記憶の合鍵の上限で 429)。撮影サーバー(8799)では確かめを流さない(撮影の記憶のフォルダに試しの合鍵が増える)。https の入口だけは 8799 を通るので、流すと合鍵が 1 文脈に 1 つ増える(中身は空。7 日で消える)。
+- **layout_check と default_check は `?auto=0` で開くので、初めての訪問の 7 歩は出ない。** 撮影の端末と同じ「何も付けない URL・初めてのブラウザ」は `node work\S5\tools\first_visit_check.mjs <web> <port> <出力> [--origin https://<スマホの入口>:8444]` で見る: 入口(製品の名前・7 歩の知らせ・7 歩はまだ出ていない)→「カメラなしで試す」→ 7 歩(7 つ・案内役ノリー)→ あとで(入口に戻らない・印 later)→ 読み込み直して 2 回目は出ない、と `/api/tts` の回数・404 の数。合否を出す(2/2 で合格)。
+- 撮影サーバーの札: `machine_lock.py acquire --kind cpu --procs 1 --minutes 180`(手動の札は 180 分が上限)。**同じ who と kind でもう一度 acquire すると、その時から延びる**(新しい札は増えない)。`hold --watch-pid` は札の道具が前で待ち続けるので、裏で流せない時は使わない。
+
 ## 2D の板と見た目の方式(looks)
 - `web/src/character/index.js` の `loadCharacter(url, { look, lookMemory })`: `?look=2d|3d` が先、次にこのタブで選んだ物(lookMemory = sessionStorage)、次に character.json の `looks.default`。3D の形(model)が無く 2D がある時は 2D。2D が読めない時は、3D があれば 3D に戻す(警告だけ)。返すキャラには `lookSource`(元の URL と character.json)が付く。
 - 2D は `looks.2d.parts` の parts.json(無ければ決まりの場所 `2d/parts.json`)と、その中の svg を読む。読み込み(fetch)は character/index.js の中だけで、宛先の変数名は `url`(privacy の試験の決まり)。2D の部品は `import('../char2d/index.js')` で、2D の時だけ読む(8.7KB)。
