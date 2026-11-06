@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "yc-review-request/1",
+  "title": "K3 request.json(画面 → Claude。serve_review.py だけが書く)",
+  "type": "object",
+  "required": ["schema", "request_id", "id", "gate", "stage", "round", "ticket", "decision", "seen_hash", "note", "tags", "focus", "client", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "enum": ["yc-review-request/1"] },
+    "request_id": { "type": "string", "pattern": "^rq_[A-Za-z0-9_-]{8,64}$" },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]{1,32}$" },
+    "gate": { "enum": ["C0", "C1", "C2", "C3", "C5"] },
+    "stage": { "enum": ["draw", "look", "shape", "material", "talk"] },
+    "round": { "type": "integer", "minimum": 1 },
+    "ticket": { "type": "string", "pattern": "^tk_[A-Za-z0-9_-]{8,64}$" },
+    "decision": { "enum": ["ok", "redo"] },
+    "seen_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "note": {
+      "type": ["object", "null"],
+      "required": ["text", "chars", "warning"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "maxLength": 40 },
+        "chars": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "warning": { "type": "string" }
+      }
+    },
+    "tags": { "type": "array", "maxItems": 12, "items": { "type": "string", "maxLength": 16 } },
+    "focus": { "type": ["string", "null"], "pattern": "^[a-z0-9_]{1,48}\\.(png|jpg|svg|json)$" },
+    "client": { "enum": ["iphone", "android", "pc", "other"] },
+    "created_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$" }
+  }
+}

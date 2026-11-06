@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "yc-review-bundle/1",
+  "title": "K3 束 <門>/r<回>/manifest.json(人に見せた絵と、そのハッシュ)",
+  "type": "object",
+  "required": ["schema", "id", "gate", "round", "made_at", "words", "compare", "png", "views", "sheet", "overlay", "metrics", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "enum": ["yc-review-bundle/1"] },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]{1,32}$" },
+    "gate": { "enum": ["C0", "C1", "C2", "C3", "C5"] },
+    "round": { "type": "integer", "minimum": 1 },
+    "made_at": { "type": "string" },
+    "words": { "type": ["string", "null"], "maxLength": 200 },
+    "compare": {
+      "type": "object", "required": ["left", "right"], "additionalProperties": false,
+      "properties": { "left": { "type": ["string", "null"] }, "right": { "type": "string" } }
+    },
+    "png": { "type": ["string", "null"] },
+    "views": { "type": "array", "items": { "type": "object", "required": ["file", "label", "deg"], "additionalProperties": false,
+      "properties": { "file": { "type": "string" }, "label": { "type": "string" }, "deg": { "type": "integer" } } } },
+    "sheet": { "type": ["string", "null"] },
+    "overlay": { "type": ["string", "null"] },
+    "metrics": { "type": "array", "items": { "type": "object", "required": ["key", "label", "value"], "additionalProperties": false,
+      "properties": { "key": { "type": "string" }, "label": { "type": "string" }, "value": { "type": ["number", "string"] } } } },
+    "files": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" } }
+  }
+}

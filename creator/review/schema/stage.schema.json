@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "yc-review-stage/1",
+  "title": "K3 review/<N>.json(段 N の最後の判断。段の道具が次の段の前に読む)",
+  "type": "object",
+  "required": ["schema", "id", "n", "key", "gate", "decision", "by", "round", "request_id", "note", "tags", "feedback", "at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "enum": ["yc-review-stage/1"] },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]{1,32}$" },
+    "n": { "type": "integer", "minimum": 0, "maximum": 7 },
+    "key": { "enum": ["draw", "look", "shape", "material", "texture", "rig", "motion", "talk"] },
+    "gate": { "type": ["string", "null"], "enum": ["C0", "C1", "C2", "C3", "C5", null] },
+    "decision": { "enum": ["ok", "auto", "redo"] },
+    "by": { "enum": ["human", "none"] },
+    "round": { "type": "integer", "minimum": 0 },
+    "request_id": { "type": ["string", "null"] },
+    "note": { "type": ["string", "null"], "maxLength": 40 },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "feedback": { "type": ["string", "null"] },
+    "at": { "type": "string" }
+  }
+}

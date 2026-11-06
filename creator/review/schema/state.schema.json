@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "yc-review/1",
+  "title": "K3 state.json(Claude → 画面。review_state.py だけが書く)",
+  "type": "object",
+  "required": ["schema", "id", "name", "rev", "created_at", "updated_at", "words", "original", "stages", "gates", "current", "done", "history"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "enum": ["yc-review/1"] },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]{1,32}$" },
+    "name": { "type": "string", "maxLength": 40 },
+    "rev": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "words": { "type": ["string", "null"], "maxLength": 200 },
+    "original": { "type": ["object", "null"], "required": ["file", "sha256"], "additionalProperties": false,
+      "properties": { "file": { "type": "string" }, "sha256": { "type": "string" } } },
+    "stages": { "type": "array", "minItems": 8, "maxItems": 8, "items": {
+      "type": "object", "required": ["n", "key", "label", "status", "round"], "additionalProperties": false,
+      "properties": {
+        "n": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "key": { "enum": ["draw", "look", "shape", "material", "texture", "rig", "motion", "talk"] },
+        "label": { "type": "string" },
+        "status": { "enum": ["todo", "running", "waiting", "done", "auto", "failed", "stale"] },
+        "round": { "type": "integer", "minimum": 0 },
+        "note": { "type": ["string", "null"], "maxLength": 80 }
+      } } },
+    "gates": { "type": "object", "required": ["C0", "C2", "C3", "C5"], "additionalProperties": false,
+      "properties": { "C0": { "$ref": "#/$defs/gate" }, "C2": { "$ref": "#/$defs/gate" }, "C3": { "$ref": "#/$defs/gate" }, "C5": { "$ref": "#/$defs/gate" } } },
+    "current": { "type": "object", "required": ["stage", "activity", "since"], "additionalProperties": false,
+      "properties": { "stage": { "type": ["integer", "null"] }, "activity": { "type": ["string", "null"], "maxLength": 80 }, "since": { "type": ["string", "null"] } } },
+    "done": { "type": "boolean" },
+    "history": { "type": "array", "maxItems": 50, "items": { "type": "object", "required": ["at", "gate", "round", "result", "request_id"], "additionalProperties": false,
+      "properties": { "at": { "type": "string" }, "gate": { "type": "string" }, "round": { "type": "integer" },
+        "result": { "enum": ["ok", "redo", "rejected"] }, "request_id": { "type": "string" }, "reason": { "type": ["string", "null"] } } } }
+  },
+  "$defs": {
+    "gate": { "type": "object", "required": ["stages", "status", "round", "ticket", "bundle", "bundle_hash", "decided", "notice"], "additionalProperties": false,
+      "properties": {
+        "stages": { "type": "array", "items": { "type": "integer" } },
+        "status": { "enum": ["none", "waiting", "ok", "redo"] },
+        "round": { "type": "integer", "minimum": 0 },
+        "ticket": { "type": ["string", "null"] },
+        "bundle": { "type": ["string", "null"] },
+        "bundle_hash": { "type": ["string", "null"] },
+        "decided": { "type": ["object", "null"] },
+        "notice": { "type": ["string", "null"], "maxLength": 120 }
+      } }
+  }
+}
