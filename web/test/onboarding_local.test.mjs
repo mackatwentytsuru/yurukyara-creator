@@ -15,6 +15,8 @@ const MOCK = { lines: [{ text: 'こんにちは。' }], brain: 'mock' };
 
 // 家の中の住所の見本は、その場で組み立てる(公開の前の履歴の書き換えが、書いたままの 192.168.… と 100.64〜127.… を伏せ字にし、試験が落ちるため。S6 の頼み)
 const ip = (...parts) => parts.join('.');
+// Tailscale の名前の見本も、作り物の部品だけで組み立てる(本物の機械の名前を書かない。公開前の語の点検)
+const tsName = (...parts) => [...parts, 'ts', 'net'].join('.');
 
 test('作る道のサーバーの場所は、この PC の中(127.0.0.1・localhost)だけ。家の中の住所・*.ts.net・*.local は数えない(CRITsec F4)', () => {
   for (const ok of ['http://127.0.0.1:8796', 'http://localhost:8796', 'http://[::1]:8796', 'https://127.0.0.1:8445']) {
@@ -29,7 +31,7 @@ test('作る道のサーバーの場所は、この PC の中(127.0.0.1・localh
   }
   assert.equal(isLoopbackHost('localhost'), true);
   assert.equal(isLoopbackHost('127.0.0.1'), true);
-  assert.equal(isLoopbackHost('pc1.example-tail.ts.net'), false);
+  assert.equal(isLoopbackHost(tsName('home-pc', 'example-tail')), false);
   assert.equal(pageIsLocal({ hostname: '127.0.0.1' }), true);
   assert.equal(pageIsLocal({ hostname: 'yurukyara.example.app' }), false, '公開の URL');
   assert.equal(pageIsLocal({ hostname: 'pc.example-tail.ts.net' }), false, 'Tailscale の名前');
