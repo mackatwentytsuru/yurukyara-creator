@@ -5,6 +5,7 @@ import http.client
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -195,6 +196,72 @@ class ServerTest(Base):
         r, _ = self.req("GET", "/api/review/file/C0/r1/right.svg")
         self.assertEqual(r.status, 200)
         self.assertIn("sandbox", r.getheader("Content-Security-Policy"))
+
+
+def _can_bind(addr):
+    s = socket.socket()
+    try:
+        s.bind((addr, 0))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+class BindTest(Base):
+    """--lan・--bind の時も、この PC のブラウザの 127.0.0.1 の /qr で QR が出る(撮影の手順の 1 歩目)。
+    LAN のアドレスの代わりに 127.0.0.2 でまねる(本物の網に出さない。127.0.0.2 に待てない OS では飛ばす)。"""
+
+    ADDR = "127.0.0.2"
+
+    def setUp(self):
+        if not _can_bind(self.ADDR):
+            self.skipTest(f"{self.ADDR} に待てない OS")
+        super().setUp()
+        env = dict(os.environ, YC_REVIEW_TEST="1", YC_REVIEW_TOKEN=TOKEN)
+        self.proc = subprocess.Popen([sys.executable, str(REVIEW / "serve_review.py"), "t1", "--port", "0", "--bind", self.ADDR],
+                                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+        self.out = ""
+        while "PORT" not in self.out:
+            line = self.proc.stdout.readline()
+            if not line:
+                raise RuntimeError("サーバーが起きない: " + self.proc.stderr.read())
+            self.out += line
+        self.port = int(self.out.split("PORT ")[1].split()[0])
+
+    def tearDown(self):
+        self.proc.kill()  # 自分で起こした PID だけ
+        self.proc.wait(5)
+        self.proc.stdout.close()
+        self.proc.stderr.close()
+        super().tearDown()
+
+    def get(self, ip, path):
+        c = http.client.HTTPConnection(ip, self.port, timeout=10)
+        c.request("GET", path, headers={"Host": f"{ip}:{self.port}"})
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r, data
+
+    def test_qr_opens_on_this_pc_and_points_to_bound_address(self):
+        r, data = self.get("127.0.0.1", "/qr")
+        self.assertEqual(r.status, 200, "この PC の 127.0.0.1 の /qr が開けない")
+        self.assertIn(f"http://{self.ADDR}:{self.port}/k?k=", data.decode("utf-8"), "QR の行き先は待っているアドレス")
+        self.assertNotIn(TOKEN, self.out)
+
+    def test_bound_address_serves_phone_but_not_qr(self):
+        r, _ = self.get(self.ADDR, "/api/review/health")
+        self.assertEqual(r.status, 200)
+        r, _ = self.get(self.ADDR, "/qr")
+        self.assertEqual(r.status, 404, "QR はこの PC の 127.0.0.1 だけ")
+        r, _ = self.get(self.ADDR, f"/k?k={TOKEN}")
+        self.assertEqual(r.status, 303)
+
+    def test_loopback_is_not_trusted_when_bound_outside(self):
+        r, _ = self.get("127.0.0.1", "/api/review/state")
+        self.assertEqual(r.status, 401, "外へ待つ時は、この PC からでも合言葉が要る")
 
 
 if __name__ == "__main__":

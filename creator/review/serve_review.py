@@ -3,6 +3,7 @@
 使い方: python creator/review/serve_review.py <id> [--port 8796] [--lan | --bind <アドレス>] [--hours 8]
         python creator/review/serve_review.py --make [--web http://localhost:5173] [--allow-origin <元>…] [--port 8796]
 - 既定は 127.0.0.1 だけで待つ。--lan は外へ出る道のアドレス、--bind は決めたアドレス(0.0.0.0 にはしない)。
+  --lan・--bind の時も、この PC の QR の画面のため、同じ番号で 127.0.0.1 にも待つ(127.0.0.1 からは読むにも合言葉が要る)。
 - 合言葉は起動のたびに作り、画面にも記録にも出さない。この PC のブラウザで http://127.0.0.1:<番号>/qr を開くと、
   スマホで読む QR と入口の URL が出る(その画面にだけ)。
 - 書いてよいのは request.json と make.json だけ(K3。creator/review/schema/README.md)。state.json は読むだけ
@@ -503,11 +504,26 @@ def main(argv=None):
         print(f"番号 {args.port} はほかの物が使っています。--port で別の番号にしてください", file=sys.stderr)
         return 2
     port = srv.server_address[1]
+    # --lan・--bind の時も、QR の画面(/qr)はこの PC のブラウザの 127.0.0.1 で開く(/qr は 127.0.0.1 から来た時だけ出す)。
+    # 外へ出るアドレスだけで待つと、127.0.0.1 の /qr に届かない(つながらない)。同じ番号で 127.0.0.1 にも待つ(撮影の練習で見つけた)
+    local_srv = None
+    if srv.server_address[0] != "127.0.0.1":
+        try:
+            local_srv = ExclusiveServer(("127.0.0.1", port), None)
+        except OSError:
+            srv.server_close()
+            os.close(fd)
+            os.remove(lock_p)
+            print(f"番号 {port} は、この PC の 127.0.0.1 でほかの物が使っています。--port で別の番号にしてください", file=sys.stderr)
+            return 2
     hosts = [f"127.0.0.1:{port}", f"localhost:{port}"] if bind == "127.0.0.1" else [f"{bind}:{port}"]
     if bind != "127.0.0.1":
         hosts = [f"127.0.0.1:{port}", f"localhost:{port}"] + hosts
-    srv.RequestHandlerClass = make_handler(Current(args.id, args.make), gate, threading.Lock(), hosts, bind != "127.0.0.1", port,
-                                           allow=origins, web=args.web)
+    handler = make_handler(Current(args.id, args.make), gate, threading.Lock(), hosts, bind != "127.0.0.1", port,
+                           allow=origins, web=args.web)
+    srv.RequestHandlerClass = handler
+    if local_srv:
+        local_srv.RequestHandlerClass = handler
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(json.dumps({"pid": os.getpid(), "port": port, "id": args.id, "at": rs.now_iso()}))
     where = "この PC の中だけ" if bind == "127.0.0.1" else "同じネットワークの中だけ"
@@ -515,11 +531,19 @@ def main(argv=None):
     print(f"PORT {port}")
     print(f"スマホで開くには、この PC のブラウザで http://127.0.0.1:{port}/qr を開き、QR を読んでください。")
     print("合言葉は、その画面にだけ出し、記録しません。止めるときは Ctrl+C。", flush=True)
+    local_thread = None
     try:
+        if local_srv:
+            local_thread = threading.Thread(target=local_srv.serve_forever, name="review-local", daemon=True)
+            local_thread.start()
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if local_thread:
+            local_srv.shutdown()  # 動かした時だけ(動かしていないのに呼ぶと待ち続ける)
+        if local_srv:
+            local_srv.server_close()
         srv.server_close()
         try:
             os.remove(lock_p)
