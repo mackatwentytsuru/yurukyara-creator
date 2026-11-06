@@ -1,7 +1,7 @@
 #!/bin/sh
 # 試験の 1 段を、作業役の申告ではなく同じ物差しで測る。
 # 使い方: sh eval_stage.sh <段の名前> <.blend の相対パス(段のフォルダの中)> [pack の glb を含む .blend ではなく、正面を撮る blend]
-# 出力: <段>/verify/{shot_front.png, cmp.png}、<段>/judge/{cmp.png, dir8.png, motion.png}(あれば。判定は別途 oc_web.ps1)
+# 出力: <段>/verify/{shot_front.png, cmp.png}、<段>/judge/{cmp.png, dir8.png, motion.png}(あれば。判定は別に流す)
 STAGE=$1; BL=$2
 CHAR=${CHAR:-g_bighead}
 ENV_SH="$0"; . "$(dirname "$0")/../env.sh"

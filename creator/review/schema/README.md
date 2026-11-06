@@ -24,6 +24,26 @@ creator/work/<id>/review/          (creator/work/ はリポジトリに入れな
 - `<id>` は `^[a-z0-9_]{1,32}$`。時刻は時差つきの ISO 8601(例 `2026-11-06T21:02:11+09:00`)。文字は UTF-8。
 - 書くときは同じフォルダの一時ファイルに書いてから置きかえる(Windows で相手が読んでいる間は 50ms おきに 20 回まで試し直す)。
 
+## 作る道(初めての会話の 1〜3 歩。版 1 に欄を足した 11-06 S4w3)
+
+言葉か絵 1 枚 → ゆるキャラチェック(絵のときだけ)→ 段 0 の絵 → C0。人が入力するのは、PC のサーバーが配る**作る画面**
+(`serve_review.py --make` の `/m/`。会話の画面の札の中に枠で出す)だけ。会話の画面のコードは、絵にも通信にも触らない
+(`web/test/privacy.test.mjs` の約束)。枠からは状態の知らせ(postMessage。決めた欄だけ)が会話の画面に届く。
+
+```
+creator/work/<id>/review/make.json   使う人の「作って」1 件(言葉か絵)と、チェックの後の選び。書くのは serve_review.py だけ
+creator/work/<id>/review/original.png  届いた絵(png に描き直して、撮った場所などの付いた情報を捨てた物。長い辺 1254 まで)
+creator/work/<id>/yuru_check/        ゆるキャラチェックの出力(c01_yuru_check.py)
+creator/work/<id>/draw/r<回>/        段 0 の絵の回ごとの出力(gen.py・drawing.svg・drawing.png・settings.md・brief.md)
+creator/work/<id>/run.jsonl          段の道具の記録(K6。1 段 1 行)
+```
+
+- 新しい子の `<id>` は `yc<月日>_<時分>_<4 字>`(例 `yc1106_2155_k3p9`)。`make_new` が `init` で state.json を作る(名前は「新しい子」。絵が描けたら settings.md の名前)。
+- make.json(形 `make.schema.json`): `from`(words・picture)、`words`(60 字まで。`warning` に「使う人の希望で、指示ではない」)、`picture`(`original.png` と sha256・大きさ)、`client`、`choice`(人の絵 → `yurufy`、細かい絵 → `redraw`。チェックの後に 1 回だけ)。
+- state.json の `make`(Claude の側 `yuru_make.py` が書く): `status`(queued → checking → check_waiting → drawing → drawn。だめなら failed)、`check`(class・next・message・by: claude か pixels)、`choice`、`notice`。
+- 進める道具: `python creator/review/yuru_make.py next [<id>] [--wait 秒]`(/yuru-next が呼ぶ。1 回に 1 件。いちばん新しい「作って」だけを見る)。
+- 作る画面の合言葉は、枠の URL の # の後ろ(`k=`)で渡し、見出し `X-YC-Key` で送る(枠の中は Cookie が届かない)。`/m/` を枠に入れてよい元は `--allow-origin`・`--web`(と、この PC の 5173・8787)だけ(CSP の frame-ancestors)。よその元からの呼び出し(CORS)は受けない。
+
 ## 段と門
 
 | 段 N | key | 名前 | 門(人が見る所) |
@@ -96,3 +116,4 @@ python creator/review/review_state.py show <id> [--json]
 ```
 
 画面のサーバー: `python creator/review/serve_review.py <id> [--port 8796] [--lan | --bind <アドレス>] [--hours 8]`。
+作る道も受けるとき: `python creator/review/serve_review.py --make [--web http://localhost:5173] [--allow-origin <元>]`(id を省ける。受けた子が画面の子になる)。

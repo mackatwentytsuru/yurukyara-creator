@@ -1,40 +1,11 @@
-// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ・合言葉。
+// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ・短い知らせ(ui.notice)。
+// 合言葉(契約 K5)は会話の側の web/src/conversation/demoPass.js が 1 か所で持つ(会話と記憶の通信が同じ値を読む)。
 const $ = (id) => document.getElementById(id);
-
-/* ---------- 合言葉(契約 K5) ---------- */
-// 公開の URL で本物の頭脳を使うための合言葉。画面の入力欄で受け、URL には入れない。
-// このタブの中だけに持つ(sessionStorage。使えない時は、開いている間だけ)。会話の見出し x-demo-pass で送る。
-const PASS_STORE = 'yc.demoPass';
-const PASS_MAX = 200;
-let passMemo = '';
-
-export function getDemoPass() {
-  try {
-    return sessionStorage.getItem(PASS_STORE) ?? passMemo;
-  } catch {
-    return passMemo;
-  }
-}
-
-export function setDemoPass(value) {
-  passMemo = String(value ?? '').trim().slice(0, PASS_MAX);
-  try {
-    if (passMemo) sessionStorage.setItem(PASS_STORE, passMemo);
-    else sessionStorage.removeItem(PASS_STORE);
-  } catch {
-    // 保存が使えない窓: 開いている間だけ覚える
-  }
-  return passMemo;
-}
-
-/** 会話の通信に付ける見出し(合言葉が無ければ空) */
-export function demoPassHeaders() {
-  const p = getDemoPass();
-  return p ? { 'x-demo-pass': p } : {};
-}
 
 /** 仮の頭脳の知らせの決まりの文(理由が分からない時) */
 export const FALLBACK_BRAIN_NOTICE = '仮の頭脳です(本物の頭脳につながっていません)';
+/** 短い知らせを出しておく時間 */
+const NOTICE_MS = 6000;
 
 const STAGE_LABEL = {
   greet: '声かけ',
@@ -65,6 +36,7 @@ export function createUi() {
     foot: $('tFoot'),
   };
   let captionTimer = null;
+  let noticeTimer = null;
   let replyParts = [];
   let actParts = [];
   let mirror = null; // VR の中の板へも同じ文字を渡す
@@ -211,6 +183,21 @@ export function createUi() {
       if (!el) return;
       el.hidden = !text;
       el.textContent = text ?? '';
+    },
+    /**
+     * 会話の側(Dialogue)からの短い知らせ(鍵らしい文字を送らなかった、など)。数秒で消える。
+     * 仮の頭脳の知らせと同じ文は、字幕の上にもう出ているので重ねない。文字は textContent だけで入れる
+     */
+    notice(text) {
+      const el = $('uiNotice');
+      const brain = $('brainNotice');
+      if (!el || !text || (brain && !brain.hidden && brain.textContent === text)) return;
+      clearTimeout(noticeTimer);
+      el.textContent = text;
+      el.hidden = false;
+      noticeTimer = setTimeout(() => {
+        el.hidden = true;
+      }, NOTICE_MS);
     },
   };
 }

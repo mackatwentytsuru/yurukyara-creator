@@ -38,6 +38,10 @@ export const CSS = `
 .fr-line.user { grid-template-columns: minmax(0, 1fr); justify-items: end; }
 .fr-line.user .fr-bubble { max-width: 85%; border-radius: 16px 4px 16px 16px; background: rgba(125,98,255,0.24); border-color: rgba(183,168,255,0.45); }
 .fr-pic { display: block; max-width: 100%; max-height: 160px; margin-top: 6px; border-radius: 10px; object-fit: contain; background: #fff; }
+.fr-frame-wrap { display: grid; }
+.fr-frame { display: block; width: 100%; height: min(400px, 48vh); border: 1px solid var(--fr-line); border-radius: 14px; background: #fffdf8; }
+.fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] { max-height: min(88vh, 760px); }
+@supports (height: 1dvh) { .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] { max-height: min(88dvh, 760px); } .fr-frame { height: min(400px, 48dvh); } }
 .fr-note { margin: 0 0 0 40px; font-size: 13px; line-height: 1.55; color: var(--fr-muted); overflow-wrap: anywhere; }
 .fr-actions { padding: 10px 14px 14px; display: grid; gap: 8px; border-top: 1px solid var(--fr-line); }
 .fr-actions:empty { display: none; }

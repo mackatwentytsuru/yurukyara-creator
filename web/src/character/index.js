@@ -2,9 +2,10 @@ import { loadVrm } from './vrmCharacter.js';
 // 人型でないキャラ(type: "rig")は、キャラの柱が作った読み込み(creator/viewer/rigRuntime.js)を使う。
 // CharacterBase を継いでいるので、lookAt・setExpression・setMouth・play・update は VRM と同じ呼び方。
 import { loadRigCharacter } from '../../../creator/viewer/rigRuntime.js';
+// 既定のキャラの順(主役ノリー → ようこそくん)と主役。試験できるよう、別の小さな部品に置いてある
+import { DEFAULT_CHARACTERS, MAIN_CHARACTER, loadFirstOf } from './defaults.js';
 
-/** 何も指定が無い時に出すキャラ。先頭から、読めた物を使う(主役 → 作例) */
-export const DEFAULT_CHARACTERS = Object.freeze(['tegaki_neko', 'yokoso']);
+export { DEFAULT_CHARACTERS, MAIN_CHARACTER };
 
 /** characters/<id>/ の id、または character.json の URL、または .vrm の URL を、URL にする */
 export function characterUrl(spec) {
@@ -102,22 +103,16 @@ export async function loadCharacter(url, overrides = {}) {
 }
 
 /**
- * ?character= が無い時: DEFAULT_CHARACTERS を順に試し、最初に読めたキャラを返す。
+ * ?character= が無い時: DEFAULT_CHARACTERS(主役ノリー → ようこそくん)を順に試し、最初に読めたキャラを返す。
+ * 主役の characters/norrie がまだ無い木では、404 が 1 回出て、ようこそくんになる。
  * 指定がある時は、そのキャラだけ(読めなければ理由を出す)。
  * @returns {Promise<{character: object, id: string|null}>}
  */
 export async function loadFirstCharacter(spec, overrides = {}) {
   if (spec) return { character: await loadCharacter(characterUrl(spec), overrides), id: spec };
-  let lastErr = null;
-  for (const id of DEFAULT_CHARACTERS) {
-    try {
-      return { character: await loadCharacter(characterUrl(id), overrides), id };
-    } catch (err) {
-      lastErr = err;
-      console.info(`既定のキャラ ${id} は出せませんでした: ${err.message}`);
-    }
-  }
-  throw lastErr ?? new Error('出せるキャラがありません');
+  return loadFirstOf(DEFAULT_CHARACTERS, (id) => loadCharacter(characterUrl(id), overrides), (id, err) =>
+    console.info(`既定のキャラ ${id} は出せませんでした: ${err.message}`),
+  );
 }
 
 /** そのキャラが実際に使える動きの名前(Claude に選ばせる一覧)。idle と talk は自動なので外す。2D の板は 3D と同じ手続きの動きが全部動く */
