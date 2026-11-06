@@ -147,3 +147,66 @@ describe('鍵の見張り(check-secrets)', () => {
     assert.ok(existsSync(join(proj, 'log.jsonl')));
   });
 });
+
+describe('鍵の見張り: リポジトリの中だけを見る(CLAUDE_PROJECT_DIR)', () => {
+  const proj = tmp('yc-in-');
+  const outside = tmp('yc-out-'); // リポジトリの外(作業の板やメモの代わり)
+  const terms = put(proj, 'terms.local.txt', '# 試験の語\nひみつ村\ncs:SHOPX\nrei:\\btripo(?!d)\n');
+  const env = (more = {}) => ({ CLAUDE_PROJECT_DIR: proj, PREPUSH_TERMS: terms, YC_HOOK_LOG: join(outside, 'log.jsonl'), ...more });
+  const fakeKey = ['sk', 'ant', 'api03', 'y'.repeat(30)].join('-'); // 試験だけの偽の鍵(形だけ)
+  const call = (tool_name, tool_input, more, extra = {}) => run(SECRETS, { hook_event_name: 'PreToolUse', tool_name, tool_input, ...extra }, env(more));
+
+  test('中: 絶対パスでも鍵と語を止める(Write・Edit・MultiEdit)', () => {
+    assert.equal(call('Write', { file_path: join(proj, 'docs', 'a.md'), content: `k=${fakeKey}` }).code, 2);
+    assert.equal(call('Edit', { file_path: join(proj, 'b.md'), old_string: 'x', new_string: 'ひみつ村' }).code, 2);
+    assert.equal(call('MultiEdit', { file_path: join(proj, 'c.md'), edits: [{ new_string: 'SHOPX' }] }).code, 2);
+    assert.equal(call('Write', { file_path: join(proj, 'web', '.env'), content: 'A=1' }).code, 2);
+  });
+  test('外: 鍵らしい文字列・語・.env があっても通す(記録に入らない)', () => {
+    assert.equal(call('Write', { file_path: join(outside, 'board.md'), content: `ひみつ村 SHOPX ${fakeKey}` }).code, 0);
+    assert.equal(call('Edit', { file_path: join(outside, 'note.md'), old_string: 'x', new_string: 'ひみつ村' }).code, 0);
+    assert.equal(call('MultiEdit', { file_path: join(outside, 'm.md'), edits: [{ new_string: 'SHOPX' }] }).code, 0);
+    assert.equal(call('Write', { file_path: join(outside, '.env'), content: 'A=1' }).code, 0);
+  });
+  test('外: 名前が同じ頭の隣のフォルダ(<根>-x)と、.. で外へ出る相対パスは外とみなす', () => {
+    const sibling = `${proj}-x`;
+    mkdirSync(sibling, { recursive: true });
+    temps.push(sibling);
+    assert.equal(call('Write', { file_path: join(sibling, 'a.md'), content: 'ひみつ村' }).code, 0);
+    assert.equal(call('Write', { file_path: join('..', 'up.md'), content: 'ひみつ村' }).code, 0);
+  });
+  test('中: 相対パスは cwd から見る(cwd が中なら止め、外なら通す)', () => {
+    assert.equal(call('Write', { file_path: 'r.md', content: 'ひみつ村' }, {}, { cwd: join(proj, 'web') }).code, 2);
+    assert.equal(call('Write', { file_path: 'r.md', content: 'ひみつ村' }, {}, { cwd: outside }).code, 0);
+    assert.equal(call('Write', { file_path: 'r.md', content: 'ひみつ村' }).code, 2); // cwd が無ければ根から見る
+  });
+  test('中: 書く先が分からない時は、念のため見る', () => {
+    assert.equal(call('Write', { content: 'ひみつ村' }).code, 2);
+  });
+  test('rei: の行(区別しない正規表現)も見る。似た語(tripod)は通す', () => {
+    assert.equal(call('Write', { file_path: join(proj, 'd.md'), content: 'Tripo で作った' }).code, 2);
+    assert.equal(call('Write', { file_path: join(proj, 'd.md'), content: 'solve_tripod と Tripod は別の語' }).code, 0);
+  });
+  test('読めない正規表現の行があれば、中のファイルは止める', () => {
+    const bad = put(outside, 'bad.local.txt', 're:([\n');
+    const r = call('Write', { file_path: join(proj, 'e.md'), content: 'ふつうの文' }, { PREPUSH_TERMS: bad });
+    assert.equal(r.code, 2);
+    assert.match(r.err, /読めない行/);
+  });
+  if (process.platform === 'win32') {
+    test('中: Windows では大文字と小文字・区切りの違いがあっても中とみなす', () => {
+      const shouted = join(proj.toUpperCase(), 'f.md').replace(/\\/g, '/');
+      assert.equal(call('Write', { file_path: shouted, content: 'ひみつ村' }).code, 2);
+    });
+  }
+  test('Bash の git commit の見張りは今までどおり(リポジトリの差分を見る)', () => {
+    const repo = tmp('yc-in-git-');
+    const git = (...a) => spawnSync('git', ['-C', repo, ...a], { encoding: 'utf8' });
+    git('init', '-q');
+    put(repo, 'bad.txt', `ひみつ村 ${fakeKey}\n`);
+    git('add', 'bad.txt');
+    const r = call('Bash', { command: 'git commit -m x' }, { CLAUDE_PROJECT_DIR: repo });
+    assert.equal(r.code, 2);
+    assert.match(r.err, /bad\.txt/);
+  });
+});

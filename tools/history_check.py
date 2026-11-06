@@ -2,6 +2,7 @@
 
 使い方: python tools/history_check.py [--terms 語の一覧.txt] [--json 出力.json]
   語の一覧: 1 行に 1 語。人名など、リポジトリに書けない語を書く。tools/history_terms.local.txt(リポジトリに入れない)を自動で読む。
+  形は tools/termlist.py(cs: は大文字と小文字を区別、re:・rei: は正規表現)。
 見る物: 全コミットで足された行と、コミットの本文。バイナリ(画像・GLB など)の中身は見ない。
 出す物: 語ごとの件数、最初に現れたコミットとファイル。行の中身は表示しない(鍵を画面に出さないため)。
 終わりの番号: 0 = 何もなし、1 = 見つかった(止めて報告する)、2 = 動かせない。
@@ -11,6 +12,8 @@ import os
 import re
 import subprocess
 import sys
+
+import termlist
 
 # 鍵の形。誤検知を減らすため、長さを見る
 KEY_PATTERNS = {
@@ -27,8 +30,8 @@ LOCAL_TERMS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history_
 
 
 def load_terms(path):
-    with open(path, encoding="utf-8") as f:
-        return [t.strip() for t in f if t.strip() and not t.startswith("#")]
+    """語の一覧の行(形は tools/termlist.py。cs:・re:・rei: も読む)"""
+    return termlist.read_lines(path)
 
 
 def scan(patterns):
@@ -76,7 +79,11 @@ def main():
     if "--json" in a:
         out = a[a.index("--json") + 1]
     patterns = {k: re.compile(v) for k, v in KEY_PATTERNS.items()}
-    patterns.update({t: re.compile(re.escape(t), re.I) for t in terms})
+    try:
+        patterns.update({t: termlist.compile_term(t) for t in terms})
+    except re.error as e:
+        print(f"語の一覧に、正規表現として読めない行があります: {e.msg}")
+        sys.exit(2)
     found, commits = scan(patterns)
     print(f"点検したコミット {commits} 件、探した物 {len(patterns)} 種類(鍵の形 {len(KEY_PATTERNS)}、語 {len(terms)})")
     for name, row in sorted(found.items(), key=lambda kv: -kv[1]["count"]):
