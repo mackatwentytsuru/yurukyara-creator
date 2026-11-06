@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "yokoso",
+  "svg": "body.svg",
+  "viewBox": [0, 0, 1000, 1000],
+  "heightM": 1.0,
+  "pxPerUnit": 1,
+  "waist": [500, 880],
+  "parts": {
+    "shadow": { "box": [260, 900, 480, 100], "z": 0, "upper": false },
+    "feet": { "box": [340, 822, 320, 136], "z": 1, "upper": false },
+    "arm_r": { "box": [232, 620, 182, 230], "pivot": [382, 650], "z": 2 },
+    "arm_l": { "box": [586, 620, 182, 230], "pivot": [618, 650], "z": 2 },
+    "body": { "box": [295, 580, 410, 330], "pivot": [500, 880], "z": 3 },
+    "head": { "box": [220, 60, 560, 560], "pivot": [500, 600], "z": 5 }
+  },
+  "face": {
+    "eyes": { "box": [355, 245, 290, 160] },
+    "brows": { "box": [355, 190, 290, 72] },
+    "mouth": { "box": [436, 398, 128, 102] }
+  },
+  "blink": { "noBlink": ["happy", "relaxed"] },
+  "expressionFallback": {}
+}

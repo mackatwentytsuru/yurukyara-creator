@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+<!-- ようこそくん 2D。部品は <g id> で分ける。顔は face.<表情>.<枠>(枠 = eyes・brows・mouth_closed・mouth_half・mouth_open)。
+     Claude が描いた(2026-11-06)。体の部品を直したときは creator/d2/check_parts.mjs で顔以外のハッシュを比べる。 -->
+<defs>
+  <radialGradient id="gGreen" cx="0.5" cy="0.5" r="0.6" fx="0.38" fy="0.28">
+    <stop offset="0" stop-color="#e6f59a"/>
+    <stop offset="0.45" stop-color="#a8d63a"/>
+    <stop offset="1" stop-color="#6a9c1a"/>
+  </radialGradient>
+  <linearGradient id="gSash" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#f05a48"/>
+    <stop offset="1" stop-color="#c8202a"/>
+  </linearGradient>
+  <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7"/></filter>
+  <filter id="softBig" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="12"/></filter>
+</defs>
+
+<g id="shadow">
+  <ellipse cx="500" cy="950" rx="200" ry="16" fill="#000" opacity="0.28" filter="url(#softBig)"/>
+</g>
+
+<g id="feet">
+  <ellipse cx="440" cy="868" rx="34" ry="40" fill="url(#gGreen)"/>
+  <ellipse cx="560" cy="868" rx="34" ry="40" fill="url(#gGreen)"/>
+  <ellipse cx="425" cy="912" rx="78" ry="40" fill="url(#gGreen)"/>
+  <ellipse cx="575" cy="912" rx="78" ry="40" fill="url(#gGreen)"/>
+</g>
+
+<g id="arm_r">
+  <ellipse cx="352" cy="705" rx="46" ry="72" transform="rotate(32 352 705)" fill="url(#gGreen)"/>
+  <circle cx="300" cy="782" r="60" fill="url(#gGreen)"/>
+</g>
+
+<g id="arm_l">
+  <ellipse cx="648" cy="705" rx="46" ry="72" transform="rotate(-32 648 705)" fill="url(#gGreen)"/>
+  <circle cx="700" cy="782" r="60" fill="url(#gGreen)"/>
+</g>
+
+<g id="body">
+  <ellipse cx="500" cy="745" rx="175" ry="158" fill="url(#gGreen)"/>
+  <g transform="rotate(28 500 760)">
+    <rect x="300" y="725" width="400" height="70" rx="6" fill="url(#gSash)"/>
+    <line x1="308" y1="734" x2="692" y2="734" stroke="#fff" stroke-width="3" stroke-dasharray="12 9" opacity="0.85"/>
+    <line x1="308" y1="786" x2="692" y2="786" stroke="#fff" stroke-width="3" stroke-dasharray="12 9" opacity="0.85"/>
+    <text x="520" y="779" text-anchor="middle" font-size="50" font-weight="700" fill="#fff" font-family="Hiragino Maru Gothic ProN, Yu Gothic, Meiryo, sans-serif">ようこそ</text>
+  </g>
+</g>
+
+<g id="head">
+  <circle cx="500" cy="340" r="275" fill="url(#gGreen)"/>
+  <ellipse cx="420" cy="175" rx="95" ry="55" fill="#fff" opacity="0.35" filter="url(#soft)"/>
+  <ellipse cx="338" cy="440" rx="46" ry="29" fill="#ff98ad" opacity="0.85" filter="url(#soft)"/>
+  <ellipse cx="662" cy="440" rx="46" ry="29" fill="#ff98ad" opacity="0.85" filter="url(#soft)"/>
+</g>
+
+<!-- 目 -->
+<g id="face.neutral.eyes">
+  <ellipse cx="405" cy="320" rx="34" ry="52" fill="#141418"/><circle cx="393" cy="300" r="11" fill="#fff"/>
+  <ellipse cx="595" cy="320" rx="34" ry="52" fill="#141418"/><circle cx="583" cy="300" r="11" fill="#fff"/>
+</g>
+<g id="face.happy.eyes" fill="none" stroke="#141418" stroke-width="13" stroke-linecap="round">
+  <path d="M372 332 Q405 282 438 332"/><path d="M562 332 Q595 282 628 332"/>
+</g>
+<g id="face.surprised.eyes">
+  <ellipse cx="405" cy="318" rx="40" ry="60" fill="#141418"/><circle cx="392" cy="296" r="13" fill="#fff"/>
+  <ellipse cx="595" cy="318" rx="40" ry="60" fill="#141418"/><circle cx="582" cy="296" r="13" fill="#fff"/>
+</g>
+<g id="face.sad.eyes">
+  <ellipse cx="405" cy="330" rx="30" ry="44" fill="#141418"/><circle cx="395" cy="314" r="9" fill="#fff"/>
+  <ellipse cx="595" cy="330" rx="30" ry="44" fill="#141418"/><circle cx="585" cy="314" r="9" fill="#fff"/>
+  <path d="M378 376 q-8 16 0 22 q8 -6 0 -22z" fill="#7cc8f0"/>
+</g>
+<g id="face.angry.eyes">
+  <path d="M371 300 L439 318 L439 350 Q405 385 371 350 Z" fill="#141418"/><circle cx="398" cy="332" r="8" fill="#fff"/>
+  <path d="M629 300 L561 318 L561 350 Q595 385 629 350 Z" fill="#141418"/><circle cx="588" cy="332" r="8" fill="#fff"/>
+</g>
+<g id="face.relaxed.eyes" fill="none" stroke="#141418" stroke-width="12" stroke-linecap="round">
+  <path d="M372 316 Q405 350 438 316"/><path d="M562 316 Q595 350 628 316"/>
+</g>
+<g id="face.think.eyes">
+  <ellipse cx="410" cy="314" rx="33" ry="50" fill="#141418"/><circle cx="420" cy="292" r="11" fill="#fff"/>
+  <ellipse cx="600" cy="314" rx="33" ry="50" fill="#141418"/><circle cx="610" cy="292" r="11" fill="#fff"/>
+</g>
+
+<!-- 眉(neutral・happy・relaxed は描かない) -->
+<g id="face.surprised.brows" fill="none" stroke="#3d5a12" stroke-width="10" stroke-linecap="round">
+  <path d="M370 232 Q405 200 440 232"/><path d="M560 232 Q595 200 630 232"/>
+</g>
+<g id="face.sad.brows" fill="none" stroke="#3d5a12" stroke-width="10" stroke-linecap="round">
+  <path d="M374 250 L438 226"/><path d="M562 226 L626 250"/>
+</g>
+<g id="face.angry.brows" fill="none" stroke="#3d5a12" stroke-width="11" stroke-linecap="round">
+  <path d="M370 222 L440 252"/><path d="M560 252 L630 222"/>
+</g>
+<g id="face.think.brows" fill="none" stroke="#3d5a12" stroke-width="10" stroke-linecap="round">
+  <path d="M374 246 L438 244"/><path d="M562 232 Q596 206 628 228"/>
+</g>
+
+<!-- 口 3 形 -->
+<g id="face.neutral.mouth_closed"><path d="M465 425 Q500 457 535 425" fill="none" stroke="#141418" stroke-width="8" stroke-linecap="round"/></g>
+<g id="face.neutral.mouth_half"><path d="M466 422 Q500 470 534 422 Q500 430 466 422 Z" fill="#4a1a1c" stroke="#141418" stroke-width="5" stroke-linejoin="round"/></g>
+<g id="face.neutral.mouth_open">
+  <path d="M460 416 Q500 488 540 416 Q500 426 460 416 Z" fill="#4a1a1c" stroke="#141418" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="500" cy="458" rx="18" ry="9" fill="#e8707a"/>
+</g>
+<g id="face.happy.mouth_closed"><path d="M450 418 Q500 472 550 418" fill="none" stroke="#141418" stroke-width="9" stroke-linecap="round"/></g>
+<g id="face.happy.mouth_half">
+  <path d="M452 416 Q500 478 548 416 Z" fill="#4a1a1c" stroke="#141418" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="500" cy="452" rx="16" ry="7" fill="#e8707a"/>
+</g>
+<g id="face.happy.mouth_open">
+  <path d="M446 410 Q500 494 554 410 Z" fill="#4a1a1c" stroke="#141418" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="500" cy="462" rx="22" ry="10" fill="#e8707a"/>
+</g>
+<g id="face.surprised.mouth_closed"><ellipse cx="500" cy="440" rx="12" ry="14" fill="#4a1a1c" stroke="#141418" stroke-width="5"/></g>
+<g id="face.surprised.mouth_half"><ellipse cx="500" cy="442" rx="17" ry="23" fill="#4a1a1c" stroke="#141418" stroke-width="5"/></g>
+<g id="face.surprised.mouth_open"><ellipse cx="500" cy="445" rx="23" ry="33" fill="#4a1a1c" stroke="#141418" stroke-width="5"/></g>
+<g id="face.sad.mouth_closed"><path d="M468 452 Q500 424 532 452" fill="none" stroke="#141418" stroke-width="8" stroke-linecap="round"/></g>
+<g id="face.sad.mouth_half"><path d="M470 456 Q500 420 530 456 Q500 446 470 456 Z" fill="#4a1a1c" stroke="#141418" stroke-width="5" stroke-linejoin="round"/></g>
+<g id="face.sad.mouth_open"><path d="M466 462 Q500 410 534 462 Q500 450 466 462 Z" fill="#4a1a1c" stroke="#141418" stroke-width="5" stroke-linejoin="round"/></g>
+<g id="face.angry.mouth_closed"><path d="M468 446 Q500 430 532 446" fill="none" stroke="#141418" stroke-width="8" stroke-linecap="round"/></g>
+<g id="face.angry.mouth_half">
+  <path d="M468 430 L532 430 L526 456 L474 456 Z" fill="#4a1a1c" stroke="#141418" stroke-width="5" stroke-linejoin="round"/>
+  <rect x="474" y="432" width="52" height="8" fill="#fff"/>
+</g>
+<g id="face.angry.mouth_open">
+  <path d="M462 424 L538 424 L530 468 L470 468 Z" fill="#4a1a1c" stroke="#141418" stroke-width="5" stroke-linejoin="round"/>
+  <rect x="470" y="427" width="60" height="10" fill="#fff"/>
+</g>
+<g id="face.relaxed.mouth_closed"><path d="M474 430 Q500 448 526 430" fill="none" stroke="#141418" stroke-width="8" stroke-linecap="round"/></g>
+<g id="face.think.mouth_closed"><path d="M470 446 Q485 434 500 444 Q515 454 530 440" fill="none" stroke="#141418" stroke-width="8" stroke-linecap="round"/></g>
+</svg>
