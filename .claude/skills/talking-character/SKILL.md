@@ -167,3 +167,18 @@ Claude を使わない部分(doctor → builder → 骨 → `check_all.sh` → `
 - **PNG にする**: `chrome.exe --headless=new --screenshot=out.png --window-size=1254,1254 --default-background-color=FFFFFFFF --disable-gpu --hide-scrollbars --user-data-dir=<空のフォルダ> file:///<svg を埋めた html の絶対パス>`(約 1 秒)。**`--user-data-dir` が無いと `Missing headless user data directory` で何も出ない**。相対パスの html は `ERR_FILE_NOT_FOUND` になる。
 - **描き直しの見どころ**: ① 顔が読めるか ② 左右の釣り合い ③ 手足が切れていないか(切れたら filter の領域) ④ 重なり順(字が腕に隠れた → 腕を帯より先に描く) ⑤ 色が沈んでいないか ⑥ 足元の影が外へはみ出していないか。ようこそくんは 4 回、ロボくんは 3 回描き直した。
 - **測れる形にしておく**: 部品の中心・半径は、SVG に書いた数字が builder の辞書 `D` の元になる。足元の影・白い文字・目のハイライトは、`s03_compare_core.silhouette` が体に数えるよう直した(色味のない明るい灰色の影を体から外し、体の中の白い穴は埋める)。
+
+## 段を新しい文脈の Claude に頼み、時間と量を run.jsonl に残す(2026-11-06)
+- `python creator/skilltest/stage_run.py claude --run <回のフォルダ> --char <id> --stage <N> --name <段> --model claude-sonnet-5-5 --prompt <頼みの文.md> --cwd <リポジトリ> --add-dir <作業フォルダ> --judge-dir <判定の出力の親>`。1 段 = run.jsonl の 1 行(start・end・sec・actor・cost_usd・tokens・ok・commit)。
+- **定額のプランで流す**: 親の `CLAUDE_CODE_*` と `ANTHROPIC_API_KEY`・`ELEVENLABS_API_KEY` を外す(API の請求にしない、声の費用も出さない)。`cost_usd` は claude -p の `total_cost_usd` で、**請求ではなく定価に直した目安**。中の判定役の分は `answers/_usage.jsonl` から足す。
+- 数段を 1 回で頼んだときは `--split <段の分け方.json>`(Bash の命令の形 → 段)で、段ごとの時間と量の割り当てを出す。② 形と ③ 材質は同じ builder の中で一緒に作るので分けられない。`run_groups.sh` は builder・骨・動きを 1 命令でするので、② に数えられる(目安)。
+- まとめ: `python creator/skilltest/stage_run.py sum --run <回のフォルダ>`。
+- 判定役も段の Claude も `--strict-mcp-config`(と判定は `--setting-sources project`)で、手元の MCP の道具の一覧と使う人の設定を読まない。判定 1 回の量が約 1/6 になった(Haiku 1 回: 0.0166 → 0.0025 ドルの目安)。
+
+## ⑦ 話すを 1 回の命令で(2026-11-06)
+- `python creator/pipeline/t07_talk.py <pack> <id> --name <表示の名前> --out <出力> --persona <性格.md> --words "<元の言葉>"`。取り付け(pk04)→ character.json に K1 の `origin` と `looks` を足して検証 → `vite build` → 空いた番号で鍵なしのサーバー(仮の頭脳・字幕と口パク)→ `web_talk_check.mjs` → 自分のサーバーの PID だけを止める。
+- 質問は既定で「こんにちは、はじめまして|あなたのお名前と、好きなことを教えて」(お店の質問をしない)。
+
+## ブラウザの道具は GPU だけ(2026-11-06)
+- `shot_browser.mjs`・`shot_eye.mjs`・`test_look_drift.mjs`・`web_talk_check.mjs`・`web_talk_record.mjs` は、WebGL を GPU(d3d11)で描き、描画役の名前が SwiftShader など CPU なら止まる(`creator/skilltest/gpu_only.mjs`)。`CHECK_GPU=1` は付けなくても GPU。大きな PC では先に機械の札(`--kind gpu --vram 3`)と GPU の鍵を取る。
+- CPU で描きたい理由があっても、大きな PC では描かない(熱と、ほかの仕事の邪魔)。GPU の無い機械では、この道具は止まる(それでよい)。
