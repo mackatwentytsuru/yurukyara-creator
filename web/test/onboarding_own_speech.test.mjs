@@ -116,7 +116,7 @@ test('初めての会話: 主役の絵の入口で、おまかせ・もう一度
     let offered = [];
     const fr = new FirstRun({
       guide: MAIN,
-      creator: createSampleCreator({ main: MAIN, exists: async () => true }),
+      creator: createSampleCreator({ main: MAIN }),
       persona: {
         get: (id) => stored.get(id) ?? null,
         set: (id, v) => stored.set(id, v),
@@ -140,9 +140,10 @@ test('初めての会話: 主役の絵の入口で、おまかせ・もう一度
     await fr.start();
     await fr.act('pick', { url: 'blob:test', name: 'e.png' });
     await fr.act('kind_yuru');
-    await fr.act('next_meet');
-    assert.equal(fr.character.id, MAIN.id, '絵の入口は主役');
-    await fr.act('keep');
+    assert.equal(fr.character, null, '絵の入口は、だまって主役を出さない(D1)');
+    await fr.act('use_guide'); // 使う人が「ノリーで続きを試す」を選ぶ
+    assert.equal(fr.character.id, MAIN.id, '選んだ時だけ主役');
+    assert.equal(fr.step, 4);
     assert.equal(fr.settings.tone, 'own', `種 ${seed}: おまかせ`);
     assert.ok(said.some((l) => l.who === 'note' && l.text.includes('この子の話し方')), '4 歩目のまとめに出る');
     for (let i = 0; i < 4; i++) {

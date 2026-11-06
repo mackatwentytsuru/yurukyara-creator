@@ -2,6 +2,7 @@
 // - 「## 初めてのあいさつ」: はじめて会った人に言う文(3 文まで)
 // - 「## 話し方の例」: 1 行に 1 つ、左の「」が使う人の言葉の例(合図)、→ の右の「」が返事。仮の頭脳は、合図の言葉が入っていればその返事を言う
 // - 「## あいづち」: 話がよく分からないときの返事(仮の頭脳の、最後の返事)
+// - 「## 覚えている時の言い方」: 覚えていることを話す時の文(「- 合図: 文」。文の {名前}・{好きなもの}・{話題} に覚えた言葉が入る)。11-07 CRITux 23
 // - 本物の頭脳には、人格の文ごと渡るので、どの節も手本にして話す(言い回しは頭脳に任せる)
 // - 仮の頭脳(鍵なし・上限・公開のリンクで合言葉なし)は、ここで取り出した文をそのまま言う
 // - 人格の欄から安全の決まりを上書きしようとする行は、先に sanitizePersona で外す(どの文も安全の層の下)。返事の文は出力の確かめも通す
@@ -93,4 +94,33 @@ export function exampleReply(persona, text) {
 /** 「## あいづち」の文(話がよく分からないとき)。無ければ空 */
 export function aizuchi(persona) {
   return sectionItems(persona, 'あいづち', AIZUCHI_MAX_LINES).filter((t) => !isUnsafeOutput(t));
+}
+
+/** 「## 覚えている時の言い方」の合図(仮の頭脳が使う場面) */
+export const MEMORY_CUES = ['また会えた', '話の続き', '名前を覚えた', '好きなものを覚えた', '全部わすれた', 'まだ覚えていない'];
+const SLOT = /\{(名前|好きなもの|話題)\}/gu;
+
+/**
+ * 「## 覚えている時の言い方」から、その場面の 1 文を作る。行の形は「- 合図: 文」。
+ * 同じ合図の行が何本かあれば、入れる言葉がそろう最初の行を使う(例: 名前を知らない時の言い方を 2 本目に書く)。
+ * 入れる言葉の改行・かぎかっこは外し、できた文は 40 字まで。安全の決まりに反する文は使わない。無ければ空(決まった文を使う)。
+ * @param {string} persona
+ * @param {string} cue MEMORY_CUES のどれか
+ * @param {{名前?:string, 好きなもの?:string, 話題?:string}} [words]
+ */
+export function memoryLine(persona, cue, words = {}) {
+  for (const line of sectionLines(persona, '覚えている時の言い方')) {
+    const m = line.match(ITEM);
+    const colon = m ? m[1].search(/[:：]/u) : -1;
+    if (colon < 0 || m[1].slice(0, colon).trim() !== cue) continue;
+    let missing = false;
+    const filled = m[1].slice(colon + 1).trim().replace(SLOT, (_, slot) => {
+      const v = String(words[slot] ?? '').replace(/[\r\n「」『』{}]/gu, '').trim();
+      if (!v) missing = true;
+      return v;
+    });
+    if (missing || !filled || Array.from(filled).length > GREETING_LINE_MAX) continue; // 途中で切れた文は言わない(次の行か、決まった文)
+    if (!isUnsafeOutput(filled)) return filled;
+  }
+  return '';
 }

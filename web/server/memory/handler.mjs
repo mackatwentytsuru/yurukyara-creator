@@ -12,6 +12,7 @@ const HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-cont
 const SUBS = new Set(['', 'new', 'pair', 'claim', 'reflect']);
 export const NEW_PER_MINUTE = 10; // 合鍵を作る回数(接続元ごと・1 分)
 export const NEW_PER_DAY = 2000; // 合鍵を作る回数(全体・1 日)
+export const PASS_FAILS_PER_MINUTE = 5; // 番号を作る・受け取る時の、合言葉の間違い(接続元ごと・1 分)。超えたら比べずに断る
 
 const reply = (status, data, extra = {}) => new Response(JSON.stringify(data), { status, headers: { ...HEADERS, ...extra } });
 
@@ -19,10 +20,28 @@ const reply = (status, data, extra = {}) => new Response(JSON.stringify(data), {
 export function memoryConfig(cfg = {}, env = process.env) {
   return {
     pepper: cfg.pepper ?? env.MEMORY_PEPPER ?? '',
-    // 番号づくりの合言葉。公開では DEMO_PASSPHRASE(会話と同じ合言葉)。無ければ番号を作らない
-    passphrase: cfg.passphrase ?? env.DEMO_PASSPHRASE ?? env.APP_PASSPHRASE ?? '',
+    // 番号づくりと受け取りの合言葉。公開では DEMO_PASSPHRASE(会話と同じ合言葉)。無ければ番号を作らない・受け取らない。
+    // 貼った時の前後の空白と改行は外す(画面の側も外して送る。外さないと、だれの合言葉も合わなくなる)
+    passphrase: String(cfg.passphrase ?? env.DEMO_PASSPHRASE ?? env.APP_PASSPHRASE ?? '').trim(),
     maxBodyBytes: Number(cfg.maxBodyBytes) > 0 ? Number(cfg.maxBodyBytes) : 32768,
   };
+}
+
+/**
+ * 合言葉を確かめる(番号を作る・受け取る。CRITsec F9: 公開では受け取りにも合言葉が要る)。
+ * 合言葉が決まっていなければ断る。同じ接続元が 1 分に 5 回間違えたら、比べずに断る(当て試しを遅くする)。
+ * @param {'pair'|'claim'} what
+ */
+async function requirePass(request, { conf, store, client, now, what }) {
+  const verb = what === 'pair' ? '作りません' : '受け取れません';
+  if (!conf.passphrase) throw new MemoryError(`合言葉が設定されていないので、番号は${verb}`, 403, 'no_pass');
+  const failKey = `ycm:pf:${client}:${Math.floor(now() / 60000)}`;
+  if ((Number(await store.get(failKey)) || 0) >= PASS_FAILS_PER_MINUTE) throw new MemoryError('合言葉の間違いが続いたので、少し待ってね', 429, 'pass_limited');
+  const given = String(request.headers.get('x-demo-pass') ?? request.headers.get('x-app-pass') ?? '').trim();
+  if (!samePass(given, conf.passphrase)) {
+    await store.incr(failKey, { ttlSeconds: 120 });
+    throw new MemoryError(`合言葉が違うので、番号は${verb}`, 403, 'no_pass');
+  }
 }
 
 /** 接続元の目印(見出しの値はそのまま使わず、ハッシュの頭だけ) */
@@ -87,12 +106,12 @@ export async function handleMemory(request, { store, cfg = {}, now = Date.now, e
       return reply(200, { ok: true, forgotten: await mem.forgetAll(key) });
     }
     if (m === 'POST' && sub === 'pair') {
-      if (!conf.passphrase) throw new MemoryError('合言葉が設定されていないので、番号は作りません', 403, 'no_pass');
-      const given = request.headers.get('x-demo-pass') ?? request.headers.get('x-app-pass') ?? '';
-      if (!samePass(given, conf.passphrase)) throw new MemoryError('合言葉が違うので、番号は作りません', 403, 'no_pass');
+      await requirePass(request, { conf, store, client, now, what: 'pair' });
       return reply(200, await mem.pair(key));
     }
     if (m === 'POST' && sub === 'claim') {
+      // 合言葉を持たない人は、番号を試せない(試せると、全体の取り消しで、ほかの人の番号まで消せた。F9)
+      await requirePass(request, { conf, store, client, now, what: 'claim' });
       const body = await readBody(request, conf.maxBodyBytes);
       const { key: got } = await mem.claim(String(body.code ?? ''), client);
       return reply(200, { key: got, ...(await mem.list(got)) });
@@ -115,16 +134,17 @@ export async function handleMemory(request, { store, cfg = {}, now = Date.now, e
  * - 「わすれて」だけの言葉なら全部消し、返事のイベントまで返す(handled: true。頭脳は呼ばない)
  * - それ以外は、覚えていること(memory)とこの回に覚えた事(learned)を返す。runTurn にそのまま渡す
  * 置き場が使えないときは、記憶なしで話を続ける(会話を止めない)。
+ * persona(人格の文)を渡すと、「わすれて」の返事がその子の言葉になる(人格の「## 覚えている時の言い方」)。
  * @returns {Promise<{handled:boolean, events:object[], memory:{text:string,items:object[]}|null, learned:object[]}>}
  */
-export async function chatMemory(request, rawText, { store, cfg = {}, now = Date.now, env = process.env }) {
+export async function chatMemory(request, rawText, { store, cfg = {}, now = Date.now, env = process.env, persona = '' }) {
   const key = request.headers.get('x-memory-key') ?? '';
   const text = redactSecrets(String(rawText ?? '')).text; // 鍵らしい文字は覚えない
   const none = { handled: false, events: [], memory: null, learned: [] };
   if (!key) return none;
   const mem = createKvMemory({ store, pepper: memoryConfig(cfg, env).pepper, now });
   try {
-    if (isForgetRequest(text)) return { ...none, handled: true, events: forgetReplyEvents(await mem.forgetAll(key)) };
+    if (isForgetRequest(text)) return { ...none, handled: true, events: forgetReplyEvents(await mem.forgetAll(key), persona) };
     const memory = await mem.recall(key);
     let learned = [];
     try {

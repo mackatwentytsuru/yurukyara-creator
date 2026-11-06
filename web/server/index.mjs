@@ -136,7 +136,7 @@ async function handleChat(req, res) {
   // 記憶: 合鍵(ヘッダー)があれば、覚えていることを読み、この回の言葉から覚える事を足す
   const memoryKey = typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
   if (memoryKey && isForgetRequest(body.text)) {
-    for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey))) send(ev);
+    for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey), body.character?.persona ?? '')) send(ev);
     send({ type: 'done', serverMs: Date.now() - t0 });
     return res.end();
   }

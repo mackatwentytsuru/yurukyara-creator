@@ -120,7 +120,7 @@ function renderGates(st) {
     const ready = READY_GATES.includes(g) && info.round > 0;
     const mark = info.status === "ok" ? " ✓" : info.status === "waiting" ? " ●" : "";
     const b = el("button", { type: "button", class: "gate-tab", role: "tab", "aria-selected": String(app.gate === g), "data-turn": info.status === "waiting" ? "1" : "0" },
-      `${g} ${GATE_LABEL[g]}${mark}`);
+      `${GATE_LABEL[g]}${mark}`); // 画面に内部の言葉(C0 など)を出さない(D7)
     b.disabled = !ready;
     if (!READY_GATES.includes(g)) b.title = "準備中";
     b.addEventListener("click", async () => { app.gate = g; app.error = null; await ensureBundle(g); render(); });
@@ -284,14 +284,14 @@ function renderBar() {
   $("pending").hidden = !waitingMine;
   $("buttons").hidden = waitingMine;
   if (waitingMine) {
-    $("pendingText").textContent = `PC の受け取りを待っています…(${app.pending.gate} ${app.pending.decision === "ok" ? "OK" : "やり直し"})`;
+    $("pendingText").textContent = `PC の受け取りを待っています…(${GATE_LABEL[app.pending.gate] || ""} ${app.pending.decision === "ok" ? "OK" : "やり直し"})`;
   }
   const can = !reason && !app.sending;
   $("okBtn").disabled = !can;
   $("redoBtn").disabled = !can;
   const armed = Date.now() < app.armedUntil;
   $("okBtn").classList.toggle("armed", armed);
-  $("okBtn").textContent = armed ? `${app.gate} を OK にする(もう一度)` : "OK";
+  $("okBtn").textContent = armed ? `${GATE_LABEL[app.gate]}を OK にする(もう一度)` : "OK";
 }
 
 async function send(decision, note, tags) {
@@ -352,7 +352,7 @@ const picked = new Set();
 function openSheet() {
   picked.clear();
   $("note").value = "";
-  $("sheetTitle").textContent = `${app.gate} ${GATE_LABEL[app.gate]}をやり直す`;
+  $("sheetTitle").textContent = `${GATE_LABEL[app.gate]}をやり直す`;
   $("noteMax").textContent = String(app.noteMax);
   const box = $("tags");
   box.replaceChildren();

@@ -1,8 +1,6 @@
 /* 作る画面(初めての会話の札の中の枠)。狭い幅(320〜400px)を先に考える */
-:root { --bg: #fffdf8; --text: #2a2622; --muted: #6b635b; --line: #e3dbd0; --accent: #d9622b; --ok: #2f8f5b; --err: #b3261e; }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #1d1b19; --text: #f3eee8; --muted: #b9b0a6; --line: #3a352f; --accent: #f08a4b; --ok: #5cc28a; --err: #f2b8b5; }
-}
+/* 会話の画面(暗い色)の札の中に出るので、同じ色にそろえる(明るい枠が浮いていた。CRITux 22) */
+:root { --bg: #1d1a2e; --text: #f4f1fb; --muted: #b2abc9; --line: rgba(255, 255, 255, 0.16); --accent: #8a6bff; --ok: #7be0c3; --err: #ffb4a8; color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif; }
 main { padding: 10px 12px 14px; display: grid; gap: 10px; }
@@ -30,3 +28,31 @@ input[type="text"] { font: inherit; font-size: 16px; min-height: 48px; width: 10
 .mk-fig img { width: min(200px, 56vw); aspect-ratio: 1; object-fit: contain; border-radius: 14px; background: #fff; border: 1px solid var(--line); }
 .mk-fig figcaption { font-size: 13px; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
 .mk-err { margin: 0; color: var(--err); font-size: 14px; overflow-wrap: anywhere; }
+.mk-err[hidden] { display: none; }
+.mk-done-fig img:not([src]), .mk-done-fig img[src=""] { display: none; }
+/* 横に広い枠(PC の札): 絵を左、ボタンを右に並べて、枠を巻かずに「直したい」まで見せる */
+@media (min-width: 380px) {
+  #c0:not([hidden]) { grid-template-columns: minmax(0, 150px) minmax(0, 1fr); align-items: start; column-gap: 12px; }
+  #c0 .mk-fig { grid-row: 1 / span 3; }
+  #c0 .mk-fig img { width: 100%; }
+}
+/* 背の低い枠: 絵を小さく */
+@media (max-height: 420px) {
+  .mk-fig img { width: min(140px, 40vw); }
+  main { gap: 8px; padding-top: 8px; }
+}
+/* 横に広くて背の低い枠(PC の札。1280×720 で枠の高さ 260px ほど): 一言の欄と送るを 1 行にして、巻かずに「直したい」まで見せる */
+@media (min-width: 380px) and (max-height: 420px) {
+  #noteForm { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; }
+  #noteForm .mk-label { grid-column: 1 / -1; font-size: 13px; }
+  #noteForm .mk-count { display: none; }
+  #noteForm .mk-btn { width: auto; }
+  #c0 { row-gap: 8px; }
+  #c0 .mk-fig figcaption { font-size: 12px; }
+}
+/* 絵だけの小さな枠(view=pic): 枠いっぱいに絵だけ */
+html.mk-pic, html.mk-pic body { height: 100%; overflow: hidden; background: #fff; }
+html.mk-pic main { padding: 0; height: 100%; display: block; }
+html.mk-pic .mk-where, html.mk-pic #doneMsg, html.mk-pic .mk-err { display: none; }
+html.mk-pic #done { height: 100%; display: block; }
+html.mk-pic .mk-fig, html.mk-pic .mk-fig img { width: 100%; height: 100%; border: 0; border-radius: 0; }

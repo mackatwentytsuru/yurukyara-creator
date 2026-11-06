@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMemoryStore } from '../api/_lib/store.mjs';
 import { handleMemoryRoute } from '../api/_lib/memory.mjs';
-import { chatMemory, handleMemory, memorySub } from '../server/memory/handler.mjs';
+import { PASS_FAILS_PER_MINUTE, chatMemory, handleMemory, memoryConfig, memorySub } from '../server/memory/handler.mjs';
 import { GLOBAL_FAIL_LIMIT, PAIR_TTL_MS, RETENTION_MS } from '../server/memory/store.mjs';
 
 const PASS = 'pass-for-test-only';
@@ -96,11 +96,11 @@ test('番号で受け取る: 別の端末で同じ記憶が読める。1 回し�
   const key = (await call('/api/memory/new', { method: 'POST' })).data.key;
   await call('/api/memory/reflect', { method: 'POST', key, body: { text: 'ぼくはタロウです' } });
   const { code } = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data;
-  const got = await call('/api/memory/claim', { method: 'POST', body: { code }, ip: '198.51.100.7' });
+  const got = await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code }, ip: '198.51.100.7' });
   assert.equal(got.status, 200);
   assert.equal(got.data.key, key);
   assert.ok(got.data.items.some((it) => it.text === '名前: タロウ'));
-  const again = await call('/api/memory/claim', { method: 'POST', body: { code }, ip: '198.51.100.8' });
+  const again = await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code }, ip: '198.51.100.8' });
   assert.equal(again.status, 400);
 });
 
@@ -109,12 +109,12 @@ test('番号: 10 分で切れる。新しく出すと前の番号は使えない
   const key = (await call('/api/memory/new', { method: 'POST' })).data.key;
   const first = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data.code;
   const second = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data.code;
-  if (first !== second) assert.equal((await call('/api/memory/claim', { method: 'POST', body: { code: first }, ip: '203.0.113.1' })).status, 400);
+  if (first !== second) assert.equal((await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code: first }, ip: '203.0.113.1' })).status, 400);
   clock.t += PAIR_TTL_MS + 1000;
-  assert.equal((await call('/api/memory/claim', { method: 'POST', body: { code: second }, ip: '203.0.113.2' })).status, 400, '切れた');
+  assert.equal((await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code: second }, ip: '203.0.113.2' })).status, 400, '切れた');
   const third = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data.code;
   await call('/api/memory', { method: 'DELETE', key, body: {} });
-  assert.equal((await call('/api/memory/claim', { method: 'POST', body: { code: third }, ip: '203.0.113.3' })).status, 400, '消えた');
+  assert.equal((await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code: third }, ip: '203.0.113.3' })).status, 400, '消えた');
 });
 
 test('番号: 同じ接続元が 5 回間違えたら、正しい番号でも 10 分止める', async () => {
@@ -122,13 +122,13 @@ test('番号: 同じ接続元が 5 回間違えたら、正しい番号でも 10
   const key = (await call('/api/memory/new', { method: 'POST' })).data.key;
   const { code } = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data;
   const wrong = code === '000000' ? '000001' : '000000';
-  for (let i = 0; i < 5; i++) assert.equal((await call('/api/memory/claim', { method: 'POST', body: { code: wrong }, ip: '192.0.2.50' })).status, 400);
-  const locked = await call('/api/memory/claim', { method: 'POST', body: { code }, ip: '192.0.2.50' });
+  for (let i = 0; i < 5; i++) assert.equal((await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code: wrong }, ip: '192.0.2.50' })).status, 400);
+  const locked = await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code }, ip: '192.0.2.50' });
   assert.equal(locked.status, 429);
   assert.equal(locked.data.reason, 'locked');
   clock.t += 10 * 60 * 1000 + 1000;
   const fresh = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data.code;
-  assert.equal((await call('/api/memory/claim', { method: 'POST', body: { code: fresh }, ip: '192.0.2.50' })).status, 200, '10 分たてば戻る');
+  assert.equal((await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code: fresh }, ip: '192.0.2.50' })).status, 200, '10 分たてば戻る');
 });
 
 test(`番号: 全部の接続元で合わせて ${GLOBAL_FAIL_LIMIT} 回間違えたら、今ある番号を全部取り消す`, async () => {
@@ -136,8 +136,8 @@ test(`番号: 全部の接続元で合わせて ${GLOBAL_FAIL_LIMIT} 回間違�
   const key = (await call('/api/memory/new', { method: 'POST' })).data.key;
   const { code } = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data;
   const wrong = code === '999999' ? '999998' : '999999';
-  for (let i = 0; i < GLOBAL_FAIL_LIMIT; i++) await call('/api/memory/claim', { method: 'POST', body: { code: wrong }, ip: `10.0.${i}.1` });
-  assert.equal((await call('/api/memory/claim', { method: 'POST', body: { code }, ip: '10.9.9.9' })).status, 400);
+  for (let i = 0; i < GLOBAL_FAIL_LIMIT; i++) await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code: wrong }, ip: `10.0.${i}.1` });
+  assert.equal((await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code }, ip: '10.9.9.9' })).status, 400);
 });
 
 test('記憶は最後に使ってから 7 日で消える', async () => {
@@ -185,7 +185,7 @@ test('会話の手伝い chatMemory: 合鍵なしは何もしない・「わす�
   assert.match(b.memory.text, /名前: タロウ/);
   const c = await chatMemory(req(key), 'わすれて', deps);
   assert.equal(c.handled, true);
-  assert.deepEqual(c.events[0], { type: 'memory', forgotten: true });
+  assert.deepEqual(c.events[0], { type: 'memory', forgotten: true, via: 'chat' }); // via: 'chat' は会話の言葉で消した印(画面の札が古い知らせを消す)
   assert.ok(c.events.some((e) => e.type === 'say'));
   assert.equal((await call('/api/memory', { key })).status, 404);
 });
@@ -210,4 +210,55 @@ test('S6 の入口(handleMemoryRoute)から、この中身が呼べる(合言葉
     if (saved.m === undefined) delete process.env.MEMORY_PEPPER;
     else process.env.MEMORY_PEPPER = saved.m;
   }
+});
+
+// ---- 11-07 CRITsec F9: 公開では、番号の受け取りにも合言葉が要る ----
+
+test('番号の受け取り(F9): 合言葉が無い・違うと 403。合えば受け取れる。合言葉の決まっていない設定では受け取らない', async () => {
+  const { call } = setup();
+  const key = (await call('/api/memory/new', { method: 'POST' })).data.key;
+  await call('/api/memory/reflect', { method: 'POST', key, body: { text: 'ぼくはタロウです' } });
+  const { code } = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data;
+  const none = await call('/api/memory/claim', { method: 'POST', body: { code }, ip: '198.51.100.20' });
+  assert.equal(none.status, 403);
+  assert.equal(none.data.reason, 'no_pass');
+  assert.match(none.data.error, /受け取れません/);
+  assert.ok(!JSON.stringify(none.data).includes(PASS), '返事に合言葉を出さない');
+  assert.equal((await call('/api/memory/claim', { method: 'POST', pass: 'wrong', body: { code }, ip: '198.51.100.20' })).status, 403);
+  const ok = await call('/api/memory/claim', { method: 'POST', pass: ` ${PASS} `, body: { code }, ip: '198.51.100.20' });
+  assert.equal(ok.status, 200, '前後の空白は外して比べる');
+  assert.equal(ok.data.key, key);
+  const unset = setup({ passphrase: '' });
+  const r = await unset.call('/api/memory/claim', { method: 'POST', pass: 'anything', body: { code: '123456' } });
+  assert.equal(r.status, 403);
+  assert.equal(r.data.reason, 'no_pass');
+});
+
+test('番号の受け取り(F9): 合言葉を持たない人の当て試しは、全体の取り消しを起こせない(番号を試す所まで届かない)', async () => {
+  const { call } = setup();
+  const key = (await call('/api/memory/new', { method: 'POST' })).data.key;
+  const { code } = (await call('/api/memory/pair', { method: 'POST', key, pass: PASS })).data;
+  const wrong = code === '999999' ? '999998' : '999999';
+  for (let i = 0; i < GLOBAL_FAIL_LIMIT + 5; i++) assert.equal((await call('/api/memory/claim', { method: 'POST', body: { code: wrong }, ip: `10.1.${i}.1` })).status, 403);
+  assert.equal((await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code }, ip: '10.9.9.8' })).status, 200, '審査の人の番号は消えていない');
+});
+
+test('合言葉の間違い: 同じ接続元が 1 分に 5 回間違えたら、正しい合言葉でも比べずに 429。1 分たてば戻る。ほかの接続元は使える', async () => {
+  const { clock, call } = setup();
+  const key = (await call('/api/memory/new', { method: 'POST' })).data.key;
+  for (let i = 0; i < PASS_FAILS_PER_MINUTE; i++) assert.equal((await call('/api/memory/pair', { method: 'POST', key, pass: `guess-${i}`, ip: '192.0.2.90' })).status, 403);
+  const limited = await call('/api/memory/pair', { method: 'POST', key, pass: PASS, ip: '192.0.2.90' });
+  assert.equal(limited.status, 429);
+  assert.equal(limited.data.reason, 'pass_limited');
+  const claimLimited = await call('/api/memory/claim', { method: 'POST', pass: PASS, body: { code: '123456' }, ip: '192.0.2.90' });
+  assert.equal(claimLimited.status, 429, '受け取りも同じ数え');
+  assert.equal((await call('/api/memory/pair', { method: 'POST', key, pass: PASS, ip: '192.0.2.91' })).status, 200, 'ほかの接続元');
+  clock.t += 61 * 1000;
+  assert.equal((await call('/api/memory/pair', { method: 'POST', key, pass: PASS, ip: '192.0.2.90' })).status, 200, '1 分たてば戻る');
+});
+
+test('合言葉の設定(環境変数)は、前後の空白と改行を外して比べる', () => {
+  assert.equal(memoryConfig({}, { DEMO_PASSPHRASE: `  ${PASS}\n` }).passphrase, PASS);
+  assert.equal(memoryConfig({ passphrase: ` ${PASS} ` }, {}).passphrase, PASS);
+  assert.equal(memoryConfig({}, {}).passphrase, '');
 });

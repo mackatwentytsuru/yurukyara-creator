@@ -126,8 +126,8 @@ async function findChrome() {
   }
 }
 
-async function openPage(browser, web, make, token, width) {
-  const ctx = await browser.newContext({ viewport: { width, height: 844 }, deviceScaleFactor: 2, hasTouch: width < 720, isMobile: width < 720, reducedMotion: 'reduce' });
+async function openPage(browser, web, make, token, width, height = 844) {
+  const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: width < 720, isMobile: width < 720, reducedMotion: 'reduce' });
   const page = await ctx.newPage();
   const errors = [];
   page.on('requestfailed', (r) => errors.push(`通信の失敗 ${r.failure()?.errorText ?? ''}`));
@@ -191,7 +191,8 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       const pc1 = await pcNext(work, '--fake-draw');
       assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
       await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
-      assert.match(await frame.$eval('#picCap', (e) => e.textContent), /C0 絵の 1 回目/);
+      assert.match(await frame.$eval('#picCap', (e) => e.textContent), /1 回目の絵。この PC の Claude Code が描きました/);
+      assert.doesNotMatch(await frame.$eval('#picCap', (e) => e.textContent), /C0|段 \d/, '内部の言葉を出さない(D7)');
       assert.ok(await frame.$eval('#pic', (e) => e.naturalWidth > 0), '描いた絵が出る');
       await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子ができたよ。どうかな?'));
       await fits(page, frame, '3 歩目');
@@ -211,9 +212,19 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
 
       await frame.click('#okBtn');
       await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
-      assert.equal(await page.$('iframe.fr-frame'), null, '決めたら枠を閉じる');
+      assert.equal(await page.$('.fr-actions iframe.fr-frame'), null, '決めたら作る画面の枠を閉じる');
       assert.match(await logText(page), /けってい! OK を PC に伝えたよ/);
-      assert.match(await logText(page), /段 1〜6/);
+      assert.match(await logText(page), /3D ができるまでは、ノリーがかわりに舞台に立って/, '主役が代わりに立つと言う(D5)');
+      assert.doesNotMatch(await logText(page), /段 \d|C0/, '札に内部の言葉(段 0・C0)を出さない(D7)');
+      // 描いた絵は、札の上の小さな枠(絵だけ)に出したまま。話している間も見える(D5)
+      const pic = await page.waitForSelector('.fr-pin iframe.fr-frame', { timeout: 10_000 });
+      assert.match(await pic.getAttribute('src'), /\/m\/#k=.*&view=pic$/);
+      const picFrame = await pic.contentFrame();
+      await picFrame.waitForFunction(() => (document.getElementById('donePic')?.naturalWidth ?? 0) > 0, null, { timeout: 15_000 });
+      assert.equal(await picFrame.$eval('#okBtn', (e) => e.offsetParent === null), true, '絵だけの枠にボタンを出さない');
+      assert.match(await page.$eval('.fr-pin-cap', (e) => e.textContent), /PC の Claude Code が描いた絵。3D はこれから/);
+      const box = await page.$eval('.fr-pin', (e) => e.getBoundingClientRect().height);
+      assert.ok(box > 0 && box < 140, `絵の欄は小さく ${box}`);
       await shot(page, 'make390_4_persona');
       const pc3 = await pcNext(work, '--fake-draw');
       assert.equal(pc3.did, 'claimed_ok', JSON.stringify(pc3));
@@ -266,6 +277,58 @@ test('作る道(幅 400): 絵 → ゆるキャラチェック(人の絵)→ ゆ�
   } finally {
     await browser.close();
     make.proc.kill();
+    web.proc.kill();
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+// PC(1280×720): 札は下の帯(会話の欄と「送る」)の上。作る画面は暗い色で、絵を左・ボタンを右に並べ、枠を巻かずに「直したい」まで見える(CRITux 14・22)
+test('作る道(PC 1280×720): 札が下の帯を隠さず、作る画面の「直したい」まで巻かずに見える', { skip: SLOW || (!HAS_PY && 'python と Pillow が無い'), timeout: 180_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const work = mkdtempSync(join(tmpdir(), 'fr-make-'));
+  const token = randomBytes(16).toString('hex');
+  const web = await startWeb();
+  const make = await startMake(work, token, web.base);
+  try {
+    const { ctx, page, errors } = await openPage(browser, web.base, make.base, token, 1280, 720);
+    try {
+      // 会話の画面(main.js)が測る上の段と下の帯の高さのまね(1280×720 の実測に近い値)
+      await page.evaluate(() => {
+        document.documentElement.style.setProperty('--top-h', '96px');
+        document.documentElement.style.setProperty('--bottom-h', '110px');
+      });
+      const frame = await frameOf(page);
+      await frame.fill('#words', '赤い提灯の子');
+      await frame.click('#wordsBtn');
+      await frame.waitForSelector('#waiting:not([hidden])');
+      const pc1 = await pcNext(work, '--fake-draw');
+      assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
+      await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
+      await frame.waitForFunction(() => document.getElementById('pic').naturalWidth > 0, null, { timeout: 10_000 });
+      const sheet = await page.$eval('.fr-sheet', (e) => {
+        const b = e.getBoundingClientRect();
+        return { top: Math.round(b.top), bottom: Math.round(b.bottom) };
+      });
+      assert.ok(sheet.bottom <= 720 - 110 - 11, `札が下の帯にかかる ${JSON.stringify(sheet)}`);
+      assert.ok(sheet.top >= 96, `札が上の段にかかる ${JSON.stringify(sheet)}`);
+      const inner = await frame.evaluate(() => {
+        const vh = innerHeight;
+        const bottom = (id) => Math.round(document.getElementById(id).getBoundingClientRect().bottom);
+        return { vh, ok: bottom('okBtn'), note: bottom('noteBtn'), again: bottom('againBtn'), bg: getComputedStyle(document.body).backgroundColor, sh: document.documentElement.scrollHeight };
+      });
+      assert.ok(inner.note <= inner.vh && inner.ok <= inner.vh, `「この子にする」「直したい」が枠の下に隠れた ${JSON.stringify(inner)}`);
+      assert.equal(inner.bg, 'rgb(29, 26, 46)', '作る画面は会話の画面と同じ暗い色');
+      await fits(page, frame, 'PC 3 歩目');
+      await shot(page, 'make1280_3_c0');
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      return { sheet, inner };
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    make.proc.kill(); // 自分で起こした PID だけ
     web.proc.kill();
     rmSync(work, { recursive: true, force: true });
   }

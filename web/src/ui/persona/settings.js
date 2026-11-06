@@ -196,6 +196,58 @@ export function randomSettings(rnd = Math.random, { voice = 'none', ownSpeech = 
   });
 }
 
+// 話し方を手本の文で決めている印(「## 話し方の例」の節)。この子の口調は、性格の画面で変えさせない(D6)
+const SPEECH_EXAMPLES = /^#{1,6}\s*話し方の例/u;
+
+/**
+ * その子の話し方が、人格の文で「決まっている」(変えると別の子になる)か。主役(mainId)と、話し方の手本の節がある子。
+ * 作例の「- 話し方: やさしく」のような説明だけの子は、使う人が口調を選べる(おまかせは own のまま。definesOwnSpeech)
+ * @param {string|null|undefined} id
+ * @param {{persona?: string, mainId?: string|null}} [o]
+ */
+export function fixesOwnSpeech(id, { persona = '', mainId = null } = {}) {
+  if (!id) return false;
+  if (mainId && id === mainId) return true;
+  const lines = String(persona ?? '').split(/\r?\n/).map((l) => l.trim());
+  const end = lines.findIndex((l) => SETTINGS_HEAD.test(l));
+  return (end < 0 ? lines : lines.slice(0, end)).some((l) => SPEECH_EXAMPLES.test(l));
+}
+
+// 人格の文から性格の型を読む言葉(「- 性格:」の行を先に見て、無ければ文の全体。上から順に見る)
+const PERSONALITY_WORDS = [
+  ['shy', /恥ずかしがり|はずかしがり|照れ屋|てれや|人見知り|ひとみしり/u],
+  ['mischief', /いたずら|イタズラ/u],
+  ['genki', /元気|げんき|明るく|あかるく|はずむ|にぎやか/u],
+  ['calm', /おっとり|のんびり|ぽやぽや|ゆっくり|やさし|おだやか|落ち着/u],
+];
+const PERSONALITY_LINE = /^(?:[-*・]\s*)?性格\s*[::]/u;
+
+/**
+ * 人格の文(persona.md)に書いてある性格の型(PRESETS の名前)。書いていなければ null。画面が足した設定の節は見ない。
+ * @param {string} persona
+ */
+export function personalityOf(persona) {
+  const lines = String(persona ?? '').split(/\r?\n/).map((l) => l.trim());
+  const end = lines.findIndex((l) => SETTINGS_HEAD.test(l));
+  const own = end < 0 ? lines : lines.slice(0, end);
+  const find = (text) => PERSONALITY_WORDS.find(([, re]) => re.test(text))?.[0] ?? null;
+  const line = own.find((l) => PERSONALITY_LINE.test(l));
+  return (line && find(line)) || find(own.join('\n'));
+}
+
+/**
+ * その子「本来の」設定(性格の画面を開いた時・初めての会話の 4 歩目の初め。くじ引きにしない。司令塔の決め D6)。
+ * 型は人格の文の性格(無ければ fallback)、口調は話し方の決まった子なら own、ほかはフレンドリー。長さはふつう、声は文字とレトロ音。
+ * @param {string} persona
+ * @param {{ownSpeech?: boolean, fallback?: string|null}} [o] fallback: 性格が書いていない時の型(null なら null を返す)
+ * @returns {object|null}
+ */
+export function ownSettings(persona, { ownSpeech = false, fallback = 'calm' } = {}) {
+  const preset = personalityOf(persona) ?? fallback;
+  if (!preset || !PRESETS[preset]) return null;
+  return normalize({ preset, tone: ownSpeech ? 'own' : 'friendly', energy: PRESETS[preset].energy, length: 'normal' });
+}
+
 /** 型を選んだとき: 性格と、その型の元気さにそろえる(口調・長さ・声はそのまま) */
 export function applyPreset(settings, preset) {
   const s = normalize(settings);

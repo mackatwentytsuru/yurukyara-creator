@@ -163,7 +163,7 @@ def do_check(cid, a):
     by = "claude" if str(yc.get("why", "")).startswith("判定役 2 つが同じ") else "pixels"   # 割れた・使わなかった時は画素の数字
     check = {"class": cls, "next": yc.get("next"), "message": yc.get("message") or "", "by": by}
     if cls == "yuru":
-        rs.set_make(cid, status="drawing", check=check, activity="ゆるキャラにぴったりの絵でした。段 0(絵)を描きます")
+        rs.set_make(cid, status="drawing", check=check, activity="ゆるキャラにぴったりの絵でした。絵を描きます")
         return draw(cid, a, kind="picture", extra={"check": check})
     rs.set_make(cid, status="check_waiting", check=check, activity="ゆるキャラチェックの結果を出しました。画面で選んでください")
     tell = ("人の写真・人の絵と分かれました。画面で「ゆるキャラにしてみる」を押したら、もう一度 /yuru-next と打ってください"
@@ -251,7 +251,7 @@ def draw(cid, a, kind, feedback=None, extra=None):
     if old_log.exists() and rnd > 1:           # 前の回の Claude の記録は、上書きされる前に回のフォルダへ移す
         shutil.move(str(old_log), str(prev_dir / "stage_log"))
     svg, png = folder / "drawing.svg", folder / "drawing.png"
-    rs.set_make(cid, status="drawing", activity=f"段 0(絵)の {rnd} 回目を描いています(数分)")
+    rs.set_make(cid, status="drawing", activity=f"絵を描いています({rnd} 回目。数分かかります)")
     if a.fake_draw:
         rc = stage_tool(cid, 0, "draw", [py_word(), FAKE_DRAW, folder, "--round", str(rnd)], review="on", publish=(svg, png))
     else:
@@ -270,7 +270,7 @@ def draw(cid, a, kind, feedback=None, extra=None):
     name = read_name(folder / "settings.md")
     if name:
         rs.set_name(cid, name)
-    rs.set_make(cid, status="drawn", notice=None, activity=f"C0 絵の {rnd} 回目を出しました。画面で見てください")
+    rs.set_make(cid, status="drawn", notice=None, activity=f"絵ができました({rnd} 回目)。画面で見てください")
     who = name or "新しい子"
     return out({"id": cid, "did": "redrew" if rnd > 1 else "drew", "gate": "C0", "round": rnd, "name": name, **(extra or {}),
                 "tell": f"{who}の絵(C0 の {rnd} 回目)を出しました。画面かスマホで OK か「やり直し+一言」を押してください"})

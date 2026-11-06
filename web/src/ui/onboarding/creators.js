@@ -2,10 +2,11 @@
 //   creator.mode            'sample'(見本を出す)| 'local'(手元の PC の作る道具へ渡す)
 //   creator.check(input, o)  → { class: 'yuru'|'human'|'complex', by: 'claude'|'pixels'|'person', message }(絵のときだけ)
 //   creator.make(input, o)   → { id, name, sample: boolean, note, local?, picture?, round? }(できた子。見本なら sample: true)
+//                              見本の道では、言葉が本当に見本に当たる時だけ。当たらない言葉と絵は null(台本が正直に言う)
 //   creator.review(id, 'ok'|'redo', 一言, o) → { ok, message }(手元で作った子だけ。K3 の request.json へ)
 //   creator.redrawn(id, o)   → できた子(やり直しの次の回の絵。手元で作った子だけ)
 //   o = { signal, onProgress(text) }。待つ間の様子は onProgress で伝え、signal で待つのをやめられる
-// 'sample': Claude Code で作ってある子を、言葉に近い順に出す。絵はこの端末の外に送らない。
+// 'sample': Claude Code で作ってある子を、言葉に当たる時だけ出す(当たらなければ出さない)。絵はこの端末の外に送らない。
 // 'local' : 言葉か絵 1 枚を、手元の PC の確認画面のサーバー(creator/review/serve_review.py --make)へ渡す。
 //           PC で /yuru-next を打つと、ゆるキャラチェック → 段 0 の絵 → C0 に出る。OK・やり直し+一言は K3 の request.json。
 
@@ -18,7 +19,10 @@ export const SAMPLE_CHARACTERS = [
   { id: 'yokoso', name: 'ようこそくん', note: 'Claude が描いた絵から作った子', keys: ['ようこそ', '受付', '案内', 'いらっしゃい', 'みどり', '緑'] },
 ];
 
-/** 言葉にいちばん近い見本(当たる言葉が無ければ、言葉から作った見本) */
+/**
+ * 言葉にいちばん近い見本。当たる言葉が 1 つも無ければ null(だまって別の子を出さない。司令塔の決め D1・CRITux 3)
+ * @returns {object|null}
+ */
 export function pickSample(words, samples = SAMPLE_CHARACTERS) {
   const w = String(words ?? '').normalize('NFKC').toLowerCase();
   let best = null;
@@ -30,29 +34,40 @@ export function pickSample(words, samples = SAMPLE_CHARACTERS) {
       bestHits = hits;
     }
   }
-  return best ?? samples[0];
+  return best;
 }
 
+/** 主役(案内役)の見本としての説明。主役も、協力者が手で描いた絵から Claude Code で作った子 */
+export const MAIN_NOTE = '協力者が手で描いた絵から、Claude Code で作った子';
+
 /**
- * 見本の道。絵の入口では、主役(協力者が手で描いた絵から作った子)を出す。主役がまだ舞台に無ければ、言葉の見本にする。
+ * 見本の道。この画面では新しく描かない。言葉が見本の子に本当に当たる時だけ、その子を出す。
+ * 当たらない言葉と絵(この画面では Claude が絵を見ない)は make が null を返し、台本が正直に「近い見本がいない」と言う。
+ * 選べる見本の一覧(list)は、使う人が自分で選ぶ時だけ使う(だまって選ばない)。
  * @param {object} [o]
- * @param {{id:string, name:string}} [o.main] 主役。絵から作った見本として出す(無ければ見本の 1 番目)
+ * @param {{id:string, name:string}} [o.main] 主役(案内役)。「主役で続ける」に使う
  * @param {object[]} [o.samples]
- * @param {(id:string)=>Promise<boolean>} [o.exists] 主役が舞台に出せるか(入口 index.js が舞台のキャラで答える。通信はしない)
  */
-export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS, exists = async () => true } = {}) {
+export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS } = {}) {
   return {
     mode: 'sample',
     async check() {
       // Claude の確かめは手元の PC だけ。見本の道では、使う人に選んでもらう(台本がそう伝える)
       return { class: 'complex', by: 'person', message: '' };
     },
+    /** 言葉に本当に当たる見本だけ。絵と、当たらない言葉は null */
     async make(input) {
-      if (input?.from === 'picture' && main?.id && (await exists(main.id))) {
-        return { id: main.id, name: main.name, sample: true, note: '協力者が手で描いた絵から、Claude Code で作った子' };
-      }
+      if (input?.from !== 'words') return null;
       const s = pickSample(input?.words ?? '', samples);
-      return { id: s.id, name: s.name, sample: true, note: s.note };
+      return s ? { id: s.id, name: s.name, sample: true, note: s.note } : null;
+    },
+    /** 使う人が自分で選ぶ見本の一覧(主役は「主役で続ける」で別に出すので入れない) */
+    list() {
+      return samples.map((s) => ({ id: s.id, name: s.name, sample: true, note: s.note }));
+    },
+    /** 主役(案内役)を、見本の子として出す時の形 */
+    main() {
+      return main?.id ? { id: main.id, name: main.name, sample: true, note: MAIN_NOTE, guide: true } : null;
     },
   };
 }
@@ -61,23 +76,43 @@ export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS, 
 
 export const LOCAL_HINT = 'PC の Claude Code で /yuru-next と打つと、描き始めます(描くのに数分かかります)。';
 const LOCAL_NOTE = '手元の PC の Claude Code が描いた絵';
-const PRIVATE_HOST = /^(127\.0\.0\.1|localhost|\[::1\]|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)*\.(ts\.net|local))$/i;
+// この PC の中だけ(ループバック)。家の中の住所・*.ts.net・*.local は数えない(CRITsec F4: だれでも *.ts.net の名前を持てる)
+const LOOPBACK_HOST = /^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|localhost|\[::1\]|::1)$/i;
+
+/** その名前がこの PC の中(ループバック)を指すか */
+export function isLoopbackHost(hostname) {
+  return LOOPBACK_HOST.test(String(hostname ?? ''));
+}
 
 /**
- * 作る道のサーバーの場所が、手元(この PC か家の中のネットワーク)か。よその場所へ絵と合言葉を送らないための確かめ。
+ * 作る道のサーバーの場所が、この PC の中か。よその場所へ絵と合言葉を送らないための確かめ。
  * @param {string} base 例 http://127.0.0.1:8796
  */
 export function isLocalBase(base) {
   try {
     const u = new URL(base);
-    return (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password && u.pathname === '/' && !u.search && !u.hash && PRIVATE_HOST.test(u.hostname);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password && u.pathname === '/' && !u.search && !u.hash && isLoopbackHost(u.hostname);
   } catch {
     return false;
   }
 }
 
+/** この画面そのものが、この PC の中(ループバック)で開かれているか。作る道の # はこの時だけ読む(CRITsec F4) */
+export function pageIsLocal(loc = globalThis.location) {
+  return isLoopbackHost(loc?.hostname);
+}
+
 const MAKE_EVENTS = new Set(['ready', 'sent', 'progress', 'checked', 'chose', 'drawn', 'decided', 'restart', 'error']);
 const clipText = (s, n) => [...String(s ?? '')].slice(0, n).join('');
+const STAGE_WORDS = ['絵', '読む', '形', '色と材質', '模様', '骨', '動き', '話す'];
+const GATE_WORDS = { 0: '絵', 2: '形', 3: '色と材質', 5: '話す' };
+
+/** 作る画面からの文に、内部の言葉(段 0(絵)・C0 など)が残っていても、ふつうの言葉にして出す(D7。PC の側も直してある) */
+export function plainWords(text) {
+  return String(text ?? '')
+    .replace(/段\s*(\d)\s*(?:[((][^))]*[))])?/gu, (_m, d) => STAGE_WORDS[Number(d)] ?? '')
+    .replace(/(?<![A-Za-z0-9_])C([0235])(?![A-Za-z0-9_])\s*(絵|形|色と材質|話す)?/gu, (_m, d, label) => label || `${GATE_WORDS[d]}の確認`);
+}
 
 /** 作る画面からの知らせを、決めた欄と形だけにする(知らない物は捨てる) */
 export function cleanMakeEvent(d) {
@@ -87,10 +122,10 @@ export function cleanMakeEvent(d) {
     e.from = d.from === 'picture' ? 'picture' : 'words';
     if (e.from === 'words') e.words = clipText(d.words, 60);
   }
-  if (d.ev === 'progress' || d.ev === 'error') e.text = clipText(d.text ?? d.message, 120);
+  if (d.ev === 'progress' || d.ev === 'error') e.text = plainWords(clipText(d.text ?? d.message, 120));
   if (d.ev === 'checked') {
     if (!['yuru', 'human', 'complex'].includes(d.class)) return null;
-    Object.assign(e, { class: d.class, message: clipText(d.message, 120), by: d.by === 'claude' ? 'claude' : 'pixels' });
+    Object.assign(e, { class: d.class, message: plainWords(clipText(d.message, 120)), by: d.by === 'claude' ? 'claude' : 'pixels' });
   }
   if (d.ev === 'chose') e.choice = d.choice === 'redraw' ? 'redraw' : 'yurufy';
   if (d.ev === 'drawn' || d.ev === 'decided') {
@@ -110,16 +145,18 @@ export function cleanMakeEvent(d) {
  * 手元の PC の作る道。1〜3 歩の入力と絵は、PC のサーバーが配る「作る画面」(/m/)を札の中の枠に出して、その中だけで扱う。
  * この画面のコードは、絵にも通信にも触らない(test/privacy.test.mjs の約束のまま)。受け取るのは、枠からの状態の知らせ(postMessage)だけ。
  * @param {object} o
- * @param {string} o.base 作る道のサーバー(例 http://127.0.0.1:8796)。手元の場所だけ(isLocalBase)
+ * @param {string} o.base 作る道のサーバー(例 http://127.0.0.1:8796)。この PC の中だけ(isLocalBase)
  * @param {string} o.key 合言葉(枠の URL の # の後ろで渡す。サーバーには送られない。画面・記録に出さない)
  * @param {string} [o.parentOrigin] この画面の元(枠は、ここにだけ知らせを送る)
  * @param {Window} [o.win]
  */
 export function createLocalCreator({ base, key, parentOrigin = globalThis.location?.origin ?? '', win = globalThis } = {}) {
-  if (!isLocalBase(base)) throw new Error('作る道のサーバーは、この PC か家の中のネットワークの場所だけです');
+  if (!isLocalBase(base)) throw new Error('作る道のサーバーは、この PC の中(127.0.0.1・localhost)だけです');
   if (!key) throw new Error('作る道の合言葉がありません');
   const origin = new URL(base).origin;
   const frameUrl = `${origin}/m/#k=${encodeURIComponent(key)}&p=${encodeURIComponent(parentOrigin)}`;
+  // 描いた絵だけを見せる小さな枠(「この子にする」の後、3D ができるまで札の上に出す。D5)。絵は枠の中だけで扱う
+  const picUrl = `${frameUrl}&view=pic`;
   const listeners = new Set();
   const onMessage = (msg) => {
     if (msg?.origin !== origin) return; // 作る画面の元からの知らせだけ
@@ -132,6 +169,7 @@ export function createLocalCreator({ base, key, parentOrigin = globalThis.locati
     mode: 'local',
     base: origin,
     frameUrl,
+    picUrl,
     note: LOCAL_NOTE,
     /** 枠からの知らせを受ける。戻り値で受けるのをやめる */
     listen(f) {
