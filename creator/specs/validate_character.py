@@ -56,6 +56,8 @@ def file_refs(d):
     refs = [d.get("persona"), d.get("model")] + list((d.get("motions") or {}).values())
     two = (d.get("looks") or {}).get("2d") or {}
     refs.append(two.get("svg"))
+    if isinstance(two.get("parts"), str):
+        refs.append(two["parts"])
     for parts in (two.get("expressions") or {}).values():
         refs += list(parts.values())
     return [r for r in refs if isinstance(r, str)]

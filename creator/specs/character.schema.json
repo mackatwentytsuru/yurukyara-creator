@@ -59,13 +59,13 @@
         },
         "2d": {
           "type": "object",
-          "required": ["svg", "parts"],
+          "required": ["parts"],
           "additionalProperties": true,
           "properties": {
-            "svg": {"type": "string", "description": "元の SVG(<g id=\"char\"> の下に決まった名前の部品。yc-0-draw の d02 が点検)"},
+            "svg": {"type": "string", "description": "元の SVG(<g id=\"char\"> の下に決まった名前の部品。yc-0-draw の d02 が点検)。parts が parts.json のときは、その中に書けば省いてよい"},
             "parts": {
-              "type": "array",
-              "description": "SVG にある部品の名前。正本は creator/pipeline/d03_svgkit.py の PARTS",
+              "type": ["array", "string"],
+              "description": "部品。配列なら SVG にある部品の名前(正本は creator/pipeline/d03_svgkit.py の PARTS)。文字なら 2D の部品の表 parts.json へのパス(S2 の形: svg の名前・viewBox・部品の箱・顔の枠の箱・noBlink を中に持つ)",
               "items": {"type": "string", "enum": ["shadow", "back", "foot_R", "foot_L", "arm_R", "arm_L", "body", "head", "ear_R", "ear_L", "cheek_R", "cheek_L", "eye_R", "eye_L", "brow_R", "brow_L", "mouth", "hat", "accessory"]}
             },
             "expressions": {
