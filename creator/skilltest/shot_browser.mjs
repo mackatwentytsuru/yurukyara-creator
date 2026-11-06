@@ -5,6 +5,7 @@
 // 出力: <出力フォルダ>/browser_front.png、browser_q.png(斜め)、browser_close.png(顔のアップ)。1024px 四方、背景は白に近い。
 // 前提: creator/viewer/serve.py が動いている(--mount で試しのフォルダを配る)。Chrome が入っている。
 import { chromium } from '../../web/node_modules/playwright-core/index.mjs';
+import { GPU_ARGS, assertGpu } from './gpu_only.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -21,9 +22,10 @@ const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   // 毛の殻で三角形が数十万になると CPU での 1 コマが長く、GPU の見張りに落とされる(Target crashed)。撮影では見張りを切る
   // CHECK_GPU=1 なら GPU(d3d11)で描く(CPU の swiftshader は作業用 PC の CPU を占める。GPU の札を取ってから使う)
-  args: process.env.CHECK_GPU ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-watchdog'],
+  args: GPU_ARGS,
 });
 const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
+console.log('WebGL の描画役:', await assertGpu(page));
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });

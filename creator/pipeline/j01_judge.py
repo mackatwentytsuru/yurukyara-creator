@@ -106,7 +106,10 @@ def ask_claude(model, work_dir, out_path):
     with open(os.path.join(work_dir, "brief.md"), encoding="utf-8") as f:
         prompt = f.read()
     # json で受け、答えの文だけを返す。使った量(定価に直した目安と、トークン)は <判定のフォルダ>/answers/_usage.jsonl に 1 行ずつ足す(run.jsonl の費用の元)
-    cmd = [shutil.which("claude") or "claude", "-p", "--model", model, "--allowedTools", "Read", "--output-format", "json"]
+    # --strict-mcp-config と --setting-sources project: 手元の MCP の道具の一覧と、使う人の設定を読まない。
+    # 判定には要らず、1 回の量が約 1/6 になった(Haiku 1 回: 0.0166 → 0.0025 ドルの目安、2026-11-06 に測った)
+    cmd = [shutil.which("claude") or "claude", "-p", "--model", model, "--allowedTools", "Read", "--output-format", "json",
+           "--strict-mcp-config", "--setting-sources", "project"]
     try:
         p = subprocess.run(cmd, input=prompt, cwd=work_dir, env=clean_env(), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT_S)
     except (OSError, subprocess.TimeoutExpired):

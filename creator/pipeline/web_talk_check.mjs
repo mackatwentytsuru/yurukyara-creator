@@ -6,6 +6,7 @@
 // 頭脳の鍵がないサーバーでは仮の返事になる。読み上げの鍵がなければ字幕と口パクだけになる。どちらだったかを json に書く。
 // 終わりの番号: 0 = 全部できた、1 = できない所がある。
 import { pathToFileURL } from 'node:url';
+import { GPU_ARGS, assertGpu } from '../skilltest/gpu_only.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -30,13 +31,14 @@ if (!CHAR) {
 fs.mkdirSync(OUT, { recursive: true });
 
 const { chromium } = await import(pathToFileURL(path.join(HERE, '../../web/node_modules/playwright-core/index.mjs')).href);
-const gpuArgs = has('gpu') ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-watchdog'];
+const gpuArgs = GPU_ARGS; // CPU の描画には落とさない(--gpu は前の版との互換で、付けなくても GPU)
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   args: [...gpuArgs, '--autoplay-policy=no-user-gesture-required'],
 });
 const context = await browser.newContext({ viewport: VIEW, ...(has('video') ? { recordVideo: { dir: OUT, size: VIEW } } : {}) });
 const page = await context.newPage();
+console.log('WebGL の描画役:', await assertGpu(page));
 const problems = [];
 page.on('pageerror', (e) => problems.push('pageerror: ' + e.message.slice(0, 200)));
 const result = { character: CHAR, loaded: false, turns: [], mouth_max: 0, expressions: [], motions: [], problems };

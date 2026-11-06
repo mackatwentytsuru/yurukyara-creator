@@ -128,7 +128,9 @@ def cmd_claude(a):
     shutil.copyfile(a.prompt, os.path.join(work, "prompt.md"))
     cmd = [shutil.which("claude") or "claude", "-p", "--model", a.model, "--effort", a.effort,
            "--output-format", "stream-json", "--verbose",
-           "--allowedTools", "Read Write Edit Bash Glob Grep"]
+           "--allowedTools", "Read Write Edit Bash Glob Grep", "--strict-mcp-config"]
+    if a.light:     # 使う人の設定(フック・許可・MCP)を読まない。量が減る。スキルはリポジトリの .claude/skills から読む
+        cmd += ["--setting-sources", "project"]
     for d in a.add_dir or []:
         cmd += ["--add-dir", d]
     log = os.path.join(work, "log.jsonl")
@@ -219,6 +221,7 @@ def main():
     c.add_argument("--timeout", type=int, default=3000)
     c.add_argument("--split")
     c.add_argument("--judge-dir")
+    c.add_argument("--light", action="store_true", help="--setting-sources project で流す(使う人の設定を読まない)")
     t.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
     if a.cmd_name == "tool" and a.cmd and a.cmd[0] == "--":

@@ -4,6 +4,7 @@
 // タブの録画(getDisplayMedia)を使う。録るのに GPU を使うので、重い仕事と重ねない。出力は webm。
 // 字幕・考えの窓を含む画面と、声が同じ時間で入る。端末のスピーカーの遅れは入らない。
 import { pathToFileURL } from 'node:url';
+import { GPU_ARGS, assertGpu } from '../skilltest/gpu_only.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -33,9 +34,10 @@ const { chromium } = await import(pathToFileURL(path.join(HERE, '../../web/node_
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   headless: !process.argv.includes('--show'),
-  args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required', '--auto-accept-this-tab-capture', `--window-size=${VIEW.width},${VIEW.height + 120}`, '--window-position=40,40'],
+  args: [...GPU_ARGS, '--autoplay-policy=no-user-gesture-required', '--auto-accept-this-tab-capture', `--window-size=${VIEW.width},${VIEW.height + 120}`, '--window-position=40,40'],
 });
 const page = await browser.newPage({ viewport: VIEW });
+console.log('WebGL の描画役:', await assertGpu(page));
 const problems = [];
 page.on('pageerror', (e) => problems.push(e.message.slice(0, 200)));
 await page.exposeFunction('__saveChunk', (b64) => fs.appendFileSync(OUT, Buffer.from(b64, 'base64')));

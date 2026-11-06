@@ -6,6 +6,7 @@
 // 前提: creator/viewer/serve.py が動いている。CHECK_GPU=1 なら GPU(d3d11)で描く(作業用 PC では GPU の札を先に取る)。
 // 前後で同じ絵になるよう、動きを時刻 0 で止め、まばたきを止め、視線を正面の固定の目標へ向ける。カメラは顔の部品(Eyes / Face)の箱から決める。
 import { chromium } from '../../web/node_modules/playwright-core/index.mjs';
+import { GPU_ARGS, assertGpu } from './gpu_only.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -15,11 +16,12 @@ const ids = (idsArg ?? 'yokoso,robo,f_led,d_lantern').split(',');
 fs.mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
-  args: process.env.CHECK_GPU ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-watchdog'],
+  args: GPU_ARGS,
 });
 const summary = {};
 for (const id of ids) {
   const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
+  console.log('WebGL の描画役:', await assertGpu(page));
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });

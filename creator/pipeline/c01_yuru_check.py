@@ -1,6 +1,6 @@
 """ゆるキャラチェック: 入れた絵を、最初に 3 つに分ける(最初の設計の決め)。分かれ道の次の手も決める。
 
-使い方: python creator/pipeline/c01_yuru_check.py <絵.png> <出力フォルダ> [--no-ai]
+使い方: python creator/pipeline/c01_yuru_check.py <絵.png> <出力フォルダ> [--no-ai] [--reuse]
 分け方:
   yuru    ゆるキャラ・マスコットとして扱いやすい(単純な形・顔が読める)→ 次: そのまま ① 見る段へ
   human   人の顔・人物の写真や写実寄りの絵 → 次: 「ゆるキャラにしてみる?」と提案(特徴を生かして yc-0-draw で描き直す)か、別の絵にする
@@ -50,7 +50,8 @@ C. 複雑な絵。景色・建物・たくさんの物、細かい部品や模�
 
 そのあとに 1 行だけ、「理由: 」に続けて短く理由を書いてかまいません。
 """
-ANS = re.compile(r"^\W*答え\W*[::]\W*([ABC])\b", re.M)
+ANS = re.compile(r"答え\s*[:：]\s*\**\s*([ABC])(?![A-Za-z])")
+ANS_LINE = re.compile(r"^\W*([ABC])(?:[\s.。:：]|$)", re.M)   # 「A. ゆるキャラ…」「C」だけの行(見本の形を外した答え)
 ROUNDS, NEED = 3, 2
 
 
@@ -92,13 +93,23 @@ def by_numbers(m):
     return None
 
 
-def ask(model, work, n):
-    text = J.ask_claude(model, work, os.path.join(work, "answers", f"{model}_{n}.txt"))
+def parse(text):
+    """「答え: X」を探す(理由が先でも、同じ行に続いても拾う)。無ければ、A・B・C だけで始まる行。"""
     m = ANS.search(text or "")
+    if m:
+        return m.group(1)
+    m = ANS_LINE.search(text or "")
     return m.group(1) if m else None
 
 
-def by_claude(png, out):
+def ask(model, work, n, reuse=False):
+    path = os.path.join(work, "answers", f"{model}_{n}.txt")
+    if reuse and os.path.exists(path):
+        return parse(open(path, encoding="utf-8").read())
+    return parse(J.ask_claude(model, work, path))
+
+
+def by_claude(png, out, reuse=False):
     os.makedirs(os.path.join(out, "answers"), exist_ok=True)
     shutil.copyfile(png, os.path.join(out, "pic.png"))
     with open(os.path.join(out, "brief.md"), "w", encoding="utf-8") as f:
@@ -106,7 +117,7 @@ def by_claude(png, out):
     res = {}
     for model in (J.CLAUDE_MODEL_1, J.CLAUDE_MODEL_2):
         with ThreadPoolExecutor(ROUNDS) as pool:
-            got = list(pool.map(lambda n: ask(model, out, n), range(ROUNDS)))
+            got = list(pool.map(lambda n: ask(model, out, n, reuse), range(ROUNDS)))
         best = max("ABC", key=got.count)
         res[model] = {"answers": got, "class": LETTER[best] if got.count(best) >= NEED else None}
     return res
@@ -127,10 +138,11 @@ def main():
     ap.add_argument("png")
     ap.add_argument("out")
     ap.add_argument("--no-ai", action="store_true")
+    ap.add_argument("--reuse", action="store_true", help="answers/ に前の答えがあれば、聞き直さずに読み直す(費用 0)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     m = metrics(a.png)
-    judges = {} if a.no_ai else by_claude(a.png, a.out)
+    judges = {} if a.no_ai else by_claude(a.png, a.out, a.reuse)
     cls, why = decide(judges, m)
     nxt, msg = NEXT[cls]
     row = {"picture": os.path.basename(a.png), "class": cls, "next": nxt, "message": msg, "why": why,

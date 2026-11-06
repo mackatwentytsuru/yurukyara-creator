@@ -5,6 +5,7 @@
 // 測り方: 同じ動きを、まず視線なしで回して、骨の角度の最大を測る(これが動きの分)。次に、横と上を見続けたまま回す。
 // 体の骨の角度は「動きの分 + 視線の上限」を超えてはいけない。動きの再生中と、動きが終わって人を見続けている間の両方を見る。
 import { chromium } from '../../web/node_modules/playwright-core/index.mjs';
+import { GPU_ARGS, assertGpu } from './gpu_only.mjs';
 
 const [port, url] = process.argv.slice(2, 4);
 const fi = process.argv.indexOf('--frames');
@@ -14,9 +15,10 @@ const DT = 1 / 30;
 
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
-  args: process.env.CHECK_GPU ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+  args: GPU_ARGS,
 });
 const page = await browser.newPage({ viewport: { width: 400, height: 400 } });
+console.log('WebGL の描画役:', await assertGpu(page));
 await page.goto(`http://127.0.0.1:${port}/creator/viewer/index.html?c=${url}&shot=1`);
 try {
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 60000 });
