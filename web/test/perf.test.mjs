@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PERF_SCHEMA, k6Record, quantile, summarizeFrames, summarizeResources } from '../src/stage/perf.js';
+import { PERF_SCHEMA, k6Record, quantile, summarizeFrames, summarizeResources, timingSummary } from '../src/stage/perf.js';
 
 test('版の名前がある', () => {
   assert.equal(PERF_SCHEMA, 'perf/1');
@@ -36,6 +36,15 @@ test('読み込んだファイルを種類ごとにまとめる', () => {
   assert.equal(s.total.count, 4);
   assert.equal(s.total.transfer, 1650);
   assert.deepEqual(s.files.map((f) => f.path), ['/characters/robo/model.glb', '/characters/robo/face_atlas.png']);
+});
+
+test('時間の欄: キャラを置いた時刻・最初のコマの時刻・その間(ms に丸める。分からない値は null)', () => {
+  const t = timingSummary({ readyAt: 812.4, firstFrameAt: 903.6, loopStartAt: 820.1, domContentLoadedAt: 120.2, warmS: 2, sampleS: 6 });
+  assert.deepEqual(t, { ready_ms: 812, first_frame_ms: 904, ready_to_first_frame_ms: 92, loop_start_ms: 820, dom_content_loaded_ms: 120, warm_s: 2, sample_s: 6 });
+  const none = timingSummary({ readyAt: 500 });
+  assert.equal(none.first_frame_ms, null);
+  assert.equal(none.ready_to_first_frame_ms, null);
+  assert.equal(timingSummary().ready_ms, null);
 });
 
 test('契約 K6 の平らな 1 行を作る(欄の名前と値)', () => {
