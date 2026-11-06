@@ -133,13 +133,35 @@ TOOTH_ROWS = [(338.5, 566.5, 570.5), (340, 564.5, 572.5), (341.5, 561.5, 575.5),
 TOOTH_AHEAD = float(os.environ.get("TOOTH_AHEAD", 0.0068))          # 上の端(上の唇の所)
 TOOTH_AHEAD_TIP = float(os.environ.get("TOOTH_AHEAD_TIP", 0.0068))  # 下の端(先)。下ほど前へ出すと輪郭の殻(7 mm)の外へはみ出し、判定役に「口の外にはみ出した白い四角」と言われた(11 mm で試した)。殻の内に止める
 TOOTH_IN = -0.0012
-OL_TOOTH = 0.0010
+OL_TOOTH = float(os.environ.get("OL_TOOTH", 0.0025))      # 前歯の黒い縁(殻)の厚み。絵の前歯の縁は約 3 mm。1 mm だと横から白い口元に埋もれて見えた(判定役)
 # 鼻の上の弧(︶): 正面の絵の黒い線を列ごとに測った中心と太さ(px)。真ん中は人中につながる
 ARC_PTS = [(548, 270.5), (552, 273.5), (556, 276.5), (560, 279.0), (564, 280.5), (568, 281.5), (572, 281.0), (576, 279.5),
            (580, 277.0), (584, 274.0), (588, 271.0), (590, 269.5)]
 ARC_W = [3, 8, 10, 9, 7, 7, 7, 8, 9, 9, 5, 2]
 MOUTH_KEYS = {"mouth_open": (1.8, 1.0), "mouth_wide": (1.0, 1.3), "mouth_o": (1.3, 0.5)}
 MOUTH_NU = 20
+# ---- 口の穴(第 6 波): 正面の絵の口の黒い形で、頭と顔の当て布に本当の穴をあける。穴の中(壁と底)は口の中の黒 ----
+# 面に貼る口(黒い板)は、横から見ると鼻づらの横で前歯の横の面を隠した(前歯が 13〜25 画素の点になった)。
+# 穴にすると、横から鼻づらの下に切れ込みが出て、上の唇(歯ぐき)から下がる前歯が白く見える。正面は穴の形 = 絵の口の黒の形のまま。
+MOUTH_HOLE = os.environ.get("MOUTH_HOLE", "1") == "1"
+HOLE_D = float(os.environ.get("HOLE_D", 0.010))               # 穴の深さ(元の面から奥へ、m。底は面に沿う)。
+# くさび形の鼻づらでは穴が左右へ抜け、横から前歯の後ろに背景が透ける。前歯の後ろは黒い塊(GumBack)でふさぎ、
+# 輪郭の殻は穴をあける前の頭から作って切らない(横から見て、絵と同じく前歯の前を輪郭の黒い線が通る)
+TOOTH_FRONT = float(os.environ.get("TOOTH_FRONT", 0.0))       # 前歯の前の面: 鼻づらの真ん中の面から前へ(行ごとに平ら)。
+# 前へ出すと横から輪郭の線を切って背景の上に白が乗り、判定役に「ほとんど見えない」と言われた(3 mm)。0 で線の内側に収まる
+TOOTH_BACK_TOP = float(os.environ.get("TOOTH_BACK_TOP", 0.011))   # 前歯の後ろの面(上の端): 真ん中の面から奥へ(横から見た三角の上の幅)
+TOOTH_BACK_TIP = float(os.environ.get("TOOTH_BACK_TIP", 0.001))   # 同じ(下の端)。上を厚く下を薄くすると、横から絵と同じ下向きの三角に見える
+# 歯ぐき(黒): 穴の上の縁から前歯の上までをつなぐ塊。いちばん上の行は面の奥(頭の中)に置き、前歯を上の唇に付ける
+GUM_ROWS = [(326.0, 562.0, 575.0), (330.5, 561.0, 576.0), (335.0, 560.0, 577.0), (339.5, 560.0, 577.0)]
+GUM_IN = 0.0015
+GUM_BACK = 0.0005          # 歯ぐきの前の面は前歯の前の面より少し奥(重なる所で前歯の白が勝つ。同じ面だと白と黒がちらついた)
+MOUTH_REST_PX = 0.8        # 静かな時の口の板: 穴の下の縁に沿う細い帯(面積 0 の面を作らない)
+KEY_OVERLAP_PX = 3.0       # シェイプキーで、動く黒い板を穴の下の縁から上へ重ねる量(前歯の下の端より下に収まる)
+# 前歯の下の延び: 横の絵の前歯は正面の絵より縦に長い(横 341〜357 px、正面 338.5〜351 px)。前歯を下の唇の黒い縁(LipEdge)の後ろへ伸ばし、
+# 正面からは縁に隠して絵の形のまま、横からは縦に長い三角に見せる(縁は前歯の前の面から 1 mm だけ。横から見ると輪郭の黒い線に重なる)
+TOOTH_EXT_ROWS = [(353.5, 564.5, 572.5), (356.0, 566.5, 570.5)]
+LIP_EDGE_ROWS = [(351.0, 561.0, 576.0), (356.8, 563.0, 574.0)]
+LIP_EDGE_T = (0.0003, 0.0010)    # 縁の前の面は前歯の前の面から 0.3 mm 前、後ろの面は 1.0 mm 奥
 # 背中の筋: 1 本の帯の真ん中を濃い色にする(首で切れない)。後ろの絵の幅 61 px・芯 25 px、芯は z 0.756〜0.208
 STRIPE_PATH = [(180, 0.885), (180, 0.172)]
 STRIPE_W, STRIPE_ROWS, STRIPE_SEG = 0.060, 21, 80
@@ -425,12 +447,219 @@ def mouth_pts(k, fw):
     return [list(r) for r in zip(*pts)]
 
 
+def mouth_tb(x):
+    """穴(静かな時の口 = 正面の絵の口の黒)の、列 x(画素)の上の縁と下の縁。範囲の外は None。"""
+    cols = MOUTH_COLS
+    if x < cols[0][0] or x > cols[-1][0]:
+        return None
+    for i in range(len(cols) - 1):
+        x0, t0, b0 = cols[i]
+        x1, t1, b1 = cols[i + 1]
+        if x0 <= x <= x1:
+            t = (x - x0) / (x1 - x0)
+            return t0 + (t1 - t0) * t, b0 + (b1 - b0) * t
+    return cols[-1][1], cols[-1][2]
+
+
+def mouth_ext_pts(k, fw):
+    """穴のある口の、動く黒い板の点(画素)。列ごとに、開いた口の列 [上の縁, 下の縁] のうち穴の外の所だけを覆う。
+    穴の範囲の列は穴の下の縁から下(縁に MOUTH_REST_PX だけ重ねる)、広げて穴の横へ出た列は列の全部。
+    基本の形(k=1, fw=1)は、穴の下の縁に沿う細い帯になる(静かな時は穴だけが口に見える。横から前歯を隠さない)。
+    シェイプキーでは穴の下の縁に KEY_OVERLAP_PX 重ねる(広げた口の角で、穴の縁が急に上がる所に桃色の欠けが出たため)。
+    口の形全体を覆うと、板(面から 4.2 mm 前)が前歯の前に来て、話す間は前歯が隠れた(下見で確かめた)。"""
+    rest = (k, fw) == (1.0, 1.0)
+    cols = []
+    for (x, top, bot) in MOUTH_COLS:
+        xx = 568.0 + (x - 568.0) * fw
+        kb = top + (bot - top) * k
+        tb = mouth_tb(xx)
+        if tb is None:
+            a, b = top, max(kb, top + MOUTH_REST_PX)
+        else:
+            a = tb[1] - (MOUTH_REST_PX if rest else KEY_OVERLAP_PX)
+            b = max(kb, tb[1])
+        cols.append([(xx, a + (b - a) * i / 6) for i in range(7)])
+    return [list(r) for r in zip(*cols)]
+
+
+def hole_cutter(surf, mat, step=2.0, nrow=8, ahead=0.03):
+    """口の穴をあける刃: 正面の絵の口の黒い形を前後へ伸ばした閉じた形(前のふたは面から ahead 前、後ろのふた = 穴の底は面から HOLE_D 奥)。
+    底は列と行の格子で面に沿う(平らな底だと、くさび形の鼻づらの横で穴があかない)。"""
+    x0, x1 = MOUTH_COLS[0][0], MOUTH_COLS[-1][0]
+    n = int(round((x1 - x0) / step))
+    cols = []
+    for i in range(n + 1):
+        x = x0 + (x1 - x0) * i / n
+        t, b = mouth_tb(x)
+        if b - t < 1.0:          # 両端は高さ 0 なので、刃が潰れないよう 1 px にする
+            c = (t + b) / 2
+            t, b = c - 0.5, c + 0.5
+        cols.append([(x, t + (b - t) * j / nrow) for j in range(nrow + 1)])
+    pts = [list(r) for r in zip(*cols)]          # [行(上→下)][列(+x)]
+    fr = [[(X(px), surf(X(px), Z(py)) - ahead, Z(py)) for px, py in row] for row in pts]
+    bk = [[(X(px), surf(X(px), Z(py)) + HOLE_D, Z(py)) for px, py in row] for row in pts]
+    nv, nu = len(pts), len(pts[0])
+    nb = nv * nu
+    verts = [p for row in fr for p in row] + [p for row in bk for p in row]
+    faces = []
+    for i in range(nv - 1):
+        for j in range(nu - 1):
+            a = i * nu + j
+            q = (a, a + nu, a + nu + 1, a + 1)
+            faces.append(q)
+            faces.append(tuple(reversed([v + nb for v in q])))
+    ring = ([(0, j) for j in range(nu)] + [(i, nu - 1) for i in range(1, nv)] + [(nv - 1, j) for j in range(nu - 2, -1, -1)]
+            + [(i, 0) for i in range(nv - 2, 0, -1)])
+    for k in range(len(ring)):
+        (i0, j0), (i1, j1) = ring[k], ring[(k + 1) % len(ring)]
+        a, b = i0 * nu + j0, i1 * nu + j1
+        faces.append((a, b, b + nb, a + nb))
+    ob = P._make("mouth_cutter", verts, faces, mat, (0, 0, 0), (0, 0, 0), smooth=False)
+    fix_normals(ob)
+    return ob
+
+
+def cut_hole(ob, cutter, sheet):
+    """ob から刃の形を引く(Blender の Boolean、EXACT)。穴の壁と底は刃の材質(口の中の黒)になる。
+    sheet(顔の当て布のような開いた板)は、刃から来た面を消して、穴だけを残す。"""
+    m = ob.modifiers.new("mouth_hole", "BOOLEAN")
+    m.operation = "DIFFERENCE"
+    m.solver = "EXACT"
+    m.object = cutter
+    m.material_mode = "TRANSFER"
+    m.use_hole_tolerant = sheet
+    dg = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(ob.evaluated_get(dg), preserve_all_data_layers=True, depsgraph=dg)
+    ob.modifiers.remove(m)
+    old = ob.data
+    ob.data = me
+    bpy.data.meshes.remove(old)
+    if sheet:
+        cut_mat = cutter.data.materials[0]
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bad = [f for f in bm.faces if me.materials[f.material_index] == cut_mat]
+        bmesh.ops.delete(bm, geom=bad, context="FACES")
+        bm.to_mesh(me)
+        bm.free()
+        while len(me.materials) > 1 and me.materials[len(me.materials) - 1] == cut_mat:
+            me.materials.pop(index=len(me.materials) - 1)
+    for p in me.polygons:
+        p.use_smooth = True
+    n_in = sum(1 for p in me.polygons if me.materials[p.material_index] == cutter.data.materials[0])
+    print("CUT", ob.name, "faces", len(me.polygons), "hole faces", n_in)
+    return ob
+
+
+def block_rows(name, rows, edge, mat, ncols=8):
+    """行ごとの (py, x0, x1) の範囲を、行ごとの前の面と後ろの面(edge(py, px, x) → (前の y, 後ろの y))で閉じた塊(前歯・歯ぐき)。"""
+    pts = rows_to_pts(rows, ncols)
+    fr, bk = [], []
+    for row in pts:
+        fr.append([])
+        bk.append([])
+        for px, py in row:
+            yf, yb = edge(py, px, X(px))
+            fr[-1].append((X(px), yf, Z(py)))
+            bk[-1].append((X(px), yb, Z(py)))
+    nv, nu = len(pts), ncols + 1
+    nb = nv * nu
+    verts = [p for row in fr for p in row] + [p for row in bk for p in row]
+    faces = []
+    for i in range(nv - 1):
+        for j in range(nu - 1):
+            a = i * nu + j
+            q = (a, a + nu, a + nu + 1, a + 1)
+            faces.append(q)
+            faces.append(tuple(reversed([v + nb for v in q])))
+    ring = ([(0, j) for j in range(nu)] + [(i, nu - 1) for i in range(1, nv)] + [(nv - 1, j) for j in range(nu - 2, -1, -1)]
+            + [(i, 0) for i in range(nv - 2, 0, -1)])
+    for k in range(len(ring)):
+        (i0, j0), (i1, j1) = ring[k], ring[(k + 1) % len(ring)]
+        a, b = i0 * nu + j0, i1 * nu + j1
+        faces.append((a, b, b + nb, a + nb))
+    ob = P._make(name, verts, faces, mat, (0, 0, 0), (0, 0, 0))
+    fix_normals(ob)
+    return ob
+
+
+def tooth_mid_y(py):
+    """前歯の横から見た幅の真ん中の、鼻づらの真ん中の面からの奥行き(m、奥が正)。8 方向の撮影で前歯の画素を測る点に使う。"""
+    if not MOUTH_HOLE:
+        return -(TOOTH_AHEAD + TOOTH_AHEAD_TIP) / 2
+    rows = TOOTH_ROWS + TOOTH_EXT_ROWS
+    y0, y1 = rows[0][0], rows[-1][0]
+    t = (py - y0) / (y1 - y0)
+    return (-TOOTH_FRONT + TOOTH_BACK_TOP + (TOOTH_BACK_TIP - TOOTH_BACK_TOP) * t) / 2
+
+
+def tooth_in_hole(surf, mats):
+    """穴のある口の前歯(白)と歯ぐき(黒)。前の面は鼻づらの真ん中の面から TOOTH_FRONT 前(行ごとに平ら)、
+    後ろの面は上で TOOTH_BACK_TOP・下で TOOTH_BACK_TIP 奥(横から見て下向きの三角に近い形)。
+    歯ぐき: 上の段は穴の上の縁から前歯の上まで。下の段は前歯の真後ろ(正面からは前歯に隠れる幅)で、穴の底の奥までふさぐ(横から透けない)。
+    前歯は下の唇の黒い縁(LipEdge)の後ろへ TOOTH_EXT_ROWS だけ伸ばす(正面は縁に隠れ、横からは絵のように縦に長い)。"""
+    rows = TOOTH_ROWS + TOOTH_EXT_ROWS
+    y0, y1 = rows[0][0], rows[-1][0]
+
+    def back_of(py):
+        t = min(max((py - y0) / (y1 - y0), 0.0), 1.0)
+        return TOOTH_BACK_TOP + (TOOTH_BACK_TIP - TOOTH_BACK_TOP) * t
+
+    def tooth_edge(py, px, x):
+        yc = surf(0.0, Z(py))
+        return yc - TOOTH_FRONT, yc + back_of(py)
+
+    def gum_edge(py, px, x):
+        yc = surf(0.0, Z(py))
+        # 後ろの面は穴の底の少し奥まで(深くすると頭に埋まる点が 6 割を超え、検査 ③ の「飲まれている」に落ちた)
+        if py <= GUM_ROWS[0][0] + 0.01:           # いちばん上の行は面の奥(その点の面から GUM_IN 奥)= 頭の中
+            return surf(x, Z(py)) + GUM_IN, yc + HOLE_D + 0.0005
+        return yc - TOOTH_FRONT + GUM_BACK, yc + HOLE_D + 0.0005
+
+    def behind_edge(py, px, x):
+        yc = surf(0.0, Z(py))
+        f = yc + back_of(py) - 0.0003
+        return f, max(f + 0.0005, yc + HOLE_D + 0.001)
+    # 前歯の後ろの段: 前歯と同じ行で、幅を左右 0.4 px ずつ細く(横から見て、重なる所は前歯の横の面が手前)
+    def lip_edge(py, px, x):
+        yc = surf(0.0, Z(py))
+        return yc - TOOTH_FRONT - LIP_EDGE_T[0], yc - TOOTH_FRONT + LIP_EDGE_T[1]
+    behind_rows = [(py, a + 0.4, b - 0.4) for py, a, b in rows]
+    tooth = block_rows("Tooth", rows, tooth_edge, mats["tooth"], ncols=8)
+    gum = block_rows("Gum", GUM_ROWS, gum_edge, mats["mouth"], ncols=6)
+    # 前歯の後ろの段と下の唇の縁は頭に合わせる(ほとんどが前歯と頭の中なので、別の部品にすると検査 ③ の「飲まれている」に落ちる)
+    gum_back = block_rows("GumBack", behind_rows, behind_edge, mats["mouth"], ncols=8)
+    lip = block_rows("LipEdge", LIP_EDGE_ROWS, lip_edge, mats["mouth"], ncols=6)
+    gum_back = P.join([gum_back, lip], "GumBack")
+    return tooth, gum, gum_back
+
+
+def px_grid_y(pts2, surf, off):
+    """px_grid と同じだが、面からの距離 off を「真っすぐ前(-Y)」へ取る(正面から見た位置が絵の画素のまま。穴の縁とずれない)。
+    面の法線の向きの距離が off になるよう、前への量は off / |法線の y|(0.35 で止める)。"""
+    out = []
+    for row in pts2:
+        r = []
+        for px, py in row:
+            x, z = X(px), Z(py)
+            hit, nor = surf.n(x, z)
+            ny = max(abs(nor.normalized().y), 0.35)
+            r.append((x, hit.y - off / ny, z))
+        out.append(r)
+    return out
+
+
 def mouth_mesh(surf, mats):
     """口: 黒い板(前と後ろ)。mouth_open・mouth_wide・mouth_o のシェイプキー(口の下の縁と幅を動かす)。
-    前歯は別の塊(Tooth)にして上の唇に付ける(口が開いても歯は上に残る)。"""
+    前歯は別の塊(Tooth)にして上の唇に付ける(口が開いても歯は上に残る)。
+    MOUTH_HOLE のとき、板は穴の外へ出る所だけ(mouth_ext_pts)。基本の形は穴の下の縁の細い帯。"""
+    pts_fn = mouth_ext_pts if MOUTH_HOLE else mouth_pts
+
+    grid = px_grid_y if MOUTH_HOLE else px_grid
+
     def build(k, fw):
-        dark = mouth_pts(k, fw)
-        return [px_grid(dark, surf, 0.0042), px_grid(dark, surf, -0.0015)]
+        dark = pts_fn(k, fw)
+        return [grid(dark, surf, 0.0042), grid(dark, surf, -0.0015)]
     grids = build(1.0, 1.0)
     allg = [(grids[0], True), (grids[1], False)]
     verts, faces = [], []
@@ -467,10 +696,17 @@ def build_face(surf_head, mats):
     nose = plate("nose", ellipse_rows(NOSE_C, NOSE_R, 22), surf_head, 0.0030, 0.0025, mats["pink"], ncols=16)
     # 鼻の上の弧(︶ の 1 本)と人中
     arc = ribbon("nose_arc", ARC_PTS, ARC_W, surf_head, 0.0052, mats["black"])
-    phil = ribbon("philtrum", [(569, 282), (569, 300), (569, 322), (569, 334)], [9, 8, 8, 9], surf_head, 0.0052, mats["black"])
+    # 人中の下の端: 穴のある口では穴の上の縁(330 px)の手前で止める(穴の上へ垂れると、穴のあいた鼻の板を内側と数えて検査 ③ に落ちた)
+    phil_end = 329.5 if MOUTH_HOLE else 334
+    phil = ribbon("philtrum", [(569, 282), (569, 300), (569, 322), (569, phil_end)], [9, 8, 8, 9], surf_head, 0.0052, mats["black"])
     mouth = mouth_mesh(surf_head, mats)
-    # 前歯 1 本: 上の唇から下がる白い塊(正面は絵の形、横からは口の前に白く見える)
-    tooth = slab("Tooth", TOOTH_ROWS, surf_head, TOOTH_AHEAD, TOOTH_IN, mats["white"], ncols=8, ahead_tip=TOOTH_AHEAD_TIP)
+    parts["Gum"] = parts["GumBack"] = None
+    if MOUTH_HOLE:
+        # 前歯 1 本と歯ぐき: 穴の中で上の唇から下がる(横から切れ込みの中に白く見える)
+        tooth, parts["Gum"], parts["GumBack"] = tooth_in_hole(surf_head, mats)
+    else:
+        # 前歯 1 本: 上の唇から下がる白い塊(正面は絵の形、横からは口の前に白く見える)
+        tooth = slab("Tooth", TOOTH_ROWS, surf_head, TOOTH_AHEAD, TOOTH_IN, mats["white"], ncols=8, ahead_tip=TOOTH_AHEAD_TIP)
     parts["flat"] = [mask_line, mask, nose, arc, phil]
     parts["Mouth"] = mouth
     parts["Tooth"] = tooth
@@ -583,6 +819,13 @@ def main():
         brown=flat_mat("Brown", BROWN), cream=flat_mat("Cream", CREAM), pink=flat_mat("Pink", PINK), green=flat_mat("Green", GREEN),
         white=flat_mat("Glove", WHITE), stripe=flat_mat("Stripe", STRIPE), black=flat_mat("Ink", BLACK), mouth=flat_mat("MouthIn", BLACK),
     )
+    # 前歯は光の向きによらず絵の白のまま(地の色 0・発光 1)。横から見ると前歯の横の壁は下向きで、ほかと同じ材質だと灰色になり、
+    # 判定役に「白い前歯が小さい」と言われた(白く写る所が上半分だけだった)
+    tooth_m = flat_mat("ToothWhite", WHITE)
+    tb = next(n for n in tooth_m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    tb.inputs["Base Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+    tb.inputs["Emission Strength"].default_value = 1.0
+    mats["tooth"] = tooth_m
     ol = P.material("Outline", (0, 0, 0), rough=1.0, spec=0.0)
     ol.use_backface_culling = True
     mats["outline"] = ol
@@ -613,9 +856,26 @@ def main():
             secs.append(dict(z=Z(py), cx=sign * (((xl + xr) / 2) - CX) / S * -1.0, cy=((yf + yb) / 2 - CX) / S,
                              rx=(xr - xl) / 2 / S, ry=(yb - yf) / 2 / S))
         ears.append(P.loft("ear%d" % sign, secs, mat=mats["brown"], n=28, e=1.0, refine=2))
-    head_all = P.join([head] + ears, "Head")
+    ol_head_all = None
+    if MOUTH_HOLE:
+        # 口の穴: 頭(耳と合わせる前の頭だけ。耳と重なったまま引くと、耳の殻の付け根も消える)と顔の当て布(仮面の縁・仮面・鼻)から、
+        # 口の黒い形を引く
+        cutter = hole_cutter(surf_head, mats["mouth"])
+        # 殻は穴をあける前の頭から(切らない)。穴をあけた頭から作ると、切り口の細い三角の法線が乱れて口の角から黒い棘が 25 mm 出た。
+        # 殻を口の形に切り抜くと、横から前歯が輪郭の外の背景に乗って見えにくかった。正面からは殻の手前の面は裏向きで描かれない
+        ol_parts = [with_outline(head, OL, mats)] + [with_outline(e, OL, mats) for e in ears]
+        cut_hole(head, cutter, sheet=False)
+        for o in face["flat"][:3]:
+            cut_hole(o, cutter, sheet=True)
+        bpy.data.objects.remove(cutter, do_unlink=True)
+        ol_head_all = P.join(ol_parts, "ol_Head")
+        ol_head_all["surface_only"] = True
+    head_all = P.join([head] + ears + ([face["GumBack"]] if face["GumBack"] is not None else []), "Head")
     group(head_all, "head")
-    objs_shell.append(head_all)
+    if ol_head_all is None:
+        objs_shell.append(head_all)
+    else:
+        group(ol_head_all, "head")
 
     group(torso, "body")
     objs_shell.append(torso)
@@ -704,6 +964,8 @@ def main():
         group(o, "head")
     group(face["Mouth"], "head")
     group(face["Tooth"], "head")
+    if face["Gum"] is not None:
+        group(face["Gum"], "head")
     with_outline(face["Tooth"], OL_TOOTH, mats)        # 前歯の黒い縁(横から見た時に絵と同じ線が出る)
     group(belly, "body")
     group(belly_line, "body")
@@ -742,7 +1004,7 @@ def main():
         "belly": [on(surf_torso, 568.5, 650, 0.0032), on(surf_torso, 568.5, 760, 0.0032), on(surf_torso, 520, 900, 0.0032)],
         "tail": [list(TAIL[i]) for i in (6, 8, 10, 12)],
         "nose_tip": [on(surf_head, 568.5, 300, 0.003)],
-        "tooth": [[0.0, round(surf_head(0.0, Z(346)) - (TOOTH_AHEAD + TOOTH_AHEAD_TIP) / 2, 4), round(Z(346), 4)]],
+        "tooth": [[0.0, round(surf_head(0.0, Z(346)) + (tooth_mid_y(346)), 4), round(Z(346), 4)]],
         "eye_L": [rig["eye_L"]], "eye_R": [rig["eye_R"]],
     }
     json.dump(samples, open(WORK + "/samples_at.json", "w"), indent=1)
