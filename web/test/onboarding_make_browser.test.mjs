@@ -193,6 +193,10 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
       assert.match(await frame.$eval('#picCap', (e) => e.textContent), /1 回目の絵。この PC の Claude Code が描きました/);
       assert.doesNotMatch(await frame.$eval('#picCap', (e) => e.textContent), /C0|段 \d/, '内部の言葉を出さない(D7)');
+      // 作る画面は img の src(blob:)と #c0 を同じ時に出し、絵はその後に読み込まれる(ふだん 2〜8ms)。#c0 だけを待って
+      // すぐ読むと、絵の読み込みが詰まった時に naturalWidth 0 で落ちる(順の揺れ。絵を 60ms 遅らせると必ず落ちた)。
+      // PC の 3 本目と同じく、読み終わるのを待ってから同じ文で確かめる(読めなければ「描いた絵が出る」で落ちる)
+      await frame.waitForFunction(() => document.getElementById('pic').naturalWidth > 0, null, { timeout: 10_000 }).catch(() => {});
       assert.ok(await frame.$eval('#pic', (e) => e.naturalWidth > 0), '描いた絵が出る');
       await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子ができたよ。どうかな?'));
       await fits(page, frame, '3 歩目');
