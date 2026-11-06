@@ -4,6 +4,7 @@
 // サーバー ⇔ Claude / ElevenLabs の間は変わらない。パケット損失は CDP では作れないので、測らない。
 // 本物の Claude と ElevenLabs を呼ぶ(1 回あたり Claude 1 回・読み上げ約 30 字)。指標は画面の中だけで集め、実測のログ(latency.jsonl)には書かない。
 import { chromium } from 'playwright-core';
+import { GPU_ARGS, stopIfSoftwareRenderer } from '../src/stage/gpuGuard.js'; // WebGL を CPU で描かない決まり
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
@@ -18,7 +19,7 @@ const QUESTIONS = ['こんにちは', 'お手洗いはどこですか', '休憩�
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
+  args: [...GPU_ARGS, '--autoplay-policy=no-user-gesture-required'],
 });
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 // 指標の送信だけを画面の中で握りつぶす。page.route(通信の横取り)は使わない:
@@ -28,6 +29,7 @@ await page.addInitScript(() => {
   window.fetch = (url, init) => (String(url).includes('/api/metrics') && init?.method === 'POST' ? Promise.resolve(new Response('{"ok":true}')) : real(url, init));
 });
 await page.goto(`${base}/?character=f_led&place=test_room&auto=0`);
+await stopIfSoftwareRenderer(page, browser); // CPU の描画なら止める
 await page.waitForFunction(() => window.__app?.character && window.__app.speaker, null, { timeout: 60000 });
 await page.click('#startSim');
 const cdp = await page.context().newCDPSession(page);

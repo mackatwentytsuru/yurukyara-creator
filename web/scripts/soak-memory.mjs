@@ -4,6 +4,7 @@
 //   env -u ANTHROPIC_API_KEY -u CLAUDE_CREDIT_API_KEY -u ELEVENLABS_API_KEY PORT=8815 node server/index.mjs
 // 区切りごとに、強制のごみ集め(gc)のあとの JS ヒープ、DOM の数、three のジオメトリ・テクスチャの数、会話の履歴の長さを出す。
 import { chromium } from 'playwright-core';
+import { GPU_ARGS, stopIfSoftwareRenderer } from '../src/stage/gpuGuard.js'; // WebGL を CPU で描かない決まり
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
@@ -15,7 +16,7 @@ const QUESTIONS = ['こんにちは', 'お手洗いはどこですか', '休憩�
 const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
   headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required', '--js-flags=--expose-gc', '--enable-precise-memory-info'],
+  args: [...GPU_ARGS, '--autoplay-policy=no-user-gesture-required', '--js-flags=--expose-gc', '--enable-precise-memory-info'],
 });
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 const errors = [];
@@ -25,6 +26,7 @@ await page.addInitScript(() => {
   window.fetch = (url, init) => (String(url).includes('/api/metrics') && init?.method === 'POST' ? Promise.resolve(new Response('{"ok":true}')) : real(url, init));
 });
 await page.goto(`${base}/?character=f_led&place=test_room&auto=0`);
+await stopIfSoftwareRenderer(page, browser); // CPU の描画なら止める
 await page.waitForFunction(() => window.__app?.character && window.__app.speaker, null, { timeout: 60000 });
 await page.click('#startSim');
 

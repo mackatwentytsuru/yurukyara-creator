@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { makeSpeech, stereo } from './lib/stereoSim.mjs';
+import { GPU_ARGS, stopIfSoftwareRenderer } from '../src/stage/gpuGuard.js'; // WebGL を CPU で描かない決まり
 
 const arg = (k, d) => {
   const i = process.argv.indexOf('--' + k);
@@ -53,13 +54,14 @@ for (const deg of ANGLES) {
   const browser = await chromium.launch({
     ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' }),
     headless: true,
-    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${file}`, '--autoplay-policy=no-user-gesture-required', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${file}`, '--autoplay-policy=no-user-gesture-required', ...GPU_ARGS],
   });
   const ctx = await browser.newContext({ permissions: ['microphone'] });
   const page = await ctx.newPage();
   const problems = [];
   page.on('pageerror', (e) => problems.push(e.message.slice(0, 160)));
   await page.goto(`http://127.0.0.1:${PORT}/?micspacing=${SPACING}&auto=0`);
+  await stopIfSoftwareRenderer(page, browser); // CPU の描画なら止める
   await page.waitForFunction(() => window.__app?.startStereo, null, { timeout: 60000 });
   const status = await page.evaluate(() => window.__app.startStereo());
   const info = await page.evaluate(() => window.__app.stereoMic.info);
