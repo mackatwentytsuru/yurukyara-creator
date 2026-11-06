@@ -6,6 +6,7 @@ import { pose2d } from './pose2d.js';
 
 const LAYER_GAP = 0.002; // 板どうしの前後の間(メートル)
 const EMOTION_MIN = 0.25; // これより弱い表情は neutral にする
+const ARM_FRONT = 1.0; // 腕がこれ(ラジアン)より上がったら頭の前に描く
 
 /**
  * SVG の部品を板(平面)に描いて動かす 2D のキャラ。CharacterBase を継ぐので、
@@ -54,6 +55,7 @@ export class Svg2DCharacter extends CharacterBase {
     mesh.position.copy(this._toLocal(x + w / 2, y + h / 2, parentPivot));
     mesh.position.z = order * LAYER_GAP;
     mesh.renderOrder = order;
+    mesh.userData.order = order;
     return mesh;
   }
 
@@ -88,6 +90,7 @@ export class Svg2DCharacter extends CharacterBase {
     const head = this.groups.head;
     const headPivot = head.userData.pivot;
     const headZ = parts.head.z ?? 0;
+    this.headOrder = headZ;
     this.face = new THREE.Group();
     this.face.name = '2d:face';
     head.add(this.face);
@@ -177,10 +180,19 @@ export class Svg2DCharacter extends CharacterBase {
     const head = this.groups.head;
     head.position.set(head.userData.base.x + m.headX * this.headSize.w, head.userData.base.y + m.headY * this.headSize.h, head.userData.base.z);
     head.rotation.z = m.headRot;
-    head.scale.y = m.headSquash;
+    // 上半身のつぶしを頭では打ち消す(頭は丸いまま、少し手前へ大きく)
+    head.scale.set(m.headGrow, (m.headSquash * m.headGrow) / this.upper.scale.y, 1);
     this.face.position.set(m.faceX * this.headSize.w, m.faceY * this.headSize.h, 0);
-    if (this.groups.arm_r) this.groups.arm_r.rotation.z = m.armR;
-    if (this.groups.arm_l) this.groups.arm_l.rotation.z = m.armL;
+    for (const [name, rot] of [['arm_r', m.armR], ['arm_l', m.armL]]) {
+      const arm = this.groups[name];
+      if (!arm) continue;
+      arm.rotation.z = rot;
+      // 腕を高く上げたら、頭の前に出す(後ろのままだと、手を振る手が頭に隠れる)
+      const mesh = arm.children[0];
+      const front = Math.abs(rot) > ARM_FRONT;
+      mesh.renderOrder = front ? this.headOrder + 0.5 : mesh.userData.order;
+      mesh.position.z = (front ? this.headOrder + 0.5 : mesh.userData.order) * LAYER_GAP;
+    }
     this.state2d.motion = m;
   }
 

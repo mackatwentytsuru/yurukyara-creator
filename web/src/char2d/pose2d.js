@@ -11,7 +11,7 @@ export const DEFAULT_GAINS = {
   headShiftY: 0.22, // 頭の縦ずれ(同じ)
   faceParallax: 0.6, // 顔の部品は頭よりこれだけ多めにずらす
   arm: 0.8, // 腕の回転の効き
-  bowSquash: 0.45, // おじぎで上半身を縦につぶす量
+  bowSquash: 0.2, // おじぎで体を縦につぶす量(頭はつぶさない。つぶすと平たい顔に見える)
   bounce: 0.012, // 待つ間の弾み(背の高さに対する割合)
 };
 
@@ -42,7 +42,8 @@ export function pose2d(pose, s = {}, gains = DEFAULT_GAINS) {
     headRot: -roll,
     headSquash: 1 - 0.12 * Math.abs(Math.sin(clamp(pitch, -1, 1))),
     faceX: Math.sin(clamp(yaw, -1.2, 1.2)) * g.headShiftX * g.faceParallax,
-    faceY: -Math.sin(clamp(pitch, -1, 1)) * g.headShiftY * g.faceParallax,
+    faceY: -Math.sin(clamp(pitch + bow, -1, 1)) * g.headShiftY * g.faceParallax, // おじぎでは顔が下を向く
+    headGrow: 1 + 0.06 * Math.min(1, bow), // おじぎで頭が手前へ出る
     armR: armR * g.arm,
     armL: armL * g.arm,
   };

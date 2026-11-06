@@ -78,7 +78,7 @@ test(`意図の列 10 個を 2D に流す(受け手: ${k2 ? 'K2 の intent.js' :
     const label = `${i + 1}: ${intent.emotion}/${intent.gesture}`;
     const res = intentApi.applyIntent(c, intent, { userPosition: [0, 1.4, 2] });
     if ('played' in want && res && 'played' in res) assert.equal(res.played, want.played, `${label} 動きが始まったか`);
-    const seen = { armMin: 0, armMax: 0, headYMin: Infinity, headYMax: -Infinity, upperMin: 1, headRotMax: 0, headXMin: Infinity, headXMax: -Infinity };
+    const seen = { armMin: 0, armMax: 0, headYMin: Infinity, headYMax: -Infinity, upperMin: 1, headRotMax: 0, headXMin: Infinity, headXMax: -Infinity, faceYMin: 0 };
     const headY0 = c.groups.head.userData.base.y;
     run(c, 1.6, (cc) => {
       const h = cc.groups.head;
@@ -89,6 +89,7 @@ test(`意図の列 10 個を 2D に流す(受け手: ${k2 ? 'K2 の intent.js' :
       seen.headXMin = Math.min(seen.headXMin, h.position.x);
       seen.headXMax = Math.max(seen.headXMax, h.position.x);
       seen.upperMin = Math.min(seen.upperMin, cc.upper.scale.y);
+      seen.faceYMin = Math.min(seen.faceYMin, cc.face.position.y);
       seen.headRotMax = Math.max(seen.headRotMax, Math.abs(h.rotation.z));
     });
     const wantEmotion = want.emotion === 'neutral' || c.canShow(want.emotion) ? want.emotion : null;
@@ -98,7 +99,7 @@ test(`意図の列 10 個を 2D に流す(受け手: ${k2 ? 'K2 の intent.js' :
     assert.deepEqual(visibleIn(c, 'brows'), want.brows ? [want.brows] : [], `${label} 眉`);
     assert.ok(allFinite(c), `${label} 板の位置が数になっている`);
     if (check === 'armUp') assert.ok(seen.armMin < -1.2, `${label} 右腕が上がる (${seen.armMin.toFixed(2)})`);
-    if (check === 'bow') assert.ok(seen.upperMin < 0.8, `${label} 上半身が前へ倒れる (${seen.upperMin.toFixed(2)})`);
+    if (check === 'bow') assert.ok(seen.upperMin < 0.95 && seen.faceYMin < -0.02, `${label} 体が縮み顔が下を向く (${seen.upperMin.toFixed(2)}, ${seen.faceYMin.toFixed(3)})`);
     if (check === 'nod') assert.ok(seen.headYMax - seen.headYMin > 0.01, `${label} 頭が上下にうなずく (${(seen.headYMax - seen.headYMin).toFixed(3)})`);
     if (check === 'shake') assert.ok(seen.headXMax - seen.headXMin > 0.02, `${label} 頭が左右に動く`);
     if (check === 'tilt') assert.ok(seen.headRotMax > 0.05, `${label} 頭がかしぐ (${seen.headRotMax.toFixed(3)})`);
