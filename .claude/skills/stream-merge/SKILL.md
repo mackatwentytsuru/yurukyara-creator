@@ -68,3 +68,11 @@ description: 並べて進めた作業の線(w/s<n>-…)を、合わせる線(yur
 - 2D の見た目の話す試験は、`web_talk_check.mjs --character "norrie&look=2d"`(URL の `?character=` の後ろに足される)で開ける。結果の `web_talk.png` を開いて、板の 2D か 3D かを目で確かめる(2D は動きに tilt が出た)。
 - Git Bash で `"…$(grep $'\r' …)…"` のように二重引用符の中に `$'\r'` を書くと、CR として読まれず数が狂う(合わせ⑤で 10 と出て、正しくは 0)。引用符の外で数えるか、`printf '\r'` を使う。
 - 返した流れがあっても、残りの門が最後の木で全部通れば、開発の線と main は進めてよい(司令塔の言葉がある時)。返した線は、直ったら臨時の合わせで入れる。
+
+## 臨時の合わせ 5b で学んだ事(11/7 03:23〜03:45、実測)
+- **録画などの「待ってから入れる」合わせは、待つ間に下見と台本だけ済ませる**。下見は作業フォルダを触らない物だけ(`git merge-tree --write-tree --name-only yurukyara-dev <頭>`・`git diff --name-status yurukyara-dev...<頭>`・`git log --oneline yurukyara-dev..<頭>` と札の「入れてほしいコミット」の比べ)。待つのは、2 分ごとの背景の until ループ(終わると知らせが来る)と、手前で python の `time.sleep` の見張り(1 回 9 分まで)。`<<DONE>>` が出てから 11 分で、門 2 回・話す試験・画面の確かめ・送る、まで済んだ。
+- 開発の線は、合わせの後も司令塔のスキルのコミットで進む(b3c8a7d → 78facf1)。合わせ係の線を早送りしてから入れる。流れが先にその頭を取り込んでいれば、`git diff --name-status <開発の線>...<流れの頭>` はその流れのファイルだけになる(5b は S5 の 9 本)。土台の門も 1 回流す(.md だけの変化でも、数を控える元になる。366/366)。
+- **`machine_lock.py run ... -- bash x.sh` は、Windows では WSL の bash を呼ぶことがある**(`/j/...` が無いと止まった)。Git Bash の道を書く(`cygpath -w "$(which bash)"` → `C:\Program Files\Git\usr\bin\bash.exe`)か、台本を python にする。
+- **画面の確かめ(幅 390・400・480 × 3D・2D)は、S5 の `layout_check.mjs` を読むだけで使う**(`node <S5>\tools\layout_check.mjs <web> <port> <出力> --character norrie --only single`、次に `--only switch`)。1 つのサーバーで続けると記憶の合鍵の回数の上限で 429 が出る(S5 の一度に流した回で出た)ので、**回ごとにサーバーを起こし直す**と問題 0。道具の `ok` は 44px 未満を見ないので、切り替えのボタン(aria-label が「3D(」「2D(」で始まる 2 つ)の幅と高さが 44 以上かは、結果の `targets` から別に判定する。合格: 頭のすき間 ≥ 0・「覚えていること」が押して開く・押せない所 0・切り替え 44×44・はみ出し無し・描画役が GPU。
+- 会話サーバーは `web/dist` を配る。合わせた後、GPU の確かめの前に `vite build` を流す(門の vite build の行)。`dist/index.html` の時刻が合わせの後かを見る。
+- main の早送りの前の下見は 3 つ: `git diff --name-status main yurukyara-dev`・`comm -13 <(git ls-tree -r --name-only main | sort) <(git ls-tree -r --name-only yurukyara-dev | sort)`(新しい道)・`git cat-file -s` の合計(5b は 約 0.25MB)。

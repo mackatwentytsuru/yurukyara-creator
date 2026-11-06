@@ -1,6 +1,6 @@
 ---
 name: render-device
-description: ゆるキャラの画面(3D と 2D の板)を「軽いのにきれい」にする手順。重さの測り(?perf=1・measure-render.mjs・K6 の 1 行)、CPU の描画(SwiftShader)で止める見張り、端末の段(tiers.js)、meshopt の解凍の共通の口、2D の板の読み込み(looks)、既定のキャラ(主役ノリー)、動きの意図(K2)、スマホの https の道と Quest の実機の道(USB)、IWER で VR を確かめる、main.js に他の流れの部品を付ける。使う場面 - 重さを測る、最初のコマ、first_frame、読み込みの大きさ、遅い回線、--cold、--throttle、話す試験の口、mouth_max、fps、描く呼び出し、三角の数、スマホで重い、Quest で重い、端末の段、tier、SwiftShader、画面なしの Chrome で撮る、meshopt、KTX2、重さの表、2D の板、looks、?look=2d、既定のキャラ、主役、norrie、動きの意図、applyIntent、https の道、Quest、IWER、vr-check、quest-usb、記憶の札を付ける、初めての会話を付ける、スマホではみ出す。
+description: ゆるキャラの画面(3D と 2D の板)を「軽いのにきれい」にする手順。重さの測り(?perf=1・measure-render.mjs・K6 の 1 行)、CPU の描画(SwiftShader)で止める見張り、端末の段(tiers.js)、meshopt の解凍の共通の口、2D の板の読み込み(looks)、3D と 2D の見た目の切り替え(このタブだけ覚える)、キャラを上の段と下の帯の間に収める(スマホの幅で頭が段の下に入らない)、既定のキャラ(主役ノリー)、動きの意図(K2)、スマホの https の道と Quest の実機の道(USB)、IWER で VR を確かめる、main.js に他の流れの部品を付ける。使う場面 - 見た目の切り替え、2D と 3D を切り替える、sessionStorage、上の段に重なる、頭が隠れる、耳が切れる、Claude の考えが重なる、覚えていることが押せない、44px、--top-h、frameCharacter、topGuard、重さを測る、最初のコマ、first_frame、読み込みの大きさ、遅い回線、--cold、--throttle、話す試験の口、mouth_max、fps、描く呼び出し、三角の数、スマホで重い、Quest で重い、端末の段、tier、SwiftShader、画面なしの Chrome で撮る、meshopt、KTX2、重さの表、2D の板、looks、?look=2d、既定のキャラ、主役、norrie、動きの意図、applyIntent、https の道、Quest、IWER、vr-check、quest-usb、記憶の札を付ける、初めての会話を付ける、スマホではみ出す。
 ---
 
 # 軽いのにきれい(描画と端末)
@@ -54,8 +54,25 @@ description: ゆるキャラの画面(3D と 2D の板)を「軽いのにきれ�
 - 縮める道具(gltfpack・gltf-transform)はまだ無い。部品を足すのは S6 だけ。足すまでは縮めた GLB を作らない(手で量子化などをしない。GLB は S1 の持ち物)。
 - KTX2 は入れていない(計画の削る順 4)。変換の道具が無いうちに KTX2Loader(約 37KB)と変換の wasm(約 0.5MB)を足しても軽くならないため。
 
+## 上の段と下の帯の間に収める(スマホの幅。2026-11-07 第 5 波)
+- 上の段(上の札・見せ方のボタン・覚えていること・見た目の切り替え・「Claude の考え」の見出し)はスマホの幅で 3〜4 行(幅 390 で下の端 約 180px)になる。前はキャラの見せ方が下の帯しか避けず、幅 390・400・480 で 2D と 3D のノリーの頭と耳が段の下に入った(形の点の上の端と段の下の端のすき間 −76〜−90px)。
+- 直し方: `scene.js` の `frameCharacter` は、1 回置いてキャラの箱の横の範囲を画面へ写し、`state.topGuard(left, right)`(main.js が渡す。横に重なる上の段の下の端 + 8px)より上にキャラの上の端があれば、段の下から置き直す。2 回目はキャラが小さくなるだけなので、横に重なる段は増えない。計算(帯に収める高さと真ん中のずらし)は three を読まない `web/src/stage/framing.js` の `fitBand`・`guardBottom`(試験 `web/test/place_frame_band.test.mjs`)。直した後は すき間 +44〜+51px、PC は変わらない(左上の段がキャラに横で重ならない)。
+- カメラの見る高さ = キャラの真ん中の高さ + shift × 見える高さ。shift = (上の段 − 下の帯) ÷ 2 ÷ 画面の高さ(下の帯だけの時は前の式と同じ)。上の段は画面の 45%、下の帯は 50% までで切り、キャラの帯は 3 割は残す(横向きのスマホ)。
+- 全身の時は、キャラの実際の幅(原点から遠い側の 2 倍 × 1.04。しっぽが片側だけ長くても両側を空ける)も画面の幅に入れる。画角は毎回 28 度から計算する(前は部屋の中で広げた画角を次の計算に持ち越していた)。
+- 上の段の高さが変わったら置き直す: `.top` を ResizeObserver で見て `--top-h` を書き(「Claude の考え」の top に使う)、続けて置き直す。始めると札が 2 行になる・ボタンが増える時に効く。見出しを開いた中身(考えの窓の本文・覚えていることの引き出し)は、使う人が開いた時だけの重なりなので数えない。
+- 「Claude の考え」は幅 960 まで `top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px)`。決め打ちの `+ 76px` では、札が 2 行になった時に考えの見出しが「覚えていること」などに重なって押せなかった(S4 の撮影の練習 M12・M13)。
+- 押す所は 44px: `.top .place-mode-button, .top .drawer > summary` と `.thought-head`。S4 の「性格」「はじめての会話」は `place-mode-button fr-launch` で、S4 の JS が後から入れる `.fr-launch { min-height: 40px }`(1 つのクラス)が勝つので、`.top` を前に付けて強くする。summary は `line-height: 18px` と上下 12px で 44px(flex にしない。古い Safari の details の動きを変えない)。
+
+## 見た目の切り替え(3D と 2D。2026-11-07 第 5 波)
+- 3D と 2D の両方があるキャラだけ、上の段に `#lookSwitch`(「見た目」+「3D」「2D」の 2 つのボタン、aria-pressed、押す所 44px)を出す。スマホの幅では、畳んだ「Claude の考え」の見出しの右に `position: fixed` で置く(上の段の行を増やさない。考えを開くと窓の下に隠れる)。AR(data-hide-in-ar)・VR の間・入口の LED・ヘッドセット・`?perf=1` では出さない。
+- 両方あるかは `availableLooks(character)`(character/index.js): 3D は model があれば。2D は `looks.2d.parts` が文字(S2 の parts.json の場所)なら見に行かずにあり、`looks` はあるが `2d` が無い時は決まりの場所 `2d/parts.json` を 1 回 GET で見る(ノリーは合わせ⑤から looks.2d が書いてあるので見に行かない)(content-type が json の 200 だけ)。前の形(looks が無い。ロボくん・パネルくん・提灯くん)と、2d が部品の名前の並びだけ(みかんちゃん。板の部品の表が無い)は見に行かない(404 をコンソールに出さない)。
+- 替える時は `loadCharacter(lookSource.url, { ...app.tierOverrides, look })` で読み、舞台の object3d を入れ替え、`app.character` と `dialogue.character` を替え、置き直す。読んだ物は Map に持ち、2 回目からはすぐ替わる。会話・記憶・人格の文はキャラの id が同じなのでそのまま。
+- 選んだ方は、このタブだけで覚える: `sessionStorage` の `yc.look.<character.json の id>`(読み書きは try/catch。使えないブラウザでは覚えないだけ)。順は `?look=` → このタブで選んだ物 → `looks.default`。`?look=` が URL にある時は、押した時に `history.replaceState` で選んだ方へ書き換える(読み込み直しても同じ)。別のタブ・新しい文脈では既定に戻る。
+- 決まりは three を読まない `web/src/character/looks.js`(試験 `web/test/place_look_switch.test.mjs`。今の木のキャラの looks の形と、index.html・style.css の形も見る)。
+- **今の木のキャラを見る試験は、読んだ character.json から期待を作る(決め打ちしない)。** character.json はほかの流れ(主役・S1)の持ち物で、合わせの順で先に変わる。2026-11-07 合わせ⑤: 主役の流れがノリーの looks に `2d` を足しただけで、文字のぶつかり 0 のまま `'probe'` の決め打ちが落ちた(意味のぶつかり。382 件中 1 件)。直し方は「looks.2d があれば `'yes'`・無ければ `'probe'`」。決まりの答え(主役は 2D を出せる)は残し、形の違いだけを読んで合わせる。試す前に、looks.2d を外した写し(structuredClone して delete)でも期待と looks.js の答えが合うのを 1 行の node で見る。
+
 ## 2D の板と見た目の方式(looks)
-- `web/src/character/index.js` の `loadCharacter(url, { look })`: `?look=2d|3d` が先、次に character.json の `looks.default`。3D の形(model)が無く 2D がある時は 2D。2D が読めない時は、3D があれば 3D に戻す(警告だけ)。
+- `web/src/character/index.js` の `loadCharacter(url, { look, lookMemory })`: `?look=2d|3d` が先、次にこのタブで選んだ物(lookMemory = sessionStorage)、次に character.json の `looks.default`。3D の形(model)が無く 2D がある時は 2D。2D が読めない時は、3D があれば 3D に戻す(警告だけ)。返すキャラには `lookSource`(元の URL と character.json)が付く。
 - 2D は `looks.2d.parts` の parts.json(無ければ決まりの場所 `2d/parts.json`)と、その中の svg を読む。読み込み(fetch)は character/index.js の中だけで、宛先の変数名は `url`(privacy の試験の決まり)。2D の部品は `import('../char2d/index.js')` で、2D の時だけ読む(8.7KB)。
 - `looks.2d.parts` が部品の名前の配列(S1 の K1 の形。みかんちゃん)だと、parts.json が見つからず 3D に戻る。2D の板で出すには S2 の parts.json が要る。
 - **2D の部品(2d/parts.json・body.svg)だけが入っても、`characters/<id>/character.json` が無いとキャラは出ない**(既定の順では 404 で次のキャラへ、`?character=<id>` では「読み込めない」)。2D だけで出す最小の形: `{"id","name","looks":{"default":"2d","2d":{"parts":"2d/parts.json"}},"persona":"persona.md"}`。2026-11-07 00:1x、写しの木でこの形のノリー(S2 の 2D・S3 の人格の文)が、既定のキャラ 4/4・話す試験の口 0.692・IWER 19 項目・読み込み 1.20MB・最初のコマ 0.3〜0.4 秒で通った。
@@ -96,3 +113,8 @@ description: ゆるキャラの画面(3D と 2D の板)を「軽いのにきれ�
 - 公開の URL のまねは、Playwright の `page.route` で `/api/status` を 404、`/api/chat` を K5 のまとめた JSON(`{brain, fallback, reason, notice, events, ms}`)にする。合言葉の欄が出ること・会話の見出し x-demo-pass に打った値が付き URL に無いこと・理由つきの知らせが 1 行だけ・返事・記憶の一覧の読み直し(GET /api/memory)を見られる。
 - 鍵らしい文字の試しは、偽の文字を実行のときに組み立てる(例 `['ab','cd'].join('').repeat(12)`、48 字の英字)。/api/chat の本文に入っていないこと・短い知らせが出て消えることを見る。
 - 点検の道具を `python -I` で流すと PYTHONIOENCODING が効かず、日本語が化ける。`python -I -X utf8 tools/prepush_check.py` で読める。
+- (第 5 波)鍵の無いサーバーでは、あいづちの声が 0 種類で「あいづち」の札が出ず、上の札が 1 行のまま。本物のサーバーでは 2 行になって重なる。確かめでは「カメラなしで試す」の後に `window.__app.speaker.fillers = Array.from({ length: 5 }, () => ({ text: '', samples: new Float32Array(1), ms: 1 }))` で札を出す(板の道具 `work\S5\tools\layout_check.mjs` の `--fillers 5`。既定で出す)。
+- (第 5 波)キャラの「見えている上の端」は、箱の 8 つの角を写すと遠近で角が上へ出る(PC で 40px ほど上)。確かめでは形の点(`getVertexPosition` で骨の動きも入る)を間引いて写す。見せ方の計算(frameCharacter)は箱で控えめに測ってよい。
+- (第 5 波)1 つのサーバーに新しい文脈を続けて 10 回ほど開くと、記憶の合鍵を作る回数の上限(1 分あたり)で 429 がコンソールに出る。記憶を見ない確かめは `?memory=0` で開く。
+- (第 5 波)GPU の札(--kind gpu)は、ほかの流れの動画の生成(--kind video)と同時に使えない。待つ間に CPU だけの仕事(試験・点検・コミット・札)を進める。Bash の道具は 10 分で裏へ回るので、長く待つ命令は裏で流し、終わりを待ってから報告する。
+- (第 5 波)重なりと頭の位置と切り替えの確かめ: `node work\S5\tools\layout_check.mjs <web> <port> <出力> [--switch] [--only single|switch|others]`。幅 390・400・480・PC × 2D・3D で「覚えていること」が開くか・押せない所・44px 未満・頭のすき間・切り替えの有無、切り替え(押す → 読み込み直し → 戻す → 別の文脈)、ほかのキャラ(ようこそくん あり・みかんちゃん なし・ロボくん なし)を見て、絵と layout_check.json を出す。
