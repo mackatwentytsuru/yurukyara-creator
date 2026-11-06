@@ -3,8 +3,10 @@
   正面(-Y から見た絵)X = (px - 568.5) / S、画面の右 = +X = キャラの左。
   横(キャラの左の側面)Y = (px - 568.5) / S、顔は画面の左 = -Y。
   後ろ(+Y から見た絵)X = (568.5 - px) / S。
-体と頭は P.loft(正面の絵から半幅、横の絵から前後の端)、しっぽは P.tube(正面と横と後ろの 3 枚で 3D の中心線)。
+体は P.loft、頭は loft_face(正面の絵から半幅、横の絵から前後の端。顔の前半分は行ごとに細くして、横の絵の顔が横から見えるようにする)、
+しっぽは P.tube(正面と横と後ろの 3 枚で 3D の中心線)。
 輪郭は P.outline の殻(黒・背面を描かない)。毛の殻は使わない(平らな塗り)。
+色は元の絵の画素の色。材質は「地の色 A_SCALE 倍 + 発光 E_SCALE 倍」で、光の向きによる明暗を浅くする(影の側も絵の色に近い)。
 使い方: blender -b -P norrie.py -- <出力.blend> work=<作業フォルダ>"""
 import json
 import math
@@ -39,23 +41,43 @@ def R(px):
     return px / S
 
 
-# ---- 色(元の絵の画素を測った値。平らな塗り) ----
-# 元の絵の色は (80,63,62)・(242,231,224)・(38,152,104)。ブラウザの光で明るく出るので、描く色は少し暗く置く
-BROWN = (71, 56, 55)
-CREAM = (216, 205, 198)
-PINK = (230, 177, 188)
-GREEN = (34, 142, 97)
-WHITE = (232, 232, 232)
-STRIPE = (38, 38, 38)
+# ---- 色(元の絵の画素を測った値の中央値。平らな塗り) ----
+BROWN = (80, 64, 60)
+CREAM = (240, 233, 222)
+PINK = (228, 178, 188)
+GREEN = (36, 152, 103)
+WHITE = (252, 252, 252)
+STRIPE = (41, 40, 38)
 BLACK = (8, 8, 8)
+# 材質: 出る色 = 絵の色 ×(A_SCALE × 光の量 + E_SCALE)。画面の光の量は、下向きの面 約 0.05、光へ向く面 約 0.8。
+# 照り(鏡のような反射)は 0。ブラウザの読み込み(rigRuntime の applyLift)は、発光のある材質には足さない
+A_SCALE = float(os.environ.get("NORRIE_A", 0.22))
+E_SCALE = float(os.environ.get("NORRIE_E", 0.92))
+
+
+def flat_mat(name, rgb):
+    """照り 0・つや消し。地の色は絵の色の A_SCALE 倍、発光は絵の色の E_SCALE 倍(どちらも線形の色で)。"""
+    m = P.material(name, rgb, rough=1.0, spec=0.0)
+    b = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    lin = [P._lin(c) for c in rgb]
+    b.inputs["Base Color"].default_value = (lin[0] * A_SCALE, lin[1] * A_SCALE, lin[2] * A_SCALE, 1.0)
+    b.inputs["Emission Color"].default_value = (lin[0], lin[1], lin[2], 1.0)
+    b.inputs["Emission Strength"].default_value = E_SCALE
+    return m
 
 # ---- 頭の断面: (py, 半幅 px, 前の端 px(横の絵), 後ろの端 px(横の絵))。輪郭の線(7px)を含む外形 ----
 HEAD = [(80, 6, 395, 425), (86, 60, 340, 458), (100, 108, 292, 478), (130, 150, 246, 528), (160, 162, 226, 547),
         (190, 180, 215, 562), (220, 194, 205, 570), (250, 206, 172, 575), (280, 215, 150, 576), (310, 218, 152, 570),
         (340, 208, 158, 559), (370, 180, 168, 540), (400, 152, 194, 515), (425, 126, 230, 500), (445, 98, 275, 478),
         (461, 45, 340, 440)]
-# ---- 胴の断面(同じ書き方) ----
-BODY = [(424, 108, 352, 515), (450, 128, 348, 565), (480, 148, 342, 598), (520, 152, 338, 642), (560, 146, 338, 676),
+# ---- 顔の前半分の形: (py, 前半分の指数 p, いちばん広い所を後ろへずらす量 d px)。p=2 は楕円、1 に近いほどくさび形、2 より大きいと平ら ----
+# 正面の絵の顔(クリームの仮面・ピンクの鼻・目)を正面から貼ったまま、横から見た時に横の絵と同じ所に見えるように決めた。
+# 測った合い方(横の絵の画素): クリームの奥の端 平均 7 px・ピンクの奥の端 ±5 px・目の中心 234 px(絵 234 px。正面は 521.5/615.8 px、絵 521.4/615.6)
+FACE_SHAPE = [(150, 2.0, 0), (185, 2.0, 0), (204, 1.45, 18), (211, 1.35, 22), (222, 1.25, 40), (240, 1.12, 60), (300, 1.12, 60),
+              (330, 1.2, 55), (350, 1.16, 25), (365, 1.14, 5), (380, 1.25, 0), (400, 1.48, 0), (412, 1.9, 0), (425, 2.5, 0),
+              (440, 3.0, 0), (452, 2.6, 0), (461, 2.0, 0)]
+# ---- 胴の断面(同じ書き方)。いちばん上の行の後ろの端は頭の中へ入れる(後ろから首に胴の上の縁と輪郭が見えないように) ----
+BODY = [(424, 108, 352, 488), (450, 128, 348, 565), (480, 148, 342, 598), (520, 152, 338, 642), (560, 146, 338, 676),
         (600, 144, 342, 706), (640, 150, 352, 730), (680, 165, 372, 750), (720, 186, 394, 764), (760, 192, 410, 774),
         (800, 200, 416, 778), (840, 214, 412, 778), (880, 224, 408, 773), (910, 231, 402, 772), (940, 231, 398, 765),
         (970, 219, 398, 745), (1000, 213, 402, 712), (1030, 195, 392, 665), (1055, 160, 388, 620), (1068, 110, 395, 590)]
@@ -91,20 +113,36 @@ BELLY_ROWS = [(528, 548, 590), (540, 490, 647), (570, 469, 668), (600, 454, 683)
               (750, 437, 700), (790, 438, 699), (810, 443, 694), (825, 430, 707), (840, 411, 726), (855, 393, 744), (870, 376, 761),
               (885, 358, 779), (900, 340, 797), (930, 300, 837), (960, 300, 837), (990, 300, 837), (1020, 300, 837),
               (1052, 300, 837)]
-NOSE_C, NOSE_R = (567.0, 310.5), (48.0, 58.0)
+NOSE_C, NOSE_R = (568.5, 310.5), (48.0, 58.0)     # 中心は顔の稜線(x 568.5)に置く(絵は 567。1.5 px ずれると稜線で下のクリームが透けた)
 # 目: 元の絵の黒い丸(正面で直径 約 32px)を測った中心。黒い玉(頭に半分埋めた楕円体)で作る
 EYE_C = (521.4, 211.7), (615.6, 211.7)
 EYE_R = (15.9, 17.4)       # 縦は少し高く(頭の面の斜めで下が埋まる分。正面で丸く見える)
-EYE_BULGE = float(os.environ.get("EYE_BULGE", 0.0045))      # 玉の赤道の面から前へのふくらみ(m)。出すぎると横から飛び出して見える
+EYE_BULGE = float(os.environ.get("EYE_BULGE", 0.0040))      # 玉の赤道の面から前へのふくらみ(m)。出すぎると横から飛び出して見える(横の顔の輪郭に目が重なった)
 EYE_TILT = float(os.environ.get("EYE_TILT", 20.0))         # 玉の軸の向き(度)。頭の面の法線(上へ約 23°)でなく、ほぼ正面(-Y)に寄せる。上向きが正
-EYE_CLEAR = float(os.environ.get("EYE_CLEAR", -0.003))      # 赤道の輪が頭の面から前へ出る最小の量(m)。頭の面が斜めでも輪が埋まらず、輪郭が円で出る
+EYE_CLEAR = float(os.environ.get("EYE_CLEAR", -0.009))      # 赤道の輪が頭の面から前へ出る最小の量(m、Y で測る)。顔の面が横を向くので深めに埋める(-6 mm だと前へ 14 mm 出て、横から見て輪郭のふちに乗った)
+EYE_WIDEN_MAX = float(os.environ.get("EYE_WIDEN_MAX", 1.12))       # 横を向く面の目で、正面から見た幅を戻す倍率の上限
 # 口: 黒い所の列ごとの (x, 上の縁 py, 下の縁 py)(正面の絵を測った値)。中央の人中は別の線
 MOUTH_COLS = [(530, 326, 326), (534, 323, 332), (538, 325, 338), (542, 328, 341), (546, 330, 346), (550, 331, 351), (554, 332, 355),
               (558, 331, 359), (562, 330, 361), (566, 330, 362), (570, 330, 362), (574, 330, 361), (578, 331, 359), (582, 332, 356),
               (586, 331, 352), (590, 330, 347), (594, 328, 341), (598, 326, 338), (602, 323, 335), (606, 324, 326)]
-TEETH = [((556, 567), 339, 351), ((570, 581), 339, 351)]
+# 前歯: 上の唇から下がる白い 1 本(正面の絵の白い所を行ごとに測った (py, 左の端, 右の端))。面から前へ出した小さな塊にして、横からも見える
+TOOTH_ROWS = [(338.5, 566.5, 570.5), (340, 564.5, 572.5), (341.5, 561.5, 575.5), (343, 556.0, 581.0), (345, 557.5, 579.5),
+              (347, 559.0, 578.0), (349, 560.5, 576.5), (351, 562.5, 574.5)]
+TOOTH_OUT = float(os.environ.get("TOOTH_OUT", 0.0072))    # 前の面が頭の面から出る量(m)。輪郭の殻(7 mm)と同じくらい出すと横から白が見える
+TOOTH_IN = -0.0012
+OL_TOOTH = 0.0015
+# 鼻の上の弧(︶): 正面の絵の黒い線を列ごとに測った中心と太さ(px)。真ん中は人中につながる
+ARC_PTS = [(548, 270.5), (552, 273.5), (556, 276.5), (560, 279.0), (564, 280.5), (568, 281.5), (572, 281.0), (576, 279.5),
+           (580, 277.0), (584, 274.0), (588, 271.0), (590, 269.5)]
+ARC_W = [3, 8, 10, 9, 7, 7, 7, 8, 9, 9, 5, 2]
 MOUTH_KEYS = {"mouth_open": (1.8, 1.0), "mouth_wide": (1.0, 1.3), "mouth_o": (1.3, 0.5)}
 MOUTH_NU = 20
+# 背中の筋: 1 本の帯の真ん中を濃い色にする(首で切れない)。後ろの絵の幅 61 px・芯 25 px、芯は z 0.756〜0.208
+STRIPE_PATH = [(180, 0.885), (180, 0.172)]
+STRIPE_W, STRIPE_ROWS, STRIPE_SEG = 0.060, 21, 80
+CORE_HALF_U = 0.40          # 21 列のうち真ん中の 9 列(0.026 m)
+CORE_Z = (0.756, 0.208)
+CORE_TIP = 0.14
 
 
 def smooth_path(pts, radii, k=4):
@@ -155,6 +193,81 @@ def secs_from(rows, top_shift=True):
     return out
 
 
+def face_shape(py):
+    """FACE_SHAPE を py でなめらかに補間して (p, d px) を返す。"""
+    K = FACE_SHAPE
+    if py <= K[0][0]:
+        return K[0][1], K[0][2]
+    for i in range(len(K) - 1):
+        if K[i][0] <= py <= K[i + 1][0]:
+            t = (py - K[i][0]) / (K[i + 1][0] - K[i][0])
+            t = t * t * (3 - 2 * t)
+            return K[i][1] + (K[i + 1][1] - K[i][1]) * t, K[i][2] + (K[i + 1][2] - K[i][2]) * t
+    return K[-1][1], K[-1][2]
+
+
+def loft_face(name, secs, mat=None, n=36, refine=3):
+    """頭の形。P.loft と同じ断面のつなぎ方で、前半分(-Y)だけ超楕円の指数 p と、いちばん広い所の位置 d を行ごとに変える。
+    p と d は、細かくした後の断面ごとに face_shape(高さ) から決める(断面の間でも目の行の形が狂わない)。後ろ半分は楕円。"""
+    if secs[0]["z"] > secs[-1]["z"]:
+        secs = list(reversed(secs))
+    secs = P._refine_secs(secs, refine) if refine > 1 else secs
+    verts, faces = [], []
+    for s in secs:
+        p, dpx = face_shape(FY - s["z"] * S)
+        d = dpx / S
+        cyp, ryf, ryb = s["cy"] + d, s["ry"] + d, max(s["ry"] - d, 1e-4)
+        ef = 2.0 / p
+        for i in range(n):
+            th = 2 * math.pi * i / n
+            c, sn = math.cos(th), math.sin(th)
+            if sn < 0:
+                verts.append((s["cx"] + s["rx"] * P._sgnpow(c, ef), cyp + ryf * P._sgnpow(sn, ef), s["z"]))
+            else:
+                verts.append((s["cx"] + s["rx"] * c, cyp + ryb * sn, s["z"]))
+        s["_cyp"] = cyp
+    m = len(secs)
+    for j in range(m - 1):
+        for i in range(n):
+            a = j * n + i
+            b = j * n + (i + 1) % n
+            faces.append((a, b, b + n, a + n))
+    for j in (0, m - 1):
+        c = len(verts)
+        s = secs[j]
+        verts.append((s["cx"], s["_cyp"], s["z"]))
+        for i in range(n):
+            a = j * n + i
+            b = j * n + (i + 1) % n
+            faces.append((c, b, a) if j == 0 else (c, a, b))
+    return P._make(name, verts, faces, mat, (0, 0, 0), (0, 0, 0))
+
+
+def slab(name, rows, surf, off_front, off_back, mat, ncols=8):
+    """行ごとの範囲で作る、面から前へ出た小さな塊(前歯)。前の板・後ろの板・まわりの壁で閉じる。"""
+    pts = rows_to_pts(rows, ncols)
+    fr, bk = px_grid(pts, surf, off_front), px_grid(pts, surf, off_back)
+    nv, nu = len(pts), ncols + 1
+    nb = nv * nu
+    verts = [p for row in fr for p in row] + [p for row in bk for p in row]
+    faces = []
+    for i in range(nv - 1):
+        for j in range(nu - 1):
+            a = i * nu + j
+            q = (a, a + nu, a + nu + 1, a + 1)
+            faces.append(q)
+            faces.append(tuple(reversed([v + nb for v in q])))
+    ring = ([(0, j) for j in range(nu)] + [(i, nu - 1) for i in range(1, nv)] + [(nv - 1, j) for j in range(nu - 2, -1, -1)]
+            + [(i, 0) for i in range(nv - 2, 0, -1)])
+    for k in range(len(ring)):
+        (i0, j0), (i1, j1) = ring[k], ring[(k + 1) % len(ring)]
+        a, b = i0 * nu + j0, i1 * nu + j1
+        faces.append((a, b, b + nb, a + nb))
+    ob = P._make(name, verts, faces, mat, (0, 0, 0), (0, 0, 0))
+    fix_normals(ob)
+    return ob
+
+
 def ray_surface(ob):
     me = ob.data
     me.calc_loop_triangles()
@@ -174,7 +287,18 @@ def ray_surface(ob):
         if nor.y > 0:
             nor = -nor
         return hit, nor
+
+    def surfs(x, z, d=0.006):
+        """なめらかな法線: 近くの 4 点(±d)の当たりから求める。三角形 1 枚の向きは左右で違うことがある(目の向きが左右でずれた)。"""
+        hit = surfn(x, z)[0]
+        tx = Vector((2 * d, surf(x + d, z) - surf(x - d, z), 0.0))
+        tz = Vector((0.0, surf(x, z + d) - surf(x, z - d), 2 * d))
+        nor = tx.cross(tz).normalized()
+        if nor.y > 0:
+            nor = -nor
+        return hit, nor
     surf.n = surfn
+    surf.ns = surfs
     return surf
 
 
@@ -295,21 +419,15 @@ def mouth_pts(k, fw):
 
 
 def mouth_mesh(surf, mats):
-    """口: 黒い板(前と後ろ)+ 白い前歯 2 本。mouth_open・mouth_wide・mouth_o のシェイプキー(口の下の縁と幅を動かす)。"""
+    """口: 黒い板(前と後ろ)。mouth_open・mouth_wide・mouth_o のシェイプキー(口の下の縁と幅を動かす)。
+    前歯は別の塊(Tooth)にして上の唇に付ける(口が開いても歯は上に残る)。"""
     def build(k, fw):
         dark = mouth_pts(k, fw)
-        grids = [px_grid(dark, surf, 0.0042), px_grid(dark, surf, -0.0015)]
-        teeth = []
-        for (x0, x1), y0, y1 in TEETH:
-            xs = [x0, (x0 + x1) / 2, x1]
-            tp = [[(x, y0 + (y1 - y0) * i / 2) for x in xs] for i in range(3)]
-            teeth.append(px_grid(tp, surf, 0.0054))
-        return grids, teeth
-    grids, teeth = build(1.0, 1.0)
-    allg = [(grids[0], True), (grids[1], False)] + [(t, True) for t in teeth]
-    nd = 2 * len(grids[0]) * len(grids[0][0])
-    verts, faces, fmat = [], [], []
-    for gi, (g, front) in enumerate(allg):
+        return [px_grid(dark, surf, 0.0042), px_grid(dark, surf, -0.0015)]
+    grids = build(1.0, 1.0)
+    allg = [(grids[0], True), (grids[1], False)]
+    verts, faces = [], []
+    for g, front in allg:
         base = len(verts)
         nv, nu = len(g), len(g[0])
         for row in g:
@@ -319,17 +437,13 @@ def mouth_mesh(surf, mats):
                 a = base + i * nu + j
                 q = (a, a + nu, a + nu + 1, a + 1)
                 faces.append(q if front else tuple(reversed(q)))
-                fmat.append(0 if gi < 2 else 1)
     mo = P._make("Mouth", verts, faces, mats["mouth"], (0, 0, 0), (0, 0, 0))
-    mo.data.materials.append(mats["white"])
-    for p, m in zip(mo.data.polygons, fmat):
-        p.material_index = m
     mo.shape_key_add(name="Basis")
     for name, (k, fw) in MOUTH_KEYS.items():
         key = mo.shape_key_add(name=name)
-        g2, t2 = build(k, fw)
+        g2 = build(k, fw)
         pts = []
-        for g in [g2[0], g2[1]] + t2:
+        for g in g2:
             for row in g:
                 pts.extend(row)
         for i, p in enumerate(pts):
@@ -344,44 +458,61 @@ def build_face(surf_head, mats):
     mask_line = plate("mask_line", MASK_ROWS, surf_head, 0.0010, 0, mats["black"], ncols=20, grow=5.0)
     mask = plate("mask", MASK_ROWS, surf_head, 0.0022, 0, mats["cream"], ncols=20)
     nose = plate("nose", ellipse_rows(NOSE_C, NOSE_R, 22), surf_head, 0.0030, 0.0025, mats["pink"], ncols=16)
-    # 鼻の上の線(2 本の弧)と人中
-    arcL = ribbon("nose_arc_L", [(547, 269), (554, 276), (561, 282), (568, 284)], [4, 8, 9, 8], surf_head, 0.0052, mats["black"])
-    arcR = ribbon("nose_arc_R", [(591, 269), (584, 276), (577, 282), (569, 284)], [4, 8, 9, 8], surf_head, 0.0052, mats["black"])
+    # 鼻の上の弧(︶ の 1 本)と人中
+    arc = ribbon("nose_arc", ARC_PTS, ARC_W, surf_head, 0.0052, mats["black"])
     phil = ribbon("philtrum", [(569, 282), (569, 300), (569, 322), (569, 334)], [9, 8, 8, 9], surf_head, 0.0052, mats["black"])
     mouth = mouth_mesh(surf_head, mats)
-    parts["flat"] = [mask_line, mask, nose, arcL, arcR, phil]
+    # 前歯 1 本: 上の唇から下がる白い塊(正面は絵の形、横からは口の前に白く見える)
+    tooth = slab("Tooth", TOOTH_ROWS, surf_head, TOOTH_OUT, TOOTH_IN, mats["white"], ncols=8)
+    parts["flat"] = [mask_line, mask, nose, arc, phil]
     parts["Mouth"] = mouth
-    # 目: 黒い玉(頭に半分埋めた楕円体)。向きは頭の面の法線でなく、ほぼ正面(-Y)と少し下。まばたきは上下へつぶす
-    eyes_parts = []
+    parts["Tooth"] = tooth
+    # 目: 黒い玉(頭に半分埋めた楕円体)。向きは頭の面の横向き(水平の向き)に、上へ EYE_TILT 度。
+    # 顔の前半分を細くしたので、目の所の面は横を向く(約 30 度)。正面から見た幅が細らないよう、横の半径を 1/cos だけ広げる
+    eyes_parts, eye_ctr = [], []
+    up = Vector((0.0, 0.0, 1.0))
+    al = math.radians(EYE_TILT)
     for ci, c in enumerate(EYE_C):
-        x, z = X(c[0]), Z(c[1])
-        rx, rz = EYE_R[0] / S, EYE_R[1] / S
-        al = math.radians(EYE_TILT)
-        axis = Vector((0.0, -math.cos(al), math.sin(al)))                 # 玉の前向きの軸
-        rot = Matrix.Rotation(-al, 3, "X")                                 # 玉の局所の y を軸へ合わせる回転
-        y0 = surf_head(x, z)
+        xt, z = X(c[0]), Z(c[1])
+        x = xt
+        for _ in range(4):          # 玉を軸の向きへ出すと横へずれるので、正面から見た中心が絵の位置になるまで当て直す
+            hit, nor = surf_head.ns(x, z)
+            h = Vector((nor.x, nor.y, 0.0)).normalized()
+            axis = (h * math.cos(al) + up * math.sin(al)).normalized()       # 玉の前向きの軸
+            xl = up.cross(axis).normalized()
+            yl = -axis
+            rot = Matrix((xl, yl, xl.cross(yl))).transposed()                # 玉の局所の (x, y, z) → 世界
+            widen = min(1.0 / max(-h.y, 1e-3), EYE_WIDEN_MAX)
+            rx, rz = EYE_R[0] / S * widen, EYE_R[1] / S
 
-        def clearance(sh):
-            """玉の赤道の輪(軸に垂直な円)の各点が、頭の面より前へ出ている量の最小(m)。"""
-            cc = Vector((x, y0, z)) + axis * sh
-            m = 1e9
-            for k in range(24):
-                t = 2 * math.pi * k / 24
-                pnt = cc + rot @ Vector((rx * math.cos(t), 0.0, rz * math.sin(t)))
-                m = min(m, surf_head(pnt.x, pnt.z) - pnt.y)
-            return m
-        lo, hi = -0.02, 0.04
-        for _ in range(30):
-            mid = (lo + hi) / 2
-            if clearance(mid) < EYE_CLEAR:
-                lo = mid
-            else:
-                hi = mid
-        sh = hi
-        ctr = Vector((x, y0, z)) + axis * sh
-        print("EYE", ci, "shift", round(sh, 4), "front-most", round(surf_head(x, z) - (ctr.y - EYE_BULGE * math.cos(al)), 4))
+            def clearance(sh, hit=hit, axis=axis, rot=rot, rx=rx, rz=rz):
+                """玉の赤道の輪(軸に垂直な円)の各点が、頭の面より前へ出ている量の最小(m、Y の向きで測る)。"""
+                cc = hit + axis * sh
+                m = 1e9
+                for k in range(24):
+                    t = 2 * math.pi * k / 24
+                    pnt = cc + rot @ Vector((rx * math.cos(t), 0.0, rz * math.sin(t)))
+                    m = min(m, surf_head(pnt.x, pnt.z) - pnt.y)
+                return m
+            lo, hi = -0.02, 0.04
+            for _ in range(30):
+                mid = (lo + hi) / 2
+                if clearance(mid) < EYE_CLEAR:
+                    lo = mid
+                else:
+                    hi = mid
+            ctr = hit + axis * hi
+            if abs(ctr.x - xt) < 0.0003:
+                break
+            x -= ctr.x - xt
+        eye_ctr.append(ctr)
+        tip = ctr + axis * EYE_BULGE
+        print("EYE", ci, "shift", round(hi, 4), "side_deg", round(math.degrees(math.atan2(abs(h.x), -h.y)), 1), "widen", round(widen, 3),
+              "ctr", [round(v, 4) for v in ctr], "front_px", round(CX + ctr.x * S, 1), "side_px", round(CX + ctr.y * S, 1),
+              "protrude_mm", round((surf_head(tip.x, tip.z) - tip.y) * 1000, 1))
         eyes_parts.append(P.superquadric("eye%d" % ci, (rx, EYE_BULGE, rz), (1.0, 1.0), tuple(ctr), mat=mats["black"], seg=(24, 14),
-                                         rot_deg=(-EYE_TILT, 0, 0)))
+                                         rot_deg=tuple(math.degrees(a) for a in rot.to_euler("XYZ"))))
+    parts["eye_ctr"] = eye_ctr
     eyes = P.join(eyes_parts, "Eyes")
     gL = eyes.vertex_groups.new(name="eye_L")
     gR = eyes.vertex_groups.new(name="eye_R")
@@ -441,22 +572,18 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     os.makedirs(WORK, exist_ok=True)
 
-    def flat(name, rgb, rough=0.8, spec=0.15):
-        return P.material(name, rgb, rough=rough, spec=spec)
-
     mats = dict(
-        brown=flat("Brown", BROWN), cream=flat("Cream", CREAM), pink=flat("Pink", PINK), green=flat("Green", GREEN),
-        white=flat("Glove", WHITE, rough=0.85, spec=0.1), stripe=flat("Stripe", STRIPE), black=flat("Ink", BLACK, rough=0.6, spec=0.2),
-        mouth=flat("MouthIn", BLACK, rough=0.6, spec=0.2),
+        brown=flat_mat("Brown", BROWN), cream=flat_mat("Cream", CREAM), pink=flat_mat("Pink", PINK), green=flat_mat("Green", GREEN),
+        white=flat_mat("Glove", WHITE), stripe=flat_mat("Stripe", STRIPE), black=flat_mat("Ink", BLACK), mouth=flat_mat("MouthIn", BLACK),
     )
-    ol = flat("Outline", (0, 0, 0), rough=0.9, spec=0.0)
+    ol = P.material("Outline", (0, 0, 0), rough=1.0, spec=0.0)
     ol.use_backface_culling = True
     mats["outline"] = ol
 
     objs_shell = []     # 殻を付けた物(殻の一覧)
 
-    # ---- 頭と胴(P.loft) ----
-    head = P.loft("head_core", secs_from(HEAD), mat=mats["brown"], n=36, e=1.0, refine=2)
+    # ---- 頭(loft_face: 顔の前半分を行ごとに細く)と胴(P.loft) ----
+    head = loft_face("head_core", secs_from(HEAD), mat=mats["brown"], n=36, refine=3)
     torso = P.loft("torso", secs_from(BODY), mat=mats["brown"], n=36, e=0.97, refine=2)
     surf_head = ray_surface(head)
     surf_torso = ray_surface(torso)
@@ -536,27 +663,41 @@ def main():
     group(knot, "body")
     objs_shell.append(bow)
 
-    # ---- 背中の筋(体の後ろの道。クリームの帯の上に、濃い細い帯を少し短く) ----
+    # ---- 背中の筋: 1 本の帯(クリーム)の真ん中の列を濃い色にする。2 本に分けると首で濃い芯が途切れた(判定 ④) ----
     surfaces = [head_all, torso]
-    sk = W.wrap_band("stripe_cream", surfaces, [(180, 0.885), (180, 0.172)], 0.058, thick=0.003, clearance=0.001, mat=mats["cream"],
-                     seg=64, rows=6, taper=0.2, taper_min=0.05)
-    sd = W.wrap_band("stripe_dark", surfaces, [(180, 0.835), (180, 0.205)], 0.027, thick=0.003, clearance=0.002, mat=mats["stripe"],
-                     seg=64, rows=4, taper=0.2, taper_min=0.05)
-    for st in (sk, sd):
-        for v in st.data.vertices:
-            pass
-    # 筋の上半分は頭の骨、下半分は胴の骨(首の高さで分ける。つなぎ目は頭と胴のすき間なので動いても目立たない)
+    st = W.wrap_band("stripe", surfaces, STRIPE_PATH, STRIPE_W, thick=0.003, clearance=0.0012, mat=mats["cream"],
+                     seg=STRIPE_SEG, rows=STRIPE_ROWS, taper=0.2, taper_min=0.05)
+    st.data.materials.append(mats["stripe"])
+    nv = STRIPE_ROWS + 1
+    z0, z1 = STRIPE_PATH[0][1], STRIPE_PATH[1][1]
+    n_core = 0
+    for k in range(STRIPE_SEG):
+        zc = z0 + (z1 - z0) * (k + 0.5) / STRIPE_SEG
+        s = (CORE_Z[0] - zc) / (CORE_Z[0] - CORE_Z[1])
+        if not 0.0 < s < 1.0:
+            continue
+        f = min(min(s, 1.0 - s) / CORE_TIP, 1.0)
+        half = CORE_HALF_U * max(f * f * (3 - 2 * f), 0.15)       # 芯の両端は細くとがらせる
+        for j in range(STRIPE_ROWS):
+            if abs(2 * (j + 0.5) / STRIPE_ROWS - 1) < half:
+                fi = 2 * (k * (nv - 1) + j)                        # wrap_band の面の順: 列ごとに 表・裏
+                st.data.polygons[fi].material_index = 1
+                st.data.polygons[fi + 1].material_index = 1
+                n_core += 1
+    print("BUILD stripe core faces", n_core)
+    # 筋の上半分は頭の骨、下半分は胴の骨(首の高さで分ける)
     z_neck = 0.63
-    for st in (sk, sd):
-        gh = st.vertex_groups.new(name="head")
-        gb = st.vertex_groups.new(name="body")
-        for v in st.data.vertices:
-            (gh if v.co.z > z_neck else gb).add([v.index], 1.0, "REPLACE")
+    gh = st.vertex_groups.new(name="head")
+    gb = st.vertex_groups.new(name="body")
+    for v in st.data.vertices:
+        (gh if v.co.z > z_neck else gb).add([v.index], 1.0, "REPLACE")
 
     # ---- 顔の部品の骨 ----
     for o in face["flat"]:
         group(o, "head")
     group(face["Mouth"], "head")
+    group(face["Tooth"], "head")
+    with_outline(face["Tooth"], OL_TOOTH, mats)        # 前歯の黒い縁(横から見た時に絵と同じ線が出る)
     group(belly, "body")
     group(belly_line, "body")
     for o in (face["flat"][0], face["flat"][1], belly, belly_line):
@@ -570,8 +711,9 @@ def main():
         th = OL_SMALL if ob.name == "BowWings" else OL
         with_outline(ob, th, mats)
 
-    # ---- 骨の位置 ----
-    ez = Z(EYE_C[0][1])
+    # ---- 骨の位置(目の骨は玉の中心) ----
+    eL = next(c for c in face["eye_ctr"] if c.x > 0)
+    eR = next(c for c in face["eye_ctr"] if c.x < 0)
     rig = {
         "root": [0, 0, 0],
         "body": [0, 0.0, 0.36],
@@ -580,9 +722,23 @@ def main():
         "arm_R": list(arms["arm_R"]["pivot"]),
         "leg_L": [0.152, -0.06, 0.09],
         "leg_R": [-0.152, -0.06, 0.09],
-        "eye_L": [round(X(EYE_C[1][0]), 4), round(surf_head(X(EYE_C[1][0]), ez), 4), round(ez, 4)],
-        "eye_R": [round(X(EYE_C[0][0]), 4), round(surf_head(X(EYE_C[0][0]), ez), 4), round(ez, 4)],
+        "eye_L": [round(eL.x, 4), round(eL.y, 4), round(eL.z, 4)],
+        "eye_R": [round(eR.x, 4), round(eR.y, 4), round(eR.z, 4)],
     }
+    # ---- 色と横顔の点検に使う点(作業フォルダへ。8 方向の写真のどの画素を測るか) ----
+    def on(surf, px, py, off):
+        hit, nor = surf.n(X(px), Z(py))
+        p = hit + nor.normalized() * off
+        return [round(p.x, 4), round(p.y, 4), round(p.z, 4)]
+    samples = {
+        "chin": [on(surf_head, 568.5, 428, 0.0022), on(surf_head, 520, 418, 0.0022), on(surf_head, 617, 418, 0.0022)],
+        "belly": [on(surf_torso, 568.5, 650, 0.0032), on(surf_torso, 568.5, 760, 0.0032), on(surf_torso, 520, 900, 0.0032)],
+        "tail": [list(TAIL[i]) for i in (6, 8, 10, 12)],
+        "nose_tip": [on(surf_head, 568.5, 300, 0.003)],
+        "tooth": [on(surf_head, 568.5, 346, TOOTH_OUT)],
+        "eye_L": [rig["eye_L"]], "eye_R": [rig["eye_R"]],
+    }
+    json.dump(samples, open(WORK + "/samples_at.json", "w"), indent=1)
     tri = {o.name: sum(len(p.vertices) - 2 for p in o.data.polygons) for o in bpy.context.scene.objects if o.type == "MESH"}
     print("BUILD tris", sum(tri.values()), json.dumps(sorted(tri.items(), key=lambda kv: -kv[1])[:8]))
     json.dump(rig, open(WORK + "/rig_at.json", "w"), indent=1)
