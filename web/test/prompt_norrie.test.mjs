@@ -8,12 +8,14 @@ import { buildSystemBlocks } from '../server/prompt.mjs';
 import { SAFETY_RULES, classifyInput, isUnsafeOutput, mentionsChild, sanitizePersona } from '../server/safety.mjs';
 import { firstGreeting, GREETING_LINE_MAX } from '../server/greeting.mjs';
 
+// 取り出したままの文(Windows の取り出しでは CRLF)。関数にはこのまま渡し、丸ごと比べる時だけ LF にそろえる
 const PERSONA = readFileSync(join(import.meta.dirname, '..', '..', 'characters', 'norrie', 'persona.md'), 'utf8');
+const lf = (s) => s.replace(/\r\n/g, '\n');
 
 test('ノリーの人格の文: 安全の層が外す行が 0(上書きの企てに見える言葉を書いていない)', () => {
   const r = sanitizePersona(PERSONA);
   assert.equal(r.removed, 0);
-  assert.equal(r.text, PERSONA.trim());
+  assert.equal(r.text, lf(PERSONA).trim());
 });
 
 test('ノリーでも、指示文の 1 段目は安全の決まりのまま。2 段目に名前・一人称・役どころ・話し方が入る', () => {
