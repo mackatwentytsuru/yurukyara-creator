@@ -128,3 +128,10 @@ Claude を使わない部分(doctor → builder → 骨 → `check_all.sh` → `
 - プライバシーの試験は `web/src` の `fetch(変数)` を許可リストで見る。移した部品の `fetch(url)` は `VARIABLE_FETCH` に足す。
 - 他のスレッドが動いている作業コピーは動かさない。main の整理は別の worktree でやり、元の作業コピーは別の線(archive)に切り替えるだけにすると、未コミットの変更も絶対パスの台本も壊れない。
 - 別の worktree には `web/node_modules`(junction)と、`tools/prepush_terms.local.txt`(git 無視)を写さないと、`npm test` と `prepush_check` が動かない。
+
+## 公開の前に git の履歴を書き換える手順(2026-11-06)
+- 元の repo・worktree には触らず、`git clone --no-local --single-branch --branch main` の写しで作る。道具は `pip install --user git-filter-repo`(`python -m git_filter_repo`)。
+- 手順は 1 回の `filter-repo` にまとめる: ① `--paths-from-file`(今の木の追跡一覧)で、外したファイルの古い版と、それだけを触ったコミットを落とす ② `--replace-text` と `--replace-message`(同じ規則ファイル)で、残るファイルとコミットの文の語を置き換える ③ 必要なら `--mailmap` で作者のメールを GitHub の noreply(`<数字の id>+<名前>@users.noreply.github.com`、id は `gh api users/<名前> --jq .id`)にする。
+- 規則ファイルは Write で書く(Bash の heredoc だと `\b` が壊れる)。置き換えは、先に `git log -p` の足された行を数える自作の走査で、語ごとの出現ファイルと前後を見てから決める。語の一覧は `tools/history_terms.local.txt`(git 無視)。機械の名前・IP・ローカルのパス・メールも走査に入れる。
+- 日時と `Co-Authored-By` の行は残る(落ちるのは、落としたファイルだけを触ったコミットの分)。確かめは、写しで `tools/history_check.py` が 0 件、バイナリも `git grep -a` で語が 0 件、`npm test`、`prepush_check`、元の木との差が置き換えの行だけ、の 5 つ。
+- 公開すると全部のブランチと履歴が見える。archive の線は別の非公開リポジトリへ移してから、本体から消す。
