@@ -18,7 +18,7 @@ REPO = Path(__file__).resolve().parents[2]
 SAMPLES = ("yokoso", "robo", "f_led", "d_lantern")
 HASHES = REPO / "creator" / "setup" / "samples_hash.json"
 PY = sys.executable
-TEXT = {".json", ".md", ".txt"}
+TEXT = {".json", ".md", ".txt", ".svg", ".html", ".css", ".js", ".mjs", ".py", ".sh"}  # .gitattributes の text eol=lf と同じ。Windows の CRLF でも Mac・Linux の LF でも同じ値にする
 
 
 def run(args):
