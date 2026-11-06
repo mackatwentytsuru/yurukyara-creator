@@ -49,7 +49,8 @@ allowed-tools: Read, Bash(python creator/review/yuru_make.py *), Bash(python cre
 ## 画面の側(人が押す所)
 
 - 初めての会話の作る画面: PC で `python creator/review/serve_review.py --make --web http://localhost:5173` → この PC のブラウザで `http://127.0.0.1:8796/qr` → 「この PC の初めての会話」のリンク(合言葉は # の後ろ)。会話の画面の札の中に、作る画面(/m/)が枠で出る。
-- スマホの確認画面(C0・C2): 同じ /qr の QR。
+- スマホの確認画面(C0・C2): 同じ /qr の QR。スマホから開くときは `--lan`(同じ Wi-Fi)で起こす。`--lan`・`--bind` でも、QR の画面はこの PC の `http://127.0.0.1:<番号>/qr`(同じ番号で 127.0.0.1 にも待つ。11-06 S4w4 で直した)。
+- 撮影の手順の練習(本人が押す順に、幅 390 で): `node <板>\work\S4\shoot_1107\rehearse_review.mjs <リポジトリ> <出力> local|lan`。lan は `--bind 127.0.0.2` で LAN をまねる(本物の網に出さない・ファイアウォールの窓が出ない)。仮の作業フォルダに子を作り、/qr → QR の URL → やり直し+一言 →「送る」→ 受け取り(claim)→ 2 回目 → OK 2 回 → 0.json が ok、を写真つきで通す。
 
 ## 学んだこと
 
@@ -66,3 +67,5 @@ allowed-tools: Read, Bash(python creator/review/yuru_make.py *), Bash(python cre
   描き直し(Sonnet・23 秒・0.14 ドル。帽子だけ青になり、ほかは同じ)→ この子にする → 0.json が ok(人・2 回目)→ 段 1 を始めてよい。run.jsonl に 2 行。
 - (11-06 S4w3)描き直しで名前が変わった(おむすび → おにぎりん)。前の回の settings.md を写し、頼みの文に「名前は変えない」と書いた(この直しの後は、本物では試していない)。
 - (11-06 S4w3)`claude -p "/yuru-next"` で、リポジトリのスキルがそのまま動く(`--setting-sources project --strict-mcp-config`、`--allowedTools` に道具 2 本と Read、`BASH_DEFAULT_TIMEOUT_MS=600000`)。CLAUDE_CODE_* と API の鍵を外して、定額のプランのログインで流した。
+- (11-06 S4w4)`--lan` で起こすと LAN のアドレスだけで待っていたので、起動の文と撮影の手順が言う `http://127.0.0.1:<番号>/qr` につながらなかった(ERR_CONNECTION_REFUSED。本人の撮影の 1 歩目で止まるところだった)。同じ番号で 127.0.0.1 にも待つようにした。127.0.0.1 からでも、外へ待つ時は読むのに合言葉が要る(前のまま)。Windows の `SO_EXCLUSIVEADDRUSE` でも、アドレスが違えば同じ番号で 2 本待てる(実測)。試験は 127.0.0.2 で LAN をまねる(127.0.0.2 に待てない OS では飛ばす)。
+- (11-06 S4w4)練習の写真に合言葉を残さない: /qr の画面を撮る前に、文字の `k=…` を伏せ、QR の絵をぼかす(使い捨ての試しの合言葉でも)。

@@ -9,11 +9,15 @@ import { FirstRun } from '../src/ui/onboarding/script.js';
 import { cleanMakeEvent, createLocalCreator, isLocalBase } from '../src/ui/onboarding/creators.js';
 import { readLocalMake, MAKE_KEY } from '../src/ui/onboarding/index.js';
 import { randomSettings, seededRandom } from '../src/ui/persona/settings.js';
+import { MAIN_CHARACTER } from '../src/character/defaults.js';
 
 const MOCK = { lines: [{ text: 'こんにちは。' }], brain: 'mock' };
 
+// 家の中の住所の見本は、その場で組み立てる(公開の前の履歴の書き換えが、書いたままの 192.168.… と 100.64〜127.… を伏せ字にし、試験が落ちるため。S6 の頼み)
+const ip = (...parts) => parts.join('.');
+
 test('作る道のサーバーの場所は、この PC か家の中のネットワークだけ', () => {
-  for (const ok of ['http://127.0.0.1:8796', 'http://localhost:8796', 'http://192.168.x.x:8796', 'http://10.0.0.5:8796', 'http://100.x.x.x:8796', 'https://pc.example-tail.ts.net:8445']) {
+  for (const ok of ['http://127.0.0.1:8796', 'http://localhost:8796', `http://${ip(192, 168, 1, 20)}:8796`, 'http://10.0.0.5:8796', `http://${ip(100, 101, 1, 2)}:8796`, 'https://pc.example-tail.ts.net:8445']) {
     assert.equal(isLocalBase(ok), true, ok);
   }
   for (const bad of ['https://evil.example', 'http://8.8.8.8:8796', 'http://127.0.0.1:8796/x', 'http://u:p@127.0.0.1:8796', 'javascript:alert(1)', 'http://127.0.0.1.evil.example', '', null]) {
@@ -81,7 +85,7 @@ function harness({ frameWaitMs } = {}) {
   const win = fakeWindow();
   const creator = createLocalCreator({ base: 'http://127.0.0.1:8796', key: 'test-key', parentOrigin: 'http://localhost:5173', win });
   const fr = new FirstRun({
-    guide: { id: 'norrie', name: 'ノリー' },
+    guide: MAIN_CHARACTER,
     creator,
     persona: { get: (id) => stored.get(id) ?? null, set: (id, s) => stored.set(id, s), random: () => randomSettings(seededRandom(3)) },
     talk: async () => MOCK,

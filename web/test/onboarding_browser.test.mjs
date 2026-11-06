@@ -58,6 +58,7 @@ const PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="/__fr/src/ui/style.css"><title>初めての会話の試し</title></head>
 <body><header class="top"><div class="modes" id="modes"></div></header>
+<aside id="thought" class="thought" aria-label="Claude の考え"><button class="thought-head" type="button">Claude の考え</button></aside>
 <div id="gate" class="gate"><div class="gate-card"><h1>入口</h1><button type="button" class="primary">はじめる</button></div></div>
 <script type="module">
 import { mountFirstRun } from '/__fr/src/ui/onboarding/index.js';
@@ -172,6 +173,9 @@ async function walkWords(page, label, { full }) {
   assert.equal(await page.$eval('.fr-sheet', (e) => e.dataset.step), '1');
   const gate = () => page.$eval('#gate', (e) => [getComputedStyle(e).opacity, getComputedStyle(e).pointerEvents].join(' '));
   assert.equal(await gate(), '0 none', '初めての会話の間は、入口のゲートを消して舞台を見せる');
+  const thought = () => page.$eval('#thought', (e) => getComputedStyle(e).display);
+  const phone = (await page.evaluate(() => innerWidth)) < 720;
+  assert.equal(await thought() === 'none', phone, 'スマホの初めての会話の間だけ「Claude の考え」を隠す(上の段のボタンに重ならない)');
 
   await page.fill('.fr-actions [data-act="words"] input', '赤い提灯の子');
   await page.click('.fr-actions [data-act="words"] button[type="submit"]');
@@ -281,6 +285,7 @@ async function walkWords(page, label, { full }) {
   await page.click('.fr-actions [data-act="close"]');
   await page.waitForSelector('.fr-sheet', { state: 'detached', timeout: 15_000 });
   assert.equal(await gate(), '1 auto', '閉じたら、入口のゲートが戻る');
+  assert.notEqual(await thought(), 'none', '閉じたら「Claude の考え」も戻る');
   assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done');
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('yc.persona.v1.d_lantern')));
   assert.equal(saved.preset, 'shy');

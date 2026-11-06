@@ -5,8 +5,7 @@ import assert from 'node:assert/strict';
 import { FirstRun, VOICE_THANKS, NOTE_MAX } from '../src/ui/onboarding/script.js';
 import { createSampleCreator, pickSample } from '../src/ui/onboarding/creators.js';
 import { randomSettings, seededRandom, normalize } from '../src/ui/persona/settings.js';
-
-const MAIN = { id: 'norrie', name: 'ノリー' };
+import { MAIN_CHARACTER as MAIN } from '../src/character/defaults.js';
 const MOCK = { lines: [{ text: 'こんにちは。', expression: 'happy', motion: 'wave' }, { text: '今日は、どんなお話をしようか。' }], brain: 'mock' };
 
 function harness({ creator = createSampleCreator({ main: MAIN, exists: async () => true }), voice = {}, talk = async () => MOCK, show = async () => true, seed = 7 } = {}) {
@@ -44,6 +43,7 @@ function harness({ creator = createSampleCreator({ main: MAIN, exists: async () 
   return {
     fr, said, steps, stored, snaps, talks, personas,
     get offered() { return offered.map((a) => a.id); },
+    get labels() { return offered.map((a) => a.label); },
     get done() { return done; },
     texts: (who) => said.filter((l) => !who || l.who === who).map((l) => l.text),
   };
@@ -113,7 +113,7 @@ test('絵の入口(見本の道): 人の絵なら「ゆるキャラにしてみ�
   assert.ok(h.texts('note').some((t) => t.includes('どんな写真でもきれいに作れるわけではありません')));
   assert.deepEqual(h.offered, ['yurufy', 'other']);
   await h.fr.act('yurufy');
-  assert.equal(h.fr.character.id, 'norrie');
+  assert.equal(h.fr.character.id, MAIN.id);
   assert.equal(h.fr.input.yurufy, true);
   assert.equal(h.fr.snapshot().words, null, '絵の住所は残さない');
   assert.ok(!JSON.stringify(h.fr.snapshot()).includes('blob:'));
@@ -171,6 +171,7 @@ test('鍵が違う → もう一度。あとで → 文字で話す。鍵の受�
   await h.fr.act('key', { key: 'bad-key' });
   assert.equal(h.texts('char').at(-1), 'うまくいかなかったみたい。');
   assert.deepEqual(h.offered, ['key', 'later']);
+  assert.equal(h.labels[1], '鍵なしで続ける', '札の右上の「あとで」(会話ごと閉じる)と同じ名前にしない');
   await h.fr.act('later');
   assert.equal(h.texts('char').at(-1), 'じゃあ、文字とレトロな音で話そうね。');
 

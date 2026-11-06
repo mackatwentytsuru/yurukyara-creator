@@ -7,6 +7,7 @@
 // 台本は枠からの知らせ(makeEvent)を受けて、案内役の言葉と歩みを進める。
 import { PRESETS, summary, normalize } from '../persona/settings.js';
 import { styleLines, MOCK_NOTICE } from '../persona/preview.js';
+import { MAIN_CHARACTER } from '../../character/defaults.js'; // 主役の決まりは 1 か所(S5)。ここでは写さない
 
 export const STEPS = [
   { n: 1, key: 'start', label: 'どんな子' },
@@ -35,7 +36,7 @@ const clip = (s, n) => [...String(s ?? '').trim()].slice(0, n).join('');
 export class FirstRun {
   /**
    * @param {object} d
-   * @param {{id:string, name:string}} d.guide 案内役(主役の猫)
+   * @param {{id:string, name:string}} d.guide 案内役(既定は主役 MAIN_CHARACTER = ノリー)
    * @param {object} d.creator 作る道(creators.js)
    * @param {{get:(id:string)=>object|null, set:(id:string, s:object)=>void, random:()=>object}} d.persona
    * @param {(text:string, ctx:object)=>Promise<{lines:{text:string,expression?:string,motion?:string}[], brain:string, safety?:string|null, notice?:string}>} d.talk
@@ -66,8 +67,13 @@ export class FirstRun {
     this.log = []; // 試験と確かめのための、言った文の記録
   }
 
+  /** 案内役。渡されなければ主役(MAIN_CHARACTER) */
+  get guide() {
+    return this.d.guide ?? MAIN_CHARACTER;
+  }
+
   get guideName() {
-    return this.d.guide?.name || 'ノリー';
+    return this.guide.name || MAIN_CHARACTER.name;
   }
 
   /** 1〜3 歩が手元の PC の本当の作る道で、入力を PC の作る画面(枠)でするか */
@@ -117,7 +123,8 @@ export class FirstRun {
   async start() {
     this._go(1);
     const sample = this.d.creator.mode === 'sample';
-    const nori = this.d.guide?.id === 'norrie';
+    // 案内役が主役のときは、主役(ノリー)の口調で名乗る。主役を替えたら、この 1 文も替える
+    const nori = this.guide.id === MAIN_CHARACTER.id;
     await this._say(
       {
         who: 'guide',
@@ -467,7 +474,8 @@ export class FirstRun {
   _offerKey() {
     this._offer([
       { id: 'key', label: '鍵を入れる', kind: 'key', remember: Boolean(this.d.voice.canRemember?.()), primary: true },
-      { id: 'later', label: 'あとで' },
+      // 札の右上の「あとで」(初めての会話ごと閉じる)と同じ名前にしない(撮影の練習で、7 歩目に「あとで」が 2 つ並んでいた)
+      { id: 'later', label: '鍵なしで続ける' },
     ]);
   }
 
