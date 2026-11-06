@@ -1,0 +1,20 @@
+{
+ "id": "norrie",
+ "height_m": 1.0,
+ "bones": [
+  {"name": "root", "at": [0, 0, 0], "parent": null},
+  {"name": "body", "at": [0, 0, 0.36], "parent": "root"},
+  {"name": "head", "at": [0, -0.17, 0.6], "parent": "body"},
+  {"name": "arm_L", "at": [0.105, -0.065, 0.55], "parent": "body"},
+  {"name": "arm_R", "at": [-0.105, -0.065, 0.55], "parent": "body"},
+  {"name": "leg_L", "at": [0.152, -0.06, 0.09], "parent": "root"},
+  {"name": "leg_R", "at": [-0.152, -0.06, 0.09], "parent": "root"},
+  {"name": "eye_L", "at": [0.0404, -0.3381, 0.8255], "parent": "head"},
+  {"name": "eye_R", "at": [-0.0418, -0.3379, 0.8255], "parent": "head"}
+ ],
+ "roles": {
+  "root": "root", "body": "body", "head": "head",
+  "arm_L": "arm_L", "arm_R": "arm_R", "leg_L": "leg_L", "leg_R": "leg_R"
+ },
+ "motion": {"only": ["idle", "talk", "nod", "bow", "wave"], "arm_amp": 0.45}
+}
