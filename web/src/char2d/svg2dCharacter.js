@@ -132,7 +132,7 @@ export class Svg2DCharacter extends CharacterBase {
     if (this.spec.back) {
       const b = this.spec.back;
       this.back = new THREE.Group();
-      this.back.name = '2d:back';
+      this.back.name = '2d:back:pivot';
       this.back.rotation.y = Math.PI;
       const mesh = this._plane(svg, b.id ?? 'back', b.box, rasterize, pxPerUnit, 0, null);
       mesh.position.z = LAYER_GAP; // 後ろ向きの板の手前 = 体の後ろ
