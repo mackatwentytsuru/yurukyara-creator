@@ -66,10 +66,13 @@ test('2D を出せそうか: S2 の形は yes・looks だけは見に行く・�
   assert.equal(twoDHint(null), 'no');
 });
 
-test('今の木のキャラ: ようこそくんは 2D が書いてある・ノリーは決まりの場所を見る・みかんと前の形は切り替えを出さない', () => {
+test('今の木のキャラ: ようこそくんは 2D が書いてある・ノリーは 2D を出せる(looks.2d があれば yes・無ければ決まりの場所を見る)・みかんと前の形は切り替えを出さない', () => {
   assert.equal(twoDHint(readCharacter('yokoso')), 'yes');
-  assert.equal(twoDHint(readCharacter('norrie')), 'probe', 'ノリーは looks.2d が無いが、2d/parts.json がある');
-  assert.equal(partsPath(readCharacter('norrie')), '2d/parts.json');
+  // 今の木を決め打ちしない: 読んだ character.json に looks.2d があれば 'yes'、無ければ決まりの場所を見る 'probe'
+  const norrie = readCharacter('norrie');
+  const norrieHint = norrie.looks?.['2d'] ? 'yes' : 'probe';
+  assert.equal(twoDHint(norrie), norrieHint, norrieHint === 'yes' ? 'ノリーは looks.2d に部品の表の場所が書いてある' : 'ノリーは looks.2d が無いが、2d/parts.json がある');
+  assert.equal(partsPath(norrie), '2d/parts.json');
   readFileSync(join(CHARACTERS, 'norrie', '2d', 'parts.json')); // 決まりの場所に部品の表がある
   assert.equal(twoDHint(readCharacter('mikan')), 'no', 'みかんの 2d は部品の名前の並びだけ(板の部品の表が無い)');
   for (const id of ['robo', 'f_led', 'd_lantern']) assert.equal(twoDHint(readCharacter(id)), 'no', id);
