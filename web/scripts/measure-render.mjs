@@ -1,6 +1,6 @@
 // 重さを測る(L0)。会話サーバーが配るページを ?perf=1 で開き、キャラごと・画面の幅ごとに window.__perf を集める。
 //   npm run build && PORT=8799 npm run server        (鍵は要らない。測りでは話さない)
-//   node scripts/measure-render.mjs --port 8799 --out <出力のフォルダ> [--characters yokoso,robo] [--views pc,phone] [--sec 6]
+//   node scripts/measure-render.mjs --port 8799 --out <出力のフォルダ> [--characters yokoso,robo] [--views pc,phone] [--sec 6] [--query tier=low]
 // GPU で描く(gpuGuard.js の GPU_ARGS)。WebGL が CPU(SwiftShader)なら、その場で止める。GPU の札と鍵を取ってから流す。
 // 分かるのは、この PC の GPU での数字。スマホの幅は「幅と画素の密度だけ」をまねた物で、スマホの実機の速さではない(重さの表では別の行)。
 import fs from 'node:fs';
@@ -20,12 +20,14 @@ const OUT = opt('out', 'perf_out');
 const CHARS = opt('characters', 'yokoso,robo,f_led,d_lantern').split(',').filter(Boolean);
 const VIEWS = opt('views', 'pc,phone').split(',').filter(Boolean);
 const SEC = Number(opt('sec', '6'));
+const EXTRA = opt('query', ''); // 足す URL の値(例 tier=low&fur=3)。比べの測りに使う
 const TIMEOUT_MS = (SEC + 40) * 1000;
 
 const VIEW_SPECS = {
   pc: { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 },
   // 幅 390・密度 3 は今のふつうの iPhone の画面。描く画素の倍率は stage が 2 までに抑える
-  phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+  // 名乗りも iPhone にして、端末の段(stage/tiers.js)がスマホの段を選ぶかも確かめる
+  phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' },
 };
 
 function commit() {
@@ -58,7 +60,7 @@ for (const view of VIEWS) {
     page.on('console', (m) => {
       if (m.type() === 'error' && !m.text().includes('503')) problems.push(`console: ${m.text().slice(0, 160)}`);
     });
-    await page.goto(`http://127.0.0.1:${PORT}/?character=${encodeURIComponent(id)}&perf=1&perfsec=${SEC}&auto=0`, { waitUntil: 'load' });
+    await page.goto(`http://127.0.0.1:${PORT}/?character=${encodeURIComponent(id)}&perf=1&perfsec=${SEC}&auto=0${EXTRA ? `&${EXTRA}` : ''}`, { waitUntil: 'load' });
     if (!guarded) {
       await stopIfSoftwareRenderer(page, browser); // CPU の描画なら、ここで止まる
       guarded = true;
@@ -81,7 +83,7 @@ for (const view of VIEWS) {
     await context.close();
     const p = perf;
     console.log(p
-      ? `${id}\t${view}\tfps ${p.frames.fps_median}\tframe ${p.frames.frame_ms_median}ms p95 ${p.frames.frame_ms_p95}\tcpu ${p.frames.render_cpu_ms_median}ms\tcalls ${p.gl.calls}\ttri ${p.gl.triangles}\ttex ${p.gl.textures}\tMB ${(p.bytes.total.transfer / 1048576).toFixed(2)}\tready ${p.timing.ready_ms}ms${problems.length ? `\t問題 ${problems.length}` : ''}`
+      ? `${id}\t${view}\tfps ${p.frames.fps_median}\tframe ${p.frames.frame_ms_median}ms p95 ${p.frames.frame_ms_p95}\tcpu ${p.frames.render_cpu_ms_median}ms\tcalls ${p.gl.calls}\ttri ${p.gl.triangles}\ttex ${p.gl.textures}\ttier ${p.tier?.name ?? '-'}\tMB ${(p.bytes.total.transfer / 1048576).toFixed(2)}\tready ${p.timing.ready_ms}ms${problems.length ? `\t問題 ${problems.length}` : ''}`
       : `${id}\t${view}\t測れなかった\t${problems.join(' / ')}`);
   }
 }

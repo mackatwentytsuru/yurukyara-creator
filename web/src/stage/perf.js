@@ -74,7 +74,7 @@ function showBox(json) {
   box.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99;margin:0;padding:6px 8px;font:11px/1.35 ui-monospace,monospace;background:rgba(0,0,0,.72);color:#fff;border-radius:6px;pointer-events:none;max-width:90vw;white-space:pre-wrap';
   const mb = (b) => (b / 1048576).toFixed(2);
   box.textContent = [
-    `重さ ${json.character} ・ ${json.renderer.software ? 'CPU の描画(数字は使えない)' : 'GPU'}`,
+    `重さ ${json.character} ・ ${json.renderer.software ? 'CPU の描画(数字は使えない)' : 'GPU'}${json.tier ? ` ・ 段 ${json.tier.name}` : ''}`,
     `fps ${json.frames.fps_median} ・ 1 フレーム ${json.frames.frame_ms_median}ms(p95 ${json.frames.frame_ms_p95})`,
     `描く呼び出し ${json.gl.calls} ・ 三角 ${json.gl.triangles} ・ 絵 ${json.gl.textures}`,
     `読み込み ${mb(json.bytes.total.transfer)}MB ・ 出るまで ${json.timing.ready_ms}ms`,
@@ -86,7 +86,7 @@ function showBox(json) {
  * 測り始める。main.js がキャラを出したあと、?perf=1 のときだけ呼ぶ。
  * stage.render を包んで、描く 1 回の CPU の時間も測る(包むのは測っている間だけ)。
  */
-export function startPerf({ stage, character, params, readyAt }) {
+export function startPerf({ stage, character, params, readyAt, tier = null }) {
   window.__perf = null;
   window.__perfDone = false;
   const warmS = Number(params.get('perfwarm') ?? 2);
@@ -124,6 +124,7 @@ export function startPerf({ stage, character, params, readyAt }) {
       measured_at: new Date().toISOString(),
       character: params.get('character') ?? params.get('char') ?? '_test',
       kind: character.kind ?? null,
+      tier: tier ? { name: tier.name, reason: tier.reason, pixel_ratio_max: tier.pixelRatioMax, fur_layers: tier.furLayers } : null,
       url: location.pathname + location.search,
       ua: navigator.userAgent,
       viewport: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio, pixel_ratio_used: stage.renderer.getPixelRatio() },
