@@ -2,7 +2,11 @@
 import * as THREE from 'three';
 import { createStage } from './scene.js';
 import { loadFirstCharacter, motionChoices, MAIN_CHARACTER } from './character/index.js';
-import { MediapipeSource, SimSource, PoseSource, BridgeSource } from './tracking/sources/index.js';
+// 入力の差し替え口(tracking/sources/index.js の約束)。カメラの顔の部品(mediapipeSource.js)は重いので、ここでは読まず、
+// 「はじめる」を押した時に読む(最初の読み込みを軽くする。重さの表 L3)
+import { SimSource } from './tracking/sources/simSource.js';
+import { PoseSource } from './tracking/sources/poseSource.js';
+import { BridgeSource } from './tracking/sources/bridgeSource.js';
 import { AttentionPicker } from './tracking/attention.js';
 import { describeScene } from './tracking/geometry.js';
 import { Speaker } from './conversation/speaker.js';
@@ -49,6 +53,7 @@ const app = {
   status: null,
   metrics: [],
   lastAttention: { tracks: [], primaryId: null, speakerId: null },
+  firstFrameAt: null, // キャラの入った最初のコマを描き終えた時刻(ms。?perf=1 の first_frame_ms)
 };
 window.__app = app; // 試験と開発の確認用
 if (IS_HEADSET) document.documentElement.classList.add('is-headset');
@@ -410,6 +415,7 @@ function frame(rawMs) {
     vrPanel.place(c.object3d, stage.state.height, stage.camera);
   }
   stage.render();
+  if (app.firstFrameAt === null) app.firstFrameAt = performance.now();
 
   if (nowMs - chipClock > 500) {
     chipClock = nowMs;
@@ -651,6 +657,7 @@ async function boot() {
   new ResizeObserver(fitBottom).observe(bottomBar);
   fitBottom();
   let readyAt = null;
+  let loopStartAt = null;
   try {
     app.place = await loadPlaceData(params.get('place'));
     // 毛の層は重ね描きで、ソフト描画で 20 倍遅かった(実測)。端末の段で、スマホ・弱い端末・ヘッドセットは減らす(PC は今のまま)。?fur= で決め打ち
@@ -671,9 +678,18 @@ async function boot() {
     // 人型でないキャラ(rig)と 2D の板は、上半身でなく全身を見せる
     const view = params.get('view') ?? (character.kind === 'vrm' ? 'bust' : 'full');
     stage.frameCharacter(character, view === 'full' ? 'full' : 'bust', app.place.loaded?.object3d);
-    if (character.personaUrl) app.persona = await (await fetch(character.personaUrl)).text();
+    readyAt = performance.now(); // キャラを舞台に置いた時刻(?perf=1 で使う)
+    // 置いたらすぐ描き始める。人格の文・見せ方の用意(VR の有無を調べる)・/api/status を待たない。
+    // 待つと、初めて開いたブラウザで最初のコマが 0.6〜1 秒遅れた(重さの表 L3)。frame() は、まだ無い物(見せ方・入力)を飛ばす
+    loopStartAt = performance.now();
+    stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う
+    if (character.personaUrl) {
+      // 人格の文が無い(404・頁の代わり)時は空にする。届いた 404 の文や頁を、人格として頭脳に渡さない
+      const res = await fetch(character.personaUrl).catch(() => null);
+      app.persona = res?.ok && !/html|json/i.test(res.headers.get('content-type') ?? '') ? await res.text() : '';
+      if (!app.persona) console.warn(`人格の文を読めませんでした(${res?.status ?? '通信できない'}): ${character.personaUrl}`);
+    }
     status.textContent = '';
-    readyAt = performance.now(); // キャラが出た時刻(?perf=1 で使う)
   } catch (err) {
     console.error(err);
     status.textContent = `キャラを読み込めませんでした: ${err.message}`;
@@ -688,9 +704,8 @@ async function boot() {
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
   buttons.forEach((b) => (b.disabled = false));
-  stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う
   // ?perf=1: いまの重さを測る(L0。数字は window.__perf。測りの部品は、このときだけ読む)
-  if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt, tier: app.tier }));
+  if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt, tier: app.tier, firstFrameAt: () => app.firstFrameAt, loopStartAt }));
 
   /** 入力を選んで始める。失敗したら理由を出して、ゲートに戻る */
   async function startSource(kind, pending) {
@@ -698,6 +713,8 @@ async function boot() {
     buttons.forEach((b) => (b.disabled = true));
     status.textContent = pending;
     try {
+      // カメラの顔の部品は、押した時に読む(最初の読み込みに入れない)
+      const MediapipeSource = kind === 'camera' ? (await import('./tracking/sources/mediapipeSource.js')).MediapipeSource : null;
       const source =
         kind === 'camera'
           ? new MediapipeSource({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV })

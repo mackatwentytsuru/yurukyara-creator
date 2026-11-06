@@ -65,6 +65,28 @@ export function summarizeResources(entries) {
   return { ...out, files };
 }
 
+/**
+ * 時間の欄。時刻はどれもページを開いた時からの ms(performance.now)。
+ * - ready_ms: キャラを読み込んで舞台に置いた時刻
+ * - first_frame_ms: キャラの入った最初のコマを描き終えた時刻(main.js の frame。見た人がキャラを見られる時刻に近い)
+ * - ready_to_first_frame_ms: その間(描く輪を回し始めるまでの待ちと、最初の 1 コマを描く時間)
+ * - loop_start_ms: 描く輪(setAnimationLoop)を回し始めた時刻。first_frame_ms との差が、最初の 1 コマを描くのにかかった時間
+ */
+export function timingSummary({ readyAt = null, firstFrameAt = null, loopStartAt = null, domContentLoadedAt = null, warmS = null, sampleS = null } = {}) {
+  const ms = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null);
+  const ready = ms(readyAt);
+  const first = ms(firstFrameAt);
+  return {
+    ready_ms: ready,
+    first_frame_ms: first,
+    ready_to_first_frame_ms: ready !== null && first !== null ? first - ready : null,
+    loop_start_ms: ms(loopStartAt),
+    dom_content_loaded_ms: ms(domContentLoadedAt),
+    warm_s: warmS,
+    sample_s: sampleS,
+  };
+}
+
 /** 毎フレームの間隔(ms)から、滑らかさの数字を作る */
 export function summarizeFrames(intervals, renderMs) {
   const f = [...intervals].sort((a, b) => a - b);
@@ -104,7 +126,7 @@ function showBox(json) {
     `重さ ${json.character} ・ ${json.renderer.software ? 'CPU の描画(数字は使えない)' : 'GPU'}${json.tier ? ` ・ 段 ${json.tier.name}` : ''}`,
     `fps ${json.frames.fps_median} ・ 1 フレーム ${json.frames.frame_ms_median}ms(p95 ${json.frames.frame_ms_p95})`,
     `描く呼び出し ${json.gl.calls} ・ 三角 ${json.gl.triangles} ・ 絵 ${json.gl.textures}`,
-    `読み込み ${mb(json.bytes.total.transfer)}MB ・ 出るまで ${json.timing.ready_ms}ms`,
+    `読み込み ${mb(json.bytes.total.transfer)}MB ・ 出るまで ${json.timing.ready_ms}ms ・ 最初のコマ ${json.timing.first_frame_ms ?? '—'}ms`,
   ].join('\n');
   document.body.append(box);
 }
@@ -113,7 +135,7 @@ function showBox(json) {
  * 測り始める。main.js がキャラを出したあと、?perf=1 のときだけ呼ぶ。
  * stage.render を包んで、描く 1 回の CPU の時間も測る(包むのは測っている間だけ)。
  */
-export function startPerf({ stage, character, params, readyAt, tier = null }) {
+export function startPerf({ stage, character, params, readyAt, tier = null, firstFrameAt = () => null, loopStartAt = null }) {
   window.__perf = null;
   window.__perfDone = false;
   const warmS = Number(params.get('perfwarm') ?? 2);
@@ -157,12 +179,7 @@ export function startPerf({ stage, character, params, readyAt, tier = null }) {
       ua: navigator.userAgent,
       viewport: { w: innerWidth, h: innerHeight, dpr: devicePixelRatio, pixel_ratio_used: stage.renderer.getPixelRatio() },
       renderer: { name: rendererName, software: isSoftwareRenderer(rendererName), webgl2: stage.renderer.capabilities.isWebGL2 ?? true },
-      timing: {
-        ready_ms: Math.round(readyAt),
-        dom_content_loaded_ms: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
-        warm_s: warmS,
-        sample_s: sampleS,
-      },
+      timing: timingSummary({ readyAt, firstFrameAt: firstFrameAt(), loopStartAt, domContentLoadedAt: nav?.domContentLoadedEventEnd ?? null, warmS, sampleS }),
       frames: summarizeFrames(intervals, renderMs),
       gl: {
         calls: info.render.calls,
