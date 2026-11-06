@@ -179,6 +179,12 @@ html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origi
   padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--warn); color: var(--warn);
 }
 .brain-notice[hidden] { display: none; }
+/* 短い知らせ(会話の側の ui.notice。鍵らしい文字を送らなかった、など)。数秒で消える */
+.ui-notice {
+  width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(12px, 1.6vw, 15px); line-height: 1.4;
+  padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--lav); color: var(--text);
+}
+.ui-notice[hidden] { display: none; }
 
 /* 覚えていること(S3 の記憶の札を入れる引き出し) */
 .drawer { position: relative; pointer-events: auto; }

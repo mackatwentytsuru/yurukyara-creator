@@ -95,20 +95,24 @@ function setGaze(spec, ms = 2000) {
 /* ---------- 会話のイベント(記憶の札・仮の頭脳の知らせ) ---------- */
 let memory = null; // 記憶の札(S3 の mountMemoryPanel の返り値)
 let brainNoticeText = null; // イベントで届いた「仮の頭脳です(理由)」
+let eventBrain = null; // 会話のイベントで分かった頭脳('haiku' | 'mock')。公開の関数の fallback も mock
 
 /** サーバーの会話のイベントを 1 つ受ける。Dialogue の onEvent で、手元のサーバー(流れる形)も公開の関数(まとめた JSON)も全部届く */
 function onChatEvent(ev) {
   memory?.onChatEvent(ev); // 覚えた({type:'memory', added})・消したの知らせで一覧を読み直す
   if (ev?.type === 'meta') {
+    if (ev.brain) eventBrain = ev.brain;
+    else if (ev.fallback) eventBrain = 'mock'; // 公開の関数の先頭の知らせ(brain が来る前に、仮の頭脳だと分かる)
     if (ev.notice) brainNoticeText = ev.notice; // 上限・合言葉など、理由つきの知らせ(K5)
     else if (ev.brain === 'haiku') brainNoticeText = null;
     updateBrainNotice();
   }
 }
 
-/** いま話している頭脳。手元のサーバーは /api/status、公開の URL は会話のイベント(Dialogue.brain)から */
+/** いま話している頭脳。手元のサーバーは /api/status、公開の URL は会話のイベントから */
 function currentBrain() {
   if (app.status?.brain) return app.status.brain;
+  if (eventBrain) return eventBrain;
   return dialogue.brain && dialogue.brain !== 'unknown' ? dialogue.brain : null;
 }
 

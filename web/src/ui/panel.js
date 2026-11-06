@@ -1,9 +1,11 @@
-// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ。
+// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ・短い知らせ(ui.notice)。
 // 合言葉(契約 K5)は会話の側の web/src/conversation/demoPass.js が 1 か所で持つ(会話と記憶の通信が同じ値を読む)。
 const $ = (id) => document.getElementById(id);
 
 /** 仮の頭脳の知らせの決まりの文(理由が分からない時) */
 export const FALLBACK_BRAIN_NOTICE = '仮の頭脳です(本物の頭脳につながっていません)';
+/** 短い知らせを出しておく時間 */
+const NOTICE_MS = 6000;
 
 const STAGE_LABEL = {
   greet: '声かけ',
@@ -34,6 +36,7 @@ export function createUi() {
     foot: $('tFoot'),
   };
   let captionTimer = null;
+  let noticeTimer = null;
   let replyParts = [];
   let actParts = [];
   let mirror = null; // VR の中の板へも同じ文字を渡す
@@ -180,6 +183,21 @@ export function createUi() {
       if (!el) return;
       el.hidden = !text;
       el.textContent = text ?? '';
+    },
+    /**
+     * 会話の側(Dialogue)からの短い知らせ(鍵らしい文字を送らなかった、など)。数秒で消える。
+     * 仮の頭脳の知らせと同じ文は、字幕の上にもう出ているので重ねない。文字は textContent だけで入れる
+     */
+    notice(text) {
+      const el = $('uiNotice');
+      const brain = $('brainNotice');
+      if (!el || !text || (brain && !brain.hidden && brain.textContent === text)) return;
+      clearTimeout(noticeTimer);
+      el.textContent = text;
+      el.hidden = false;
+      noticeTimer = setTimeout(() => {
+        el.hidden = true;
+      }, NOTICE_MS);
     },
   };
 }
