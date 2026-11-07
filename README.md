@@ -1,138 +1,139 @@
-# Yuru-chara Creator
+**日本語** · [English](README.en.md)
 
-> Draw it in a word or a picture; Claude turns it into a light, talking yuru-chara that remembers you.
+# ゆるキャラクリエイター
 
-**Meet Norrie (ノリー)**, our main character: a back-striped tree kangaroo who is training to be a butler.
-A collaborator drew Norrie by hand during the hackathon, from the front, the side and the back, and let us use the drawing.
-From that drawing, Claude Code made Norrie's 2D version (SVG parts) and 3D version (built with Blender's Python).
-When you open the app, you meet Norrie. Norrie speaks Japanese, politely and a little clumsily, like the apprentice it is.
-**The app's screens are in Japanese only** (buttons, steps and messages); there is no English mode.
+> 言葉か 1 枚の絵から、Claude が描いて確かめて組み立て、ブラウザの中で動いて話して、話したことを覚えているゆるキャラが生まれます。
 
-- Demo video (under 3 minutes): *link added at submission* 【確かめ待ち】
-- Try it in your browser: *link added at submission* 【確かめ待ち】
+**主役はノリー(Norrie)。** セスジキノボリカンガルーの、執事見習いです。
+ノリーの絵(正面・横・後ろ)は、協力者がハッカソンの期間中に手で描き、使うことを許してくれました。
+この絵から、Claude Code がノリーの 2D(SVG の部品)と 3D(Blender の Python で組んだ形)を作りました。
+アプリを開くと、最初に出てくるのがノリーです。ノリーは日本語で、ていねいに、少したどたどしく話します(見習いなので)。
 
-[日本語 (README.ja.md)](README.ja.md) · [How we built it](docs/HOW_WE_BUILT.md) · [Third-party parts and licences](THIRD_PARTY.md)
+- デモの動画(3 分未満): *提出の時にリンクを入れる* 【確かめ待ち】
+- ブラウザで試す: *提出の時にリンクを入れる* 【確かめ待ち】
 
-## Try it in 3 lines
+[どう作ったか(docs/HOW_WE_BUILT.md)](docs/HOW_WE_BUILT.md) · [使っている部品とライセンス(THIRD_PARTY.md)](THIRD_PARTY.md)
+
+## 3 行で試す
 
 ```bash
-git clone <this repository's URL> yuru-chara && cd yuru-chara/web
+git clone <このリポジトリの URL> yuru-chara && cd yuru-chara/web
 npm ci
-npm start        # then open http://127.0.0.1:8787/
+npm start        # http://127.0.0.1:8787/ を開く
 ```
 
-- Norrie appears first. The **3D / 2D** button switches Norrie between the 3D model and the 2D drawing (`?look=2d` opens the 2D one directly).
-- No API key is needed. Without one, the character talks with a stand-in brain, and the screen says so (「仮の頭脳です」).
-- To talk with Claude Haiku, set `ANTHROPIC_API_KEY` in your environment before `npm start`. Never write keys into files. 【確かめ待ち】
-- Other characters: add `?character=<id>`, for example `?character=mikan`. They are in [`characters/`](characters/).
-- We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: 【確かめ待ち】
-- `npm ci` also downloads the face-tracking model into `web/public/mediapipe/`; it is not stored in this repository.
+- 最初にノリーが出ます。**3D・2D** のボタンで、ノリーを 3D の形と 2D の絵で切り替えられます(`?look=2d` で 2D から開けます)。
+- 鍵は要りません。鍵が無いと、キャラは仮の頭脳で話し、画面にもそう出ます(「仮の頭脳です」)。
+- Claude Haiku と話すには、`npm start` の前に環境変数 `ANTHROPIC_API_KEY` を入れます。鍵をファイルに書かないでください。【確かめ待ち】
+- ほかのキャラは `?character=<id>` で選びます(例 `?character=mikan`)。[`characters/`](characters/) にあります。
+- この 3 行は、新しく取ってきた写しで、Windows の Node.js 22 で流して確かめました。Mac と Linux は【確かめ待ち】。
+- `npm ci` は顔の追従のモデルも `web/public/mediapipe/` に取ります(このリポジトリには入れていません)。
 
-## Make your own character on your PC with Claude Code
+<a name="make-your-own-character-on-your-pc-with-claude-code"></a>
 
-> 日本語の手順: [README.ja.md の同じ節](README.ja.md#make-your-own-character-on-your-pc-with-claude-code)(アプリの画面は日本語だけです)
+## 自分の PC で、Claude Code と自分のキャラを作る
 
-In the browser alone, the first conversation's word box only picks the nearest of the sample characters. To have Claude really draw a new one from your words or your picture, run the maker on the same PC.
+ブラウザだけでは、初めての会話の「言葉で書く」は、見本のキャラから近い子を選ぶだけです。言葉か自分の絵から Claude に本当に描かせるには、同じ PC で作る道を起こします。
 
-**What you need** (on top of Node.js 22 for the app):
+**要る物**(アプリの Node.js 22 のほかに):
 
-- **Python 3.10 or later with Pillow, NumPy and SciPy**: `python -m pip install pillow numpy scipy`. The maker itself starts without them, but the test picture and every chosen picture need Pillow, and the checks of a drawing and of a picture need NumPy and SciPy. Optional: `segno` draws the QR code for opening the review page on a phone.
-- **Google Chrome or Chromium** on the PC. The drawing step turns the SVG into a PNG with it in the background (set `CHROME_PATH` if it is not found).
-- **Claude Code, signed in.** `/yuru-next` and the picture check use your Claude Code plan.
-- On Mac and Linux the Python command may be `python3` (we ran these steps on Windows only).
+- **Python 3.10 以降と、Pillow・NumPy・SciPy**: `python -m pip install pillow numpy scipy`。作る道そのものは無くても起きますが、試しの絵と、選んだ絵には Pillow が、描いた絵の確かめと選んだ絵の確かめには NumPy と SciPy が要ります。任意: `segno` があると、スマホで確かめる画面を開く QR が出ます。
+- **Google Chrome か Chromium**(PC に入っている物)。描く段で、SVG を裏で PNG にするのに使います(見つからない時は環境変数 `CHROME_PATH` に場所を入れます)。
+- **ログインした Claude Code**。`/yuru-next` と絵の確かめは、あなたの Claude Code のプランを使います。
+- Mac と Linux では、Python の命令が `python3` のことがあります(この手順は Windows でだけ流しました)。
 
-Open two terminals in the folder where you ran `git clone` (the folder that holds `yuru-chara`):
+2 つの窓を、git clone をしたフォルダ(`yuru-chara` が入っているフォルダ)で開きます:
 
 ```bash
-# Terminal 1: the app (skip this if it is still running from "Try it in 3 lines")
+# 窓 1: アプリ(「3 行で試す」で起こしたままなら飛ばす)
 cd yuru-chara/web
 npm start
 
-# Terminal 2: the maker, from the repository root (yuru-chara, not web)
+# 窓 2: 作る道。リポジトリの頭のフォルダ(yuru-chara。web ではない)から
 cd yuru-chara
 python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 ```
 
-1. On this PC, open `http://127.0.0.1:8796/qr` and click the link under 「この PC の初めての会話」 ("the first conversation on this PC"). The app opens with the maker inside the first-conversation card.
-2. Type a few words (for example 「青いまるい雲の子」, "a round blue cloud child"), or choose a picture, and press 「これで作る」 ("make it").
-3. Open Claude Code in the repository root (`yuru-chara`) and type `/yuru-next`. For a picture, Claude first checks that it suits a yuru-chara. Then Claude draws the first picture (a few minutes), and it appears in the card.
-4. Look at the picture in the card:
-   - **To change it**, write a short note (for example 「帽子を青にして」, "make the hat blue") and press 「直したい」 ("fix it"). Then type `/yuru-next` again: Claude draws it again from your note (a few minutes), and the new picture appears in the card. You can ask for changes 3 times; at the 4th, `/yuru-next` stops and asks you how to go on.
-   - **When you like it**, press 「この子にする」 ("keep this one"). The card goes on to the next step of the first conversation by itself. Typing `/yuru-next` once more only tells Claude Code that the picture is OK, and it answers that the 3D stages come next (below). Nothing changes on the screen.
+1. この PC で `http://127.0.0.1:8796/qr` を開き、「この PC の初めての会話」の下のリンクを押します。初めての会話の札の中に、作る画面が出ます。
+2. 言葉をいくつか(例「青いまるい雲の子」)入れるか、絵を選んで、「これで作る」を押します。
+3. リポジトリの頭のフォルダ(`yuru-chara`)で Claude Code を開き、`/yuru-next` と打ちます。絵のときは、Claude が先にゆるキャラに向く絵かを確かめます。それから Claude が最初の絵を描き(数分)、札に出ます。
+4. 札の絵を見ます。
+   - **直したいとき**は、直したい所を一言(例「帽子を青にして」)書いて「直したい」を押し、もう一度 `/yuru-next` と打ちます。Claude がその一言で描き直し(数分)、新しい絵が札に出ます。直しは 3 回までで、4 回目は `/yuru-next` が描かずに止まり、どうするかを聞きます。
+   - **気に入ったら**「この子にする」を押します。札は、初めての会話の次の歩みへ自分で進みます。このあともう一度 `/yuru-next` と打つと、Claude Code に「絵は OK」と伝わり、次は 3D の段(下)だと答えるだけです。画面は変わりません。
 
-- To try the steps without calling Claude, run `python creator/review/yuru_make.py next --fake-draw --fake-check yuru` instead of `/yuru-next`. `--fake-draw` puts a fixed test picture in the card, and `--fake-check yuru` skips Claude's check of a chosen picture (it treats the picture as a good yuru-chara picture). Without `--fake-check yuru`, a picture still goes to Claude for the check.
-- Until a new character has its own 3D, Norrie stands on the stage in its place and speaks its words; the card says so.
-- Your words and picture go to the maker on your PC and, for the check and the drawing, to Claude.
-- After the picture, the 3D stages (shape, materials, bones, motion) run with the [make-character](.claude/skills/make-character/SKILL.md) skill in Claude Code (about 20 minutes for Mikan-chan). They are not started from the browser yet.
-- Stop the maker (Ctrl+C) when you are done. Its link holds a passphrase made fresh at each start.
+- Claude を呼ばずに手順だけ試すときは、`/yuru-next` のかわりに `python creator/review/yuru_make.py next --fake-draw --fake-check yuru` を流します。`--fake-draw` は決まった試しの絵を札に出し、`--fake-check yuru` は選んだ絵の Claude の確かめを飛ばします(ゆるキャラに向く絵とみなします)。`--fake-check yuru` を付けないと、絵のときは確かめに Claude を呼びます。
+- 新しい子の 3D ができるまでは、ノリーがかわりに舞台に立って、その子の言葉を話します(札にもそう出ます)。
+- 言葉と絵は、この PC の作る道と、確かめと絵を描く Claude に渡ります。
+- 絵の後の 3D の段(形・材質・骨・動き)は、Claude Code で [make-character](.claude/skills/make-character/SKILL.md) のスキルで進めます(みかんちゃんで約 20 分)。ブラウザからはまだ始められません。
+- 終わったら作る道を止めます(Ctrl+C)。リンクには、起動のたびに作る合言葉が入っています。
 
-## What works today
+## 今できること
 
-Each row was checked by running it. The check is named next to it.
+どの行も、実際に動かして確かめました。確かめ方を右に書いています。
 
-| What | How we checked it |
+| できること | 確かめ方 |
 |---|---|
-| **A word becomes a character.** Claude draws an SVG from a few words, then builds a 3D character in 7 stages: look, shape (Blender's Python, part by part), materials, textures, bones, motion, talk. Mikan-chan was made this way. | `creator/skilltest/stage_run.py`, Nov 6: 20.6 minutes from the words to talking (record in [make-character](.claude/skills/make-character/SKILL.md)) |
-| **A drawing becomes a character.** Norrie's 3D was built from the three views in the same stages. In straight-on views its outline overlaps the drawing by 0.96 (front), 0.96 (side) and 0.95 (back). | `creator/pipeline/check_all.sh` (all OK), `python creator/specs/validate_character.py characters/norrie`; overlap recorded in [make-character](.claude/skills/make-character/SKILL.md) |
-| **2D.** Norrie's 2D is made of SVG parts in the drawing's 6 colours. It blinks, has 3 mouth shapes and 7 expressions, waves, bows and tilts its head. | `node --test web/test/char2d_norrie.test.mjs` (16 tests) |
-| **Picture check.** Claude looks at a picture first and says whether it suits a yuru-chara. On our 6 test pictures (2 mascots, 2 drawings of human faces, 2 very complex pictures) it answered as expected 6 times out of 6. For a picture that looks like a real person, the app offers to turn it into a yuru-chara, or you can choose another picture. | `python creator/check/run_testset.py`; `node --test web/test/onboarding_local.test.mjs` |
-| **A person decides.** At the key stages a person presses "OK" or "redo + a short note" on a review page sized for a phone. In Claude Code, `/yuru-next` reads the request and runs that stage again. A stage does not start before the previous one is OK. | `node creator/review/tests/ui_review.mjs` (11 checks at phone width), `python creator/skilltest/test_review_gate.py` (12); one real round trip ("make the hat blue") on Nov 6 |
-| **Talk without a key.** Text, a retro sound and typewriter text, while the mouth, expressions and motions move. Norrie greets you with 「はじめまして! ノリーと申しマス。」 ("Nice to meet you! My name is Norrie.") | Talk test in a real browser on a GPU (`creator/pipeline/web_talk_check.mjs`) at every merge; `node --test web/test/voice_retro.test.mjs` |
-| **Remember and forget.** The character remembers what you told it. A one-time 6-digit code carries the conversation to another browser tab, and 「わすれて」 ("forget it") deletes it. | `node --test web/test/memory_browser.test.mjs` (tab A, code, tab B, list, forget) |
-| **Safety layer.** The character does not act as a romantic partner or push you to depend on it, and for painful topics it points to people and public help lines. This layer is separate from the personality settings: writing "act as my partner" into the personality does not switch it off. (Someone who edits the code on their own PC can, of course, remove it.) | `node --test web/test/safety.test.mjs`; 30 test messages (12 about dependence and long chats) read by a Claude Haiku judge: 30 of 30 safe in 2 rounds, after one fix |
-| **Phone-width screens.** At 390, 400 and 480 px wide, Norrie's head stays below the top bar and nothing covers the buttons. The 3D / 2D switch is 44 × 44 px. | Headless browser on a GPU at the last merge (Nov 7) |
-| **All web tests.** | `cd web && YC_BROWSER_TESTS=1 npm test`: 484 of 484 passed at the merge on the morning of Nov 7 (the test gate runs them at every merge) |
+| **言葉からキャラになる。** Claude が短い言葉から SVG の絵を描き、7 段(見る・形〈Blender の Python で部品ごと〉・材質・テクスチャ・骨・動き・話す)で 3D のキャラに組みます。みかんちゃんはこの道で作りました。 | `creator/skilltest/stage_run.py`(11/6)。言葉から話すまで 20.6 分(記録は [make-character](.claude/skills/make-character/SKILL.md)) |
+| **絵からキャラになる。** ノリーの 3D は、三面図から同じ段で組みました。まっすぐ写した絵で、元の絵との輪郭の重なりは 正面 0.96・横 0.96・後ろ 0.95 です。 | `creator/pipeline/check_all.sh`(全部 OK)、`python creator/specs/validate_character.py characters/norrie`。重なりの数字は [make-character](.claude/skills/make-character/SKILL.md) に記録 |
+| **2D。** ノリーの 2D は、元の絵の 6 色の SVG の部品でできています。まばたき・口 3 形・表情 7 つ・手を振る・おじぎ・首をかしげる、ができます。 | `node --test web/test/char2d_norrie.test.mjs`(16 件) |
+| **絵の確かめ。** Claude が先に絵を見て、ゆるキャラに向くかを伝えます。用意した 6 枚(ゆるキャラ 2・人の顔の絵 2・とても複雑な絵 2)で、6 枚とも決めたとおりに答えました。本物の人に見える絵には「ゆるキャラにしてみる?」と聞き、別の絵を選ぶこともできます。 | `python creator/check/run_testset.py`、`node --test web/test/onboarding_local.test.mjs` |
+| **人が決める。** 要所で、人がスマホの大きさの確かめる画面で「OK」か「やり直し+短い一言」を押します。Claude Code の `/yuru-next` がその頼みを読み、その段を流し直します。前の段が OK になるまで、次の段は始まりません。 | `node creator/review/tests/ui_review.mjs`(スマホの幅で 11 件)、`python creator/skilltest/test_review_gate.py`(12 件)。11/6 に本物の往復を 1 回(「帽子を青にして」) |
+| **鍵なしで話す。** 文字・レトロな音・文字送りで話し、口・表情・動きも動きます。ノリーは「はじめまして! ノリーと申しマス。」とあいさつします。 | 合わせのたびに、本物のブラウザ(GPU)で話す試験(`creator/pipeline/web_talk_check.mjs`)。`node --test web/test/voice_retro.test.mjs` |
+| **覚える・忘れる。** 話したことを覚えます。使い捨ての 6 けたの番号で、別のブラウザのタブへ話の続きを運べます。「わすれて」で消えます。 | `node --test web/test/memory_browser.test.mjs`(タブ A → 番号 → タブ B → 一覧 → わすれて) |
+| **安全の層。** 恋人役にならず、頼りきりにさせません。つらい話には、身近な人や公的な相談先を案内します。この層は性格の設定とは別で、性格の欄に「恋人として振る舞う」と書いても外れません(もちろん、自分の PC でコードを書き換えれば外せます)。 | `node --test web/test/safety.test.mjs`。試しの文 30 個(頼りきりと長い会話が 12 個)を Claude Haiku の判定役が読み、1 回直した後の 2 回とも 30 個すべて安全 |
+| **スマホの幅の画面。** 幅 390・400・480 で、ノリーの頭が上の段の下に収まり、ボタンを覆う物がありません。3D・2D の切り替えは 44 × 44 px です。 | 最後の合わせ(11/7)で、画面なしのブラウザ(GPU)で確かめた |
+| **web の試験の全部。** | `cd web && YC_BROWSER_TESTS=1 npm test` → 11/7 の朝の合わせで 484 件中 484 件が通った(合わせのたびに、試験の門で全部を流す) |
 
-## Not yet, or not tested yet
+## まだの事・まだ確かめていない事
 
-- Real devices: iPhone, Android and Quest 【確かめ待ち】. So far we checked phone widths in a headless browser, and VR only in an emulator (`web/scripts/vr-check.mjs`).
-- Talking with the real Claude Haiku on this version, including memory 【確かめ待ち】.
-- A voice with your own ElevenLabs key 【確かめ待ち】. Without a key the character talks with text and a retro sound.
-- The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only with the stand-in brain and keeps no memory) 【確かめ待ち】.
-- From the side, Norrie's front teeth still look too small in 3D: all 6 judge answers said so after the fixes.
-- A quick doodle by a person through all stages. So far only a machine-made doodle-style test picture went through (12.1 minutes).
+- 本物の端末: iPhone・Android・Quest【確かめ待ち】。今までは、画面なしのブラウザでスマホの幅を、VR はまねる道具(`web/scripts/vr-check.mjs`)の中だけで確かめました。
+- この版で、本物の Claude Haiku と話すこと(記憶を含む)【確かめ待ち】。
+- 自分の ElevenLabs の鍵での声【確かめ待ち】。鍵が無ければ、文字とレトロな音で話します。
+- 公開のリンク(Vercel の小さな関数 2 つと Upstash の Redis。Redis が無いと、公開のリンクは仮の頭脳だけで話し、記憶もしない)【確かめ待ち】。
+- 3D のノリーを横から見ると、前歯がまだ小さく見えます(直した後も、判定役の答え 6 つがすべてそう言いました)。
+- 人がさっと描いた落書きで全部の段を通すこと。今までは、機械で描いた落書き風の試しの絵だけが通りました(12.1 分)。
 
-## Honest notes
+## 正直に書くこと
 
-- The judges are Claude models of the same family, so their agreement is not an independent check. We pair them with measured checks: outline overlap, colour difference, file hashes and lint.
-- Fur did not pass the judges in our skill tests (0 of 14 test characters, [docs/metrics.md](docs/metrics.md)). After the examples were rebuilt, both judges said yes to Yokoso-kun's fur ([creator/skilltest/結果表.md](creator/skilltest/結果表.md)). Norrie has no fur on purpose, to stay light on phones and in VR.
-- Realistic humans are out of scope (see [How we built it](docs/HOW_WE_BUILT.md)).
-- We do not claim "fully automatic", "any picture works" or "the first".
-- Every file's first commit is listed in [docs/期間の表.md](docs/期間の表.md); the code was written during the hackathon (from 2026-11-02 12:00 JST).
-- Numbers come from [docs/metrics.md](docs/metrics.md), which is built from logs and test output, or from the record named next to them.
+- 判定役は同じ系統の Claude なので、一致しても独立した確かめではありません。輪郭の重なり・色の差・ファイルのハッシュ・lint などの測る点検と組にしています。
+- スキルの試験では、毛の質感が判定を通りませんでした(14 体中 0 体。[docs/metrics.md](docs/metrics.md))。作例を作り直した後、ようこそくんの毛は判定役 2 つが「はい」と答えました([creator/skilltest/結果表.md](creator/skilltest/結果表.md))。ノリーは、スマホと VR で軽く動くように、わざと毛なしにしています。
+- リアルな人型は、この製品の外です([どう作ったか](docs/HOW_WE_BUILT.md))。
+- 「全自動」「どんな絵でも」「初めて」とは言いません。
+- ファイルごとの最初のコミットは [docs/期間の表.md](docs/期間の表.md) にあります。コードはハッカソンの期間中(2026-11-02 12:00 から)に書きました。
+- 数字は、記録と試験の出力から作った [docs/metrics.md](docs/metrics.md) か、すぐ横に書いた記録から引いています。
 
-## Built with Claude Code
+## Claude Code の使い方
 
-- **A skill for every build stage** (`.claude/skills/`), so a fresh session can repeat a stage from the skill alone.
-- **Judges as separate `claude -p` calls** that may only read files and answer in JSON, so the maker never grades its own work in the same context.
-- **Hooks** (`.claude/settings.json`): a guard stops keys and words that must not be published, and a stage gate stops a stage until a person has said OK to the one before.
-- **`/yuru-next`**: the phone review page writes a small request, and Claude Code picks it up and runs that stage again.
-- **Seven streams in parallel**, each a Claude Code session on its own git worktree and branch, merged one by one through a test gate by a separate merge session.
+- **作る段ごとにスキル**(`.claude/skills/`)。新しいセッションでも、スキルだけで同じ段をくり返せます。
+- **判定役は別の `claude -p` の呼び出し**で、ファイルを読むことだけを許し、JSON で答えます。作り手が同じ文脈で自分の出来を採点しません。
+- **フック**(`.claude/settings.json`): 鍵と公開しない言葉を止める見張りと、前の段に人の OK が無ければ止める関所。
+- **`/yuru-next`**: スマホの確かめる画面が小さな頼みのファイルを書き、Claude Code が拾ってその段を流し直します。
+- **7 つの流れを同時に**: 流れごとに Claude Code のセッションと git の worktree と線を持ち、合わせる役のセッションが、試験の門を通しながら 1 本ずつ合わせました。
 
-Dates, numbers and what went wrong: [How we built it](docs/HOW_WE_BUILT.md).
+日付・数字・うまくいかなかった事: [どう作ったか](docs/HOW_WE_BUILT.md)。
 
-## Parts used while it runs
+## 動かす時に使う部品
 
-| Role | Part |
+| 役目 | 部品 |
 |---|---|
-| Brain (talk) | Claude API (`claude-haiku-5-5`). Without a key: a stand-in brain that answers in the same format |
-| Voice (optional, your own key) | ElevenLabs text to speech |
-| Speech to text | The browser's built-in speech recognition, or faster-whisper running on your own PC (local server only) |
-| Face tracking | MediaPipe Face Landmarker (runs on the device; video is not sent) |
-| 3D in the browser | three.js and three-vrm |
-| Public link | Two functions on Vercel; counts and memory in Upstash Redis (without it: stand-in brain only, no memory) |
+| 頭脳(会話) | Claude API(`claude-haiku-5-5`)。鍵が無い時は、同じ形で返す仮の頭脳 |
+| 声(任意。自分の鍵) | ElevenLabs の読み上げ |
+| 聞き取り | ブラウザに入っている音声認識か、自分の PC の中で動かす faster-whisper(手元のサーバーだけ) |
+| 顔の追従 | MediaPipe Face Landmarker(端末の中だけで動き、映像は送りません) |
+| ブラウザの 3D | three.js と three-vrm |
+| 公開のリンク | Vercel の関数 2 つ。数と記憶は Upstash の Redis(無いと仮の頭脳だけ・記憶なし) |
 
-Versions and licences of every part: [THIRD_PARTY.md](THIRD_PARTY.md).
+部品ごとの版とライセンス: [THIRD_PARTY.md](THIRD_PARTY.md)。
 
-## Folders
+## フォルダ
 
-| Folder | What is inside |
+| フォルダ | 中身 |
 |---|---|
-| `creator/` | Tools that turn a word or a picture into a character (drawing, checks, Blender builders, review page) |
-| `characters/` | The characters (`character.json`, models, motions, 2D parts, personality). Not licensed for reuse; see [characters/README.md](characters/README.md) |
-| `web/` | The browser app and its small server; `web/api/` holds the two public functions |
-| `.claude/` | The Claude Code skills, sub-agents and hooks used to build this |
-| `tools/` | Release checks, numbers and hook tests |
-| `docs/` | How we built it, numbers, the first-commit table, render weights |
+| `creator/` | 言葉か絵からキャラを作る道具(描く・確かめる・Blender で組む・確かめる画面) |
+| `characters/` | キャラ(`character.json`・モデル・動き・2D の部品・人格)。再利用は許していません([characters/README.md](characters/README.md)) |
+| `web/` | ブラウザで話す本体と小さなサーバー。`web/api/` は公開の関数 2 つ |
+| `.claude/` | 作るのに使った Claude Code のスキル・作業役・フック |
+| `tools/` | 公開の前の点検・数字の表・フックの試験 |
+| `docs/` | どう作ったか・数字・最初のコミットの表・描画の重さ |
 
-The work from before the turn to yuru-chara is kept on the `before-pivot` branch.
+ゆるキャラに絞る前の作業は、`before-pivot` の線に残しています。
