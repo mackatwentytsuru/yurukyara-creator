@@ -159,7 +159,8 @@ test('style.css: テレビ表示は小さな窓を隠し、字幕を画面の高
 
 test('main.js: テレビ表示の線・下の余白・入口・全画面は押した時だけ', () => {
   const js = read('src/main.js');
-  assert.match(js, /if \(tvActive\(\)\) return tvTopLimit\(\{ corner: rectsOf\('#tvExit, #tvRotate'\), left, right, clear: topClearance\(window\.innerHeight, TOP_GAP_PX\) \}\);/);
+  // BCV: テレビ表示の隅のカメラの入・切(#tvCam。出している時だけ)も、キャラの横に重なる時は数える
+  assert.match(js, /if \(tvActive\(\)\) return tvTopLimit\(\{ corner: rectsOf\('#tvExit, #tvRotate, #tvCam:not\(\[hidden\]\)'\), left, right, clear: topClearance\(window\.innerHeight, TOP_GAP_PX\) \}\);/);
   assert.match(js, /stage\.state\.bottomInset = h \+ tvBottomReserve\(window\.innerHeight\);/);
   assert.match(js, /--tv-cap', `\$\{tvCaptionPx\(window\.innerHeight\)\}px`/);
   assert.match(js, /const TV = tvPlan\(\{ params, nav: navigator, headset: IS_HEADSET \}\);/);

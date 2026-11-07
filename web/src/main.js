@@ -360,7 +360,8 @@ async function toggleMic() {
 
 function updatePrivacy() {
   const texts = {
-    camera: 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
+    // BCV: 使う人がカメラを選んだ時は、話しかけた回に絵を 1 枚 Claude へ送る(保存しない)。自動で始める画面は今までどおり追従だけ
+    camera: app.camera?.seeing?.() ? app.camera.privacy : 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
     pose: 'カメラの映像は使っていません。この端末の位置だけで、あなたのいる方向を知っています。',
     sim: TOUCH ? 'カメラは使っていません(画面を指でなぞった向きに、人がいることにしています)。' : 'カメラは使っていません(マウスの向きに、人がいることにしています)。',
     bridge: '床のカメラの機械が、あなたのいる向き(数字)だけをこの画面に送ります。映像は保存も、送信もしません。',
@@ -372,6 +373,7 @@ function updatePrivacy() {
   ui.privacy(text, app.mode !== 'camera');
   // テレビ表示はカメラを使わない時の注意書きを隠すが、マイクで聞いている間は残す(style.css の .privacy.off:not(.mic))
   $('privacy')?.classList.toggle('mic', Boolean(listener?.listening));
+  app.camera?.sync?.(); // BCV: カメラの入・切のボタンの見た目を、今の入力に合わせる
 }
 
 /* ---------- 画面の状態 ---------- */
@@ -397,7 +399,9 @@ function updateChips() {
   const info = app.source?.info() ?? { label: 'なし', ok: false };
   const noCamera = app.mode === 'sim' || !app.source;
   const camera = app.mode === 'camera' ? (info.ok ? 'オン' : '準備中') : noCamera ? 'なし' : info.label;
-  chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
+  // BCV: 絵を送るカメラが入っている間は、いちばん前に赤い点の札(小さな印。高さ 500 未満でもこの札だけ残す = style.css)
+  if (app.camera?.seeing?.()) chips.unshift(['', 'カメラ オン', 'rec']);
+  else chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
   chips.push(['見えている人', `${app.lastAttention.tracks.length} 人`, '']);
   if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'この PC' : 'ブラウザ', 'ok']);
   if (stereoMic) {
@@ -722,7 +726,7 @@ const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getB
 /** キャラの頭を置いてよいいちばん上の線(px)。[left, right] はキャラの横の範囲。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
 function topGuard(left, right) {
   // テレビ表示: 上の段は隠すので、画面の上の端から画面の高さの 6%(隅の「もどる」・縦持ちの一言がキャラの横に重なる時だけ、その下から)
-  if (tvActive()) return tvTopLimit({ corner: rectsOf('#tvExit, #tvRotate'), left, right, clear: topClearance(window.innerHeight, TOP_GAP_PX) });
+  if (tvActive()) return tvTopLimit({ corner: rectsOf('#tvExit, #tvRotate, #tvCam:not([hidden])'), left, right, clear: topClearance(window.innerHeight, TOP_GAP_PX) }); // #tvCam: BCV
   return topLimit({
     bar: rectsOf(TOP_BAR),
     side: rectsOf(TOP_SIDE),
@@ -1173,6 +1177,100 @@ function setupQuestLink() {
   root.hidden = false;
 }
 
+/* ---------- BCV: カメラは使う人が決める・カメラの中身にも答える(11-08 本人)。決まりと部品は stage/cameraSwitch.js、絵の 1 枚は conversation/cameraFrame.js ---------- */
+// どの端末でも、いつでもカメラを入れたり切ったりできる(入力の列のボタン・テレビ表示の隅のボタン)。入れる前に 1 行の知らせ。
+// 入っている間は小さな印(上の札の先頭の赤い点の札・ボタンの赤い点)。切ると、カメラの流れを止める(顔の追従は、カメラなしの入力へ)。
+// 使う人が入れたカメラ(入口の「カメラを使って始める」を押した・ここで知らせを読んで入れた)の時だけ、声か文字で話しかけた回に、
+// 同じカメラの流れから絵を 1 枚、頭脳へ送る。自動で始める画面(入口の LED など)は押す人がいないので、顔の追従だけ(絵は送らない)。
+import { cameraSwitchPlan, mountCameraSwitch, CAMERA_PRIVACY } from './stage/cameraSwitch.js';
+import { takeFrame } from './conversation/cameraFrame.js';
+const cameraUse = {
+  plan: cameraSwitchPlan({ headset: IS_HEADSET, led: params.get('led') === '1', autostart: params.get('autostart') === '1', source: params.get('source') ?? '', perf: params.get('perf') === '1' }),
+  consent: false, // 使う人がカメラを選んだか(入口の押し・知らせの「カメラを つかう」)
+  ui: null,
+  mockNoticeShown: false, // 「本物の頭脳の時だけ見られる」を、入れている間に 1 回だけ出す
+  privacy: CAMERA_PRIVACY,
+  /** 絵を送るカメラが入っているか(使う人が選んだ・顔の追従のカメラが動いている) */
+  seeing: () => cameraUse.consent && app.mode === 'camera' && app.source?.kind === 'mediapipe',
+  /** 入・切の見た目を今に合わせる(updatePrivacy から呼ばれる) */
+  sync: () => cameraUse.ui?.set(app.mode === 'camera' && app.source?.kind === 'mediapipe'),
+};
+app.camera = cameraUse;
+// 入口の「カメラを使って始める」を、人が押した時だけ「選んだ」にする(?autostart=1 の click() は人の押しではない = 絵は送らない)
+$('startCam')?.addEventListener('click', (e) => {
+  if (e.isTrusted && cameraUse.plan.show) cameraUse.consent = true;
+});
+$('startSim')?.addEventListener('click', () => {
+  cameraUse.consent = false;
+});
+// 話しかけた回(声・文字。近づいた合図は除く)だけ、絵を 1 枚。顔の追従と同じ <video> から取る
+dialogue.getImage = ({ trigger } = {}) => (trigger !== 'approach' && cameraUse.seeing() ? takeFrame(app.source.video) : null);
+// サーバーの「本物の頭脳の時だけ見られる」「今日の絵の上限」の知らせ(cameraNotice)。仮の頭脳の知らせは、入れている間に 1 回だけ
+const chatEventBeforeCamera = dialogue.onEvent;
+dialogue.onEvent = (ev) => {
+  chatEventBeforeCamera?.(ev);
+  if (ev?.type !== 'meta' || !ev.cameraNotice) return;
+  if (ev.camera === 'mock' && cameraUse.mockNoticeShown) return;
+  if (ev.camera === 'mock') cameraUse.mockNoticeShown = true;
+  ui.notice(ev.cameraNotice);
+};
+
+/** カメラを入れる(顔の追従を始める)。先に新しい入力を動かし、動いてから前の入力を止める(失敗したら今の入力のまま投げる) */
+async function cameraOn() {
+  if (modes && modes.mode !== 'screen') throw new Error('xr');
+  const { MediapipeSource } = await import('./tracking/sources/mediapipeSource.js');
+  const next = new MediapipeSource({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV });
+  await next.start();
+  const prev = app.source;
+  app.source = next;
+  app.mode = 'camera';
+  cameraUse.consent = true;
+  cameraUse.mockNoticeShown = false;
+  try {
+    await prev?.stop?.();
+  } catch (err) {
+    console.warn('前の入力を止められませんでした:', err.message);
+  }
+  updatePrivacy();
+}
+
+/** カメラを切る(カメラの流れを止める)。顔の向きは、カメラなしの入力(マウス・指でなぞる)へ */
+async function cameraOff() {
+  const prev = app.source;
+  const next = new SimSource({ element: $('stage'), getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV });
+  await next.start();
+  app.source = next;
+  app.mode = 'sim';
+  cameraUse.consent = false;
+  try {
+    await prev?.stop?.(); // MediapipeSource.stop → カメラの流れの全部の track を止める
+  } catch (err) {
+    console.warn('カメラを止められませんでした:', err.message);
+  }
+  updatePrivacy();
+}
+
+/** 入力の列のボタンと、テレビ表示の隅のボタンを付ける(出さない入口では隠したまま) */
+function setupCameraSwitch() {
+  const button = $('camBtn');
+  const ask = $('camAsk');
+  if (!button || !ask || !cameraUse.plan.show) return;
+  cameraUse.ui = mountCameraSwitch({
+    button,
+    tvButton: $('tvCam'),
+    ask,
+    turnOn: cameraOn,
+    turnOff: cameraOff,
+    isMock: () => currentBrain() === 'mock',
+    env: () => ({ secure: window.isSecureContext, mediaDevices: navigator.mediaDevices ?? null }),
+  });
+  button.hidden = false;
+  const tv = $('tvCam');
+  if (tv) tv.hidden = false;
+  cameraUse.sync();
+}
+/* ---------- BCV ここまで ---------- */
+
 async function boot() {
   const status = $('gateStatus');
   const buttons = [$('startCam'), $('startSim')];
@@ -1256,6 +1354,7 @@ async function boot() {
   setupMemory();
   setupQuestLink(); // 見せ方を調べた後(Quest の中なら出さない)
   setupTvMode(); // テレビ表示の入口(iPhone・iPad は「テレビに映す」。ヘッドセットの中では出さない)
+  setupCameraSwitch(); // BCV: カメラの入・切(いつでも。入口だけでなく)
   void refreshLookSwitch(app.character); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない。舞台の子が替わるたびにも作り直す)
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));

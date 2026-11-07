@@ -530,3 +530,57 @@ html.kb-open .privacy, html.kb-open .choices { display: none; } /* 低い見え�
 html.kb-open .caption, html.kb-open .caption.settled { max-height: min(calc(2 * 1.45em + 24px), 22vh); }
 html.kb-open .gate { top: var(--kbt, 0px); bottom: var(--kb, 0px); height: auto; place-items: safe center; overflow-y: auto; }
 html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - var(--top-h, 64px) - 24px); overflow-y: auto; }
+
+/* ---------- BCV: カメラは使う人が決める(入力の列のボタン・テレビ表示の隅のボタン・入れる前の知らせ・入っている間の赤い点の札) ---------- */
+.cam { background: var(--glass); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; position: relative; min-width: 44px; }
+.cam[hidden], .tv-cam[hidden] { display: none !important; }
+.cam.on { background: rgba(255, 90, 90, 0.2); border-color: #ff6b6b; color: #ffd9d9; }
+.cam-dot { display: none; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #ff5a5a; box-shadow: 0 0 0 3px rgba(255, 90, 90, 0.28); }
+.cam.on .cam-dot, .tv-cam.on .cam-dot { display: inline-block; }
+@media (max-width: 640px) {
+  .cam .cam-label { display: none; } /* マイクと同じく、狭い画面は印だけ(赤い点は右上に重ねる) */
+  .cam.on .cam-dot { position: absolute; top: 5px; right: 5px; }
+}
+/* 上の札の先頭の印(絵を送るカメラが入っている間だけ。main.js の updateChips が出す)。高さ 500 未満で札の列を隠す時も、この札だけ残す */
+.chip.rec { color: #ffd9d9; background: rgba(255, 70, 70, 0.2); border-color: rgba(255, 107, 107, 0.65); }
+.chip.rec b { color: #ffe9e9; }
+.chip.rec::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 2px; border-radius: 50%; background: #ff5a5a; }
+@media (max-height: 500px) {
+  .chips:has(.chip.rec) { display: flex; }
+  .chips:has(.chip.rec) .chip:not(.rec) { display: none; }
+}
+/* テレビ表示の隅(「もどる」の左)。押せる大きさ 44px。入っている間は赤い点 */
+.tv-cam { display: none; }
+html.tv-mode .tv-cam {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; position: fixed; z-index: 9;
+  top: max(10px, env(safe-area-inset-top)); right: calc(max(10px, env(safe-area-inset-right)) + 92px);
+  min-height: 44px; min-width: 44px; padding: 0 12px; font: inherit; color: var(--text); cursor: pointer;
+  border-radius: 999px; background: rgba(12, 10, 22, 0.55); border: 1px solid var(--line); opacity: 0.6; transition: opacity 0.2s ease;
+}
+html.tv-mode .tv-cam.on { opacity: 0.9; border-color: #ff6b6b; color: #ffd9d9; }
+html.tv-mode .tv-cam:hover, html.tv-mode .tv-cam:focus-visible { opacity: 1; }
+html.tv-mode .tv-cam:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+/* 縦持ちの一言(左上)は、カメラの隅のボタンの左で止める */
+@media (orientation: portrait) and (pointer: coarse) {
+  html.tv-mode body:has(#tvCam:not([hidden])) .tv-rotate { right: 150px; }
+}
+/* 入れる前の知らせ(入口・「テレビに映す」と同じ形の真ん中の札。子どもにも読める大きな字) */
+.cam-ask {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+  background: rgba(12, 10, 22, 0.66); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); overflow: auto;
+}
+.cam-ask[hidden] { display: none; }
+.cam-ask-card { width: min(420px, 100%); max-height: 100%; overflow: auto; padding: 20px; border-radius: 22px; background: var(--ink-2); border: 1px solid var(--line); display: grid; gap: 12px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5); }
+.cam-ask-card h2 { margin: 0; font-size: 20px; line-height: 1.3; }
+.cam-ask-text { margin: 0; font-size: 16px; line-height: 1.7; color: var(--text); }
+.cam-ask-mock { margin: 0; font-size: 14px; line-height: 1.6; color: var(--warn); }
+.cam-ask-mock[hidden] { display: none; }
+.cam-ask-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cam-ask button { font: inherit; font-size: 16px; min-height: 48px; padding: 8px 12px; border-radius: 14px; cursor: pointer; color: var(--text); border: 1px solid var(--line); }
+.cam-ask .cam-ask-yes { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 0; font-weight: 700; }
+.cam-ask .cam-ask-no { background: transparent; }
+.cam-ask button:disabled { opacity: 0.55; cursor: wait; }
+.cam-ask button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.cam-ask-status { margin: 0; font-size: 14px; line-height: 1.5; color: var(--warn); }
+.cam-ask-status:empty { display: none; }
+/* ---------- BCV ここまで ---------- */

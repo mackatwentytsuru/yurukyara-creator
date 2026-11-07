@@ -7,6 +7,7 @@ import { nearestExpression, oneCustomPerReply } from '../src/character/expressio
 import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { summarize } from './memory/reflect.mjs';
 import { aizuchi, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
+import { CAMERA_MOCK_LINES, CAMERA_MOCK_NOTICE, cameraTurnContent, imageTokens, seeingAsked } from './camera.mjs'; // BCV: カメラの絵
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
 const GREETING_MOTIONS = ['bow', 'nod', 'wave']; // 初めてのあいさつの 1 文目はおじぎ、2 文目はうなずき、3 文目は手をふる(無いキャラは none に落ちる)
@@ -329,6 +330,8 @@ export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で�
  */
 export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, memory = null, learned = [], forceMock = false, brain: want = 'auto', paceMs = MOCK_PACE_MS }) {
   const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
+  // BCV: カメラの絵(使う人がカメラを入れて話しかけた回だけ。点検済みの形 = server/camera.mjs の readCameraImage)。この回の呼び出しにだけ使い、どこにも書かない
+  const image = trigger === 'approach' ? null : (body.image ?? null);
   // 表情と動きの名前は、決まった形(英小文字・数字・_ : -)の物だけ(指示文に名前のまま入るため。F6)
   const expressions = safeChoices(body.expressions, ['neutral', 'happy', 'surprised', 'sad', 'think']);
   // そのキャラが実際に使える動き(rig は、動きのファイルがある物だけ)
@@ -373,6 +376,15 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
 
   if (brain === 'mock') {
     onEvent({ type: 'meta', brain: 'mock' });
+    // BCV: 仮の頭脳は絵を見ない。絵がついていたら知らせ、絵について聞かれていたら、やさしく「本物の頭脳の時だけ見られる」と答える
+    if (image) {
+      onEvent({ type: 'meta', camera: 'mock', cameraNotice: CAMERA_MOCK_NOTICE }); // notice でなく cameraNotice(画面の「仮の頭脳です」の知らせを上書きしない)
+      if (seeingAsked(text)) {
+        emit({ type: 'thought', seen: scene || '', intent: 'カメラの絵', stage: 'chat', handoff: false });
+        for (const [i, line] of CAMERA_MOCK_LINES.entries()) emit({ type: 'say', text: line, expression: i === 0 ? 'sad' : 'happy', motion: i === 0 ? 'none' : 'nod', gaze: 'person' });
+        return;
+      }
+    }
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
     // 安全の層と出力の確かめは、ここ(上と emit)で通すので、守りの包みの無い台本を使う(差し替えの印 guarded が消えないように)
     for (const obj of mockLines({ text, trigger, landmarks, seen: scene, memory, learned, history, persona: character.persona ?? '' })) {
@@ -382,12 +394,13 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     return;
   }
 
-  onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}) });
+  onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}), ...(image ? { camera: 'sent' } : {}) });
   const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true });
   const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : ''].filter(Boolean).join('\n');
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
-    { role: 'user', content: buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard, hasHistory: history.length > 0 }) },
+    // BCV: 絵がついた回は [絵, 絵の決まり + この回の言葉](server/camera.mjs)。ついていない回は、今までどおりの文字だけ
+    { role: 'user', content: cameraTurnContent(buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard, hasHistory: history.length > 0 }), image) },
   ];
   let raw = '';
   let said = 0;
@@ -406,7 +419,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       raw += t;
       splitter.push(t);
     },
-    hedgeMs: hedge.afterMs,
+    hedgeMs: image ? 0 : hedge.afterMs, // BCV: 絵のついた回は 2 本目を送らない(絵を 2 回送らない)
     takeExtra: hedge.take,
   });
   splitter.flush();
@@ -429,6 +442,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       cacheRead: info.usage.cache_read_input_tokens ?? null,
       cacheWrite: info.usage.cache_creation_input_tokens ?? null,
       output: info.usage.output_tokens ?? null,
+      ...(image ? { imageTokensEstimate: imageTokens(image) } : {}), // BCV: 絵 1 枚の読みの量の目安(幅 × 高さ ÷ 750)
     },
   });
 }
