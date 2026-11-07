@@ -1,4 +1,4 @@
-// 見た目の方式(契約 K1 の looks: 3D と 2D)を選ぶ決まりと、このタブで選んだ見た目の覚え方。
+// 見た目の方式(契約 K1 の looks: 3D と 2D)を選ぶ決まりと、このタブで選んだ見た目の覚え方・切り替えの控えの鍵。
 // three を読まない小さな部品にして、node の試験でも読めるようにしてある(通信もしない。2D の有無の確かめは index.js)。
 
 /** 見た目の方式の並び(切り替えのボタンもこの順) */
@@ -42,6 +42,24 @@ export function twoDHint(json) {
   if (typeof two?.parts === 'string') return 'yes';
   if (two) return 'no';
   return json?.looks ? 'probe' : 'no';
+}
+
+/**
+ * 舞台のキャラの id(character.json の id。無ければキャラの id。どちらも無ければ '')。
+ * 見た目の控え・このタブで覚える見た目・切り替えの作り直しは、この id ごとに分ける
+ */
+export function characterKey(character) {
+  return String(character?.lookSource?.json?.id ?? character?.id ?? '');
+}
+
+/** 読み込んだキャラの控えの鍵: キャラの id と見た目('3d' | '2d'。知らない値は '3d')。ほかの子の同じ見た目と混ぜない */
+export function lookKey(id, look) {
+  return `${id ?? ''}|${normalizeLook(look) || '3d'}`;
+}
+
+/** 見た目の切り替えを出すか: 3D と 2D の両方を出せる子だけ(片方だけ・調べられなかった時は出さない) */
+export function hasBothLooks(looks) {
+  return Array.isArray(looks) && LOOKS.every((l) => looks.includes(l));
 }
 
 /** このタブで選んだ見た目を覚える鍵(キャラごと) */

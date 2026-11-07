@@ -11,6 +11,15 @@ import { MAIN_CHARACTER } from '../src/character/defaults.js';
 
 const WEB = join(import.meta.dirname, '..');
 const read = (...p) => readFileSync(join(WEB, ...p), 'utf8').replace(/\r\n/g, '\n');
+// 日本語の README(README.md)の作る道の見出し(S6 が文字を変えない約束。S4 の README_SECTION と同じ文字)
+const README_HEADING_JA = '自分の PC で、Claude Code と自分のキャラを作る';
+/** GitHub の見出しの印: 英字は小文字・記号(句読点や「、」)を消す・空白は「-」。日本語の字はそのまま(この試験の中で作る) */
+const githubSlug = (s) =>
+  s
+    .trim()
+    .toLowerCase()
+    .replace(/[\p{C}\p{S}\p{Z}\p{P}]/gu, (c) => (c === ' ' || c === '-' || /\p{Pc}/u.test(c) ? c : ''))
+    .replace(/ /g, '-');
 const store = (data = {}) => ({ getItem: (k) => (k in data ? data[k] : null) });
 const q = (s = '') => new URLSearchParams(s);
 
@@ -67,7 +76,28 @@ test('初めての会話(S4)への入口: 舞台のキャラを読み込み直�
   assert.match(rp, /!\/html\|json\/i\.test/, '404 の頁や JSON を人格にしない(boot と同じ確かめ)');
   assert.match(main, /if \(character\.personaUrl\) app\.persona = await readPersona\(character\);/, 'boot も同じ関数で読む');
   const html = read('index.html');
-  assert.match(html, /<link rel="help" href="https:\/\/github\.com\/[^"]+#make-your-own-character-on-your-pc-with-claude-code" \/>/);
+  // 画面は日本語だけ(Q-0092 A)。README は日本語が主(README.md。第 9 波)なので、日本語の README の作る道の見出しの節を指す
+  const links = html.match(/<link rel="help"[^>]*>/g) ?? [];
+  assert.equal(links.length, 1, 'README のリンクは 1 つ(初めての会話はこれを開く)');
+  const m = links[0].match(/^<link rel="help" hreflang="ja" href="https:\/\/github\.com\/[^/"]+\/[^/"]+\/blob\/HEAD\/README\.md#([^"]+)" \/>$/);
+  assert.ok(m, `日本語の README(README.md)の節へのリンク: ${links[0]}`);
+  assert.equal(m[1], githubSlug(README_HEADING_JA), `節の印は見出し「${README_HEADING_JA}」の GitHub の印`);
+  assert.equal(m[1], '自分の-pc-でclaude-code-と自分のキャラを作る');
+});
+
+test('入口の案内役の 1 行: キャラを読んだすぐ後に書いてから見せる(遅い端末で、?character= の子の前に「主役のノリー」を見せない。M8b 4)', () => {
+  const css = read('src', 'ui', 'style.css');
+  assert.match(css, /\nhtml:not\(\.guide-ready\) \.gate-guide \{ visibility: hidden; \}\n/, '書くまでは隠す(場所は空けたまま)');
+  const main = read('src', 'main.js');
+  const guide = main.slice(main.indexOf('function fillGuide()'), main.indexOf('function fillGate()'));
+  assert.match(guide, /guide\.textContent = `案内するのは「\$\{c\.name \?\? app\.characterId \?\? 'この子'\}」です。`/, '主役でない子なら、その子の名前(textContent だけ)');
+  assert.match(guide, /document\.documentElement\.classList\.add\('guide-ready'\);/, '書いたら見せる');
+  assert.ok(guide.indexOf("textContent = `") < guide.indexOf("add('guide-ready')"), '見せるのは書いた後');
+  // 読み込んだ子を app に入れたのと同じ流れ(await を挟まない)で書く。状態(/api/status)を読むのを待たない
+  assert.match(main, /\n    app\.character = character;\n    app\.characterId = id;\n    bootLookId = characterKey\(character\);\n    fillGuide\(\);/);
+  const fill = main.slice(main.indexOf('function fillGate()'), main.indexOf('function gateClosed()'));
+  assert.doesNotMatch(fill, /gateGuide/, '案内役の 1 行は fillGate では書き直さない');
+  assert.equal((main.match(/\bfillGuide\(\);/g) ?? []).length, 1, '書くのは読んだ後の 1 回だけ');
 });
 
 test('style.css: 入口の間は上の段と考えの窓を隠す(初めての会話が出ている間は出す)', () => {
