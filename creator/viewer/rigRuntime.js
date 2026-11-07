@@ -108,7 +108,7 @@ export class RigCharacterV2 extends CharacterBase {
     this.shot = null;
     // B5G: 仕草の層の骨(腕を上げた時に脇が持ちこたえる角度も、ここで測る)
     this.cuteRig = new CuteRig(gltf.scene, clips, json, this.lookBone);
-    this.cute.caps = { ...this.cute.caps, ...this.cuteRig.caps, clipArm: Object.keys(CLIP_GESTURES).filter((n) => this.actions.has(CLIP_GESTURES[n])) };
+    this.cute.caps = { ...this.cute.caps, ...this.cuteRig.caps, clipArm: Object.keys(CLIP_GESTURES).filter((n) => this.actions.has(CLIP_GESTURES[n]) && !(n === 'greet' && this.cuteRig.clipPeakDeg < 100)) };
     this._startLoop('idle', 1);
     this._startLoop('talk', 0);
     this._talkW = 0;
@@ -136,7 +136,8 @@ export class RigCharacterV2 extends CharacterBase {
     const key = String(name ?? '').trim().toLowerCase();
     if (!key || key === 'none' || key === 'idle') return false;
     if (key === 'talk') return true; // しゃべりは口の大きさで自動
-    const clipName = CLIP_GESTURES[key];
+    // greet は wave の clip で腕を動かす。ただし clip の腕が低い子(100° 未満)は、仕草の層の腕で大きくふる(上げる形は clip の形・120° まで)
+    const clipName = key === 'greet' && this.cuteRig.clipPeakDeg < 100 ? null : CLIP_GESTURES[key];
     const a = clipName ? this.actions.get(clipName) : null;
     if (!a) return this.cute.trigger(key, { intensity: opts.intensity, pointSide: opts.dx });
     this.cute.trigger(key, { clipArm: true, intensity: opts.intensity }); // 腕は clip、顔と体の添え物は仕草の層

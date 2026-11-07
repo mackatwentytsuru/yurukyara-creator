@@ -18,6 +18,8 @@ const Z = new THREE.Vector3(0, 0, 1);
 const IDENT = new THREE.Quaternion();
 /** 仕草の層が上げる腕のいちばん上(ラジアン。下ろした形から 120°) */
 export const RAISE_MAX = (120 * Math.PI) / 180;
+/** wave の clip の腕がこれより低い子は、あいさつを仕草の層の腕でふる(ラジアン。100°) */
+const LOW_WAVE = (100 * Math.PI) / 180;
 
 const NAMES = {
   root: [/^root$/i, /^hips?$/i, /^pelvis$/i],
@@ -263,6 +265,42 @@ function clipPeak(clip, arm) {
   return { q, p, angle: best, time: qt.times[bestK] };
 }
 
+/** その骨に半分より重い点の、骨からの平均の遠さ(骨の座標の長さ。止まった形)。点が無ければ 0 */
+function armReach(root, bone) {
+  root.updateMatrixWorld(true);
+  const pivot = bone.getWorldPosition(new THREE.Vector3());
+  const sy = root.getWorldScale(new THREE.Vector3()).y || 1;
+  let sum = 0;
+  let n = 0;
+  const p = new THREE.Vector3();
+  const mid = new THREE.Vector3();
+  root.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    const bi = o.skeleton.bones.indexOf(bone);
+    if (bi < 0) return;
+    const si = o.geometry.attributes.skinIndex;
+    const sw = o.geometry.attributes.skinWeight;
+    const pos = o.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i += 2) {
+      let w = 0;
+      for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) w += sw.getComponent(i, k);
+      if (w < 0.5) continue;
+      p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      sum += p.distanceTo(pivot);
+      mid.add(p);
+      n += 1;
+    }
+  });
+  if (!n) return { reach: 0, dir: null };
+  // 腕の点の真ん中への向き(親の座標)。休みの形で腕がどちらを向いているか
+  const dir = mid.divideScalar(n).sub(pivot);
+  const pq = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+  return { reach: sum / n / sy, dir: dir.applyQuaternion(pq).normalize() };
+}
+
+/** 丸い小さな腕を上げる角度(体の真ん中のまわり) */
+const STUB_RAISE = (70 * Math.PI) / 180;
+
 /** 左右を入れかえる(体の真ん中の面 x = 0 で写す) */
 const mirrorQ = (q) => new THREE.Quaternion(q.x, -q.y, -q.z, q.w);
 
@@ -319,6 +357,7 @@ export class CuteRig {
     const pl = clipPeak(wave, this.armL);
     this.waveArm = pr && pl ? (pr.angle >= pl.angle ? 'R' : 'L') : pr ? 'R' : pl ? 'L' : null;
     const peak = this.waveArm === 'R' ? pr : this.waveArm === 'L' ? pl : null;
+    this.clipPeakDeg = peak ? (peak.angle * 180) / Math.PI : 0; // wave の clip で腕がいちばん上がった角度(小さい子は、あいさつを仕草の層の腕で大きくふる)
     this.raise = { L: null, R: null };
     for (const side of ['L', 'R']) {
       const arm = side === 'L' ? this.armL : this.armR;
@@ -326,7 +365,12 @@ export class CuteRig {
       const out = side === 'L' ? 1 : -1;
       let q;
       let off = new THREE.Vector3();
-      if (peak) {
+      let outward = !peak;
+      if (peak && peak.angle < LOW_WAVE) {
+        // wave の clip の腕が低い子(前へ出すだけ等)は、正面から見えるように外へ 95° 上げる形にする(肩はずらさない)
+        q = new THREE.Quaternion().setFromAxisAngle(Z, out * ((95 * Math.PI) / 180));
+        outward = true;
+      } else if (peak) {
         const own = side === this.waveArm;
         const src = own ? peak.q : mirrorQ(peak.q);
         q = src.clone();
@@ -339,7 +383,24 @@ export class CuteRig {
       } else {
         q = new THREE.Quaternion().setFromAxisAngle(Z, out * 1.9); // clip が無い時: 外へ 109° 上げる
       }
-      this.raise[side] = { q, off, out };
+      this.raise[side] = { q, off, out, outward };
+    }
+    // 腕が丸い小さな突起(みかんの子など)は、骨を回しても形が変わって見えない。腕の点の骨からの平均の遠さが背の 8% 未満なら、
+    // 上げる・ふるを、体の真ん中のまわりに腕を回す動き(位置ごと)にする
+    for (const side of ['L', 'R']) {
+      const arm = side === 'L' ? this.armL : this.armR;
+      const r = this.raise[side];
+      if (!arm || !r) continue;
+      const ar = armReach(scene, arm);
+      r.reach = ar.reach;
+      r.stub = r.reach > 0 && r.reach < 0.08 * this.unit;
+      // 休みの腕の向き(真下から外へ何度か)。外へ上げる形は、真下から 140° を超えない(横に出た丸い腕を上げすぎて体にしまわない)
+      r.restDeg = ar.dir ? (Math.atan2(ar.dir.x * r.out, -ar.dir.y) * 180) / Math.PI : 0;
+      if (r.outward) {
+        const deg = THREE.MathUtils.clamp(140 - r.restDeg, 30, 95);
+        r.q.setFromAxisAngle(Z, r.out * ((deg * Math.PI) / 180));
+        r.raiseDeg = deg;
+      }
     }
     // 脇が持ちこたえる角度
     this.hold = { L: Infinity, R: Infinity };
@@ -431,6 +492,17 @@ export class CuteRig {
       const outA = side === 'L' ? o.armOutL : o.armOutR;
       const sh = side === 'L' ? o.shoulderL : o.shoulderR;
       const fwd = side === 'L' ? o.armFwdL : o.armFwdR;
+      if (r.stub) {
+        // 丸い小さな腕: 体の真ん中(親の原点)のまわりに、位置ごと回す(上げる 70°・ふる・外へ開く)
+        const ang = r.out * (STUB_RAISE * raise + swing * 1.2 + outA * 0.6) - (side === 'L' ? 1 : -1) * 0.3 * (side === 'L' ? o.armFwdL : o.armFwdR);
+        if (Math.abs(ang) > 1e-4) {
+          _q2.setFromAxisAngle(Z, ang);
+          arm.position.applyQuaternion(_q2);
+          arm.quaternion.premultiply(_q2);
+        }
+        if (sh) arm.position.y += sh * u;
+        continue;
+      }
       if (raise > 0.001) {
         _q2.copy(IDENT).slerp(r.q, raise);
         arm.quaternion.premultiply(_q2);

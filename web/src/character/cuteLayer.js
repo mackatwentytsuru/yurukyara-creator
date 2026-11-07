@@ -74,7 +74,7 @@ const G = {
       for (let i = 0; i < hops; i++) d.rootY += hop(t, 0.12 + i * gap, gap * 0.8, i === 0 ? 0.033 : 0.026);
       // 腕: 変形の偶数は弾みに合わせてぱたぱた(上げた形の 3〜5 割)、奇数は小さなばんざい(6 割)
       const flap = Math.max(0, Math.sin((2 * Math.PI * (t - 0.08)) / (gap * 1.0)));
-      const up = k % 2 ? 0.6 : 0.28 + 0.22 * flap;
+      const up = k % 2 ? 0.72 : 0.32 + 0.3 * flap;
       d.armRaiseL += up * e;
       d.armRaiseR += up * e;
       d.blush += 0.35 * e;
@@ -99,7 +99,7 @@ const G = {
       // 腕: キャラの動き(wave の clip)があれば、それが腕を動かす(cap.armByClip)。無ければ右手を上げてふる
       if (!cap.armByClip) {
         d.armRaiseR += e;
-        d.armSwingR += 0.32 * Math.sin(2 * Math.PI * (k % 2 ? 2.2 : 1.9) * Math.max(0, t - 0.3)) * smooth((t - 0.25) / 0.3) * e;
+        d.armSwingR += 0.38 * Math.sin(2 * Math.PI * (k % 2 ? 2.2 : 1.9) * Math.max(0, t - 0.3)) * smooth((t - 0.25) / 0.3) * e;
       }
       d.rootY += dip(t, 0, 0.12, 0.009) + hop(t, 0.12, 0.3, 0.026) + hop(t, 0.5, 0.26, k % 2 ? 0.02 : 0.015);
       if (cap.armByClip) d.armSwingR += 0.22 * Math.sin(2 * Math.PI * 1.9 * Math.max(0, t - 0.35)) * smooth((t - 0.3) / 0.3) * e; // 小さい腕の子でも、ふる手が見えるように少し足す
