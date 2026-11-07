@@ -25,6 +25,7 @@ import { injectStyles } from './styles.js';
 import { openPersonaPanel } from '../persona/panel.js';
 import { composePersona, fixesOwnSpeech, loadSettings, normalize, ownSettings, ownSpeechFor, personalityOf, randomSettings, saveSettings } from '../persona/settings.js';
 import { MOCK_NOTICE_SHORT, styleLines } from '../persona/preview.js';
+import { applyVoiceRole } from '../persona/voiceChoice.js';
 import { streamChat } from '../../conversation/brainClient.js';
 // 主役で案内役(協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリー」と呼ぶ)。three を読まない小さな部品
 import { MAIN_CHARACTER } from '../../character/defaults.js';
@@ -258,6 +259,7 @@ export function mountFirstRun({
         const id = stageId();
         const saved = id ? loadSettings(local, id) : null;
         if (saved) applyPersona(saved);
+        if (id) applyVoiceRole(app.speaker, saved?.voice?.role ?? 'auto', rawPersona(id)); // 声の役(おまかせ = この子の役)
       }
     }, 300);
   }
@@ -335,6 +337,7 @@ export function mountFirstRun({
     } catch {
       // 声の高さを替えられなくても続ける
     }
+    applyVoiceRole(app.speaker, saved?.voice?.role ?? 'auto', text); // 声の役もその子の物に(おまかせ = その子の役)
     root.classList.toggle('fr-guest', id !== home.id); // 見本の子がいる間の印(切り替えは main.js が舞台の子ごとに作り直すので、隠さない)
     return true;
   }
@@ -478,6 +481,8 @@ export function mountFirstRun({
       play,
       brain: brainNow,
       parent,
+      // 声の役は、舞台にいる子の時だけ読み上げに渡す(舞台にいない子は覚えるだけ。舞台に出た時に putNow が渡す)
+      onVoiceRole: (role) => (app && ch.id === stageId() ? applyVoiceRole(app.speaker, role, rawPersona(ch.id)) : null),
       onSave: (s) => {
         saveSettings(local, ch.id, s);
         applyPersona(s, ch);

@@ -37,7 +37,7 @@ test('normalize: 知らない値は直し、元の物は変えない', () => {
   assert.equal(s.tone, 'friendly', '語尾がだめなら、フレンドリーに戻す');
   assert.equal(s.energy, 5);
   assert.equal(s.length, 'normal');
-  assert.deepEqual(s.voice, { provider: 'none', pitch: 1.25, rate: 1.0 });
+  assert.deepEqual(s.voice, { provider: 'none', pitch: 1.25, rate: 1.0, role: 'auto' }); // 声の役の知らない値は おまかせ(第 11 波)
   assert.deepEqual(normalize(null), defaults());
 });
 
