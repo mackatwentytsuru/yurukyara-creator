@@ -9,7 +9,7 @@
 色は元の絵の画素の色。材質は「地の色 A_SCALE 倍 + 発光 E_SCALE 倍」で、光の向きによる明暗を浅くする(影の側も絵の色に近い)。
 使い方: blender -b -P norrie.py -- <出力.blend> work=<作業フォルダ>
 案 C(既定。NORRIE_CUTE=0 で前の形): 組んだ後に頭を首の骨のまわりに大きく、胴を縦に短くする。骨の位置が変わるので、
-骨と動きは作業フォルダに書く rig_spec.json で b07 に渡す(写しは norrie_rig_c.json。creator/specs/norrie_built.json は前の骨)。"""
+骨と動きは作業フォルダに書く rig_spec.json で b07 に渡す(写しは norrie_rig_c.json と creator/specs/norrie_built.json。11/7 夜の直しで両方を案 C の骨にそろえた)。"""
 import json
 import math
 import os
@@ -184,6 +184,22 @@ OL_HEAD = float(os.environ.get("NORRIE_OL_HEAD", 0.011)) if CUTE else OL   # 頭
 HAND_E = (0.9, 1.0) if CUTE else (0.8, 1.0)                 # 手袋の丸さ(縦の指数。1 で楕円体)
 CATCH = [(-0.36, 0.40, 0.30), (0.34, -0.36, 0.13)]          # 目の光: (横, 縦, 目の横の半径に対する半径)。見る人の左上に大、右下に小(両目で同じ向き)
 CATCH_T, CATCH_LIFT = 0.0006, 0.0003                        # 光の板の厚みの半分と、目の面からの持ち上げ(m)
+# 直し(11/7 夜、判定 cuteJ1〜J3): 光は 1 つ・目の上の真ん中(左右の目で鏡うつし、u は顔の真ん中の向きが正)。下の小さい光は「涙目・困り顔」に見え、
+# 見る人の左の光は斜めの顔で向こうの目の光が頭のふちに白い切れ端で出た。内寄り(u 0.16)は目の上の内の端が平らに見えて少しにらむ顔になった
+CATCH_MIRROR = [(float(os.environ.get("NORRIE_CATCH_U", 0.0)), 0.36, 0.30)]
+CATCH_MIN_CLEAR = 0.0015                                    # 光の真ん中が頭の面より前に出ている量の下限(m)。足りなければ目の真ん中へ下げる(おじぎで頭の面から浮いて見えない)
+EYE_YAW = float(os.environ.get("NORRIE_EYE_YAW", 0.3))      # 玉の向きのうち、面の横向きに合わせる割合(1 = 面の向き、0 = 正面)。1 だと正面で目の外の端が下がり「八の字の困り顔」に見えた
+SMILE_LID = (float(os.environ.get("NORRIE_SMILE_A", -0.45)), float(os.environ.get("NORRIE_SMILE_B", 0.6)))  # eye_smile の下まぶたの線: 目の中心から (a + b(1 − u²)) × 縦の半径。真ん中が上がる弧(∩)
+EYE_MAX_OUT = float(os.environ.get("NORRIE_EYE_MAX_OUT", 0.006))   # 目の前の出っぱりの上限(頭の面から、m)
+SMILE_PUSH = 0.025                                          # eye_smile で線より下の目を奥(+Y)へ押す量(m)。頭の面の後ろに隠れる
+SMILE_PULL = float(os.environ.get("NORRIE_SMILE_PULL", 0.006))  # 線より上の目を前(-Y)へ出す量(m)。目の上の端は頭の面に埋まっているので、押すだけだと細い切れ端しか残らなかった
+HEAD_SINK = float(os.environ.get("NORRIE_HEAD_SINK", 0.008))  # 頭を胴に沈める量(m)。耳の先の高さは保ち、胴を少し長く(頭と胴の段・蝶ネクタイの上のすき間を詰める)
+STRIPE_CORE_RGB = (52, 41, 40)                              # 背中の芯の色(こげ茶)。ほぼ黒(41,40,38)の細い芯は「黒い裂け目・穴」に見えた
+# 手をふる(b04_motions の wave、style "high"): 右手を外へ out 度・前へ fwd 度まで上げ(頭の高さ)、swing 度で hz 回/秒ふる。左手は外へ other_out 度(おなかから離す)。
+# 前の形は arm_amp 0.45 が掛かって 58 度しか上がらず、片手がおなかに付いたままで「ふっている」に見えなかった
+WAVE = {"style": "high", "out": float(os.environ.get("NORRIE_WAVE_OUT", 145.0)), "fwd": float(os.environ.get("NORRIE_WAVE_FWD", -15.0)),
+        "swing": 16.0, "hz": 1.7, "other_out": float(os.environ.get("NORRIE_WAVE_OTHER", 16.0)), "head_tilt": float(os.environ.get("NORRIE_WAVE_TILT", 10.0)),
+        "shift": [float(v) for v in os.environ.get("NORRIE_WAVE_SHIFT", "-0.10,0.02,-0.02").split(",")]}
 BLUSH = [((499.0, 386.0), (21.0, 14.0)), ((638.0, 386.0), (21.0, 14.0))]     # ほお(仮面の下の左右、鼻づらの横)
 BLUSH_RGB = (244, 192, 198)
 # 案 C+眉(任意、既定は眉なし): NORRIE_BROWS=1 で目の上に小さな黒い眉。シェイプキー brow_up(上へ)・brow_sad(内の端を上げる)
@@ -215,8 +231,9 @@ if CUTE:
     # 肩を丸く太く(袖の付け根の半径を太らせる)。頭を大きく胴を短くすると、あごの下と肩の間に、絵に無いくぼみができた(検査 ④ の抜け)
     ARM_R = [float(os.environ.get("NORRIE_SHOULDER_R", 0.066)), 0.052, 0.040, 0.037, 0.032]
     # 目: 絵の直径の 1.6 倍。中心は 7 px 下・内へ 1 px(仮面の先に寄せる)。少し前へ出す
-    EYE_C = (520.0, 219.0), (617.0, 219.0)
-    EYE_R = (15.9 * 1.6, 17.4 * 1.6)
+    _ein = float(os.environ.get("NORRIE_EYE_IN", 0.0))     # 目を顔の真ん中へ寄せる量(px)
+    EYE_C = (520.0 + _ein, 219.0), (617.0 - _ein, 219.0)
+    EYE_R = (15.9 * 1.72, 17.4 * 1.66 * float(os.environ.get("NORRIE_EYE_RZK", 1.0)))     # 直し: 正面を向けた分(横の広げ 1.12 → 1.02)だけ横を大きく。丸く少し縦長
     EYE_BULGE = float(os.environ.get("EYE_BULGE", 0.0050))
     TOOTH_ROWS = [(py, CX + (a - CX) * TOOTH_K, CX + (b - CX) * TOOTH_K) for py, a, b in TOOTH_ROWS]
     TOOTH_EXT_ROWS = [(py, CX + (a - CX) * TOOTH_K, CX + (b - CX) * TOOTH_K) for py, a, b in TOOTH_EXT_ROWS]
@@ -777,7 +794,7 @@ def build_face(surf_head, mats):
         x = xt
         for _ in range(4):          # 玉を軸の向きへ出すと横へずれるので、正面から見た中心が絵の位置になるまで当て直す
             hit, nor = surf_head.ns(x, z)
-            h = Vector((nor.x, nor.y, 0.0)).normalized()
+            h = Vector((nor.x * (EYE_YAW if CUTE else 1.0), nor.y, 0.0)).normalized()
             axis = (h * math.cos(al) + up * math.sin(al)).normalized()       # 玉の前向きの軸
             xl = up.cross(axis).normalized()
             yl = -axis
@@ -814,13 +831,23 @@ def build_face(surf_head, mats):
                                          rot_deg=tuple(math.degrees(a) for a in rot.to_euler("XYZ"))))
         if CUTE:
             # 目の光(白、発光): 玉の前の面の点に、その点の面の向きで置いた薄い円板。目の物に合わせるので、目の骨と一緒に動く
-            for (u, v, kr) in CATCH:
-                lp = Vector((u * rx, -EYE_BULGE * max(1.0 - u * u - v * v, 0.02) ** 0.5, v * rz))
-                nl = Vector((lp.x / rx ** 2, lp.y / EYE_BULGE ** 2, lp.z / rz ** 2)).normalized()
-                nw = (rot @ nl).normalized()
-                cpos = ctr + rot @ lp + nw * CATCH_LIFT
-                eul = nw.to_track_quat("Y", "Z").to_euler()
+            for (u0, v0, kr) in CATCH_MIRROR:
+                u = u0 * (-1.0 if ctr.x > 0 else 1.0)          # 顔の真ん中の向き(鏡うつし)
+                v = v0
                 r = kr * rx
+                while True:
+                    lp = Vector((u * rx, -EYE_BULGE * max(1.0 - u * u - v * v, 0.02) ** 0.5, v * rz))
+                    nl = Vector((lp.x / rx ** 2, lp.y / EYE_BULGE ** 2, lp.z / rz ** 2)).normalized()
+                    nw = (rot @ nl).normalized()
+                    cpos = ctr + rot @ lp + nw * CATCH_LIFT
+                    top = cpos + Vector((0.0, 0.0, r * rz / rx))
+                    # 光の真ん中と上の端が、頭の面より前に出ているか(埋まった所の光は、おじぎで頭の面から浮いて見えた)
+                    cl = min(surf_head(cpos.x, cpos.z) - cpos.y, surf_head(top.x, top.z) - top.y)
+                    if cl >= CATCH_MIN_CLEAR or v <= 0.0:
+                        break
+                    v -= 0.04
+                print("EYE catch", ci, "u", round(u, 2), "v", round(v, 2), "clear_mm", round(cl * 1000, 1))
+                eul = nw.to_track_quat("Y", "Z").to_euler()
                 catch_parts.append(P.superquadric("catch%d_%d" % (ci, len(catch_parts)), (r, CATCH_T, r * rz / rx), (1.0, 1.0), tuple(cpos),
                                                   mat=mats["tooth"], seg=(12, 6), rot_deg=tuple(math.degrees(a) for a in eul)))
                 catch_ctr.append(cpos)
@@ -865,6 +892,17 @@ def build_face(surf_head, mats):
     for pg in eyes.data.polygons:
         if pg.material_index in white:
             cv.update(pg.vertices)
+    if CUTE:
+        # 目の前の出っぱりを頭の面から EYE_MAX_OUT までに抑える(面との交わりの線 = 正面から見た目の形は変わらない)。
+        # 10 mm 出ていた時は、斜めの顔で向こうの目が頭のふちの外へ黒く飛び出した。輪郭の線(11 mm)より内に収める。光は目の面より少し前のまま
+        n_clamp = 0
+        for i, v in enumerate(eyes.data.vertices):
+            lim = EYE_MAX_OUT + (0.0008 if i in cv else 0.0)
+            sy = surf_head(v.co.x, v.co.z)
+            if sy - v.co.y > lim:
+                v.co.y = sy - lim
+                n_clamp += 1
+        print("BUILD eyes clamp", n_clamp, "max_out_mm", EYE_MAX_OUT * 1000)
     eyes.shape_key_add(name="Basis")
     bl = eyes.shape_key_add(name="eye_blink")
     for i, v in enumerate(eyes.data.vertices):
@@ -874,6 +912,34 @@ def build_face(surf_head, mats):
         else:
             bl.data[i].co = Vector((v.co.x, v.co.y, zc + (v.co.z - zc) * 0.08))
     bl.value = 0.0
+    if CUTE:
+        # eye_smile(笑顔の目): 下まぶたの弧(真ん中が上がる ∩)より下の目と、光の全部を奥(+Y)へ押して頭の面の後ろに隠す。
+        # 上の三日月だけが見える。奥へ押すだけなので、eye_blink(縦に寄せる)と同時に効いても形が裏返らない
+        ext = {}
+        for side in (1, -1):
+            ps = [v.co for i, v in enumerate(eyes.data.vertices) if (v.co.x > 0) == (side > 0) and i not in cv]
+            xs, zs = [p.x for p in ps], [p.z for p in ps]
+            ext[side] = ((max(xs) + min(xs)) / 2, (max(xs) - min(xs)) / 2, (max(zs) + min(zs)) / 2, (max(zs) - min(zs)) / 2)
+        sm = eyes.shape_key_add(name="eye_smile", from_mix=False)
+        la, lb = SMILE_LID
+        n_push = 0
+        for i, v in enumerate(eyes.data.vertices):
+            cx_, hx, cz_, hz = ext[1 if v.co.x > 0 else -1]
+            if i in cv:
+                c = min(catch_ctr, key=lambda q: (q - v.co).length)
+                sm.data[i].co = Vector((c.x, c.y + SMILE_PUSH, c.z))
+                continue
+            uu = max(-1.0, min(1.0, (v.co.x - cx_) / hx))
+            d = cz_ + hz * (la + lb * (1 - uu * uu)) - v.co.z
+            if d > 0:
+                f = min(d / (0.08 * hz), 1.0)
+                sm.data[i].co = Vector((v.co.x, v.co.y + SMILE_PUSH * f * f * (3 - 2 * f), v.co.z))
+                n_push += 1
+            else:
+                g = min(-d / (0.10 * hz), 1.0)
+                sm.data[i].co = Vector((v.co.x, v.co.y - SMILE_PULL * g * g * (3 - 2 * g), v.co.z))
+        sm.value = 0.0
+        print("BUILD eye_smile pushed", n_push)
     print("BUILD eyes catch_verts", len(cv), "verts", len(eyes.data.vertices))
     parts["Eyes"] = eyes
     return parts
@@ -925,7 +991,7 @@ def main():
 
     mats = dict(
         brown=flat_mat("Brown", BROWN), cream=flat_mat("Cream", CREAM), pink=flat_mat("Pink", PINK), green=flat_mat("Green", GREEN),
-        white=flat_mat("Glove", WHITE), stripe=flat_mat("Stripe", STRIPE), black=flat_mat("Ink", BLACK), mouth=flat_mat("MouthIn", BLACK),
+        white=flat_mat("Glove", WHITE), stripe=flat_mat("Stripe", STRIPE_CORE_RGB if CUTE else STRIPE), black=flat_mat("Ink", BLACK), mouth=flat_mat("MouthIn", BLACK),
         blush=flat_mat("Blush", BLUSH_RGB),
     )
     # 前歯は光の向きによらず絵の白のまま(地の色 0・発光 1)。横から見ると前歯の横の壁は下向きで、ほかと同じ材質だと灰色になり、
@@ -1045,8 +1111,9 @@ def main():
         [face["Mouth"], face["Tooth"], face["Eyes"]] + ([face["Gum"]] if face["Gum"] is not None else []) + \
         ([face["Brows"]] if face["Brows"] is not None else [])
     top = max((head_all.matrix_world @ v.co).z for v in head_all.data.vertices)
-    body_kz = (TOP_Z - (top - HEAD_PIV.z) * HEAD_K) / HEAD_PIV.z if CUTE else 1.0
-    piv2 = Vector((HEAD_PIV.x, HEAD_PIV.y, HEAD_PIV.z * body_kz))
+    sink = HEAD_SINK if CUTE else 0.0      # 頭を胴へ沈める(耳の先は保つので胴が少し長くなる)。頭と胴の段・あごの下のすき間を詰める
+    body_kz = (TOP_Z + sink - (top - HEAD_PIV.z) * HEAD_K) / HEAD_PIV.z if CUTE else 1.0
+    piv2 = Vector((HEAD_PIV.x, HEAD_PIV.y, HEAD_PIV.z * body_kz - sink))
     m_head = Matrix.Translation(piv2) @ Matrix.Scale(HEAD_K, 4) @ Matrix.Translation(-HEAD_PIV)
     m_body = Matrix.Diagonal((1.0, 1.0, body_kz, 1.0))
     hn = {o.name for o in head_objs}
@@ -1070,8 +1137,10 @@ def main():
     surfaces = [head_all, torso]
     stripe_path = [(STRIPE_PATH[0][0], xh((0, 0, STRIPE_PATH[0][1])).z), (STRIPE_PATH[1][0], xb((0, 0, STRIPE_PATH[1][1])).z)]
     core_z = (xh((0, 0, CORE_Z[0])).z, xb((0, 0, CORE_Z[1])).z)
-    st = W.wrap_band("stripe", surfaces, stripe_path, STRIPE_W, thick=0.003, clearance=0.0012, mat=mats["cream"],
-                     seg=STRIPE_SEG, rows=STRIPE_ROWS, taper=0.2, taper_min=0.05)
+    # 案 C の直し: 帯は長い細い楕円(両端を丸く、少し太く)。とがった端と細い黒い芯は「黒い裂け目」に見えた(判定 3 人とも)
+    sw, stp, stm = (0.068, 0.16, 0.45) if CUTE else (STRIPE_W, 0.2, 0.05)
+    st = W.wrap_band("stripe", surfaces, stripe_path, sw, thick=0.003, clearance=0.0012, mat=mats["cream"],
+                     seg=STRIPE_SEG, rows=STRIPE_ROWS, taper=stp, taper_min=stm)
     st.data.materials.append(mats["stripe"])
     nv = STRIPE_ROWS + 1
     z0, z1 = stripe_path[0][1], stripe_path[1][1]
@@ -1081,8 +1150,11 @@ def main():
         s = (core_z[0] - zc) / (core_z[0] - core_z[1])
         if not 0.0 < s < 1.0:
             continue
-        f = min(min(s, 1.0 - s) / CORE_TIP, 1.0)
-        half = CORE_HALF_U * max(f * f * (3 - 2 * f), 0.15)       # 芯の両端は細くとがらせる
+        if CUTE:
+            half = 0.40 * max((1.0 - abs(2 * s - 1) ** 4) ** 0.5, 0.2)  # 芯は太さをそろえ、端だけ丸く。細くとがった芯は裂け目に見えた
+        else:
+            f = min(min(s, 1.0 - s) / CORE_TIP, 1.0)
+            half = CORE_HALF_U * max(f * f * (3 - 2 * f), 0.15)       # 芯の両端は細くとがらせる
         for j in range(STRIPE_ROWS):
             if abs(2 * (j + 0.5) / STRIPE_ROWS - 1) < half:
                 fi = 2 * (k * (nv - 1) + j)                        # wrap_band の面の順: 列ごとに 表・裏
@@ -1162,6 +1234,8 @@ def main():
     spec = {"id": "norrie", "height_m": 1.0, "bones": [{"name": k, "at": rig[k], "parent": parent[k]} for k in parent],
             "roles": {k: k for k in ("root", "body", "head", "arm_L", "arm_R", "leg_L", "leg_R")},
             "motion": {"only": ["idle", "talk", "nod", "bow", "wave"], "arm_amp": 0.45}}
+    if CUTE:
+        spec["motion"]["wave"] = dict(WAVE)     # 手をふる: 片手を頭の高さへ上げて 2〜3 回ふる(b04_motions の wave の style "high")
     json.dump(spec, open(WORK + "/rig_spec.json", "w"), indent=1)
     bpy.ops.wm.save_as_mainfile(filepath=out)
     print("BUILD norrie ok", json.dumps(rig))

@@ -40,7 +40,8 @@
   },
   "morphs": {
     "happy": {
-      "mouth_wide": 0.9
+      "mouth_wide": 0.9,
+      "eye_smile": 0.9
     },
     "surprised": {
       "mouth_o": 1.0

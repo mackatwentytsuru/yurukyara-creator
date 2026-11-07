@@ -1,18 +1,18 @@
 {
  "id": "norrie",
  "height_m": 1.0,
- "note": "案 C の骨(norrie.py が作業フォルダに書く rig_spec.json の写し。creator/specs/norrie_built.json は前のノリーの骨)",
+ "note": "案 C(直し済み)の骨。norrie.py が作業フォルダに書く rig_spec.json の写し(creator/specs/norrie_built.json と同じ)",
  "bones": [
   {"name": "root", "at": [0, 0, 0], "parent": null},
-  {"name": "body", "at": [0.0, 0.0, 0.3327], "parent": "root"},
+  {"name": "body", "at": [0.0, 0.0, 0.3375], "parent": "root"},
   {"name": "head", "at": [0.0, -0.17, 0.5545], "parent": "body"},
-  {"name": "arm_L", "at": [0.11, -0.065, 0.5175], "parent": "body"},
-  {"name": "arm_R", "at": [-0.11, -0.065, 0.5175], "parent": "body"},
-  {"name": "leg_L", "at": [0.152, -0.06, 0.0832], "parent": "root"},
-  {"name": "leg_R", "at": [-0.152, -0.06, 0.0832], "parent": "root"},
-  {"name": "eye_L", "at": [0.0521, -0.3465, 0.8079], "parent": "head"},
-  {"name": "eye_R", "at": [-0.0521, -0.3464, 0.808], "parent": "head"}
+  {"name": "arm_L", "at": [0.11, -0.065, 0.525], "parent": "body"},
+  {"name": "arm_R", "at": [-0.11, -0.065, 0.525], "parent": "body"},
+  {"name": "leg_L", "at": [0.152, -0.06, 0.0844], "parent": "root"},
+  {"name": "leg_R", "at": [-0.152, -0.06, 0.0844], "parent": "root"},
+  {"name": "eye_L", "at": [0.0521, -0.3451, 0.8077], "parent": "head"},
+  {"name": "eye_R", "at": [-0.0521, -0.3449, 0.8077], "parent": "head"}
  ],
  "roles": {"root": "root", "body": "body", "head": "head", "arm_L": "arm_L", "arm_R": "arm_R", "leg_L": "leg_L", "leg_R": "leg_R"},
- "motion": {"only": ["idle", "talk", "nod", "bow", "wave"], "arm_amp": 0.45}
+ "motion": {"only": ["idle", "talk", "nod", "bow", "wave"], "arm_amp": 0.45, "wave": {"style": "high", "out": 145.0, "fwd": -15.0, "swing": 16.0, "hz": 1.7, "other_out": 16.0, "head_tilt": 10.0, "shift": [-0.1, 0.02, -0.02]}}
 }

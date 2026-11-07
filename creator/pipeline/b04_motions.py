@@ -91,6 +91,28 @@ def build_all(spec):
             p[R["arm_R"]] = {"rot": (-26.0 * up, (128 + 1.3 * osc) * up * amp + 5, 0.0)}
         return p
 
+    WV = M.get("wave") or {}
+
+    def wave_high(t):
+        """spec["motion"]["wave"] = {"style": "high", ...} のときの手をふる(arm_amp を掛けない)。
+        右手を外へ out 度・前へ fwd 度まで上げ(頭の高さ)、swing 度で hz 回/秒、2〜3 回ふる。左手は外へ other_out 度(体から少し離して楽に)。"""
+        up = tri(t, 0.0, 0.5, 1.9, 2.4)
+        osc = math.sin(2 * math.pi * WV.get("hz", 1.7) * max(0.0, t - 0.5)) * up
+        p = pose(body={"rot": (0.0, -3.0 * up, 0.0), "scale": squash(0.01 * up)},
+                 flap_R={"rot": (0, 35 * up, 0)}, flap_L={"rot": (0, -5, 0)})
+        if "arm_R" in R:
+            p[R["arm_R"]] = {"rot": (-WV.get("fwd", 15.0) * up, (WV.get("out", 135.0) + WV.get("swing", 16.0) * osc) * up + 5.0 * (1 - up), 0.0)}
+            sx, sy, sz = WV.get("shift", (0.0, 0.0, 0.0))
+            if sx or sy or sz:
+                # 肩を外・下へ少しずらしてから上げる(大きな頭のほおの下で、肩の付け根が頭に入らない)
+                p[R["arm_R"]]["loc"] = (sx * up, sy * up, sz * up)
+        if "arm_L" in R:
+            p[R["arm_L"]] = {"rot": (0.0, -(WV.get("other_out", 10.0) * up + 5.0 * (1 - up)) * 1.0, 0.0)}
+        if "head" in R and WV.get("head_tilt"):
+            # 頭を上げた手と反対へ少しかしげる(大きな頭のほおに、上げた腕が当たらない)
+            p[R["head"]] = {"rot": (0.0, WV["head_tilt"] * up, 0.0)}
+        return p
+
     def nod(t):
         a = tri(t, 0.0, 0.2, 0.25, 0.45) * 13 + tri(t, 0.45, 0.65, 0.7, 0.95) * 9
         return pose(body={"rot": (a, 0, 0), "scale": squash(-0.01 * a / 13)},
@@ -169,7 +191,7 @@ def build_all(spec):
     motions = {
         "idle": {"duration": 3.0, "loop": True, "fn": idle},
         "talk": {"duration": 1.2, "loop": True, "fn": talk},
-        "wave": {"duration": 2.4, "loop": False, "fn": wave_fix},
+        "wave": {"duration": 2.4, "loop": False, "fn": wave_high if WV.get("style") == "high" else wave_fix},
         "nod": {"duration": 0.95, "loop": False, "fn": nod},
         "bow": {"duration": 1.8, "loop": False, "fn": bow},
         "jump": {"duration": 1.05, "loop": False, "fn": jump},
