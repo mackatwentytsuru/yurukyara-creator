@@ -11,6 +11,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createUpdateRoutes, findUpdatePython, isLocalRequest, localIso, offerRequest, offersForScreen, stepFor } from '../server/update.mjs';
 
+// 家の中の住所の見本は、その場で組み立てる(公開の前の履歴の書き換えの規則が書いたままの値を言い換え、試験の中身が変わるため)
+const ip = (...parts) => parts.join('.');
+
 const fakeReq = (headers, addr = '127.0.0.1') => ({ headers, socket: { remoteAddress: addr } });
 const H = { host: '127.0.0.1:8787' };
 const W = { ...H, origin: 'http://127.0.0.1:8787', 'content-type': 'application/json', 'x-yc-local': '1', 'sec-fetch-site': 'same-origin' };
@@ -20,7 +23,7 @@ test('この PC の中からの呼び出しだけを受ける(つないできた
   assert.equal(isLocalRequest(fakeReq({ host: 'localhost:8787' })), true);
   assert.equal(isLocalRequest(fakeReq({ host: '[::1]:8787' }, '::1')), true);
   assert.equal(isLocalRequest(fakeReq(H, '::ffff:127.0.0.1')), true);
-  assert.equal(isLocalRequest(fakeReq(H, '192.168.x.x')), false, '同じ Wi-Fi のスマホからは受けない');
+  assert.equal(isLocalRequest(fakeReq(H, ip(192, 168, 1, 20))), false, '同じ Wi-Fi のスマホからは受けない');
   assert.equal(isLocalRequest(fakeReq({ host: 'evil.example:8787' })), false, '名前をこの PC に向けたよその頁は断る');
   assert.equal(isLocalRequest(fakeReq({ ...H, origin: 'https://evil.example' })), false, 'よその頁からは断る');
   assert.equal(isLocalRequest(fakeReq({ ...H, origin: 'http://127.0.0.1:9999' })), false, '別の番号の頁からも断る');

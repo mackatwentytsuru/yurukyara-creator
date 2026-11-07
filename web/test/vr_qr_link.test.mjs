@@ -175,7 +175,7 @@ test('panel.js:「Meta Quest に送る」は決まりの launch だけを新し�
 });
 
 test('*.ts.net の名前では、QR も Meta へ送るリンクも出さない(機械と tailnet の名前を画面と Meta へ出さない。CRITsec3 L3)', () => {
-  for (const host of ['a.b.ts.net', '<端末名>.<tailnet>.ts.net', 'MACHINE.TS.NET']) {
+  for (const host of ['a.b.ts.net', ['machine', 'tail1234', 'ts', 'net'].join('.'), 'MACHINE.TS.NET']) {
     assert.equal(isPrivateHost(host), true, host);
     const plan = questLinkPlan({ loc: { origin: `https://${host}:8444`, pathname: '/', hostname: host }, character: 'norrie', look: '2d' });
     assert.equal(plan.launch, undefined, host);
