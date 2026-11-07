@@ -35,7 +35,7 @@ npm start        # then open http://127.0.0.1:8787/
 ## Updating (your characters are kept)
 
 - Just tell Claude Code 「アップデートして」 ("update"). It checks for a new version, tells you what is new, and asks for your OK before updating (skill `yuru-update`).
-- Kept: the characters you made, personalities, voices, memories and settings (your own folders in `characters/`, `web/logs/`, `creator/work/`, `web/.env` and so on).
+- Kept: the characters you made, personalities, voices, memories and settings (your own folders in `characters/`, the files named after your character in `creator/builders/` and `creator/specs/`, `web/logs/`, `creator/work/`, `web/.env` and so on).
 - Before updating, your things are copied to `backups/<date-time>/` (key files are not copied; they stay where they are). Say 「元に戻して」 ("go back") to return to the previous version.
 - After updating, new expressions your characters can use are shown one character at a time. You can look at a sample before deciding, and undo them later.
 - Without Claude Code, from the repository root: `python tools/yuru_update.py check` (look), `apply` (update), `undo` (go back), `status` (current version). It needs Python 3 (standard library only).

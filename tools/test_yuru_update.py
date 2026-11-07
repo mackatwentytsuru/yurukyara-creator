@@ -14,9 +14,12 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -72,6 +75,27 @@ V2 = {
     "creator/review/upgrade_offers.py": FAKE_OFFERS_V2,
 }
 EDITED_NORRIE = "# ノリー\n- 話し方: ていねい\n- 好きな物: 紅茶(使う人が書き足した)\n"
+# apply を 1 段の後で、いきなり止める(窓を閉じた時)か、Ctrl+C を起こす
+KILL_DRIVER = '''import os, sys
+user, point = sys.argv[1], sys.argv[2]
+sys.path.insert(0, os.path.join(user, "tools"))
+os.chdir(user)
+import yuru_update as Y
+real = Y.git
+def patched(*a, **k):
+    out = real(*a, **k)
+    if point == "after_checkout" and a[:2] == ("checkout", "-q"):
+        os._exit(9)
+    if point == "after_merge" and a[:1] == ("merge",):
+        os._exit(9)
+    if point == "ctrlc_after_merge" and a[:1] == ("merge",):
+        raise KeyboardInterrupt
+    return out
+Y.git = patched
+if point == "after_applied":
+    Y.tell_tool = lambda *a, **k: os._exit(9)
+sys.exit(Y.main(["apply"]))
+'''
 MINE = {
     "characters/my_kun/character.json": '{"id": "my_kun", "name": "マイくん"}\n',
     "characters/my_kun/persona.md": "# マイくん\n- 元気\n",
@@ -379,6 +403,181 @@ class UpdateTest(unittest.TestCase):
         self.assertIsNone(got[0])                       # ストアの入口だけなら、Python は無いとみなす
         self.assertTrue(got[1].lower().startswith("c:\\py310"))
         self.assertIsNone(got[2])
+
+    # ---------- 途中で止まった時(UPV 1) ----------
+
+    def stop_midway(self, point):
+        driver = os.path.join(self.tmp.name, "kill_driver.py")
+        with open(driver, "w", encoding="utf-8") as f:
+            f.write(KILL_DRIVER)
+        p = subprocess.run([sys.executable, driver, self.user, point], cwd=self.user, env=self.env,
+                           capture_output=True, timeout=180)
+        return p.returncode, p.stdout.decode("utf-8", "replace") + p.stderr.decode("utf-8", "replace")
+
+    def test_stopped_midway_then_apply_again_keeps_the_edited_sample(self):
+        for point in ("after_checkout", "after_merge"):
+            with self.subTest(point=point):
+                self.tmp.cleanup()
+                self.setUp()
+                before = self.put_mine()
+                self.advance()
+                code, _ = self.stop_midway(point)
+                self.assertEqual(code, 9)
+                code, out = self.tool("check")
+                self.assertIn("途中で止まっています", out)
+                code, out = self.tool("apply")
+                self.assertEqual(code, 0, out)
+                self.assertIn("先に前のままに戻しました", out)
+                self.assertIn("新しい版 1.1.0 になりました", out)
+                self.assertEqual(text(self.user, "characters/norrie/persona.md"), EDITED_NORRIE)
+                code, out = self.tool("undo")
+                self.assertEqual(code, 0, out)
+                self.assertEqual(self.git(self.user, "rev-parse", "HEAD").strip(), self.head0)
+                for rel, h in before.items():
+                    self.assertEqual(sha(self.user, rel), h, rel)
+
+    def test_stopped_midway_then_undo_goes_back(self):
+        before = self.put_mine()
+        self.advance()
+        self.assertEqual(self.stop_midway("after_merge")[0], 9)
+        code, out = self.tool("undo")
+        self.assertEqual(code, 0, out)
+        self.assertIn("先に前のままに戻しました", out)
+        self.assertEqual(self.git(self.user, "rev-parse", "HEAD").strip(), self.head0)
+        for rel, h in before.items():
+            self.assertEqual(sha(self.user, rel), h, rel)
+
+    def test_ctrl_c_is_a_kind_message_and_goes_back(self):
+        self.put_mine()
+        self.advance()
+        code, out = self.stop_midway("ctrlc_after_merge")
+        self.assertEqual(code, 3, out)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("前のままに戻しました", out)
+        self.assertEqual(self.git(self.user, "rev-parse", "HEAD").strip(), self.head0)
+        self.assertEqual(text(self.user, "characters/norrie/persona.md"), EDITED_NORRIE)
+
+    def test_stopped_after_switching_then_apply_finishes_the_rest(self):
+        self.put_mine()
+        self.advance()
+        self.assertEqual(self.stop_midway("after_applied")[0], 9)
+        code, out = self.tool("apply")
+        self.assertEqual(code, 0, out)
+        self.assertIn("続きをします", out)
+        self.assertIn("MIGRATE-CALLED", out)
+        self.assertIn("OFFERS-TEXT-CALLED", out)
+        self.assertIn("もう、いちばん新しい版です", self.tool("apply")[1])
+        self.assertEqual(self.tool("undo")[0], 0)
+        self.assertEqual(text(self.user, "VERSION").strip(), "1.0.0")
+
+    # ---------- 答えない取り先(UPV 2) ----------
+
+    def test_silent_remote_does_not_hang(self):
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(16)
+        held = []
+
+        def hold():
+            while True:
+                try:
+                    held.append(srv.accept()[0])
+                except OSError:
+                    return
+        threading.Thread(target=hold, daemon=True).start()
+        port = srv.getsockname()[1]
+        try:
+            self.git(self.user, "remote", "set-url", "origin", f"http://127.0.0.1:{port}/repo.git")
+            t0 = time.time()
+            code, out = self.tool("check", "--quiet")
+            self.assertEqual((code, out.strip()), (0, ""))
+            self.assertLess(time.time() - t0, 20)
+            if NODE:
+                t0 = time.time()
+                self.assertEqual(self.hook(), "")
+                self.assertLess(time.time() - t0, 12)
+            if os.name == "nt":
+                time.sleep(1)
+                q = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                    "@(Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'git*' -and "
+                                    "$_.CommandLine -like '*127.0.0.1:%d*' }).Count" % port],
+                                   capture_output=True, text=True, timeout=60)
+                self.assertEqual(q.stdout.strip(), "0")   # git の子や孫が残っていない
+        finally:
+            srv.close()
+            for c in held:
+                c.close()
+
+    # ---------- 元に戻す時(UPV 3) ----------
+
+    def test_undo_keeps_a_later_edit_of_a_file_the_update_did_not_touch(self):
+        self.put_mine()
+        self.advance()
+        self.assertEqual(self.tool("apply")[0], 0)
+        later = EDITED_NORRIE + "- もう一行(新しくした後に書き足した)\n"
+        write(self.user, "characters/norrie/persona.md", later)
+        code, out = self.tool("undo")
+        self.assertEqual(code, 0, out)
+        self.assertIn("いまの中身のまま残しました", out)
+        self.assertEqual(text(self.user, "VERSION").strip(), "1.0.0")
+        self.assertEqual(text(self.user, "characters/norrie/persona.md"), later)
+
+    def test_undo_save_mine_copies_then_goes_back(self):
+        self.put_mine()
+        old_mikan = sha(self.user, "characters/mikan/persona.md")
+        self.advance()
+        self.assertEqual(self.tool("apply")[0], 0)
+        write(self.user, "characters/mikan/persona.md", "# みかん\n- 新しくした後に直した\n")
+        code, out = self.tool("undo")
+        self.assertEqual(code, 1)
+        self.assertIn("undo --save-mine", out)
+        code, out = self.tool("undo", "--save-mine")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(text(self.user, "VERSION").strip(), "1.0.0")
+        self.assertEqual(sha(self.user, "characters/mikan/persona.md"), old_mikan)
+        (name,) = self.backup_dirs()
+        self.assertEqual(text(self.user, f"backups/{name}/at_undo/characters/mikan/persona.md"), "# みかん\n- 新しくした後に直した\n")
+        self.assertIn(f"backups/{name}/at_undo/characters/mikan/persona.md", out)
+
+    # ---------- 名前替えと作り方のファイル(UPV 4) ----------
+
+    def test_rename_also_moves_the_builder_and_spec_files(self):
+        write(self.user, "characters/newbie/character.json", '{"id": "newbie", "name": "わたしの子"}\n')
+        write(self.user, "creator/builders/newbie.py", "# わたしの子の組み立て\n")
+        write(self.user, "creator/specs/newbie_built.json", '{"id": "newbie", "mine": true}\n')
+        self.advance({"creator/builders/newbie.py": "# 見本の組み立て\n",
+                      "creator/specs/newbie_built.json": '{"id": "newbie"}\n'})
+        self.assertEqual(self.tool("apply")[0], 1)
+        code, out = self.tool("apply", "--rename", "newbie=newbie_mine")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(text(self.user, "creator/builders/newbie_mine.py"), "# わたしの子の組み立て\n")
+        self.assertEqual(text(self.user, "creator/builders/newbie.py"), "# 見本の組み立て\n")
+        self.assertEqual(json.loads(text(self.user, "creator/specs/newbie_mine_built.json")), {"id": "newbie_mine", "mine": True})
+        code, out = self.tool("undo")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(text(self.user, "creator/builders/newbie.py"), "# わたしの子の組み立て\n")
+        self.assertEqual(json.loads(text(self.user, "creator/specs/newbie_built.json")), {"id": "newbie", "mine": True})
+        self.assertFalse(os.path.exists(os.path.join(self.user, "creator", "builders", "newbie_mine.py")))
+
+    # ---------- 改行・消した見本・add だけの物(UPV 7) ----------
+
+    def test_deleted_sample_file_added_file_and_line_ends(self):
+        self.put_mine()
+        os.remove(os.path.join(self.user, "characters", "mikan", "persona.md"))
+        write(self.user, "characters/norrie/extra.md", "# 足した\n")
+        self.git(self.user, "add", "characters/norrie/extra.md")
+        self.advance()
+        p = subprocess.run([sys.executable, os.path.join("tools", "yuru_update.py"), "apply"], cwd=self.user,
+                           env=self.env, capture_output=True, timeout=180)
+        self.assertEqual(p.returncode, 0)
+        self.assertNotIn(b"\r\r\n", p.stdout)
+        out = p.stdout.decode("utf-8", "replace")
+        self.assertIn("消していた", out)
+        self.assertNotIn("tracked/characters/mikan/persona.md", out)
+        self.assertIn("characters/norrie/extra.md", self.git(self.user, "diff", "--cached", "--name-only"))
+        self.assertEqual(self.tool("undo")[0], 0)
+        self.assertFalse(os.path.exists(os.path.join(self.user, "characters", "mikan", "persona.md")))
+        self.assertIn("characters/norrie/extra.md", self.git(self.user, "diff", "--cached", "--name-only"))
 
     def test_already_newest(self):
         code, out = self.tool("check")

@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -34,9 +35,14 @@ MERGE_MARKS = ("MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "
 
 GIT_TIMEOUT = 60
 FETCH_TIMEOUT = 30
-QUIET_FETCH_TIMEOUT = 7     # 起動の時のおしらせ(10 秒の中で終わらせる)
+QUIET_FETCH_TIMEOUT = 5     # 起動の時のおしらせ(起動役の 8 秒より前に、自分で git を片づけて終わる)
 MERGE_TIMEOUT = 120
+KILL_WAIT = 10              # 時間切れで止めた後、出力の口が閉じるのを待つ上限
 SPARE_BYTES = 200 * 1024 * 1024   # 控えを取った後にも残しておくディスクの空き
+
+# 自分で手で組んだキャラの作り方のファイル(characters/ の外。見張られていない物だけが、その人の物)
+OWN_FILE_DIRS = ("creator/builders", "creator/specs")
+OWN_FILE_TAILS = (".py", ".json", "_built.json", "_face.args", "_look.json")
 
 UNDO_HINT = "元に戻すときは「元に戻して」と言うか、python tools/yuru_update.py undo"
 
@@ -106,14 +112,48 @@ def child_env():
     return env
 
 
-def run(cmd, timeout, cwd=None):
-    """外の命令を時間の上限つきで流す。(番号, 出力) を返す。時間切れは TimeoutError"""
+def kill_tree(proc):
+    """自分で起こしたプロセスを、その子や孫ごと止める(番号で止める。名前では止めない)。
+    Windows では、外側の git だけを止めても、中の git-remote-http が出力の口をにぎって残るため"""
     try:
-        p = subprocess.run(cmd, cwd=cwd or ROOT, env=child_env(), stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, timeout=timeout)
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=KILL_WAIT)
+        else:
+            os.killpg(proc.pid, signal.SIGKILL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
+def spawn(cmd, timeout, cwd=None, env=None, merge_err=True):
+    """命令を時間の上限つきで流す。(番号, 出力, エラー出力) を bytes で返す。
+    時間切れ・Ctrl+C の時は、木ごと止めてから TimeoutError・KeyboardInterrupt を上げる"""
+    extra = {} if os.name == "nt" else {"start_new_session": True}
+    proc = subprocess.Popen(cmd, cwd=cwd or ROOT, env=env or child_env(), stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT if merge_err else subprocess.PIPE, **extra)
+    try:
+        out, err = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as e:
+        kill_tree(proc)
+        try:
+            proc.communicate(timeout=KILL_WAIT)
+        except subprocess.TimeoutExpired:
+            pass   # 口をにぎったまま残った物があっても、待たずに進む
         raise TimeoutError(str(cmd[:2])) from e
-    return p.returncode, p.stdout.decode("utf-8", "replace")
+    except BaseException:
+        kill_tree(proc)
+        raise
+    return proc.returncode, out or b"", err or b""
+
+
+def run(cmd, timeout, cwd=None):
+    """外の命令を時間の上限つきで流す。(番号, 出力) を返す。時間切れは TimeoutError。改行は \\n にそろえる"""
+    code, out, _ = spawn(cmd, timeout, cwd=cwd)
+    return code, out.decode("utf-8", "replace").replace("\r\n", "\n")
 
 
 def git(*args, timeout=GIT_TIMEOUT, ok=(0,)):
@@ -125,13 +165,12 @@ def git(*args, timeout=GIT_TIMEOUT, ok=(0,)):
     if "GIT_SSH_COMMAND" not in env and "GIT_SSH" not in env:   # 合言葉を聞かれて止まらないように
         env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes -o ConnectTimeout=5"
     try:
-        p = subprocess.run([exe, "-c", "core.quotepath=false", *args], cwd=ROOT, env=env,
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
+        code, out, _ = spawn([exe, "-c", "core.quotepath=false", *args], timeout, env=env, merge_err=False)
+    except TimeoutError as e:
         raise TimeoutError("git " + args[0]) from e
-    if p.returncode not in ok:
-        raise RuntimeError(f"git {args[0]} ({p.returncode})")
-    return p.stdout.decode("utf-8", "replace")
+    if code not in ok:
+        raise RuntimeError(f"git {args[0]} ({code})")
+    return out.decode("utf-8", "replace")
 
 
 def git_z(*args):
@@ -242,8 +281,10 @@ def branch_info():
 
 
 def fetch(remote, quiet=False):
-    try:
-        git("fetch", "--quiet", "--no-tags", remote, timeout=QUIET_FETCH_TIMEOUT if quiet else FETCH_TIMEOUT)
+    limit = QUIET_FETCH_TIMEOUT if quiet else FETCH_TIMEOUT
+    try:   # 答えない取り先(http)では、git 自身にも、ほとんど届かない時はあきらめてもらう
+        git("-c", "http.lowSpeedLimit=1", "-c", f"http.lowSpeedTime={limit}",
+            "fetch", "--quiet", "--no-tags", remote, timeout=limit)
     except (RuntimeError, TimeoutError) as e:
         raise Offline() from e
 
@@ -377,6 +418,8 @@ def renamed_path(p, renamed):
         pre = f"characters/{r['from']}/"
         if p.startswith(pre):
             return f"characters/{r['to']}/" + p[len(pre):]
+        if p in r.get("files", ()):
+            return renamed_file(p, r["from"], r["to"])
     return p
 
 
@@ -433,14 +476,41 @@ def save_manifest(base, man):
     write_json(os.path.join(base, "manifest.json"), man)
 
 
-def rename_character(old, new):
-    """自分のキャラのフォルダの名前と、character.json の id を替える"""
-    os.rename(absp(f"characters/{old}"), absp(f"characters/{new}"))
-    cj = absp(f"characters/{new}/character.json")
-    data = read_json(cj)
+def own_files(cid, tracked):
+    """その子の作り方のファイル(creator/builders/<id>.py・creator/specs/<id>_built.json など)のうち、見張られていない物"""
+    out = []
+    for d in OWN_FILE_DIRS:
+        if not os.path.isdir(absp(d)):
+            continue
+        for tail in OWN_FILE_TAILS:
+            p = f"{d}/{cid}{tail}"
+            if p not in tracked and os.path.isfile(absp(p)):
+                out.append(p)
+    return out
+
+
+def renamed_file(p, old, new):
+    d, name = p.rsplit("/", 1)
+    return f"{d}/{new}{name[len(old):]}"
+
+
+def _set_id(path, old, new):
+    data = read_json(path)
     if isinstance(data, dict) and data.get("id") == old:
         data["id"] = new
-        write_json(cj, data)
+        write_json(path, data)
+
+
+def rename_character(old, new, files=()):
+    """自分のキャラのフォルダの名前と、character.json の id を替える。作り方のファイル(files)の名前と id も替える"""
+    os.rename(absp(f"characters/{old}"), absp(f"characters/{new}"))
+    _set_id(absp(f"characters/{new}/character.json"), old, new)
+    for p in files:
+        q = renamed_file(p, old, new)
+        if os.path.isfile(absp(p)) and not os.path.exists(absp(q)):
+            os.rename(absp(p), absp(q))
+            if q.endswith(".json"):
+                _set_id(absp(q), old, new)
 
 
 def put_back_tracked(base, man, skip=()):
@@ -457,10 +527,27 @@ def put_back_tracked(base, man, skip=()):
             shutil.copy2(os.path.join(base, "tracked", *p.split("/")), absp(p))
 
 
+def restage(man):
+    """git add だけしてあった新しいファイルを、もう一度 add した形に戻す"""
+    added = [it["path"] for it in man["tracked_changes"] if it["kind"] == "added" and os.path.isfile(absp(it["path"]))]
+    for i in range(0, len(added), 50):
+        try:
+            git("add", "--", *added[i:i + 50])
+        except (RuntimeError, TimeoutError):
+            pass
+
+
 def rename_back(man):
     for r in reversed(man["renamed"]):
         if os.path.isdir(absp(f"characters/{r['to']}")) and not os.path.exists(absp(f"characters/{r['from']}")):
-            rename_character(r["to"], r["from"])
+            os.rename(absp(f"characters/{r['to']}"), absp(f"characters/{r['from']}"))
+            _set_id(absp(f"characters/{r['from']}/character.json"), r["to"], r["from"])
+        for p in r.get("files", []):
+            q = renamed_file(p, r["from"], r["to"])
+            if os.path.isfile(absp(q)) and not os.path.exists(absp(p)):
+                os.rename(absp(q), absp(p))
+                if p.endswith(".json"):
+                    _set_id(absp(p), r["to"], r["from"])
 
 
 def put_back(base, man, head):
@@ -472,6 +559,7 @@ def put_back(base, man, head):
         pass
     put_back_tracked(base, man)
     rename_back(man)
+    restage(man)
     try:
         return git("rev-parse", "HEAD").strip() == head
     except (RuntimeError, TimeoutError):
