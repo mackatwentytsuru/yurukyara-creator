@@ -120,7 +120,7 @@ export function mountAudioPicker({ app, update = null } = {}) {
   const speakerNote = el('p', { class: 'yc-au-msg', hidden: true, text: PICKER_WORDS.noSpeakerPick });
   const updateBtn = el('button', { type: 'button', class: 'yc-link-btn', id: 'ycAudioUpdate', hidden: true });
   const micField = el('label', { class: 'yc-field' }, el('span', { text: PICKER_WORDS.mic }), micSelect);
-  const speakerField = el('label', { class: 'yc-field' }, el('span', { text: PICKER_WORDS.speaker }), speakerSelect);
+  const speakerField = el('label', { class: 'yc-field', hidden: true }, el('span', { text: PICKER_WORDS.speaker }), speakerSelect); // 一覧が取れてから出す
   const meterRow = el('div', { class: 'yc-meter-row' }, el('span', { class: 'yc-meter-label', text: PICKER_WORDS.meter }), meter);
   const testRow = el('div', { class: 'yc-au-actions' }, testBtn);
   sheet.body.append(
@@ -306,6 +306,8 @@ export function mountAudioPicker({ app, update = null } = {}) {
     if (unav) {
       micField.hidden = true;
       allowBtn.hidden = true;
+      speakerField.hidden = true; // 一覧が取れない(空の欄を出さない。iPhone の Safari の http で出ていた)
+      speakerNote.hidden = false;
       return;
     }
     if (await readDevices()) void startMeter();
