@@ -54,7 +54,7 @@ test('runTurn(brain: mock)がこの回に覚えた事(learned)を使う: ノリ�
     { id: '1', kind: 'name', text: '名前: タロウ' },
     { id: '2', kind: 'like', text: '好きなもの: カレー' },
   ];
-  assert.deepEqual(await mock({ text: 'ぼくはタロウ。カレーが好き', history: [{ role: 'user', content: 'やあ' }], character: { persona: NORRIE } }, { learned }), ['タロウさん、デスね。ノリー、覚えマシタ!', 'カレーがお好きなんデスね。ノリー、覚えておきマス!']);
+  assert.deepEqual(await mock({ text: 'ぼくはタロウ。カレーが好き', history: [{ role: 'user', content: 'やあ' }], character: { persona: NORRIE } }, { learned }), ['タロウさん、デスね。ノリー、覚えマシタ!', 'カレーがお好きなんデスね。ノリー、覚えておきマス!', 'おうちの場所や電話は、覚えないので あんしんデス!']);
   assert.deepEqual(await mock({ text: 'ぼくはタロウ。カレーが好き', character: { persona: MIKAN } }, { learned }), ['タロウさんっていうんだね。', 'カレーが好きなんだ。覚えておくね。', 'おうちの場所や電話は、覚えないから あんしんしてね。']);
 });
 

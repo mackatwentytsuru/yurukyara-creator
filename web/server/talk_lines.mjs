@@ -16,13 +16,28 @@ export function hashText(text) {
 }
 
 // ---- 人間か AI かを聞かれた時 ----
-const ASKS_TARGET = /(人間|にんげん|ろぼっと|ロボット|ai|えーあい|人工知能|じんこうちのう|本物|ほんもの|生き物|いきもの|生きて|いきてる|中の人|なかのひと|中に(?:人|ひと)|人が入|ひとが入|人が話|ひとが話|機械|きかい|こんぴゅーた|コンピュータ|ぷろぐらむ|プログラム)/u;
-const ASKS_FORM = /([?？]|ですか|でしょ|かな|なの|じゃない|じゃないの|なんだ(?!よ)|か$|いるの|あるの|なんでしょ)/u;
+const TARGET_WORD = '(?:人間|にんげん|ろぼっと|ロボット|ai|えーあい|人工知能|じんこうちのう|本物|ほんもの|生き物|いきもの|生きて(?:る|いる)|いきて(?:る|いる)|機械|きかい|こんぴゅーた|コンピュータ|コンピューター|ぷろぐらむ|プログラム)';
+const FORM_WORD = '(?:なの|の|なん|ですか|でしょ|かな|だよね|じゃない|じゃないの|なんでしょ|なんだよね)';
+// 相手(きみ・あなた・キャラの名前)を主語にした問い。主語があれば、言葉の前後に何があってもよい
+const ASKS_FORM = /([?？]|ですか|でしょ|かな|なの|じゃない|なんだ(?!よ)|か$|いるの)/u;
+const SUBJECT = /(きみ|君|キミ|あなた|貴方|あんた|おまえ|お前)(は|って|も|の)?/u;
+// 主語が無い時は、言葉だけの短い問いだけ(「ロボットがすき?」「これ本物のりんご?」「ぼくのいぬ、いきてる?」は、AI の問いではない)
+const BARE = new RegExp(`^(?:本当は|ほんとうは|ほんとは|本当に|ほんとうに|ほんとに|実は|じつは|もしかして)?(?:これ|それ|あれ|きみ)?(?:は|って)?${TARGET_WORD}(?:${FORM_WORD})?[?？]?$`, 'u');
+// 「中の人」の問いは、主語が無くてもよい(ひらがなだけでも)
+const INSIDE = /((中|なか)の(人|ひと)|(中|なか)に(人|ひと)|(人|ひと)が(入|はい)|(人|ひと)が(話|はな))/u;
+const norm2 = (s) => norm(s).replace(/\s+/g, '');
 
-/** 相手が何者か(人間か・AI か・本物か)を聞いている言葉か */
-export function asksIfAI(text) {
-  const s = norm(text);
-  return ASKS_TARGET.test(s) && ASKS_FORM.test(s);
+/** 相手が何者か(人間か・AI か・本物か)を聞いている言葉か。names = キャラの名前(主語として数える) */
+export function asksIfAI(text, names = []) {
+  const subj = [SUBJECT, ...names.map((n) => String(n ?? '').trim()).filter((n) => Array.from(n).length >= 2).map((n) => new RegExp(`${norm2(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:は|って|も|の)?`, 'u'))];
+  const target = new RegExp(TARGET_WORD, 'u');
+  return norm2(text).split(/(?<=[?？。!！])/u).some((raw) => {
+    const s = raw.replace(/[。!！]$/u, '');
+    if (!s) return false;
+    if (INSIDE.test(s) && ASKS_FORM.test(s)) return true;
+    if (subj.some((r) => r.test(s)) && target.test(s) && ASKS_FORM.test(s)) return true;
+    return BARE.test(s);
+  });
 }
 
 const AI_FIRST = 'AI のキャラクターだよ。人間じゃないんだ。'; // 安全の決まり 5 と同じ言い方(試験と画面の確かめが同じ文を見る)

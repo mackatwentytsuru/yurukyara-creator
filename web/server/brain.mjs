@@ -8,7 +8,7 @@ import { nearestExpression, oneCustomPerReply } from '../src/character/expressio
 import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, personalWarn, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { mentionsRest, restGuard, restLine, restNeed } from './safety.mjs'; // BSF 11-08: 長い会話・夜おそくの「休もうか」(1 回の会話で 1 回)
 import { summarize } from './memory/reflect.mjs';
-import { aizuchi, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
+import { aizuchiPair, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
 import { aiAnswer, asksIfAI, asksMemory, MEMORY_FIRST_NOTE, MEMORY_PLAIN_LINES, PERSONAL_HISTORY_MASK, personalLines, standinReply } from './talk_lines.mjs'; // UW3: 仮の頭脳の言い回し(AI・覚えること・書かないでね・ふつうの返事)
 import { CAMERA_MOCK_LINES, CAMERA_MOCK_NOTICE, cameraTurnContent, imageTokens, seeingAsked } from './camera.mjs'; // BCV: カメラの絵
 
@@ -236,7 +236,17 @@ export function classifyTurn({ text = '', trigger = null, scene = '' } = {}) {
 const againLine = (persona, name, fallback) => memoryLine(persona, 'また会えた', name ? { 名前: name } : {}) || fallback;
 const topicLine = (persona, topic, fallback) => memoryLine(persona, '話の続き', { 話題: topic }) || fallback;
 
-function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learned = [], history = [], persona = '' }) {
+/** 覚えている名前・年・好きなものを 1 文で(無ければ空) */
+function recalledLine(items) {
+  const last = (kind, re) => items.findLast?.((it) => it.kind === kind)?.text.replace(re, '') ?? '';
+  const name = last('name', /^名前: /);
+  const age = last('age', /^年: /).replace(/さい$/, '');
+  const like = last('like', /^好きなもの: /);
+  const parts = [name && `${name}さん`, age && `${age}さい`, like && `${like}がすき`].filter(Boolean);
+  return parts.length ? `${parts.join('で、')}だよね。ちゃんと覚えているよ。` : '';
+}
+
+function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learned = [], history = [], persona = '', charName = '' }) {
   const { name, topic } = summarize(memory?.items ?? []);
   const san = name ? `${name}さん` : '';
   const hello = firstGreeting(persona); // 人格の「初めてのあいさつ」(無ければ空)
@@ -260,7 +270,7 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
     return;
   }
   // 人間か AI かを聞かれたら、AI のキャラクターだと正直に答える(安全の決まり 5。仮の頭脳でも守る)
-  if (asksIfAI(text)) {
+  if (asksIfAI(text, [charName])) {
     yield { type: 'thought', seen: seen || '', intent: '人間かどうか', stage: 'chat', handoff: false };
     for (const [i, line] of aiAnswer(text, turn).entries()) yield { type: 'say', text: line, expression: 'happy', motion: i === 0 ? 'nod' : 'tilt', gaze: 'person' };
     return;
@@ -268,7 +278,9 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
   // 何を覚えるか・覚えないかを、子どもの言葉で言う(覚えた事が無い回。UIR 13)
   if (asksMemory(text) && !learned.length) {
     yield { type: 'thought', seen: seen || '', intent: '覚えること', stage: 'chat', handoff: false };
-    for (const [i, line] of MEMORY_PLAIN_LINES.entries()) yield { type: 'say', text: line, expression: 'happy', motion: i === 0 ? 'nod' : 'none', gaze: 'person' };
+    // 覚えている事があれば、先にそれを言う(「ぼくのこと覚えてる?」に、決まりの説明だけを返さない)
+    const recalled = recalledLine(memory?.items ?? []);
+    for (const [i, line] of (recalled ? [recalled, ...MEMORY_PLAIN_LINES.slice(1)] : MEMORY_PLAIN_LINES).entries()) yield { type: 'say', text: line, expression: 'happy', motion: i === 0 ? 'nod' : 'none', gaze: 'person' };
     return;
   }
   const hit = landmarks.find((l) => text.includes(l.name));
@@ -290,7 +302,11 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
     if (learnedAge) lines.push(`${learnedAge}さいなんだね。覚えておくね。`);
     if (learnedLike) lines.push(likeOwn || `${learnedLike}が好きなんだ。覚えておくね。`);
     // はじめて覚えた回(覚えている事が無かった回)だけ、覚えない物も 1 文で言う(UIR 13)。その子の言葉で話している時は、口調がちがうので足さない
-    if (!memory?.items?.length && lines.length < 3 && !nameOwn && !likeOwn) lines.push(MEMORY_FIRST_NOTE);
+    if (!memory?.items?.length && lines.length < 3) {
+      const noteOwn = memoryLine(persona, '覚えないものを言う'); // その子の言葉の 1 文(人格に書いてあれば)
+      if (noteOwn) lines.push(noteOwn);
+      else if (!nameOwn && !likeOwn) lines.push(MEMORY_FIRST_NOTE);
+    }
     for (const [i, line] of lines.slice(0, 3).entries()) yield { type: 'say', text: line, expression: 'happy', motion: i < 2 ? 'nod' : 'none', gaze: 'person' };
     return;
   }
@@ -329,7 +345,7 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
     return;
   }
   yield { type: 'thought', seen: seen || '', intent: 'おしゃべり', stage: 'chat', handoff: false }; // 段の名前が「雑談」なので、同じ言葉を並べない
-  const own = aizuchi(persona); // その子のあいづち(無ければ決まった文)
+  const own = aizuchiPair(persona, turn, text); // その子のあいづち(無ければ決まった文)
   if (own.length) {
     for (const [i, line] of own.entries()) yield { type: 'say', text: line, expression: i === 0 ? 'think' : 'happy', motion: AIZUCHI_MOTIONS[i] ?? 'none', gaze: 'person' };
     return;
@@ -434,7 +450,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     }
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
     // 安全の層と出力の確かめは、ここ(上と emit)で通すので、守りの包みの無い台本を使う(差し替えの印 guarded が消えないように)
-    for (const obj of mockLines({ text, trigger, landmarks, seen: scene, memory, learned, history, persona: character.persona ?? '' })) {
+    for (const obj of mockLines({ text, trigger, landmarks, seen: scene, memory, learned, history, persona: character.persona ?? '', charName: character.name ?? '' })) {
       if (paceMs > 0) await new Promise((r) => setTimeout(r, paceMs));
       emit(obj);
     }

@@ -288,3 +288,44 @@ test('声のモデルの名前は 1 か所(models.js)。elevenDirect.js もそ�
   assert.ok(!/eleven_(?:v\d|flash|multilingual|turbo|monolingual)/.test(src.replace(/\/\/.*$/gm, '')), 'モデル名の文字が無い');
   assert.match(src, /import \{ MODEL_DEFAULTS \} from '\.\/models\.js'/);
 });
+
+// ---------- UW3f(点検 UW3r の直し) ----------
+
+test('UW3f 高1: ふつうの学校の話(きのう・たのしい・いつも)は止めない。名前の形だけ止める', async () => {
+  for (const t of ['きのう小学校でサッカーした', 'たのしい小学校にかよってるよ', 'あした小学校で運動会', 'いつも幼稚園で', '兄が高校で', '昨日小学校で遊んだ']) {
+    assert.equal(personalWarn(t), null, t);
+    assert.ok(!said(await talk(t)).some((l) => /書かないでね/.test(l)), t);
+  }
+  for (const t of ['ことのは第二小学校だよ', 'ことのは第一小学校です', 'きのうさくら小学校でね']) assert.equal(personalWarn(t), 'school', t);
+});
+
+test('UW3f 高2: ノリーの仮の返事は回ごとに替わる(4 つの話で 3 とおり以上)', async () => {
+  const persona = readFileSync(join(WEB, '..', 'characters', 'norrie', 'persona.md'), 'utf8');
+  const history = [];
+  const outs = [];
+  for (const t of ['サッカーをしたよ', 'あめがふってたよ', 'ねこをかってるよ', 'きょうはなにしようかな']) {
+    const l = said(await talk(t, { history: [...history], character: { name: 'ノリー', persona } }));
+    outs.push(l.join('|'));
+    history.push({ role: 'user', content: t }, { role: 'assistant', content: l.join('') });
+  }
+  assert.ok(new Set(outs).size >= 3, outs.join(' / '));
+});
+
+test('UW3f 中3: AI の問いは「きみ(キャラ)」についてだけ。ふつうの話は止めない', () => {
+  for (const q of ['ロボットがすき?', 'これ本物のりんご?', 'プログラムってなに?', 'ぼくのいぬ、いきてる?', 'ほんもののいぬをみたよ']) assert.equal(asksIfAI(q), false, q);
+  for (const q of ['なかにひとがいるの?', 'ノリーは生きてるの?', 'きみはロボットなの', '本当は人間なんでしょ?']) assert.equal(asksIfAI(q, ['ノリー']), true, q);
+});
+
+test('UW3f 中4: 「ぼくのこと覚えてる?」は、覚えている名前・年を先に言う', async () => {
+  const memory = { items: [{ id: '1', kind: 'name', text: '名前: たろう' }, { id: '2', kind: 'age', text: '年: 7さい' }], text: '' };
+  const lines = said(await talk('ぼくのこと覚えてる?', { history: [{ role: 'user', content: 'やあ' }, { role: 'assistant', content: 'やあ' }], memory }));
+  assert.match(lines[0], /たろうさん.*7さい.*覚えているよ/);
+  assert.ok(lines.length <= 3 && lines.every((l) => !isUnsafeOutput(l)));
+});
+
+test('UW3f 中6: ノリーも、はじめて覚えた回に「おうちの場所や電話は覚えない」を、自分の口調で言う', async () => {
+  const persona = readFileSync(join(WEB, '..', 'characters', 'norrie', 'persona.md'), 'utf8');
+  const learned = [{ id: '1', kind: 'name', text: '名前: タロウ' }];
+  const lines = said(await talk('ぼくはタロウ', { character: { name: 'ノリー', persona }, learned, history: [{ role: 'user', content: 'やあ' }, { role: 'assistant', content: 'やあ' }] }));
+  assert.ok(lines.some((l) => /おうちの場所や電話は、覚えない/.test(l) && /デス/.test(l)), lines.join('|'));
+});

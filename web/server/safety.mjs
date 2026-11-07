@@ -358,6 +358,19 @@ const SCHOOL_WORD = '(?:小学校|中学校|高校|高等学校|幼稚園|保育
 // 学校の名前の前に来ても名前ではない言葉
 const NOT_SCHOOL_NAME = new Set(['この', 'その', 'あの', 'どの', 'うちの', 'ぼくの', 'わたしの', '私の', '僕の', 'みんなの', 'となりの', '近くの', 'ちかくの', '前の', 'まえの', '今の', 'いまの', '行く', 'いく', '同じ', 'おなじ', '新しい', 'あたらしい', '大きい', 'おおきい', 'ふつうの', '普通の', 'ほかの', '他の', 'べつの', '別の', '友だちの', 'ともだちの', '友達の', 'どこの', '何の', 'なんの']);
 const W_SCHOOL_NAME = new RegExp(`([\\p{Script=Han}ぁ-んァ-ヶー]{1,10})${SCHOOL_WORD}`, 'gu');
+// 学校の名前ではない前の言葉: 時・回数・ようす・助詞の付いた言葉(「きのう小学校で」「たのしい小学校」「いつも幼稚園で」)。名前は、地名や人の名のような固有の形だけ
+const NOT_NAME_WORDS = new Set(['きのう', 'あした', 'あす', 'きょう', 'おととい', 'あさって', 'ことし', 'らいねん', 'きょねん', 'まいにち', 'まいあさ', 'いつも', 'ときどき', 'よく', 'たまに', 'ずっと', 'ぜんぜん', 'みんな', 'ともだち', 'かぞく', 'せんせい', 'ようやく', 'やっと', 'もうすぐ', 'さっき', 'いま', 'いっしょ', 'ひとり', 'まだ', 'もう', 'とても', 'すごく', 'ちょっと', 'あそこ', 'ここ', 'そこ', '昨日', '今日', '明日', '毎日', '毎朝', '今年', '来年', '去年', '友だち', '友達', '先生', '兄', '姉', '弟', '妹', '父', '母', '今', '前', '昔', 'むかし', '来週', '先週', '今週']);
+// 名前の終わりにあれば、名前ではない(助詞・ようすの言葉の終わり)
+const NOT_NAME_END = /[いくにでをがもへとやかね]$/u;
+
+/** 学校の言葉の前の 1〜10 字が、学校の名前らしいか(地名・人の名のような固有の形。ふつうの言葉・時・ようすは外す) */
+function isSchoolName(raw) {
+  const name = String(raw ?? '').replace(/^.*[はを]/u, ''); // 前の言葉は切って、名前だけを見る
+  const chars = Array.from(name);
+  if (chars.length < 2 || NOT_SCHOOL_NAME.has(name) || NOT_NAME_WORDS.has(name)) return false;
+  if (NOT_NAME_END.test(name)) return false;
+  return true;
+}
 const W_SCHOOL_ASK = /(学校|がっこう)の?(名前|なまえ)/u;
 const W_NAME = /(本名|ほんみょう|フルネーム|ふるねーむ|名字|みょうじ|苗字)/u;
 
@@ -374,8 +387,7 @@ export function personalWarn(text) {
   if (W_ADDRESS.test(s)) return 'address';
   if (W_SCHOOL_ASK.test(s)) return 'school';
   for (const m of s.matchAll(W_SCHOOL_NAME)) {
-    const name = m[1].replace(/^.*[はを]/u, ''); // 前の言葉は切って、名前だけを見る
-    if (name && !NOT_SCHOOL_NAME.has(name) && Array.from(name).length >= 2) return 'school';
+    if (isSchoolName(m[1])) return 'school';
   }
   if (W_NAME.test(s)) return 'name';
   return null;
