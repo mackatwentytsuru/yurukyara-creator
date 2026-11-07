@@ -41,7 +41,7 @@
 ## 画面の部品
 - **画面は合鍵を作らない**(11-07 CRITsec F8): 開いただけ・全部わすれた後・会話の「わすれて」の後は、合鍵なしのまま(`/api/memory/new` を呼ばない。他人が 1 日の上限を使い切っても、審査の人の記憶は止まらない)。合鍵は、会話で覚える事が出た最初の回の `{type:"memory", key}` か、番号の受け取りで持つ。
 - `web/src/ui/memoryKey.js`: `getKey / setKey / clearKey / memoryHeaders / loadMemory / adoptKey / emptyMemory / NOTHING_TO_PAIR / ensureKey / listMemory / forgetItem / forgetAll / pairCode / claimCode(code, {pass})`。
-  - `loadMemory()`: 合鍵があれば一覧を読む。無ければ聞かずに空の一覧(`notice` つき)。404・401 なら合鍵を捨てて空(作り直さない)。`adoptKey(key)`: 会話のイベントの合鍵を持つ(形が違えば持たない)。
+  - `loadMemory()`: 合鍵があれば一覧を読む。無ければ聞かずに空の一覧(`notice` つき)。404・401 なら合鍵を捨てて空(作り直さない)。`adoptKey(key)`: 会話のイベントの合鍵を持つ(形が違えば持たない。もう合鍵を持っていれば上書きしない: 合鍵なしで送った回の返事が、番号で受け取った後に届いても、受け取った合鍵のまま)。
   - `pairCode()` は合鍵が無ければ通信せずに `NOTHING_TO_PAIR`(先に話しかけてね)で断る。`forgetAll()` は合鍵が無ければ通信しない。`ensureKey()` は道具と試しの口(札は呼ばない)。
   - 番号を作る時も受け取る時も、合言葉は札の欄の値か会話の合言葉(`demoPass.js`)を `x-demo-pass` で送る。
 - `web/src/ui/memoryPanel.js`: `mountMemoryPanel(parent, {askPass}) → {root, ready, refresh, onChatEvent, resync}`。S5 が `main.js` に 1 行で付ける。会話のイベントを `onChatEvent` に渡すと、`key` があれば持ってから一覧を読み直す。`via:"chat"` の「わすれた」と「全部わすれる」では、**知らせと同じ時に一覧を空にし**、出していた番号と「受け取りました」などの知らせも消す(消す前に始めた読み直しが遅れて届いても描き直さない)。引き出しを開いた時の読み直しは `resync()`(今の `{type:"memory", forgotten:true}` の形でも同じ。番号と知らせは消さない。合鍵が消えていたら捨てて空)。
