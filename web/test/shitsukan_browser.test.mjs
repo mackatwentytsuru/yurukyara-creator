@@ -297,19 +297,23 @@ test('しつかん: 既定は ぬの・押すとすぐ替わり覚える・い�
     s = await pc.page.evaluate(STATE);
     assert.equal(s.shells, 0, 'ぬの に戻すと毛の殻を隠す');
     assert.deepEqual(s.stored, { norrie: 'fabric' });
-    // 5. 2D の時は出さない
+    // 5. 2D の時は出さない。3D に戻すと、前と同じ絵(舞台から外れた子の後片づけで、共有の部屋の光や毛羽の絵を捨てられても困らない)
+    await pc.page.evaluate(FREEZE);
+    const before2d = await pc.page.evaluate(PIXELS); // ここから描く輪は止まる(次の描きは PIXELS で)
     await pc.page.click('#lookSwitch button[data-look="2d"]');
     await pc.page.waitForFunction(() => window.__app.character.look === '2d', null, { timeout: 30_000 });
-    await sleep(300);
+    await pc.page.evaluate(PIXELS);
     s = await pc.page.evaluate(STATE);
     assert.equal(s.switchShown, false, '2D の時は しつかん を出さない');
     assert.equal(s.contact, false, '2D の時は足元の影なし');
     await pc.page.click('#lookSwitch button[data-look="3d"]');
     await pc.page.waitForFunction(() => window.__app.character.look === '3d', null, { timeout: 30_000 });
-    await sleep(300);
+    const after2d = await pc.page.evaluate(PIXELS);
     s = await pc.page.evaluate(STATE);
     assert.equal(s.switchShown, true);
     assert.equal(s.current, 'fabric', '3D に戻すと選んだ物');
+    const back = diff(before2d, after2d);
+    assert.ok(back.mean < 0.5, `3D に戻した後の絵が前と違う(平均の差 ${back.mean.toFixed(3)}。部屋の光や毛羽の絵が消えた?)`);
     assert.deepEqual(pc.errors, [], `ページのエラー: ${pc.errors.join(' / ')}`);
     await pc.ctx.close();
 

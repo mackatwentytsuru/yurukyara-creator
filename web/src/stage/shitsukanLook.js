@@ -21,6 +21,15 @@ const FUR_MIN_SIZE = 0.12; // 部品の箱の対角がキャラの高さのこ�
 
 let shared = null;
 
+/**
+ * ページの間ずっと使う、みんなで共有する絵は捨てさせない。舞台から外れた子の後片づけ(characterBase の releaseGpu)は、子の材質が持つ絵を
+ * 全部 dispose する。部屋の光(PMREM)は GPU の中にしかないので、一度捨てると次の子から部屋の光が消える(毛羽の絵などは作り直せるが同じ扱いにする)
+ */
+function keepForPage(texture) {
+  texture.dispose = () => {};
+  return texture;
+}
+
 /** ページで 1 回だけ作る物: 毛羽の絵 2 枚・白い絵(毛の殻が色の絵を読むため)・材質の中の計算の値・足元の影の絵 */
 function sharedAssets() {
   if (shared) return shared;
@@ -34,7 +43,7 @@ function sharedAssets() {
     t.generateMipmaps = true;
     t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     t.needsUpdate = true;
-    return t;
+    return keepForPage(t);
   };
   const normal = dataTex(normalFromHeight(h, TEX_SIZE), TEX_SIZE);
   const orm = dataTex(ormFromHeight(h, TEX_SIZE, LOOKS.fabric), TEX_SIZE);
@@ -124,7 +133,7 @@ function ensureEnv(renderer) {
   if (s.env) return s.env;
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
-  s.env = pmrem.fromScene(room, 0.04).texture;
+  s.env = keepForPage(pmrem.fromScene(room, 0.04).texture);
   room.dispose?.();
   pmrem.dispose();
   return s.env;
@@ -143,7 +152,7 @@ function contactTexture() {
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, 128, 128);
-  s.contactTex = new THREE.CanvasTexture(c);
+  s.contactTex = keepForPage(new THREE.CanvasTexture(c));
   return s.contactTex;
 }
 
