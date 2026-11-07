@@ -226,9 +226,15 @@ test('温め: 主役の初めてのあいさつと 7 歩目の声の文を作る
   assert.ok(upstream.some((u) => u.body.text.includes('しつじ')), '読み方の表を通っている');
 });
 
-test('温め: 案内役の最初の 2 文は、初めての会話の台本(script.js)の文と同じ(文が変わったら、ここが知らせる)', () => {
-  const src = readFileSync(join(import.meta.dirname, '..', 'src', 'ui', 'onboarding', 'script.js'), 'utf8');
-  for (const line of warm.GUIDE_FIRST_LINES) assert.ok(src.includes(line.replace('ノリーデス', '${this.guideName}デス')) || src.includes(line), `台本に無い文: ${line}`);
+test('温め: 案内役の最初の 2 文は、初めての会話の台本(script.js)の文と同じ(文が変わったら、ここが知らせる)', async () => {
+  const script = await import('../src/ui/onboarding/script.js');
+  const { MAIN_CHARACTER } = await import('../src/character/defaults.js');
+  if (typeof script.guideFirstLines === 'function') {
+    assert.deepEqual(warm.GUIDE_FIRST_LINES, script.guideFirstLines(MAIN_CHARACTER.name, true), '台本の関数の文をそのまま温める');
+  } else {
+    const src = readFileSync(join(import.meta.dirname, '..', 'src', 'ui', 'onboarding', 'script.js'), 'utf8');
+    for (const line of warm.GUIDE_FIRST_LINES) assert.ok(src.includes(line.replace('ノリーデス', '${this.guideName}デス')) || src.includes(line), `台本に無い文: ${line}`);
+  }
   const texts = warm.warmTargets().map((t) => t.text);
   for (const line of warm.GUIDE_FIRST_LINES) assert.ok(texts.includes(line), '温める文に入っている');
 });

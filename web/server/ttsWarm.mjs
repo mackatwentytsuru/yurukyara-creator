@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { config, REPO_ROOT } from './env.mjs';
 import { firstGreeting } from './greeting.mjs';
 import { personaVoice } from '../src/conversation/voiceRole.js';
-import { VOICE_THANKS } from '../src/ui/onboarding/script.js';
+import * as onboardingScript from '../src/ui/onboarding/script.js';
 import { MAIN_CHARACTER } from '../src/character/defaults.js';
 import { cacheKey } from './ttsCache.mjs';
 import { ttsCache, ttsStatus, synthesizePcm, voiceForRequest } from './tts.mjs';
@@ -20,11 +20,28 @@ export const WARM_MIN_REMAINING = 1500;
 const RETRY_MS = 10 * 60 * 1000;
 // 初めての会話の 7 歩目で主役が声で言う文(script.js の _voice。文が変わったら、ここも合わせる。違っていても、温めが外れるだけ)
 const CARD_VOICE_LINES = ['声でも話せるよ。よろしくね!'];
-// 初めての会話の 1 歩目で、案内役(主役ノリー)が最初に言う 2 文(script.js の start()。文が変わったら、ここも合わせる。試験が見張る)
-export const GUIDE_FIRST_LINES = [
+// 初めての会話の 1 歩目で、案内役(主役ノリー)が最初に言う 2 文。台本(script.js の guideFirstLines)から読む。
+// 台本に guideFirstLines が無い古い版の時だけ、下の控えを使う(温めが外れるだけで、動きは止まらない)
+const FALLBACK_GUIDE_FIRST_LINES = [
   'はじめまして! 執事見習いのノリーデス。きみだけのゆるキャラを生み出すお手伝い、ノリー、がんばりマス!',
   'どんな子を生み出そうか?',
 ];
+const VOICE_THANKS_FALLBACK = '声が出せるようになったよ、ありがとう!';
+
+/** 案内役の最初の 2 文(台本の関数から。読めない時は控え) */
+export function guideFirstLines() {
+  try {
+    const fn = onboardingScript.guideFirstLines;
+    if (typeof fn === 'function') {
+      const lines = fn(MAIN_CHARACTER.name, true);
+      if (Array.isArray(lines) && lines.length && lines.every((l) => typeof l === 'string')) return lines;
+    }
+  } catch {
+    // 台本が読めない時は控えで温める
+  }
+  return FALLBACK_GUIDE_FIRST_LINES;
+}
+export const GUIDE_FIRST_LINES = guideFirstLines();
 
 /** 温める [{ text, voiceId }] の一覧(声を作らない。試験でも使う) */
 export function warmTargets({ ids = [MAIN_CHARACTER.id], dir = join(REPO_ROOT, 'characters'), cfg = config } = {}) {
@@ -39,7 +56,7 @@ export function warmTargets({ ids = [MAIN_CHARACTER.id], dir = join(REPO_ROOT, '
     const own = personaVoice(persona);
     // 画面が送る声と同じ決め方(画面は役と、その子自身の声の id を送る。サーバーは使ってよい声の表に入っていれば使う)
     const { voiceId } = voiceForRequest({ voice: own.role, voiceId: own.voiceId });
-    const lines = [...firstGreeting(persona), ...(id === MAIN_CHARACTER.id ? [...GUIDE_FIRST_LINES, ...CARD_VOICE_LINES, VOICE_THANKS] : [])];
+    const lines = [...firstGreeting(persona), ...(id === MAIN_CHARACTER.id ? [...GUIDE_FIRST_LINES, ...CARD_VOICE_LINES, (onboardingScript.VOICE_THANKS ?? VOICE_THANKS_FALLBACK)] : [])];
     for (const text of lines) out.push({ text, voiceId });
   }
   return out;
