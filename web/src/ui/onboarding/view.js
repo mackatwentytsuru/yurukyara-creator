@@ -282,7 +282,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
       const { bubble, text } = row('user', '');
       text.textContent = line.text;
       if (line.img) {
-        const img = el('img', { className: 'fr-pic', alt: '選んだ絵' });
+        const img = el('img', { className: `fr-pic${/^data:image\/svg\+xml/.test(line.img) ? ' fr-pic-small' : ''}`, alt: line.who === 'user' ? '選んだ絵' : '見本の子の絵' });
         img.src = line.img;
         img.addEventListener('load', scroll, { once: true });
         bubble.append(img);
@@ -415,7 +415,13 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   }
 
   function chipButton(a) {
-    const b = el('button', { type: 'button', className: `fr-btn fr-chip${a.primary ? ' primary' : ''}${a.id === 'again' ? ' fr-again' : ''}`, textContent: a.label, ariaLabel: a.aria ?? a.label });
+    const b = el('button', { type: 'button', className: `fr-btn fr-chip${a.primary ? ' primary' : ''}${a.id === 'again' ? ' fr-again' : ''}${a.img ? ' fr-card' : ''}`, textContent: a.label, ariaLabel: a.aria ?? a.label });
+    // 小さな絵つきの札(見本の子の顔・ゆるキャラの形・しつかんの見本。B4 12b)。絵は data: の URL だけ(外の住所は使わない)
+    if (a.img && /^data:image\/svg\+xml/.test(a.img)) {
+      const pic = el('img', { className: 'fr-card-img', alt: '' });
+      pic.src = a.img;
+      b.prepend(pic);
+    }
     b.dataset.act = a.id;
     b.addEventListener('click', () => {
       voice.unlock();
@@ -551,7 +557,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
    * 出さない時: 選びが無い・最後の「はじめる」だけ・手元の PC の作る画面(枠の中に、作る画面のおまかせがある)
    */
   function autoChip(list) {
-    if (!onAuto || !list.length || list.every((a) => a.id === 'close' || a.id === 'begin') || list.some((a) => a.kind === 'frame')) return null;
+    // noAuto: その歩みに、自分の「おまかせ」の札がある(役目・ゆるキャラの形。おまかせが 2 つ並ばないように)
+    if (!onAuto || !list.length || list.every((a) => a.id === 'close' || a.id === 'begin') || list.some((a) => a.kind === 'frame' || a.noAuto)) return null;
     const b = el('button', { type: 'button', className: 'fr-btn fr-chip fr-auto', textContent: OMAKASE_CHIP });
     b.dataset.act = 'omakase';
     b.setAttribute('aria-label', `${OMAKASE_LABEL}。のこりを ぜんぶ おすすめで きめて、さいごまで すすみます`);

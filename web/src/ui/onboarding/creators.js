@@ -1,46 +1,114 @@
 // 作る道(1〜3 歩目)の受け口。台本(script.js)はこの形だけを使う:
 //   creator.mode            'sample'(見本を出す)| 'local'(手元の PC の作る道具へ渡す)
 //   creator.check(input, o)  → { class: 'yuru'|'human'|'complex', by: 'claude'|'pixels'|'person', message }(絵のときだけ)
-//   creator.make(input, o)   → { id, name, sample: boolean, note, local?, picture?, round? }(できた子。見本なら sample: true)
-//                              見本の道では、言葉が本当に見本に当たる時だけ。当たらない言葉と絵は null(台本が正直に言う)
+//   creator.make(input, o)   → { id, name, sample: boolean, note, exact?, local?, picture?, round? }(できた子。見本なら sample: true)
+//                              見本の道では、いつも いちばん近い見本(言葉の意味・色・形。絵は使う人が教えた色と形)。exact が無ければ
+//                              台本が「ぴったりではないけど、この子はどう?」と言う(B4 12b。行き止まりにしない)
 //   creator.review(id, 'ok'|'redo', 一言, o) → { ok, message }(手元で作った子だけ。K3 の request.json へ)
 //   creator.redrawn(id, o)   → できた子(やり直しの次の回の絵。手元で作った子だけ)
 //   o = { signal, onProgress(text) }。待つ間の様子は onProgress で伝え、signal で待つのをやめられる
-// 'sample': Claude Code で作ってある子を、言葉に当たる時だけ出す(当たらなければ出さない)。絵はこの端末の外に送らない。
+// 'sample': Claude Code で作ってある子から、いちばん近い子を出す。絵はこの端末の外に送らない(この画面は絵を見ない)。
 // 'local' : 言葉か絵 1 枚を、手元の PC の確認画面のサーバー(creator/review/serve_review.py --make)へ渡す。
 //           PC で /yuru-next を打つと、ゆるキャラチェック → 段 0 の絵 → C0 に出る。OK・やり直し+一言は K3 の request.json。
 // 主役の決まりは web/src/character/defaults.js(S5)の 1 か所だけ。ここでは写さずに読む
 import { MAIN_CHARACTER } from '../../character/defaults.js';
-
-/** 見本の子(characters/<id>/ にある物)。words は Claude が絵を描いた元の言葉(記録のある物だけ書く) */
-export const SAMPLE_CHARACTERS = [
-  { id: 'mikan', name: 'みかんちゃん', note: '言葉「みかんの子。まるくて元気。頭に葉っぱが 1 枚」から Claude が描いて作った子', keys: ['みかん', 'オレンジ', 'くだもの', '果物', '葉っぱ'] },
-  { id: 'd_lantern', name: 'ちょうちんくん', note: 'Claude が描いた絵から作った子', keys: ['ちょうちん', '提灯', 'あかり', '明かり', '灯り', 'お祭り'] },
-  { id: 'robo', name: 'ロボくん', note: 'Claude が描いた絵から作った子', keys: ['ロボ', 'ろぼ', 'ロボット', '機械', 'メカ'] },
-  { id: 'f_led', name: 'パネルくん', note: 'Claude が描いた絵から作った子', keys: ['パネル', '画面', 'LED', 'テレビ', 'モニター'] },
-  { id: 'yokoso', name: 'ようこそくん', note: 'Claude が描いた絵から作った子', keys: ['ようこそ', '受付', '案内', 'いらっしゃい', 'みどり', '緑'] },
-];
+import { SAMPLE_THUMBS } from './thumbs.js';
 
 /**
- * 言葉にいちばん近い見本。当たる言葉が 1 つも無ければ null(だまって別の子を出さない。司令塔の決め D1・CRITux 3)
- * @returns {object|null}
+ * 見本の子(characters/<id>/ にある物)。words は Claude が絵を描いた元の言葉(記録のある物だけ書く)。
+ * 近い子を選ぶ手がかり(B4 12b。UIR 1・2): keys = その子そのものの言葉、means = 意味の仲間、colors = 色、shape = 形。
  */
-export function pickSample(words, samples = SAMPLE_CHARACTERS) {
-  const w = String(words ?? '').normalize('NFKC').toLowerCase();
-  let best = null;
-  let bestHits = 0;
-  for (const s of samples) {
-    const hits = s.keys.filter((k) => w.includes(k.normalize('NFKC').toLowerCase())).length;
-    if (hits > bestHits) {
-      best = s;
-      bestHits = hits;
-    }
-  }
-  return best;
+export const SAMPLE_CHARACTERS = [
+  { id: 'mikan', name: 'みかんちゃん', note: '言葉「みかんの子。まるくて元気。頭に葉っぱが 1 枚」から Claude が描いて作った子', keys: ['みかん', 'オレンジ', 'くだもの', '果物', '葉っぱ'],
+    means: ['たべもの', '食べ物', 'やさい', '野菜', 'りんご', 'いちご', 'ぶどう', 'もも', 'パン', 'おにぎり', 'おかし', 'お菓子', 'ケーキ', 'まんじゅう', 'あまい', '甘い', 'たまご', 'すいか'], colors: ['orange', 'yellow'], shape: 'round' },
+  { id: 'd_lantern', name: 'ちょうちんくん', note: 'Claude が描いた絵から作った子', keys: ['ちょうちん', '提灯', 'あかり', '明かり', '灯り', 'お祭り'],
+    means: ['まつり', '祭', 'ひかり', '光', 'よる', '夜', 'なつ', '夏', 'ほし', '星', 'じんじゃ', '神社', 'おてら', 'お寺', 'はなび', '花火', 'ろうそく', 'ほのお', '炎', 'おばけ'], colors: ['red', 'pink'], shape: 'tall' },
+  { id: 'robo', name: 'ロボくん', note: 'Claude が描いた絵から作った子', keys: ['ロボ', 'ろぼ', 'ロボット', '機械', 'メカ'],
+    means: ['でんしゃ', '電車', 'くるま', '車', 'うちゅう', '宇宙', 'ロケット', 'でんき', '電気', 'コンピュータ', 'パソコン', 'てつ', '鉄', 'きんぞく', '金属', 'はかせ', '博士', 'かがく', '科学'], colors: ['blue', 'gray', 'white'], shape: 'box' },
+  { id: 'f_led', name: 'パネルくん', note: 'Claude が描いた絵から作った子', keys: ['パネル', '画面', 'LED', 'テレビ', 'モニター'],
+    means: ['ゲーム', 'おんがく', '音楽', 'スマホ', 'えいが', '映画', 'どうが', '動画', 'うた', '歌', 'ダンス', 'ステージ', 'ライブ', 'ひかる', '光る'], colors: ['black', 'purple', 'blue'], shape: 'flat' },
+  { id: 'yokoso', name: 'ようこそくん', note: 'Claude が描いた絵から作った子', keys: ['ようこそ', '受付', '案内', 'いらっしゃい', 'みどり', '緑'],
+    means: ['まち', '町', 'えき', '駅', 'おみせ', 'お店', '木', 'はな', '花', 'もり', '森', 'やま', '山', 'くさ', '草', 'しょくぶつ', '植物', 'あいさつ', 'げんき', '元気'], colors: ['green'], shape: 'round' },
+];
+
+/** 主役(ノリー)を近い子として選ぶ時の手がかり(ノリーは案内役なので一覧には入れず、ここで足す) */
+export const MAIN_HINTS = {
+  keys: ['カンガルー', 'かんがるー', 'しつじ', '執事'],
+  means: ['どうぶつ', '動物', 'ねこ', '猫', 'いぬ', '犬', 'うさぎ', 'くま', '熊', 'とり', '鳥', 'しっぽ', 'もふもふ', 'ふわふわ', 'パンダ', 'きつね', 'たぬき', 'さる', '猿', 'りす', 'ねずみ', 'こあら', 'コアラ', 'ぺんぎん', 'ペンギン', 'ちょうネクタイ', '蝶ネクタイ', 'てぶくろ', '手袋'],
+  colors: ['brown'],
+  shape: 'tall',
+};
+
+/** 色の言葉(ひらがな・漢字・カタカナ)→ 色の名前。札の色の選びにも使う */
+export const COLOR_WORDS = {
+  red: ['あか', '赤', 'レッド', 'まっか', '真っ赤'], orange: ['オレンジ', 'だいだい', '橙'], yellow: ['きいろ', '黄', 'イエロー', 'きん', '金'],
+  green: ['みどり', '緑', 'グリーン', 'きみどり'], blue: ['あお', '青', 'ブルー', 'みずいろ', '水色', 'そらいろ', '空色'],
+  purple: ['むらさき', '紫', 'パープル'], pink: ['ピンク', 'ももいろ', '桃色'], brown: ['ちゃいろ', '茶', 'ブラウン'],
+  black: ['くろ', '黒', 'ブラック'], white: ['しろ', '白', 'ホワイト'], gray: ['はいいろ', '灰色', 'グレー', 'ぎん', '銀', 'シルバー'],
+};
+/** 色の札(絵の道で、いちばん多い色を聞く。子どもに分かる 8 つ) */
+export const COLOR_CHIPS = [
+  { id: 'red', label: 'あか' }, { id: 'orange', label: 'オレンジ' }, { id: 'yellow', label: 'きいろ' }, { id: 'green', label: 'みどり' },
+  { id: 'blue', label: 'あお' }, { id: 'brown', label: 'ちゃいろ' }, { id: 'pink', label: 'ピンク' }, { id: 'black', label: 'くろ・はいいろ' },
+];
+/** 形の言葉 → 形の名前 */
+export const SHAPE_WORDS = {
+  round: ['まるい', 'まる', '丸', 'ころころ', 'ぷにぷに', 'ボール'], box: ['しかく', '四角', 'はこ', '箱', 'カクカク', 'かくかく'],
+  tall: ['ほそながい', '細長', 'たかい', '背が高', 'のっぽ', 'たて'], flat: ['ひらたい', '平ら', 'うすい', '薄い', 'いた', '板'],
+};
+/** 形の札(絵の道) */
+export const SHAPE_CHIPS = [{ id: 'round', label: 'まるい' }, { id: 'tall', label: 'たてに ながい' }, { id: 'box', label: 'しかく' }, { id: 'any', label: 'わからない' }];
+
+const norm = (s) => String(s ?? '').normalize('NFKC').toLowerCase();
+const hasAny = (w, list) => (list ?? []).filter((k) => w.includes(norm(k))).length;
+const wordsColors = (w) => Object.entries(COLOR_WORDS).filter(([, ks]) => hasAny(w, ks)).map(([c]) => c);
+const wordsShapes = (w) => Object.entries(SHAPE_WORDS).filter(([, ks]) => hasAny(w, ks)).map(([s]) => s);
+
+/** 1 体の点(その子そのもの 6・意味 3・色 2・形 1)。keys に当たった時だけ「ぴったり」 */
+function scoreOf(s, w, colors, shapes) {
+  const keys = hasAny(w, s.keys);
+  const means = hasAny(w, s.means);
+  const color = colors.filter((c) => (s.colors ?? []).includes(c)).length;
+  const shape = shapes.includes(s.shape) ? 1 : 0;
+  return { score: keys * 6 + means * 3 + color * 2 + shape, exact: keys > 0, why: keys ? 'name' : means ? 'meaning' : color ? 'color' : shape ? 'shape' : null };
 }
 
-/** 主役(案内役)の見本としての説明。主役も、協力者が手で描いた絵から Claude Code で作った子 */
-export const MAIN_NOTE = '協力者が手で描いた絵から、Claude Code で作った子';
+/** 決まった順の「いちばん近い子」(手がかりが 0 の時)。同じ言葉なら、いつも同じ子 */
+function steadyPick(w, list) {
+  let h = 0;
+  for (const ch of w) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return list[h % list.length];
+}
+
+/**
+ * 言葉か、絵の色と形に、いちばん近い見本を必ず 1 体返す(行き止まりにしない。UIR 1・2)。
+ * @param {{words?:string, colors?:string[], shape?:string}} q
+ * @param {object[]} [samples] 選べる子(主役を入れる時は MAIN_HINTS を足した物)
+ * @returns {{sample:object, exact:boolean, why:'name'|'meaning'|'color'|'shape'|null}|null} 一覧が空の時だけ null
+ */
+export function nearestSample(q, samples = SAMPLE_CHARACTERS) {
+  const list = (samples ?? []).filter(Boolean);
+  if (!list.length) return null;
+  const w = norm(q?.words);
+  const colors = [...new Set([...(q?.colors ?? []), ...wordsColors(w)])];
+  const shapes = [...new Set([...(q?.shape && q.shape !== 'any' ? [q.shape] : []), ...wordsShapes(w)])];
+  let best = null;
+  for (const s of list) {
+    const r = scoreOf(s, w, colors, shapes);
+    if (!best || r.score > best.score) best = { ...r, sample: s };
+  }
+  if (!best.score) return { sample: steadyPick(w || 'x', list), exact: false, why: null };
+  return { sample: best.sample, exact: best.exact, why: best.why };
+}
+
+/** 言葉にぴったり当たる見本(その子そのものの言葉)。無ければ null(前からの形。試験と README の例で使う) */
+export function pickSample(words, samples = SAMPLE_CHARACTERS) {
+  const r = nearestSample({ words }, samples);
+  return r?.exact ? r.sample : null;
+}
+
+/** 主役(案内役)の見本としての説明。主役も、協力者が手で描いた絵から作った子(UIR 21: 見た目の手がかりを添える) */
+export const MAIN_NOTE = '木の上に すむ カンガルーの子。ながい しっぽと 緑の ちょうネクタイ。協力者が 手で描いた絵から 作った子';
 /** 主役でも見本の一覧でもない子(?character=<id> で呼んだ、このリポジトリの子)の説明 */
 export const OTHER_NOTE = 'Claude Code で作った子';
 
@@ -68,11 +136,29 @@ export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS }
       // Claude の確かめは手元の PC だけ。見本の道では、使う人に選んでもらう(台本がそう伝える)
       return { class: 'complex', by: 'person', message: '' };
     },
-    /** 言葉に本当に当たる見本だけ。絵と、当たらない言葉は null */
+    /**
+     * いちばん近い見本を必ず返す(UIR 1・2)。言葉は意味・色・形で、絵は使う人が教えた色と形で選ぶ(この画面は絵を見ない)。
+     * 案内役(主役)も選べる子に入れる(動物の言葉ならノリー)。exact はその子そのものの言葉に当たった時だけ
+     */
     async make(input) {
-      if (input?.from !== 'words') return null;
-      const s = pickSample(input?.words ?? '', samples);
-      return s ? { id: s.id, name: s.name, sample: true, note: s.note } : null;
+      const g = lead();
+      const mainEntry = g?.id === MAIN_CHARACTER.id || !g?.id
+        ? { id: MAIN_CHARACTER.id, name: MAIN_CHARACTER.name, note: MAIN_NOTE, ...MAIN_HINTS, keys: [...MAIN_HINTS.keys, MAIN_CHARACTER.name], guide: true }
+        : { keys: [], means: [], colors: [], ...(samples.find((s) => s.id === g.id) ?? {}), id: g.id, name: g.name, note: leadNote(g), guide: true };
+      const pool = [...samples.filter((s) => s.id !== mainEntry.id), mainEntry];
+      const q = input?.from === 'picture' ? { colors: input?.colors ?? [], shape: input?.shape ?? 'any' } : { words: input?.words ?? '' };
+      const r = nearestSample(q, pool);
+      if (!r) return null;
+      const s = r.sample;
+      return { id: s.id, name: s.name, sample: true, note: s.note, exact: r.exact, why: r.why, ...(s.guide ? { guide: true } : {}), img: SAMPLE_THUMBS[s.id] ?? null };
+    },
+    /** おまかせで出す子: 案内役とは別の見本から 1 体(偽の完成にしない。UIR 4)。rnd は 0〜1 */
+    surprise(rnd = Math.random) {
+      const g = lead();
+      const others = samples.filter((s) => s.id !== g?.id);
+      if (!others.length) return null;
+      const s = others[Math.min(others.length - 1, Math.floor(rnd() * others.length))];
+      return { id: s.id, name: s.name, sample: true, note: s.note, img: SAMPLE_THUMBS[s.id] ?? null };
     },
     /**
      * 使う人が自分で選ぶ見本の一覧。案内役は「〜で続きを試す」で別に出すので入れない。
@@ -80,9 +166,9 @@ export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS }
      */
     list() {
       const g = lead();
-      const others = samples.filter((s) => s.id !== g?.id).map((s) => ({ id: s.id, name: s.name, sample: true, note: s.note }));
+      const others = samples.filter((s) => s.id !== g?.id).map((s) => ({ id: s.id, name: s.name, sample: true, note: s.note, img: SAMPLE_THUMBS[s.id] ?? null }));
       if (!g?.id || g.id === MAIN_CHARACTER.id) return others;
-      return [{ id: MAIN_CHARACTER.id, name: MAIN_CHARACTER.name, sample: true, note: MAIN_NOTE }, ...others];
+      return [{ id: MAIN_CHARACTER.id, name: MAIN_CHARACTER.name, sample: true, note: MAIN_NOTE, img: SAMPLE_THUMBS[MAIN_CHARACTER.id] ?? null }, ...others];
     },
     /** 案内役を、見本の子として出す時の形 */
     main() {
@@ -122,7 +208,7 @@ export function pageIsLocal(loc = globalThis.location) {
   return isLoopbackHost(loc?.hostname);
 }
 
-const MAKE_EVENTS = new Set(['ready', 'sent', 'progress', 'checked', 'chose', 'drawn', 'decided', 'restart', 'error']);
+const MAKE_EVENTS = new Set(['ready', 'sent', 'progress', 'checked', 'chose', 'drawn', 'decided', 'restart', 'error', 'twod', 'converted']);
 const clipText = (s, n) => [...String(s ?? '')].slice(0, n).join('');
 const STAGE_WORDS = ['絵', '読む', '形', '色と材質', '模様', '骨', '動き', '話す'];
 const GATE_WORDS = { 0: '絵', 2: '形', 3: '色と材質', 5: '話す' };
@@ -148,6 +234,13 @@ export function cleanMakeEvent(d) {
     Object.assign(e, { class: d.class, message: plainWords(clipText(d.message, 120)), by: d.by === 'claude' ? 'claude' : 'pixels' });
   }
   if (d.ev === 'chose') e.choice = d.choice === 'redraw' ? 'redraw' : 'yurufy';
+  // 2D ができた(パソコンが characters/<id>/2d を組んだ)・変換の絵を OK した / 描き直したい(B4 12b)
+  if (d.ev === 'twod' || d.ev === 'converted') {
+    if (!/^[a-z0-9_]{1,32}$/.test(String(d.id ?? ''))) return null;
+    e.id = String(d.id);
+    if (d.ev === 'converted' && d.again === true) e.again = true;
+    return e;
+  }
   if (d.ev === 'drawn' || d.ev === 'decided') {
     if (d.id !== undefined && !/^[a-z0-9_]{1,32}$/.test(String(d.id))) return null;
     if (d.id !== undefined) e.id = String(d.id);

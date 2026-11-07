@@ -13,6 +13,7 @@ function harness({ creator = createSampleCreator({ main: MAIN }), guide = MAIN, 
   const said = [];
   const steps = [];
   const stored = new Map();
+  const shown = [];
   let offered = [];
   let done = false;
   const fr = new FirstRun({
@@ -27,13 +28,16 @@ function harness({ creator = createSampleCreator({ main: MAIN }), guide = MAIN, 
     offer: (a) => {
       offered = a;
     },
-    showCharacter: async () => true,
+    showCharacter: async (c) => {
+      shown.push(c?.id);
+      return true;
+    },
     onStep: (n, info) => steps.push({ n, ...info }),
     onDone: () => {
       done = true;
     },
   });
-  return { fr, said, steps, stored, get offered() { return offered.map((a) => a.id); }, get done() { return done; }, texts: (who) => said.filter((l) => !who || l.who === who).map((l) => l.text) };
+  return { fr, said, steps, stored, shown, get offered() { return offered.map((a) => a.id); }, get done() { return done; }, texts: (who) => said.filter((l) => !who || l.who === who).map((l) => l.text) };
 }
 
 test('あと いくつ・あと 何分: どの歩みでも、子どもに分かる言葉で出る', () => {
@@ -47,7 +51,7 @@ test('あと いくつ・あと 何分: どの歩みでも、子どもに分か�
   assert.equal(seen[0], 'あと 6 つ');
   assert.equal(seen[5], 'あと 1 つ');
   assert.equal(seen[6], 'これで さいご!');
-  assert.deepEqual(progressText(8), { left: 0, main: 'できあがり!', time: '' });
+  assert.deepEqual(progressText(8), { left: 0, main: 'じゅんび OK!', time: '' }, '作っていない時に「できあがり」と言わない(UIR 4)');
   assert.equal(progressText(1).time, '2 分くらい', '見本の道の 7 歩は 2 分くらい');
   assert.equal(progressText(3, { skipped: [2] }).left, 4, 'とばした歩みは数えない(言葉の時のチェック)');
   assert.ok(Number(progressText(1, { local: true }).time.match(/\d+/)[0]) >= 5, '手元の PC で描く時は、描く時間を足す');
@@ -61,12 +65,16 @@ test('おまかせ: 1 歩目の 1 回で、最後まで進む(主役・その子
   assert.equal(await h.fr.omakase(), true);
   assert.equal(h.done, true, '1 回で終わる');
   assert.equal(h.fr.done, true);
-  assert.equal(h.fr.character.id, MAIN.id, '子がまだいなければ、案内役の主役');
-  assert.ok(h.stored.get(MAIN.id), '性格を覚えた');
+  const pick = h.fr.character;
+  assert.ok(pick.id && pick.id !== MAIN.id && pick.sample, '子がまだいなければ、案内役とは別の見本の子を本当に出す(UIR 4)');
+  assert.deepEqual(h.shown, [pick.id], 'その子を舞台に出す');
+  assert.ok(h.texts('guide').includes(`おまかせで えらんだのは、${pick.name}!`));
+  assert.ok(h.stored.get(pick.id), '性格を覚えた');
+  assert.equal(h.stored.get(pick.id).role, 'home', '役目もおまかせ(おうち)');
   assert.equal(h.texts('user')[0], OMAKASE_LABEL);
   assert.ok(h.texts('guide').includes('おまかせで、ぜんぶ きめマシタ!'), 'ノリーの口調で言う');
-  const note = h.texts('note').find((t) => t.startsWith('きめたこと: '));
-  assert.ok(note && /ノリー/.test(note) && /文字と おと/.test(note), note);
+  const note = h.texts('note').find((t) => t.startsWith(`${pick.name}は、`));
+  assert.ok(note && /話す 子に したよ。$/.test(note), note);
   assert.ok(h.texts('note').includes('ぜんぶ、あとから かえられるよ。'), 'あとから変えられると言う');
   assert.deepEqual(h.offered, ['begin'], '終わっても札は自動で閉じない。決めたことと「はじめる」だけを出す(QF4 中 5)');
   assert.equal(h.steps.at(-1).n, 8);
@@ -110,12 +118,15 @@ test('おまかせ: 手元の PC の作る道(作る画面のおまかせ)から
   const creator = { mode: 'local', frameUrl: 'http://127.0.0.1:8796/m/#k=x', note: '', picUrl: null, main: () => MAIN, list: () => [] };
   const h = harness({ creator });
   await h.fr.start();
+  await h.fr.act('role_home');
   assert.deepEqual(h.offered, ['frame']);
   assert.equal(h.steps.at(-1).local, true, '歩みの知らせに手元の PC の印');
   await h.fr.makeEvent(cleanMakeEvent({ src: 'yc-make', ev: 'sent', from: 'words', words: 'まるくて げんきな ゆるキャラ', auto: true }));
   await h.fr.makeEvent(cleanMakeEvent({ src: 'yc-make', ev: 'drawn', id: 'yc1107_1830_abcd', name: 'まるこ', round: 1, noBrows: true }));
   await h.fr.makeEvent(cleanMakeEvent({ src: 'yc-make', ev: 'decided', decision: 'ok', id: 'yc1107_1830_abcd', name: 'まるこ', round: 2, auto: true }));
-  assert.equal(h.done, true, '「この子にする」の後も、おすすめで最後まで');
+  assert.equal(h.done, false, '2D ができるのを待つ');
+  await h.fr.makeEvent(cleanMakeEvent({ src: 'yc-make', ev: 'twod', id: 'yc1107_1830_abcd' }));
+  assert.equal(h.done, true, '「この子にする」→ 2D の後も、おすすめで最後まで(3D は聞かない)');
   assert.ok(h.stored.get('yc1107_1830_abcd'), 'できた子の性格を覚えた');
   assert.ok(!h.offered.includes('persona_ok'), '性格の選びで止まらない');
 });

@@ -81,6 +81,10 @@ export const CSS = `
   background: rgba(125,98,255,0.14); border: 1.5px solid rgba(183,168,255,0.55); display: inline-flex; align-items: center; justify-content: center;
   text-align: center; line-height: 1.3; font-weight: 600; overflow-wrap: anywhere; text-decoration: none; -webkit-tap-highlight-color: transparent; }
 .fr-chip { flex: 0 1 auto; max-width: 100%; font-size: 15px; padding: 6px 14px; }
+/* 小さな絵つきの札(見本の子・ゆるキャラの形・しつかん。B4 12b)。絵の上に名前。押す所は 44px 以上 */
+.fr-chip.fr-card { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 10px; min-width: 64px; line-height: 1.2; }
+.fr-card-img { width: 40px; height: 40px; display: block; pointer-events: none; }
+.fr-pic.fr-pic-small { width: 56px; height: 56px; object-fit: contain; }
 .fr-btn.primary, .yp-save { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 1.5px solid transparent; font-weight: 800; color: #fff; }
 .fr-btn.fr-auto { border: 2px solid var(--fr-mint); background: rgba(123,224,195,0.12); color: var(--fr-text); }
 .fr-btn:active { transform: translateY(1px); filter: brightness(1.12); }

@@ -127,6 +127,66 @@
           "type": "string"
         }
       }
+    },
+    "role": {
+      "enum": [
+        "home",
+        "shop",
+        "station",
+        "facility"
+      ],
+      "description": "役目(この子は、どこで だれと。B4 12b)。無ければ home。web/src/ui/onboarding/roles.js と同じ 4 つ"
+    },
+    "place": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 30,
+      "description": "お店・駅の名前(使う人が書いた時だけ)"
+    },
+    "convert": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "shape",
+        "material",
+        "at",
+        "round"
+      ],
+      "additionalProperties": false,
+      "description": "3D 用のゆるキャラ変換の頼み(「3D にもする?」の後。B4 12b)。round は何回目の変換の絵か。ok_at は人が OK した時",
+      "properties": {
+        "shape": {
+          "enum": [
+            "atama",
+            "maru"
+          ]
+        },
+        "material": {
+          "enum": [
+            "fabric",
+            "fur",
+            "vinyl"
+          ]
+        },
+        "at": {
+          "type": "string"
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "ok_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     }
   }
 }

@@ -33,6 +33,8 @@ import { MAIN_CHARACTER } from '../../character/defaults.js';
 import { isSpecId } from '../../character/urlSpec.js';
 
 export const DONE_KEY = 'yc.onboarded.v1';
+/** 作る入口のボタンの名前(UIR 16) */
+export const START_LABEL = 'あたらしい子を つくる';
 export const RESUME_KEY = 'yc.onboarding.resume.v1';
 export const MAKE_KEY = 'yc.make.v1';
 export const PROGRESS_KEY = 'yc.onboarding.progress.v1'; // 歩みごとの途中経過(この端末の中だけ。読み込み直しても続きから。高 1)
@@ -396,7 +398,8 @@ export function mountFirstRun({
   /** できた子を舞台に出す(既定)。その場で入れ替えて、続きはそのまま(読み込み直さない) */
   async function defaultShow(c) {
     if (!app || !c?.id) return true; // 舞台が無い(試しの画面)
-    if (c.local) return true; // 手元で描いたばかりの子は、まだ形(3D)が無い。舞台は案内役のまま、描いた絵を札に出す(D5)
+    // 手元で描いたばかりの子: パソコンが 2D を組むまで(twod)は、舞台は案内役のまま(D5)。2D ができたら、その場で 2D を出す(B4 12b)
+    if (c.local && !c.twod) return true;
     try {
       const ok = await putOnStage(c.id);
       if (!ok && stageId() !== c.id) await sheet?.present([{ who: 'note', text: `${c.name}は、いま舞台に出せません。札の中で続けます。` }], {});
@@ -801,7 +804,8 @@ export function mountFirstRun({
   const personaBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: '性格', className: buttonHost ? 'place-mode-button fr-launch' : 'fr-launch floating' });
   personaBtn.dataset.firstrun = 'persona';
   personaBtn.addEventListener('click', () => openPersona());
-  const startBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: 'はじめての会話', className: buttonHost ? 'place-mode-button fr-launch' : 'fr-launch floating' });
+  // 作る入口の名前は「あたらしい子を つくる」(UIR 16。前の「はじめての会話」は、押すと何が起きるか分からなかった)
+  const startBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: START_LABEL, className: buttonHost ? 'place-mode-button fr-launch' : 'fr-launch floating' });
   startBtn.dataset.firstrun = 'start';
   startBtn.addEventListener('click', () => startOnboarding());
   if (buttonHost) host.append(personaBtn, startBtn);

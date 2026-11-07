@@ -13,6 +13,9 @@
   会話の画面は /m/ を枠(iframe)に入れ、状態の知らせ(postMessage)だけを受け取る。/m/ を枠に入れてよいのは --allow-origin の元
   (--web の元と、この PC の 5173・8787 は既定で入る)だけ。枠の中は Cookie が使えないので、合言葉は見出し X-YC-Key で送る
   (合言葉は枠の URL の # の後ろで渡す。# はサーバーに送られない)。よその元からの呼び出し(CORS)は受けない。
+- --auto-next claude(既定)/ direct / off: 作る画面から頼みが届いたら(合言葉の門を通った書き込みの後だけ)、このサーバーが
+  使う人の Claude Code で /yuru-next を自分で流す(1 回に 1 本・時間の上限つき。auto_next.py)。スマホだけで作れる(B4 12b)。
+  off にすると前と同じ(PC で /yuru-next と打つ)。
 """
 import argparse
 import hmac
@@ -32,11 +35,13 @@ from urllib.parse import parse_qs, urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import review_state as rs  # noqa: E402
 import redo_check as rc  # noqa: E402
+import auto_next as an  # noqa: E402
 
 PAGE_DIR = Path(__file__).resolve().parent / "page"
 ASSET_RE = re.compile(r"^[a-z0-9_]+\.(js|css)$")
 MAKE_PAGE = "make.html"
 FILE_RE = re.compile(r"^/api/review/file/(C0|C2|C3|C5)/r(\d{1,3})/([a-z0-9_]{1,48}\.(?:png|jpg|svg|json))$")
+CONVERT_RE = re.compile(r"^/api/review/convert/r([1-5])/(drawing\.png|drawing\.svg)$")   # 3D 用のゆるキャラ変換の絵(B4 12b)
 TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml", ".json": "application/json",
          ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8"}
 CSP_PAGE = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; "
@@ -173,7 +178,7 @@ class Current:
         self.make = make
 
 
-def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=None):
+def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=None, runner=None):
     same = {f"http://{h}" for h in hosts}
     allow = set(allow) - same
 
@@ -304,6 +309,12 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
             m = FILE_RE.match(p)
             if m:
                 return self._bundle_file(m.group(1), int(m.group(2)), m.group(3))
+            m = CONVERT_RE.match(p)
+            if m:
+                target = (rs.review_dir(cid) / "convert" / f"r{m.group(1)}" / m.group(2)).resolve()
+                if target.parent.parent != (rs.review_dir(cid) / "convert").resolve() or not target.is_file():
+                    return self._err(404, "not_found", "まだ描けていません")
+                return self._file(target)
             if p == "/api/review/original":
                 st = rs.load_state(cid)
                 if not st["original"]:
@@ -344,7 +355,8 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
                 first = ("<h2 style='font-size:18px'>この PC の初めての会話(言葉か絵で作る)</h2>"
                          f"<p style='word-break:break-all'><a href='{escape(link, quote=True)}'>{escape(link.replace(gate.token, '••••••'))}</a></p>"
                          "<p>開くと、初めての会話の 1〜3 つ目のステップの中に、この PC の作る画面が出ます。言葉か絵を入れたら、"
-                         "Claude Code で /yuru-next と打ってください。</p>")
+                         + ("この PC が自分で Claude Code を動かして描きます(/yuru-next を打たなくてよい)。</p>" if runner and runner.on
+                            else "Claude Code で /yuru-next と打ってください。</p>"))
             html = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                     "<title>確認画面の入口</title><body style='font:16px sans-serif;margin:24px'>"
                     f"<h1 style='font-size:20px'>スマホで読む QR({cur.id or '作る道'})</h1>{qr}"
@@ -361,12 +373,13 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
                 return self._json(200, {"state": None, "pending": None, "make": None, "tags": {g: rs.TAGS[g] for g in ("C0", "C2")},
                                         "note_max": rs.NOTE_MAX, "words_max": rs.WORDS_MAX, "redo_max": rs.C0_REDO_MAX,
                                         "server": {"mode": "live", "can_write": gate.has(self._sid()) or self._key_ok(),
-                                                   "lan": bind_public, "make": cur.make}})
+                                                   "lan": bind_public, "make": cur.make, "auto": runner.status() if runner else None}})
             st = rs.load_state(cid)
             pend = rs.pending(cid)
             mk = rs.load_make(cid)
             choice = (mk or {}).get("choice") or {}
-            etag = f'"{st["rev"]}-{1 if pend else 0}-{1 if choice else 0}"'
+            auto = runner.status() if runner else None
+            etag = f'"{st["rev"]}-{1 if pend else 0}-{1 if choice else 0}-{(auto or {}).get("runs", 0)}{1 if (auto or {}).get("busy") else 0}"'
             if self.headers.get("If-None-Match") == etag:
                 self.send_response(304)
                 self.send_header("ETag", etag)
@@ -377,7 +390,7 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
             make = ({"from": mk["from"], "created_at": mk["created_at"], "choice": choice.get("value")} if mk else None)
             self._json(200, {"state": st, "pending": pend, "make": make, "tags": {g: rs.TAGS[g] for g in ("C0", "C2")},
                              "note_max": rs.NOTE_MAX, "words_max": rs.WORDS_MAX, "redo_max": rs.C0_REDO_MAX,
-                             "server": {"mode": "live", "can_write": can_write, "lan": bind_public, "make": cur.make}},
+                             "server": {"mode": "live", "can_write": can_write, "lan": bind_public, "make": cur.make, "auto": auto}},
                        extra={"ETag": etag})
 
         def _bundle(self, g, rnd):
@@ -406,6 +419,11 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
         # ---------- POST ----------
         def do_POST(self):
             path = urlsplit(self.path).path
+
+            def kick():
+                # 合言葉の門を通った書き込みの後だけ、/yuru-next を自分で流す(--auto-next off なら何もしない)
+                if runner:
+                    runner.kick()
             limit = MAKE_MAX if path == "/api/review/make" and cur.make else BODY_MAX
             # 先に本文を読み切る(読まずに断ると、残りが次の呼び出しとして読まれる。実測)
             try:
@@ -444,14 +462,25 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
                     if path == "/api/review/make" and cur.make:
                         rec = rs.make_new(body, client_kind(self.headers.get("User-Agent")))
                         cur.id = rec["id"]
+                        kick()
                         return self._json(201, {"id": rec["id"], "make_id": rec["make_id"]})
                     if cur.id is None:
                         return self._err(404, "not_found", "まだ子がいません")
                     if path == "/api/review/make/choice" and cur.make:
                         rs.make_choice(cur.id, body)
+                        kick()
                         return self._json(200, {"ok": True})
+                    if path == "/api/review/make/convert" and cur.make and cur.id:
+                        cv = rs.make_convert(cur.id, body)
+                        kick()
+                        return self._json(201, {"round": cv["round"]})
+                    if path == "/api/review/make/convert_ok" and cur.make and cur.id:
+                        cv = rs.make_convert_ok(cur.id, body)
+                        kick()
+                        return self._json(200, {"ok": True, "round": cv["round"]})
                     if path == "/api/review/decision":
                         req = rs.make_request(cur.id, body, client_kind(self.headers.get("User-Agent")))
+                        kick()
                         return self._json(201, {"request_id": req["request_id"]})
                     if path == "/api/review/cancel":
                         rs.cancel_request(cur.id, (body or {}).get("request_id"))
@@ -473,6 +502,10 @@ def main(argv=None):
     ap.add_argument("--make", action="store_true", help="初めての会話から、言葉か絵 1 枚で新しい子を受け付ける")
     ap.add_argument("--web", help="初めての会話の画面の元(例 http://localhost:5173)。/qr に入口を出し、作る画面を枠に入れてよい元にする")
     ap.add_argument("--allow-origin", action="append", default=[], help="作る画面(/m/)を枠に入れてよい元(何回でも)")
+    ap.add_argument("--auto-next", choices=an.MODES, default=None,
+                    help="頼みが届いたら /yuru-next を自分で流す(claude = 使う人の Claude Code で /yuru-next、direct = yuru_make.py next、off = 流さない)")
+    ap.add_argument("--auto-args", default="", help="direct の時に yuru_make.py next へ足す引数(試験用。例 --fake-draw --fake-check yuru)")
+    ap.add_argument("--auto-timeout", type=int, default=an.JOB_TIMEOUT, help="1 本の時間の上限(秒)")
     args = ap.parse_args(argv)
     if not args.id and not args.make:
         print("子の id か --make のどちらかを渡してください", file=sys.stderr)
@@ -543,8 +576,20 @@ def main(argv=None):
     hosts = [f"127.0.0.1:{port}", f"localhost:{port}"] if bind == "127.0.0.1" else [f"{bind}:{port}"]
     if bind != "127.0.0.1":
         hosts = [f"127.0.0.1:{port}", f"localhost:{port}"] + hosts
+    runner = None
+    # 既定は claude。試験(YC_REVIEW_TEST=1)の時は、決めて渡した時だけ流す(試験で本物の Claude を起こさない)
+    if args.auto_next is None:
+        args.auto_next = "off" if os.environ.get("YC_REVIEW_TEST") == "1" else "claude"
+    if args.make and args.auto_next != "off":
+        import yuru_make as ym   # 進められる物があるか(1 本流した後に、続けて流すか)
+
+        def _log(*parts):
+            print("[auto-next]", *[str(x).replace(chr(10), " ")[:200] for x in parts], flush=True)
+
+        runner = an.AutoNext(args.auto_next, extra=args.auto_args.split(), timeout=max(60, min(args.auto_timeout, 1200)),
+                             has_work=lambda: bool(ym.candidates()), log=_log)
     handler = make_handler(Current(args.id, args.make), gate, threading.Lock(), hosts, bind != "127.0.0.1", port,
-                           allow=origins, web=args.web)
+                           allow=origins, web=args.web, runner=runner)
     srv.RequestHandlerClass = handler
     if local_srv:
         local_srv.RequestHandlerClass = handler
@@ -554,6 +599,8 @@ def main(argv=None):
     print(f"確認画面: {args.id or '作る道(初めての会話から言葉か絵で作る)'}({where}。{args.hours:g} 時間で切れます)")
     print(f"PORT {port}")
     print(f"スマホで開くには、この PC のブラウザで http://127.0.0.1:{port}/qr を開き、QR を読んでください。")
+    if runner:
+        print(f"頼みが届いたら、この PC が自分で /yuru-next を流します({args.auto_next}。止めるには --auto-next off)。")
     print("合言葉は、その画面にだけ出し、記録しません。止めるときは Ctrl+C。", flush=True)
     local_thread = None
     try:

@@ -101,16 +101,18 @@
     </div>
   </div>
 
-  <!-- 入口。閉じるまで、上の段(html.gate-up の間は隠す)は押せない。初めての訪問なら、閉じた後に「はじめての会話」(7 つのステップ)が出る -->
+  <!-- 入口。閉じるまで、上の段(html.gate-up の間は隠す)は押せない。初めての訪問なら、閉じた後に「あたらしい子を つくる」(7 つのステップ)が出る -->
   <div id="gate" class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
     <div class="gate-card">
       <h1 id="gateTitle">ゆるキャラクリエイター</h1>
-      <p class="gate-what" id="gateWhat">言葉か絵 1 枚から、話して覚えるゆるキャラを作れます。</p>
-      <p class="gate-guide" id="gateGuide">案内するのは主役の<b>ノリー</b>。協力者が手で描いた、セスジキノボリカンガルーの執事見習いです。</p>
+      <!-- B4(12b): 入口の約束は、この版で本当にできることだけ(UIR 3)。主役は「カメラなしで試す」、カメラは 2 つ目(UIR 22)。ノリーの見た目の手がかり(UIR 21) -->
+      <p class="gate-what" id="gateWhat">ノリーや 見本の子と 話そう。ことばや 絵から、にた子を えらべるよ。話したことを 覚えるよ。</p>
+      <p class="gate-guide" id="gateGuide">案内するのは主役の<b>ノリー</b>。木の上に すむ カンガルーの子で、ながい しっぽと 緑の ちょうネクタイが 目じるし。協力者が手で描いた、セスジキノボリカンガルーの執事見習いです。</p>
       <p class="lead" id="gateLead">キャラがあなたの方を見て、文字で答えます。声は、声の鍵があるときだけ出ます。</p>
-      <p class="gate-first" id="gateFirst" hidden>はじめてなら、このあと「はじめての会話」(7 つのステップ)が始まります。キャラ作りの流れを試せます。</p>
-      <button id="startCam" class="primary" type="button" disabled><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">読み込んでいます…</small></button>
-      <button id="startSim" class="ghost" type="button" disabled><span class="btn-main">カメラなしで試す</span><small class="btn-sub" id="simSub">読み込んでいます…</small></button>
+      <p class="gate-first" id="gateFirst" hidden>はじめてなら、このあと「あたらしい子を つくる」が始まります。すぐ おわるよ。</p>
+      <button id="startSim" class="primary" type="button" disabled><span class="btn-main">カメラなしで試す</span><small class="btn-sub" id="simSub">読み込んでいます…</small></button>
+      <button id="startCam" class="ghost" type="button" disabled><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">読み込んでいます…</small></button>
+      <!-- /B4 -->
       <label class="pass" id="passField" hidden>
         <span>合言葉(あれば。無くても仮の頭脳で話せます)</span>
         <input id="passInput" type="password" autocomplete="off" maxlength="200" />

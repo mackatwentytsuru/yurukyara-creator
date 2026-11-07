@@ -118,6 +118,7 @@ function harness({ frameWaitMs } = {}) {
   const said = [];
   const stored = new Map();
   let offered = [];
+  const shown = [];
   const win = fakeWindow();
   const creator = createLocalCreator({ base: 'http://127.0.0.1:8796', key: 'test-key', parentOrigin: 'http://localhost:5173', win });
   const pins = [];
@@ -134,7 +135,10 @@ function harness({ frameWaitMs } = {}) {
     offer: (a) => {
       offered = a;
     },
-    showCharacter: async () => true,
+    showCharacter: async (c) => {
+      shown.push({ id: c?.id, twod: Boolean(c?.twod) });
+      return true;
+    },
     ...(frameWaitMs ? { frameWaitMs } : {}),
   });
   creator.listen((e) => fr.makeEvent(e));
@@ -142,19 +146,24 @@ function harness({ frameWaitMs } = {}) {
     win.post('http://127.0.0.1:8796', { src: 'yc-make', ...data });
     await fr.makeQueue;
   };
-  return { fr, said, send, stored, pins, get offeredAll() { return offered; }, get offered() { return offered.map((a) => a.id); }, texts: (who) => said.filter((l) => l.who === who).map((l) => l.text) };
+  return { fr, said, send, stored, pins, shown, get offeredAll() { return offered; }, get offered() { return offered.map((a) => a.id); }, texts: (who) => said.filter((l) => l.who === who).map((l) => l.text) };
 }
 
 test('言葉 → PC の絵 → 直したい(一言)= G1 → 2 回目 → この子にする → 性格へ(枠からの知らせで進む)', async () => {
   const h = harness();
   await h.fr.start();
   assert.ok(h.texts('guide')[0].includes('ノリーデス'), '案内役はノリー');
+  assert.ok(h.offered.every((id) => id.startsWith('role_')), '先に「どこで だれと」を聞く(B4 12b)');
+  await h.fr.act('role_shop');
+  assert.ok(h.texts('guide').includes('おみせの なまえは?'), 'お店は名前を聞く');
+  await h.fr.act('place_name', { text: 'ひだまりパン' });
+  await h.fr.act('place_about', { text: 'パンの しゅるい' });
   assert.ok(h.texts('note').some((t) => t.includes('Anthropic)に 送られるよ')), '言葉と絵がどこへ行くかを先に言う');
   assert.deepEqual(h.offered, ['frame'], '1〜3 歩の入力は PC の作る画面(枠)');
-  assert.equal(h.offeredAll[0].url, 'http://127.0.0.1:8796/m/#k=test-key&p=http%3A%2F%2Flocalhost%3A5173');
+  assert.equal(h.offeredAll[0].url, 'http://127.0.0.1:8796/m/#k=test-key&p=http%3A%2F%2Flocalhost%3A5173&role=shop&place=%E3%81%B2%E3%81%A0%E3%81%BE%E3%82%8A%E3%83%91%E3%83%B3', '役目と場所の名前を作る画面へ # の後ろで渡す');
   await h.send({ ev: 'sent', from: 'words', words: '赤い提灯の子' });
   assert.equal(h.fr.step, 3);
-  assert.deepEqual(h.texts('user'), ['赤い提灯の子']);
+  assert.deepEqual(h.texts('user'), ['おみせの あんない', 'ひだまりパン', 'パンの しゅるい', '赤い提灯の子']);
   assert.ok(!h.texts('guide').some((t) => t.includes('/yuru-next')) && h.texts('guide').some((t) => t.includes('パソコンの Claude Code に わたしたよ')), '子どもの画面にパソコンのコマンドを出さない(動かし方は作る画面の中。OL1)');
   await h.send({ ev: 'progress', text: '絵を描いています(1 回目。数分かかります)' });
   await h.send({ ev: 'progress', text: '絵を描いています(1 回目。数分かかります)' });
@@ -173,21 +182,35 @@ test('言葉 → PC の絵 → 直したい(一言)= G1 → 2 回目 → この�
   assert.ok(h.texts('guide').includes('なおしてみたよ。どうかな?'));
   assert.deepEqual(h.offered, ['frame'], '決めるまでは枠のまま');
   await h.send({ ev: 'decided', decision: 'ok', id: 'yc1106_2201_ab12', name: 'ちょうちんちゃん', round: 2 });
-  assert.equal(h.fr.step, 4);
-  assert.ok(h.texts('guide').includes('ちょうちんちゃんに けってい! パソコンに つたえたよ。'));
-  const notes = h.texts('note');
-  const at = notes.findIndex((t) => t.includes('この画面からは まだ はじまらないよ'));
-  const told = at >= 0 ? notes.slice(at - 1, at + 2).join(' ') : null;
-  assert.ok(told, 'できていない所(3D)を正直に言う: この画面からは始まらない・make-character で作る');
-  assert.match(told, /パソコンの Claude Code で つくれるよ/);
-  assert.ok(!/make-character|スキル|README/.test(told), '開発の言葉を出さない(中 9)');
-  assert.ok(!/これから作ります|続けて作ります/.test(told), '始まっていない物を「作っています」と言わない(CRITux3 M2)');
-  assert.match(told, /ノリーが かわりに 舞台に立って、ちょうちんちゃんの ことばを 話すよ/, '主役が代わりに立つと言う(D5)');
-  assert.ok(!/段 \d|C0/.test(told), '内部の言葉(段 1〜6・C0)を出さない(D7)');
+  assert.equal(h.fr.step, 3);
+  assert.ok(h.texts('guide').includes('ちょうちんちゃんに けってい! いま、うごく 2D に して 舞台に 出すよ。'), 'この子にするの直後に 2D を出す(B4 12b)');
   assert.equal(h.pins.at(-1)?.frame, 'http://127.0.0.1:8796/m/#k=test-key&p=http%3A%2F%2Flocalhost%3A5173&view=pic', '描いた絵だけの枠を、札の上に出したままにする(D5)');
   assert.match(h.pins.at(-1)?.caption ?? '', /ちょうちんちゃん/);
+  assert.deepEqual(h.offered, ['keep'], '2D が来ない時も行き止まりにしない(先に性格へ)');
+  await h.send({ ev: 'twod', id: 'yc1106_2201_ab12' });
+  assert.deepEqual(h.shown.at(-1), { id: 'yc1106_2201_ab12', twod: true }, '2D ができたら、その場で舞台に出す');
+  assert.ok(h.texts('guide').includes('ちょうちんちゃんが 舞台に でたよ! まばたきも するよ。'));
+  assert.ok(h.texts('guide').includes('3D にもする?(やく 20 ぷん)'));
+  assert.deepEqual(h.offered, ['want3d', 'no3d']);
+  await h.fr.act('want3d');
+  assert.ok(h.texts('note').includes('3D は、ゆるキャラの かたちに ととのえて つくるよ(もとの えと まったく おなじには ならないよ)'));
+  assert.deepEqual(h.offered, ['cs_atama', 'cs_maru', 'conv_auto'], '形は見本の絵で選ぶ(既定 あたまでっかち)');
+  assert.ok(h.offeredAll[0].img && h.offeredAll[0].primary);
+  await h.fr.act('cs_maru');
+  assert.deepEqual(h.offered, ['cm_fabric', 'cm_fur', 'cm_vinyl', 'conv_auto']);
+  await h.fr.act('cm_fur');
+  assert.deepEqual(h.offered, ['frame', 'no3d']);
+  assert.match(h.offeredAll[0].url, /&view=convert&cid=yc1106_2201_ab12&shape=maru&mat=fur$/, '選んだ形と しつかんを作る画面へ渡す');
+  await h.send({ ev: 'converted', id: 'yc1106_2201_ab12' });
+  assert.equal(h.fr.step, 4);
+  assert.ok(h.texts('guide').includes('この かたちで 3D に するね。パソコンで つくるよ(やく 20 ぷん)。'));
   assert.deepEqual(h.offered, ['persona_ok', 'persona_edit', 'persona_roll']);
-  assert.ok(h.stored.get('yc1106_2201_ab12'), '性格はできた子の id で覚える');
+  const s = h.stored.get('yc1106_2201_ab12');
+  assert.ok(s, '性格はできた子の id で覚える');
+  assert.equal(s.role, 'shop');
+  assert.deepEqual(s.place, { name: 'ひだまりパン', about: 'パンの しゅるい' });
+  const all = h.said.map((l) => l.text).join(' ');
+  assert.ok(!/make-character|スキル|README|段 \d|C0/.test(all), '開発の言葉・内部の言葉を出さない(中 9・D7)');
   await h.send({ ev: 'drawn', id: 'yc1106_2201_ab12', name: 'x', round: 3 });
   assert.equal(h.fr.step, 4, '4 歩目より後は、枠の知らせで戻らない');
 });
@@ -215,11 +238,13 @@ test('絵 → PC のチェック(人の絵)→ ゆるキャラにしてみる �
 test('作る画面から「開いた」の知らせが来なければ、黙らずに言う(来れば言わない)', async () => {
   const quiet = harness({ frameWaitMs: 40 });
   await quiet.fr.start();
+  await quiet.fr.act('role_home');
   await quiet.send({ ev: 'ready' });
   await new Promise((r) => setTimeout(r, 120));
   assert.ok(!quiet.texts('note').some((t) => t.includes('ひらけないよ')));
   const lost = harness({ frameWaitMs: 40 });
   await lost.fr.start();
+  await lost.fr.act('role_auto');
   await new Promise((r) => setTimeout(r, 120));
   assert.ok(lost.texts('note').some((t) => t.includes('ひらけないよ') && !t.includes('serve_review')), 'パソコンの じゅんびを見てもらうよう、子どもの言葉で言う');
 });

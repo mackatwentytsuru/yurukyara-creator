@@ -13,14 +13,22 @@ import { PRESETS, LENGTHS, normalize } from '../persona/settings.js';
 import { styleLines } from '../persona/preview.js';
 
 import { MAIN_CHARACTER } from '../../character/defaults.js'; // 主役の決まりは 1 か所(S5)。ここでは写さない
+import { ASKS_PLACE, DEFAULT_ROLE, PLACE_MAX, ROLES, ROLE_CHIPS, normalizeRole } from './roles.js';
+import { COLOR_CHIPS, SHAPE_CHIPS } from './creators.js';
+import { MATERIAL_THUMBS, SHAPE_THUMBS } from './thumbs.js';
 
-/** 決めたことを、子どもが読める言葉で 1 行にする(「元気さ」「レトロ音」「ElevenLabs」は使わない) */
-const KID_TONE = { own: 'この子らしい 話し方', friendly: 'なかよしの 話し方', polite: 'ていねいな 話し方' };
-const KID_VOICE = { none: '文字と おと', browser: 'この スマホの 声', elevenlabs: '本物の 声' };
-function summary(settings) {
+/**
+ * 決めたことを、子どもが読める 1 つの文にする(UIR 15: 「元気さ 2・ふつう・文字とレトロ音」のような並びにしない)。
+ * 声の出し方は書かない(7 つ目のステップで決まる。前は、まだ決めていない声の名前が出て、後の文と食い違った)
+ */
+const KID_PRESET = { calm: 'おっとり', genki: 'げんき いっぱい', mischief: 'いたずらずき', shy: 'はずかしがりや' };
+const KID_PACE = (s) => (s.energy <= 2 ? 'ゆっくり' : s.energy >= 4 ? 'はきはき' : 'のんびり');
+const KID_LEN = { short: 'みじかく', normal: '', long: 'たくさん' };
+export function summary(settings) {
   const s = normalize(settings);
-  const tone = s.tone === 'ending' ? `語尾「${s.ending}」` : KID_TONE[s.tone] ?? KID_TONE.friendly;
-  return `${PRESETS[s.preset].label}・${tone}・げんき ${s.energy}・${LENGTHS[s.length].label}・${KID_VOICE[s.voice.provider] ?? KID_VOICE.none}`;
+  const how = s.tone === 'ending' ? `「${s.ending}」を つけて` : s.tone === 'polite' ? 'ていねいに' : s.tone === 'own' ? 'この子らしく' : '';
+  const talk = [KID_PACE(s), KID_LEN[s.length], how].filter(Boolean).join('、');
+  return `${KID_PRESET[s.preset] ?? 'おっとり'}で、${talk} 話す 子`;
 }
 
 export const STEPS = [
@@ -49,10 +57,19 @@ export const MAKE_STEPS = 'あたらしい子は、パソコンの Claude Code �
 /** 写真や絵から作れない理由(見本の道)。正直で、やさしい 1 つの言い方にそろえる(写真の時は「写真」と言う) */
 export const pictureLimit = (noun = '絵') => `${noun}からの 絵づくりは、パソコンの Claude Code で するよ。`;
 export const PICTURE_TRY = 'ここでは、見本の子で ためしてみよう!';
+/** 近い見本を出す時の一言(言葉がその子そのものに当たらない時。行き止まりにしない。UIR 1) */
+export const NEAR_ENOUGH = 'ぴったりではないけど、この子はどう?';
+/** 絵の道(見本の道)。この画面は絵を見られないので、色と形を聞いて近い子を選ぶ(UIR 2。正直に言う) */
+export const PICTURE_ASK = 'この画面は 絵を 見られないんだ。いちばん 多い 色と、かたちを おしえてね。にた子を さがすよ。';
+/** 3D にするかを聞く(2D は すぐ。B4 12b) */
+export const ASK_3D = '3D にもする?(やく 20 ぷん)';
+export const CONVERT_NOTE = '3D は、ゆるキャラの かたちに ととのえて つくるよ(もとの えと まったく おなじには ならないよ)';
 /** 仮の頭脳で話している時の、子ども向けの知らせ(くわしい言い方は性格の画面) */
 export const MOCK_NOTE = 'いまは おためしの あたまで 話しているよ。話し方だけ 性格に あわせているよ。';
 
 const chars = (s) => [...String(s ?? '')].length;
+/** 1 つ目のステップの入れ方の id(役目をとばして来ても受ける) */
+const START_IDS = new Set(['words', 'pick', 'photo']);
 const clip = (s, n) => [...String(s ?? '').trim()].slice(0, n).join('');
 
 /** おまかせのくわしい名前(読み上げと、押した時の右の吹き出し)。どの歩みでも出す(本人 11/7: 全部オートでできるパターン) */
@@ -71,7 +88,7 @@ const DRAW_SEC = 240;
  * @returns {{left:number, main:string, time:string}}
  */
 export function progressText(step, { skipped = [], local = false } = {}) {
-  if (step > STEPS.length) return { left: 0, main: 'できあがり!', time: '' };
+  if (step > STEPS.length) return { left: 0, main: 'じゅんび OK!', time: '' }; // 「できあがり」は、本当に作った時だけ言う(UIR 4)
   const rest = STEPS.filter((s) => s.n >= Math.max(1, step) && !skipped.includes(s.n));
   const left = rest.filter((s) => s.n > step).length;
   const sec = rest.reduce((t, s) => t + STEP_SEC[s.n] + (local && s.n === 3 ? DRAW_SEC : 0), 0);
@@ -128,6 +145,9 @@ export class FirstRun {
     this.makeQueue = Promise.resolve(); // 作る画面の知らせを 1 つずつ順に受ける
     this.progressSeen = new Set();
     this.auto = false; // おまかせ(ぜんぶ じどう)で進めている
+    this.role = null; // 役目(この子は、どこで だれと。roles.js の id)。選ぶ前は null
+    this.place = null; // お店・駅の時だけ { name, about }
+    this.convert = null; // 3D 用のゆるキャラ変換の選び { shape, material }(手元の PC の道)
     this.log = []; // 試験と確かめのための、言った文の記録
   }
 
@@ -192,13 +212,20 @@ export class FirstRun {
 
   async _omakaseRest() {
     this.auto = true;
+    if (!this.role) this.role = DEFAULT_ROLE; // 役目もおまかせ(おうち)
     if (!this.character) {
-      const pick = this.d.creator.main?.() ?? (this.d.creator.list?.() ?? [])[0] ?? null;
+      // おまかせは、見本の中から案内役とは別の子を本当に出す(前は案内役のまま「できあがり!」と言った。UIR 4)
+      const pick = this.d.creator.surprise?.() ?? this.d.creator.main?.() ?? (this.d.creator.list?.() ?? [])[0] ?? null;
       if (pick) {
         this.character = pick;
         if (this.step < 2) this.skipped.add(2); // 1 歩目からのおまかせはチェックをしていない(歩みの丸は「とばした」に)
         this._go(3);
-        await this._say({ who: 'note', text: `おまかせ: ${pick.name}` });
+        const isGuide = pick.id === this.guide.id;
+        await this._say(
+          isGuide
+            ? { who: 'guide', text: `${pick.name}で はじめるよ!` }
+            : { who: 'guide', text: `おまかせで えらんだのは、${pick.name}!`, ...(pick.img ? { img: pick.img } : {}) },
+        );
         const stay = await (this.d.showCharacter?.(pick) ?? true);
         if (stay === false) {
           this.d.save?.(this.snapshot());
@@ -209,16 +236,14 @@ export class FirstRun {
     this._go(4);
     const id = this.character?.id ?? 'unknown';
     let s = this.d.persona.get(id);
-    if (!s) {
-      s = this.d.persona.initial?.(this.character) ?? this.d.persona.random(this.character);
-      this.d.persona.set(id, s);
-    }
-    this.settings = normalize(s);
+    if (!s) s = this.d.persona.initial?.(this.character) ?? this.d.persona.random(this.character);
+    this.settings = this._withRole(s);
+    this.d.persona.set(id, this.settings);
     this.d.onPersona?.(this.settings, this.character);
     for (const n of [5, 6, 7]) if (this.step < n) this.skipped.add(n);
     await this._say(
       { who: 'guide', text: this.nori ? 'おまかせで、ぜんぶ きめマシタ!' : 'おまかせで、ぜんぶ きめたよ!' },
-      { who: 'note', text: `きめたこと: ${this.character?.name ?? 'この子'}・性格「${summary(this.settings)}」` },
+      { who: 'note', text: `${this.character?.name ?? 'この子'}は、${summary(this.settings)}に したよ。` },
       { who: 'note', text: 'ぜんぶ、あとから かえられるよ。' },
     );
     return this._finish();
@@ -227,6 +252,11 @@ export class FirstRun {
   /** 押された物を受け取る。今出している選択肢に無い物(古いボタン)と、動いている最中の 2 回押しは捨てる */
   async act(id, payload = {}) {
     if (this.busy || (this.done && id !== 'begin')) return false;
+    // 役目を聞いている間に、ことばや絵が先に来た(呼ぶ側が役目をとばした): 役目は既定の おうち にして、そのまま受ける
+    if (!this.role && this.step === 1 && START_IDS.has(id) && this.actions.some((a) => a.id.startsWith('role_'))) {
+      this.role = DEFAULT_ROLE;
+      this.actions = this._startActions();
+    }
     if (!this.actions.some((a) => a.id === id)) return false;
     this.busy = true;
     this.d.offer([]); // 押した後は、次の選択肢が出るまでボタンを出さない
@@ -254,20 +284,85 @@ export class FirstRun {
 
   async start() {
     this._go(1);
+    // 案内役が主役のときは、主役(ノリー)の口調で名乗る。主役を替えたら、この 1 文も替える。
+    // 先に「どこで だれと」を聞く(本人の案: 何役かを、まず聞く。B4 12b)。2 つ目の文(どんな子を…)は、役目を選んだ後に言う
+    const [hello] = guideFirstLines(this.guideName, this.nori);
+    await this._say({ who: 'guide', text: hello });
+    return this._askRole();
+  }
+
+  /** 役目を聞く。既定は おうち(いちばん左・目立つ札) */
+  async _askRole() {
+    this._go(1);
+    await this._say({ who: 'guide', text: 'この子は、どこで だれと?' });
+    this._offerRole();
+  }
+
+  _offerRole() {
+    this._offer([
+      ...ROLES.map((r) => ({ id: `role_${r}`, label: ROLE_CHIPS[r], primary: r === DEFAULT_ROLE })),
+      { id: 'role_auto', label: OMAKASE_CHIP, aria: 'おまかせ(おうちに する)', noAuto: true },
+    ]);
+  }
+
+  async _roleAnswer(r) {
+    const role = r === 'auto' ? DEFAULT_ROLE : normalizeRole(r);
+    await this._say({ who: 'user', text: r === 'auto' ? OMAKASE_CHIP : ROLE_CHIPS[role] });
+    this.role = role;
+    this.place = null;
+    if (ASKS_PLACE.has(role)) {
+      await this._say({ who: 'guide', text: role === 'shop' ? 'おみせの なまえは?' : 'えきや まちの なまえは?' });
+      return this._offer([
+        { id: 'place_name', label: 'なまえ', kind: 'text', placeholder: role === 'shop' ? '例: ひだまり パン' : '例: みどり駅', max: PLACE_MAX, submit: '送る', primary: true },
+        { id: 'place_skip', label: 'とばす' },
+      ]);
+    }
+    return this._askWhat();
+  }
+
+  async _placeAnswer(id, p) {
+    const text = clip(p?.text, PLACE_MAX);
+    if (id === 'place_name') {
+      if (text) await this._say({ who: 'user', text });
+      this.place = { name: text, about: '' };
+      await this._say({ who: 'guide', text: this.role === 'shop' ? 'なにを あんないする?' : 'どんな ことを あんないする?' });
+      return this._offer([
+        { id: 'place_about', label: 'あんないする こと', kind: 'text', placeholder: this.role === 'shop' ? '例: パンの しゅるいと 店の 中' : '例: 出口と のりかえ', max: PLACE_MAX, submit: '送る', primary: true },
+        { id: 'place_skip', label: 'とばす' },
+      ]);
+    }
+    if (id === 'place_about') {
+      if (text) await this._say({ who: 'user', text });
+      this.place = { ...(this.place ?? { name: '' }), about: text };
+    } else await this._echo(id);
+    return this._askWhat();
+  }
+
+  /** 役目の後: どんな子を生み出すか */
+  async _askWhat() {
     const sample = this.d.creator.mode === 'sample';
-    // 案内役が主役のときは、主役(ノリー)の口調で名乗る。主役を替えたら、この 1 文も替える
     await this._say(
-      ...guideFirstLines(this.guideName, this.nori).map((text) => ({ who: 'guide', text })),
-      sample ? { who: 'note', text: 'ここでは、見本の子で ためせるよ。' } : null,
+      { who: 'guide', text: guideFirstLines(this.guideName, this.nori)[1] },
+      sample ? { who: 'note', text: 'ここでは、にた 見本の子を 出して ためせるよ。' } : null,
       this.local ? { who: 'note', text: '下の 作る画面に、ことばか 絵を 入れてね。' } : null,
       this.local ? { who: 'note', text: 'パソコンの Claude Code が 描くよ。ことばと絵は Claude(Anthropic)に 送られるよ。' } : null,
     );
     this._offerStart();
   }
 
+  /** 役目を性格の設定に足した、新しい設定(元は変えない) */
+  _withRole(s) {
+    const base = normalize(s);
+    if (!this.role) return base;
+    return normalize({ ...base, role: this.role, ...(this.place ? { place: this.place } : {}) });
+  }
+
   _offerStart() {
     if (this.local) {
-      this._offer([{ id: 'frame', kind: 'frame', label: 'PC の作る画面', url: this.d.creator.frameUrl }]);
+      // 役目は作る画面へ # の後ろで渡す(作る画面が make.json に書く。絵を描く段の「どこで だれと」になる)
+      const role = this.role ? `&role=${encodeURIComponent(this.role)}` : '';
+      const place = this.place?.name ? `&place=${encodeURIComponent(this.place.name)}` : '';
+      this._offer([{ id: 'frame', kind: 'frame', label: 'PC の作る画面', url: `${this.d.creator.frameUrl}${role}${place}` }]);
       // 作る画面が開けない(PC のサーバーが止まっている・この画面の元が許されていない)ときは、黙らずに言う
       clearTimeout(this.frameTimer);
       if (!this.frameReady) {
@@ -280,12 +375,17 @@ export class FirstRun {
       }
       return;
     }
-    this._offer([
-      { id: 'photo', label: '写真を撮る', kind: 'file', capture: true },
+    this._offer(this._startActions());
+  }
+
+  /** 1 つ目のステップの入れ方(見本の道)。ことばが主役。カメラの「写真を撮る」は最後(UIR 22) */
+  _startActions() {
+    if (this.local) return [{ id: 'frame', kind: 'frame', label: 'PC の作る画面', url: this.d.creator.frameUrl }];
+    return [
       { id: 'pick', label: '絵を選ぶ', kind: 'file' },
+      { id: 'photo', label: '写真を撮る', kind: 'file', capture: true },
       { id: 'words', label: 'ことばで 書く', kind: 'text', placeholder: '例: 赤い ちょうちんの子', max: WORDS_MAX, submit: '送る', primary: true },
-      // 「パソコンでの つくりかた」は、見本がいない時と「なおしたい」の時に出す(1 歩目の押す札を 1 段にして、会話を広く。OL1。前は CRITux 1 で 1 歩目にも出した)
-    ]);
+    ];
   }
 
   async _handle(id, p) {
@@ -351,13 +451,31 @@ export class FirstRun {
       case 'begin': // 最後の「はじめる」: 札を閉じるのは、使う人が押した時だけ
         this.d.onBegin?.();
         return undefined;
+      case 'place_name':
+      case 'place_about':
+      case 'place_skip':
+        return this._placeAnswer(id, p);
+      case 'want3d':
+      case 'no3d':
+        await this._echo(id);
+        return id === 'want3d' ? this._askShape() : this._after2d();
+      case 'conv_auto':
+        await this._echo(id);
+        this.convert = { shape: 'atama', material: 'fabric', auto: true };
+        return this._sendConvert();
       default:
         if (id.startsWith('s_')) return this._pickSample(id.slice(2));
+        if (id.startsWith('role_')) return this._roleAnswer(id.slice(5));
+        if (id.startsWith('col_')) return this._colorAnswer(id.slice(4));
+        if (id.startsWith('shp_')) return this._shapeAnswer(id.slice(4));
+        if (id.startsWith('cs_')) return this._convShape(id.slice(3));
+        if (id.startsWith('cm_')) return this._convMaterial(id.slice(3));
         return undefined;
     }
   }
 
   async _restart() {
+    this.convert = null;
     this.input = null;
     this.check = null;
     this.character = null;
@@ -391,18 +509,14 @@ export class FirstRun {
     await this._say({ who: 'user', text: kind === 'photo' ? '(写真を撮った)' : '(絵を選んだ)', img: p.url });
     this._go(2);
     if (this.d.creator.mode === 'sample') {
-      // 見本の道の限界は、やさしく正直に、ここで 1 回だけ言う(この画面は写真を見ない・どこにも送らない。作れない時も、くり返さない)
+      // 見本の道: この画面は絵を見られない(どこにも送らない)。正直に言い、色と形を聞いて、いちばん近い見本を出す(UIR 2)
       await this._say(
         { who: 'guide', text: `${noun}を ありがとう!` },
-        { who: 'note', text: pictureLimit(noun) },
-        { who: 'note', text: `この画面は ${noun}を見ないで、見本の子で ためすよ。どこにも 送らないよ。` },
-        { who: 'guide', text: `この${noun}は、どれに近い?` },
+        { who: 'note', text: PICTURE_ASK.replace('絵を', `${noun}を`) },
+        { who: 'note', text: `${noun}は どこにも 送らないよ。` },
+        { who: 'guide', text: 'いちばん 多い 色は?' },
       );
-      return this._offer([
-        { id: 'kind_yuru', label: 'ゆるキャラ', primary: true },
-        { id: 'kind_human', label: '人' },
-        { id: 'kind_complex', label: 'けしき・こまかい絵' },
-      ]);
+      return this._offer(COLOR_CHIPS.map((c, i) => ({ id: `col_${c.id}`, label: c.label, primary: i === 0 })));
     }
     await this._say({ who: 'guide', text: `${noun}を 見てみるね。ちょっと まってて。` });
     const result = await this.d.creator.check(this.input);
@@ -443,6 +557,23 @@ export class FirstRun {
     ]);
   }
 
+  async _colorAnswer(c) {
+    const chip = COLOR_CHIPS.find((x) => x.id === c);
+    if (!chip) return undefined;
+    await this._say({ who: 'user', text: chip.label });
+    this.input = { ...(this.input ?? { from: 'picture' }), colors: c === 'black' ? ['black', 'gray'] : [c] };
+    await this._say({ who: 'guide', text: 'かたちは?' });
+    return this._offer(SHAPE_CHIPS.map((s, i) => ({ id: `shp_${s.id}`, label: s.label, primary: i === 0 })));
+  }
+
+  async _shapeAnswer(s) {
+    const chip = SHAPE_CHIPS.find((x) => x.id === s);
+    if (!chip) return undefined;
+    await this._say({ who: 'user', text: chip.label });
+    this.input = { ...(this.input ?? { from: 'picture' }), shape: s };
+    return this._meet();
+  }
+
   /* ---------- 1 → 3: 言葉の入口(チェックは絵のときだけ) ---------- */
   async _fromWords(p) {
     const words = clip(p?.text, WORDS_MAX);
@@ -451,7 +582,7 @@ export class FirstRun {
       return this._offerStart();
     }
     this.input = { from: 'words', words };
-    await this._say({ who: 'user', text: words }, { who: 'note', text: 'ことばから つくるから、チェックは とばすよ。' });
+    await this._say({ who: 'user', text: words });
     this.skipped.add(2);
     return this._meet();
   }
@@ -463,10 +594,10 @@ export class FirstRun {
     if (!made) return this._noMatch(); // 見本の道で、言葉が見本に当たらない・絵(この画面では作れない)
     this.character = made;
     if (made.sample) {
+      // いつも いちばん近い子を出す。ぴったりの時だけ「近い子が いたよ」、ほかは「ぴったりではないけど」(UIR 1・2)
       await this._say(
-        { who: 'guide', text: '見本の中に、近い子が いたよ!' },
-        { who: 'note', text: `見本: ${made.name}` },
-        { who: 'note', text: 'ここでは 新しく描かずに、見本の子を 出すよ。' },
+        { who: 'guide', text: made.exact ? '見本の中に、近い子が いたよ!' : NEAR_ENOUGH },
+        { who: 'note', text: `見本: ${made.name}`, ...(made.img ? { img: made.img } : {}) },
       );
     }
     return this._show();
@@ -488,11 +619,8 @@ export class FirstRun {
     this.character = null;
     const picture = this.input?.from === 'picture';
     // 写真・絵の道は、2 歩目で限界を言ってある(くり返さない)。言葉の道は、ここで初めて言う
-    await this._say(
-      ...(picture
-        ? [{ who: 'guide', text: `じゃあ、${PICTURE_TRY.replace(/^ここでは、/, '')}` }]
-        : [{ who: 'guide', text: 'ごめんね。見本の中に、近い子が いないんだ。' }, { who: 'note', text: MAKE_STEPS }, { who: 'guide', text: PICTURE_TRY }]),
-    );
+    // 見本の一覧が空の時だけ来る(ふつうは make がいつも近い子を出す)。開発の言葉(Claude Code・つくりかた)は出さない(UIR 1)
+    await this._say({ who: 'guide', text: picture ? `じゃあ、${PICTURE_TRY.replace(/^ここでは、/, '')}` : PICTURE_TRY });
     this._offerNoMatch();
   }
 
@@ -506,7 +634,6 @@ export class FirstRun {
     this._offer([
       ...(main ? [{ id: 'use_guide', label: `${this.guideName}で ためす`, primary: true }] : []),
       { id: 'choose_sample', label: '見本から えらぶ', primary: !main },
-      ...this._readmeAction(),
       { id: 'again', label: 'やりなおす', aria: picture ? `やりなおす(べつの${this.input?.kind === 'photo' ? '写真' : '絵'}にする)` : 'やりなおす(ことばを かえる)' },
     ]);
   }
@@ -515,7 +642,8 @@ export class FirstRun {
   async _chooseSample() {
     const list = this.d.creator.list?.() ?? [];
     await this._say({ who: 'guide', text: 'どの子に 会ってみる?' });
-    this._offer([...list.map((c) => ({ id: `s_${c.id}`, label: c.name })), { id: 'again', label: 'やりなおす' }]);
+    // 顔の小さな絵つきの札(UIR 10)。札は折り返して全部見せる(view の fr-cards)
+    this._offer([...list.map((c) => ({ id: `s_${c.id}`, label: c.name, ...(c.img ? { img: c.img } : {}) })), { id: 'again', label: 'やりなおす' }]);
   }
 
   async _pickSample(id) {
@@ -523,7 +651,7 @@ export class FirstRun {
     if (!c) return this._chooseSample();
     this._go(3);
     this.character = c;
-    await this._say({ who: 'user', text: c.name }, { who: 'note', text: `見本: ${c.name}` });
+    await this._say({ who: 'user', text: c.name }, { who: 'note', text: `見本: ${c.name}`, ...(c.img ? { img: c.img } : {}) });
     return this._show();
   }
 
@@ -551,7 +679,7 @@ export class FirstRun {
     await this._say({ who: 'guide', text: c?.sample ? `${c.name}だよ。この子は どうかな?` : 'こんな子が できたよ。どうかな?' });
     this._offer([
       { id: 'keep', label: 'この子にする', primary: true },
-      ...(c?.sample ? [{ id: 'fix', label: 'なおしたい' }] : [{ id: 'fix', label: 'なおしたい ところ', kind: 'text', max: NOTE_MAX, placeholder: '例: 耳を もっと 大きく', submit: '送る' }]),
+      ...(c?.sample ? [{ id: 'choose_sample', label: 'ほかの子を 見る' }] : [{ id: 'fix', label: 'なおしたい ところ', kind: 'text', max: NOTE_MAX, placeholder: '例: 耳を もっと 大きく', submit: '送る' }]),
       { id: 'again', label: 'やりなおす' },
     ]);
   }
@@ -563,11 +691,10 @@ export class FirstRun {
       await this._say(
         { who: 'guide', text: '見本の子の 形や色は、ここでは なおせないんだ。' },
         { who: 'guide', text: 'でも、性格と話し方は、次のステップで変えられるよ!' },
-        { who: 'note', text: 'パソコンの Claude Code で 作った子なら、ひとことで なおせるよ。' },
       );
       return this._offer([
         { id: 'keep', label: 'この子で 性格を きめる', primary: true },
-        ...this._readmeAction(),
+        { id: 'choose_sample', label: 'ほかの子を 見る' },
         { id: 'again', label: 'やりなおす' },
       ]);
     }
@@ -587,16 +714,14 @@ export class FirstRun {
     this._go(4);
     const id = this.character?.id ?? 'unknown';
     let s = this.d.persona.get(id);
-    if (!s) {
-      // その子の人格の文に性格が書いてあれば、それで始める(主役ノリーはおっとり)。無ければおまかせ(最初の設計の決め)
-      s = this.d.persona.initial?.(this.character) ?? this.d.persona.random(this.character);
-      this.d.persona.set(id, s);
-    }
-    this.settings = normalize(s);
+    // その子の人格の文に性格が書いてあれば、それで始める(主役ノリーはおっとり)。無ければおまかせ(最初の設計の決め)
+    if (!s) s = this.d.persona.initial?.(this.character) ?? this.d.persona.random(this.character);
+    this.settings = this._withRole(s); // 1 つ目のステップで選んだ役目を足す
+    this.d.persona.set(id, this.settings);
     this.d.onPersona?.(this.settings, this.character);
     await this._say(
       { who: 'guide', text: `この子、少し${PRESETS[this.settings.preset].short}みたい!` },
-      { who: 'note', text: `性格: ${summary(this.settings)}` },
+      { who: 'note', text: `${summary(this.settings)}に したよ。` },
     );
     this._offerPersona();
   }
@@ -611,23 +736,24 @@ export class FirstRun {
 
   async _personaSaved(p) {
     this.settings = normalize(p?.settings ?? this.settings);
+    this.role = this.settings.role; // 性格の画面で役目を替えたら、それに合わせる
     this.d.persona.set(this.character?.id ?? 'unknown', this.settings);
     this.d.onPersona?.(this.settings, this.character);
     await this._say(
       { who: 'guide', text: `${PRESETS[this.settings.preset].short}にしたよ。` },
-      { who: 'note', text: `性格: ${summary(this.settings)}` },
+      { who: 'note', text: `${summary(this.settings)}に したよ。` },
     );
     this._offerPersona();
   }
 
   async _personaRoll() {
     const keepVoice = this.settings?.voice;
-    this.settings = normalize({ ...this.d.persona.random(this.character), ...(keepVoice ? { voice: keepVoice } : {}) });
+    this.settings = this._withRole({ ...this.d.persona.random(this.character), ...(keepVoice ? { voice: keepVoice } : {}) });
     this.d.persona.set(this.character?.id ?? 'unknown', this.settings);
     this.d.onPersona?.(this.settings, this.character);
     await this._say(
       { who: 'guide', text: `うーん…この子、${PRESETS[this.settings.preset].short}かも!` },
-      { who: 'note', text: `性格: ${summary(this.settings)}` },
+      { who: 'note', text: `${summary(this.settings)}に したよ。` },
     );
     this._offerPersona();
   }
@@ -761,10 +887,11 @@ export class FirstRun {
     const lines = [{ who: 'guide', text: this.nori ? 'じゅんび できマシタ! いっぱい 話してあげてくだサイ。' : 'じゅんび できたよ! いっぱい 話してあげてね。' }];
     // 決めたことを見せる(おまかせの時は、おまかせの文で言い終わっている)
     if (!this.auto && c?.name) {
-      lines.push({ who: 'note', text: `きめたこと: ${c.name}${this.settings ? `・性格「${summary(this.settings)}」` : ''}` });
+      lines.push({ who: 'note', text: this.settings ? `${c.name}は、${summary(this.settings)}だよ。` : `きめた子: ${c.name}` });
       lines.push({ who: 'note', text: 'ぜんぶ、あとから かえられるよ。' });
     }
-    if (away && c.local) lines.push({ who: 'note', text: `${c.name}の 3D は、パソコンの Claude Code で つくれるよ(約 20 分)。それまでは、${this.guideName}が 舞台に 立つよ。` });
+    if (away && c.local && !c.twod) lines.push({ who: 'note', text: `${c.name}の 3D は、パソコンの Claude Code で つくれるよ(約 20 分)。それまでは、${this.guideName}が 舞台に 立つよ。` });
+    if (away && c.local && c.twod) lines.push({ who: 'note', text: c.want3d ? `${c.name}は 2D で 舞台に いるよ。3D は パソコンで つくっているよ(やく 20 ぷん)。` : `${c.name}は 2D で 舞台に いるよ。` });
     if (away && !c.local) lines.push({ who: 'note', text: `${c.name}は、舞台に立ったままだよ。${this.guideName}にもどしたい時は、「${this.guideName}にもどす」を押してね。` });
     await this._say(...lines);
     this._offer([{ id: 'begin', label: 'はじめる', primary: true }]);
@@ -782,7 +909,11 @@ export class FirstRun {
   }
 
   async _onMake(ev) {
-    if (!this.local || this.done || !ev || this.step > 3) return;
+    if (!this.local || this.done || !ev) return;
+    // 2D ができた・変換の絵の知らせは、性格のステップに進んだ後でも受ける(3D の選びは、どのステップの後でもよい)
+    if (ev.ev === 'twod') return this._twodReady(ev);
+    if (ev.ev === 'converted') return this._converted(ev);
+    if (this.step > 3) return;
     switch (ev.ev) {
       case 'ready':
         this.frameReady = true;
@@ -831,17 +962,15 @@ export class FirstRun {
         if (ev.id && this.character?.id !== ev.id) this.character = { id: ev.id, name: ev.name, sample: false, local: true, round: ev.round, note: this.d.creator.note ?? '' };
         {
           const name = this.character?.name ?? 'この子';
-          // 描いた絵は札の上に出したまま(枠を小さくして絵だけ見せる)。3D ができるまでは案内役が代わりに舞台に立つ(D5)
-          this.d.pin?.({ frame: this.d.creator.picUrl ?? null, caption: `${name}(パソコンの Claude Code が描いた絵。3D はまだ)` });
-          await this._say(
-            { who: 'guide', text: `${name}に けってい! パソコンに つたえたよ。` },
-            { who: 'note', text: '3D は、パソコンの Claude Code で つくれるよ(約 20 分)。' },
-            { who: 'note', text: 'この画面からは まだ はじまらないよ。' },
-            { who: 'note', text: `それまでは、${this.guideName}が かわりに 舞台に立って、${name}の ことばを 話すよ。` },
-          );
+          // 描いた絵は札の上に出したまま。すぐに動く 2D にして舞台に出す(B4 12b。パソコンが部品から 2D を組む。数秒)
+          this.d.pin?.({ frame: this.d.creator.picUrl ?? null, caption: `${name}(パソコンの Claude Code が描いた絵)` });
+          if (ev.auto) this.auto = true;
+          this.waiting2d = true;
+          await this._say({ who: 'guide', text: `${name}に けってい! いま、うごく 2D に して 舞台に 出すよ。` });
+          if (this.twodEarly) return this._twodReady(this.twodEarly);
+          // 2D が来ない時(パソコンの作る道が止まっている)でも行き止まりにしない: 先に性格へ進める
+          return this._offer([{ id: 'keep', label: 'さきに 性格を きめる' }]);
         }
-        // 作る画面で「おまかせ(ぜんぶ じどう)」を選んだ時は、性格から後もおすすめで決めて終わる
-        return ev.auto || this.auto ? this._omakaseRest() : this._persona();
       case 'restart':
         this.input = null;
         this.check = null;
@@ -853,6 +982,100 @@ export class FirstRun {
       default:
         return undefined;
     }
+  }
+
+  /** パソコンが 2D を組んだ(characters/<id>/2d と looks.2d)。舞台に出して、3D にもするかを聞く */
+  async _twodReady(ev) {
+    if (!this.character || (ev.id && ev.id !== this.character.id)) {
+      if (ev.id) this.twodEarly = ev; // 決める前に届いた(順番の入れ違い)。決めた時に使う
+      return undefined;
+    }
+    if (this.character.twod) return undefined;
+    this.character = { ...this.character, twod: true };
+    const stay = await (this.d.showCharacter?.(this.character) ?? true);
+    if (stay === false) {
+      this.d.save?.(this.snapshot());
+      return undefined;
+    }
+    const at3 = this.step <= 3;
+    await this._say({ who: 'guide', text: `${this.character.name}が 舞台に でたよ! まばたきも するよ。` });
+    this.waiting2d = false;
+    if (this.auto) {
+      // おまかせ: 2D のまま進む(3D は あとから えらべる)
+      await this._say({ who: 'note', text: '3D は あとから えらべるよ。' });
+      return at3 ? this._omakaseRest() : undefined;
+    }
+    if (!at3) return undefined; // 性格に進んだ後に届いた: 舞台に出すだけ(今の選びを消さない)
+    await this._say({ who: 'guide', text: ASK_3D }, { who: 'note', text: '2D なら すぐ。3D は あとからでも えらべるよ。' });
+    return this._offer([
+      { id: 'want3d', label: '3D にも する', primary: true },
+      { id: 'no3d', label: 'いまは 2D だけ' },
+    ]);
+  }
+
+  /** 3D 用のゆるキャラ変換: 形を見本の絵で選ぶ(全国の調べの型。既定 あたまでっかち) */
+  async _askShape() {
+    await this._say({ who: 'note', text: CONVERT_NOTE }, { who: 'guide', text: 'どんな かたちに する?' });
+    return this._offer([
+      { id: 'cs_atama', label: 'あたまでっかち', img: SHAPE_THUMBS.atama, primary: true },
+      { id: 'cs_maru', label: 'まるい どう', img: SHAPE_THUMBS.maru },
+      { id: 'conv_auto', label: OMAKASE_CHIP, aria: 'おまかせ(あたまでっかちで ぬの)', noAuto: true },
+    ]);
+  }
+
+  async _convShape(shape) {
+    if (!['atama', 'maru'].includes(shape)) return this._askShape();
+    await this._echo(`cs_${shape}`);
+    this.convert = { shape, material: null };
+    await this._say({ who: 'guide', text: 'さわった かんじ(しつかん)は?' });
+    return this._offer([
+      { id: 'cm_fabric', label: 'ぬの', img: MATERIAL_THUMBS.fabric, primary: true },
+      { id: 'cm_fur', label: 'け', img: MATERIAL_THUMBS.fur },
+      { id: 'cm_vinyl', label: 'つるつる', img: MATERIAL_THUMBS.vinyl },
+      { id: 'conv_auto', label: OMAKASE_CHIP, aria: 'おまかせ(ぬの)', noAuto: true },
+    ]);
+  }
+
+  async _convMaterial(material) {
+    if (!['fabric', 'fur', 'vinyl'].includes(material)) return this._askShape();
+    await this._echo(`cm_${material}`);
+    this.convert = { shape: this.convert?.shape ?? 'atama', material };
+    return this._sendConvert();
+  }
+
+  /** 選んだ形と しつかんを、パソコンの作る画面(枠)に渡す。枠が変換の絵を頼み、描けたら見せて OK を受ける */
+  async _sendConvert() {
+    const c = this.convert ?? { shape: 'atama', material: 'fabric' };
+    if (!c.material) c.material = 'fabric';
+    this.convert = c;
+    await this._say({ who: 'guide', text: 'ゆるキャラの かたちの 絵を 1 まい 描くよ。描けたら 下で 見てね。' });
+    const q = `&view=convert&cid=${encodeURIComponent(this.character?.id ?? '')}&shape=${c.shape}&mat=${c.material}`;
+    return this._offer([
+      { id: 'frame', kind: 'frame', label: 'ゆるキャラの かたちの 絵', url: `${this.d.creator.frameUrl}${q}` },
+      { id: 'no3d', label: 'いまは 2D だけ' },
+    ]);
+  }
+
+  /** 変換の絵を OK した(3D はパソコンで make-character)・描き直したい */
+  async _converted(ev) {
+    if (!this.character || (ev.id && ev.id !== this.character.id)) return undefined;
+    if (ev.again) {
+      await this._say({ who: 'user', text: 'ちがう かたちに する' });
+      return this._askShape();
+    }
+    this.character = { ...this.character, want3d: true, convert: { ...this.convert } };
+    await this._say(
+      { who: 'user', text: 'この かたちで 3D に する' },
+      { who: 'guide', text: 'この かたちで 3D に するね。パソコンで つくるよ(やく 20 ぷん)。' },
+      { who: 'note', text: 'それまでは 2D で 話せるよ。' },
+    );
+    return this._after2d();
+  }
+
+  /** 2D のまま、性格のステップへ */
+  async _after2d() {
+    if (this.step > 3) return undefined;
+    return this.auto ? this._omakaseRest() : this._persona();
   }
 
   async _checkedLocal(ev) {
@@ -881,10 +1104,12 @@ export class FirstRun {
       from: this.input?.from ?? null,
       words: this.input?.from === 'words' ? this.input.words : null,
       check: this.check,
-      character: this.character ? { id: this.character.id, name: this.character.name, sample: Boolean(this.character.sample), ...(this.character.local ? { local: true } : {}), note: this.character.note ?? '' } : null,
+      character: this.character ? { id: this.character.id, name: this.character.name, sample: Boolean(this.character.sample), ...(this.character.local ? { local: true } : {}), ...(this.character.twod ? { twod: true } : {}), note: this.character.note ?? '' } : null,
       skipped: [...this.skipped],
       ...(this.settings ? { settings: this.settings } : {}),
       ...(this.auto ? { auto: true } : {}),
+      ...(this.role ? { role: this.role } : {}),
+      ...(this.place ? { place: this.place } : {}),
     };
   }
 
@@ -893,6 +1118,8 @@ export class FirstRun {
     if (!snap || snap.v !== SNAPSHOT_VERSION) return this.start();
     this.input = snap.from ? { from: snap.from, words: snap.words ?? '' } : null;
     this.check = snap.check ?? null;
+    if (snap.role) this.role = normalizeRole(snap.role);
+    if (snap.place) this.place = { name: clip(snap.place.name, PLACE_MAX), about: clip(snap.place.about, PLACE_MAX) };
     for (const n of snap.skipped ?? []) this.skipped.add(n);
     if (!snap.character?.id) {
       // 子を選ぶ前でも、言葉を入れた後(3 歩目)なら、言葉は残っているので、同じ言葉で見本を出し直す。絵は残していないので 1 歩目から

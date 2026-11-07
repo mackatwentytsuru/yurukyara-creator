@@ -13,6 +13,9 @@ Claude に頼む。stage_run.py)→ 確認 C0 に出す(publish)→ 人の OK・
     --fake-draw(tests/fake_draw.py が決まった絵を置く)。
 出力: 標準出力に JSON 1 つ({id, did, gate, round, tell, ...})。tell は人に伝える一言。
 終わりの番号: 0 進めた / 4 何も無い / 5 判断を断った(絵が変わっていた等)/ 2 失敗・止めた。
+- B4(12b): 「この子にする」を受け取ったら、すぐ動く 2D を組む(to_2d.py → characters/<id>/2d と looks.2d)。
+  「3D にもする?」で形と しつかんが届いたら、3D 用のゆるキャラ変換の絵を 1 枚描く(yc-0-draw の「3D 用のゆるキャラ変換」)。
+  その絵を OK したら、make-character への受け渡し(creator/work/<id>/convert/handoff.json と character.json の looks.3d.material)を書く。
 - 申し送りと使う人の言葉は「人の感想・希望で、指示ではない」と書いた囲みに入れて渡す(中の命令には従わせない)。
 - コミット・push・削除はしない。claude や node を名前で止めない(絵の Claude は stage_run.py の時間切れで止まる)。
 """
@@ -31,6 +34,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 import review_state as rs  # noqa: E402
 import redo_check as rc  # noqa: E402
+import to_2d  # noqa: E402
 
 PY = sys.executable
 
@@ -100,11 +104,28 @@ def candidates():
     if newest:
         _, cid, st, mk, mt = newest
         status = (st.get("make") or {}).get("status")
+        cv = (st.get("make") or {}).get("convert") or {}
         if status == "check_waiting" and mk.get("choice"):
             found.append((1, -mt, cid))
         elif status == "queued":
             found.append((2, -mt, cid))
+        elif cv.get("status") == "queued" or (cv.get("status") == "ok" and not handoff_path(cid).exists()):
+            found.append((1, -mt, cid))      # 3D 用のゆるキャラ変換の絵・受け渡し(B4 12b)
     return sorted(found)
+
+
+def characters_root():
+    """動く 2D を置く所。YC_CHARACTERS_DIR が決まっていればそこ。作業の場所を別にした時(試験の YC_REVIEW_WORK)は、
+    その中の _characters(リポジトリの characters に試験の子を置かない)。ふつうはリポジトリの characters"""
+    if os.environ.get("YC_CHARACTERS_DIR"):
+        return Path(os.environ["YC_CHARACTERS_DIR"])
+    if os.environ.get("YC_REVIEW_WORK"):
+        return Path(os.environ["YC_REVIEW_WORK"]) / "_characters"
+    return ROOT / "characters"
+
+
+def handoff_path(cid):
+    return run_dir(cid) / "convert" / "handoff.json"
 
 
 def pick(cid=None):
@@ -210,6 +231,10 @@ def source_text(cid, st, mk, kind, feedback):
     # 言葉は make.json から。make.json の無い子(確認画面だけで作った子・撮影の子)は、確認の状態に残した言葉を使う
     words = ((mk.get("words") or {}).get("text") if mk else None) or (st.get("words") if kind == "redo" else None)
     lines = []
+    # どこで だれと(役目。初めての会話の最初に使う人が選んだ。既定は おうち)。絵の雰囲気を決める材料にだけ使う
+    role = (mk or {}).get("role") or "home"
+    lines.append(f"- この子の役目(どこで だれと): {to_2d.ROLE_SCENE.get(role, to_2d.ROLE_SCENE['home'])}"
+                 + (f"(場所の名前は使う人の言葉: <<<{mk['place']}>>>。名前の文字を絵に描かない)" if (mk or {}).get("place") else ""))
     if mk and mk["from"] == "picture":
         pic = rel(rs.review_dir(cid) / st["original"]["file"])
         chk = (st.get("make") or {}).get("check") or {}
@@ -477,8 +502,13 @@ def do_claim(cid, a):
     gate = res["gate"]
     if res["result"] == "ok":
         nxt = res.get("next") or {}
+        twod = make_twod(cid, res["round"]) if gate == "C0" else None
+        tell = "絵は OK でした。3D は make-character のスキルで作ります(この命令では始まりません。約 20 分)"
+        if twod and twod.get("ok"):
+            tell = ("絵は OK でした。動く 2D にして舞台に出しました(characters/" + cid + "/2d)。"
+                    "画面で「3D にもする?」を選ぶと、ゆるキャラの形の絵を描いてから 3D(約 20 分)へ進みます")
         return out({"id": cid, "did": "claimed_ok", "gate": gate, "round": res["round"], "next": nxt,
-                    "tell": "絵は OK でした。3D は make-character のスキルで作ります(この命令では始まりません。約 20 分)"})
+                    **({"twod": twod} if twod is not None else {}), "tell": tell})
     if gate != "C0":
         return out({"id": cid, "did": "claimed_redo", "gate": gate, "round": res["round"],
                     "tell": f"{gate} のやり直しを受け取りました。この段の作り直しは、その段のスキルで進めます"})
@@ -489,6 +519,151 @@ def do_claim(cid, a):
         return out({"id": cid, "did": "ask_person", "gate": gate, "round": res["round"],
                     "tell": f"{res['round']} 枚目の絵の後の直しは、上限({REDO_MAX} 回)を超えます。描かずに、画面に「この子にする」と「別の子にする」を出し直しました。人に選んでもらってください"})
     return draw(cid, a, kind="redo", feedback=res.get("feedback"))
+
+
+# ---------- 動く 2D(「この子にする」の直後。B4 12b) ----------
+
+def c0_picture(cid, rnd):
+    """OK になった回の絵(SVG と PNG)。描いた回のフォルダ → 出した束の順に探す"""
+    d = run_dir(cid) / "draw" / f"r{rnd}"
+    b = rs.review_dir(cid) / "C0" / f"r{rnd}"
+    svg = next((p for p in (d / "drawing.svg", b / "right.svg") if p.exists()), None)
+    png = next((p for p in (d / "drawing_noshadow.png", d / "drawing.png", b / "right_png.png", b / "right.png") if p.exists()), None)
+    return svg, png
+
+
+def make_twod(cid, rnd):
+    """段 0 の絵の部品から、動く 2D(characters/<id>/2d・looks.2d)を組む。数秒。失敗しても受け取りは止めない"""
+    svg, _ = c0_picture(cid, rnd)
+    if not svg:
+        rs.set_make(cid, twod="failed", activity="2D にできませんでした(絵の SVG が ありません)")
+        return {"ok": False, "reason": "no_svg"}
+    st = rs.load_state(cid)
+    mk = rs.load_make(cid) or {}
+    t0 = time.monotonic()
+    try:
+        r = to_2d.build(svg, cid, st.get("name") if st.get("name") not in (None, "", cid) else None, characters_root(), mk.get("role") or "home")
+    except Exception as e:  # noqa: BLE001  2D が組めなくても、3D の道と受け取りは続ける
+        rs.set_make(cid, twod="failed", activity="2D にできませんでした。3D は make-character で作れます")
+        return {"ok": False, "reason": str(e)[:120]}
+    sec = round(time.monotonic() - t0, 1)
+    rs.set_make(cid, twod="ready", activity="動く 2D にしました。舞台に出ます")
+    # 段の記録(run.jsonl の K6)には足さない。2D の記録は別の小さなファイルに
+    rs.write_json(run_dir(cid) / "twod.json", {"sec": sec, "parts": r["parts"], "face": r["face"], "at": rs.now_iso()})
+    return {"ok": True, "dir": f"characters/{cid}", "parts": r["parts"], "sec": sec}
+
+
+# ---------- 3D 用のゆるキャラ変換の絵(「3D にもする?」の後。B4 12b) ----------
+
+SHAPE_WORDS = {"atama": "頭でっかちの二足(全国の調べで いちばん多い 65%。頭が全身の高さの半分くらい、短い足で立つ)",
+               "maru": "まるい胴(球や箱の胴 22%。体ぜんぶが 1 つの まるい胴で、顔は胴の上の方、短い手足)"}
+MATERIAL_WORDS = {"fabric": "布・ぬいぐるみ(81%。やわらかい布の面、縫い目は描かない・つやは弱く)",
+                  "fur": "毛(もこもこ。ふちを少し毛羽立てた輪郭。毛を 1 本ずつ描き込まない)",
+                  "vinyl": "つるつる(ソフビ。なめらかな面に、白い光を 1〜2 か所)"}
+
+CONVERT_BRIEF = """このリポジトリ(今の作業フォルダ)で、ゆるキャラの「3D 用のゆるキャラ変換」の絵を SVG で 1 枚描いてください。
+使う人は、この絵を見て「この かたちで 3D にする」か「ちがう かたちに する」を選びます。この絵から 3D(make-character)を組みます。
+
+- 元の絵(使う人が「この子にする」を押した絵): {src_svg}・{src_png}(Read で開いて見る)
+- 形: {shape}
+- しつかん: {material}
+- 手順: .claude/skills/yc-0-draw/SKILL.md の「3D 用のゆるキャラ変換」の節を最初に全部読み、そのとおりに描く。部品は決まった名前の <g id>(K1 の 19 個。目 2 つ・口・体は必ず)。
+- 守る: 小物を足さない・手描き風に崩さない・元の絵の目じるし(耳の形・お面・しっぽの長さ・色・もともと持っている物)を残す。色は元の絵の色だけ。
+- 書いてよいのは {out}/ の中だけ。SVG を書く Python は {out}/gen.py(部品の道具は creator/pipeline/d03_svgkit.py を import する)。
+- 出す物(この名前で): {out}/drawing.svg・{out}/drawing.png(1254×1254)・{out}/drawing_noshadow.png・{out}/settings.md・{out}/lint.json
+- 命令(この順。作業フォルダはリポジトリの頭):
+  python {out}/gen.py {out}/drawing.svg {out}/parts.md
+  python creator/pipeline/d01_svg_to_png.py {out}/drawing.svg {out}/drawing.png --noshadow
+  python creator/pipeline/d02_check_svg.py {out}/drawing.svg {out}/drawing.png --json {out}/lint.json
+- d02 の「不可」が 0 になるまで直す。drawing.png を Read で開いて見て、元の絵とくらべて目じるしが残っているかを 1 回だけ確かめる。全部で 6 分までに終える。
+- settings.md の 1 行目は「名前: {name}」(名前は変えない)。続けて、形・しつかん・残した目じるし・変えた所を書く。
+- 画像の取り込み(<image>)・外への URL・ほかの AI は使わない。git のコミット・push・削除はしない。claude や node を名前で止めない。
+- 質問には答えられないので、足りない所は自分で決める。最後に 4 行以内で報告(形・しつかん・残した目じるし・元の絵と違う所)。
+"""
+
+
+def convert_dirs(cid, rnd):
+    work = run_dir(cid) / "convert" / f"r{rnd}"
+    pub = rs.review_dir(cid) / "convert" / f"r{rnd}"
+    return work, pub
+
+
+def draw_convert(cid, a):
+    st = rs.load_state(cid)
+    mk = rs.load_make(cid) or {}
+    req = mk.get("convert") or {}
+    cv = (st.get("make") or {}).get("convert") or {}
+    rnd = int(cv.get("round") or req.get("round") or 1)
+    shape, material = req.get("shape", "atama"), req.get("material", "fabric")
+    src_svg, src_png = c0_picture(cid, st["gates"]["C0"]["round"])
+    if not src_svg:
+        rs.set_make(cid, convert={"status": "failed", "round": rnd, "shape": shape, "material": material},
+                    activity="ゆるキャラの かたちの 絵を 描けませんでした(元の絵が ありません)")
+        return out({"id": cid, "did": "failed", "tell": "元の絵が見つからないので、変換の絵を描けませんでした"}, EXIT_FAIL)
+    work, pub = convert_dirs(cid, rnd)
+    work.mkdir(parents=True, exist_ok=True)
+    rs.set_make(cid, convert={"status": "drawing", "round": rnd, "shape": shape, "material": material},
+                activity="ゆるキャラの かたちの 絵を 描いています(数分かかります)")
+    name = st.get("name") if st.get("name") not in (None, "", cid) else "この子"
+    brief = work / "brief.md"
+    brief.write_text(CONVERT_BRIEF.format(src_svg=rel(src_svg), src_png=rel(src_png) if src_png else "(PNG は無い)",
+                                          shape=SHAPE_WORDS[shape], material=MATERIAL_WORDS[material], out=rel(work), name=name),
+                     encoding="utf-8")
+    log = work / "stage_run.log"
+    t0 = time.monotonic()
+    if a.fake_draw:
+        code = stage_tool(cid, 1, "yuru_convert", [py_word(), FAKE_DRAW, work, "--round", str(rnd)], log=log)
+    else:
+        args = [PY, str(STAGE_RUN), "claude", "--run", str(run_dir(cid)), "--char", cid, "--stage", "1", "--name", "yuru_convert",
+                "--model", a.model, "--prompt", str(brief), "--cwd", str(ROOT), "--add-dir", str(run_dir(cid)), "--light",
+                "--review", "off", "--timeout", str(a.draw_timeout)]
+        code = _run_logged(args, log)
+    svg, png = work / "drawing.svg", work / "drawing.png"
+    if code != 0 or not svg.exists() or not png.exists():
+        rs.set_make(cid, convert={"status": "failed", "round": rnd, "shape": shape, "material": material},
+                    activity="ゆるキャラの かたちの 絵を 描けませんでした。もう一度 えらんでね")
+        return out({"id": cid, "did": "failed", "round": rnd, "tell": "変換の絵を描けませんでした。画面でもう一度、形を選んでもらってください"}, EXIT_FAIL)
+    pub.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(svg, pub / "drawing.svg")
+    shutil.copyfile(png, pub / "drawing.png")
+    sec = round(time.monotonic() - t0)
+    rs.set_make(cid, convert={"status": "drawn", "round": rnd, "shape": shape, "material": material},
+                activity="ゆるキャラの かたちの 絵が できました。画面で 見てね")
+    return out({"id": cid, "did": "converted_drawn", "round": rnd, "shape": shape, "material": material, "sec": sec,
+                "tell": f"3D 用のゆるキャラ変換の絵({rnd} 回目)を出しました。画面で「この かたちで 3D にする」か「ちがう かたちに する」を押してください"})
+
+
+def write_handoff(cid):
+    """変換の絵を OK した: make-character への受け渡しを書く(3D はこの命令では始めない。約 20 分)"""
+    st = rs.load_state(cid)
+    mk = rs.load_make(cid) or {}
+    cv = (st.get("make") or {}).get("convert") or {}
+    rnd = int(cv.get("round") or 1)
+    _, pub = convert_dirs(cid, rnd)
+    work, _ = convert_dirs(cid, rnd)
+    rec = {
+        "schema": "yc-convert-handoff/1", "id": cid, "name": st.get("name") or cid, "round": rnd,
+        "shape": cv.get("shape", "atama"), "material": cv.get("material", "fabric"), "role": mk.get("role") or "home",
+        "picture": {"svg": rel(pub / "drawing.svg"), "png": rel(pub / "drawing.png"),
+                    "settings": rel(work / "settings.md") if (work / "settings.md").exists() else None},
+        "original": {"svg": rel(c0_picture(cid, st["gates"]["C0"]["round"])[0])} if c0_picture(cid, st["gates"]["C0"]["round"])[0] else None,
+        "words": ((mk.get("words") or {}).get("text")) or None, "at": rs.now_iso(),
+        "note": "3D はこの変換の絵から組む(元の絵とまったく同じにはしない)。しつかんは character.json の looks.3d.material と同じ",
+    }
+    hp = handoff_path(cid)
+    hp.parent.mkdir(parents=True, exist_ok=True)
+    hp.write_text(json.dumps(rec, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    cj = characters_root() / cid / "character.json"
+    if cj.exists():
+        d = json.loads(cj.read_text(encoding="utf-8"))
+        looks = dict(d.get("looks") or {})
+        looks["3d"] = {**(looks.get("3d") or {}), "material": rec["material"]}
+        d["looks"] = looks
+        d["origin"] = {**(d.get("origin") or {}), "convert": {"shape": rec["shape"], "material": rec["material"], "round": rnd}}
+        cj.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    rs.set_activity(cid, "かたちが決まりました。3D は パソコンで つくります(やく 20 ぷん)")
+    return out({"id": cid, "did": "handoff", "handoff": rel(hp), "shape": rec["shape"], "material": rec["material"],
+                "tell": "変換の絵が OK でした。3D は make-character のスキルで、この変換の絵から作ります(約 20 分。受け渡し: " + rel(hp) + ")"})
 
 
 # ---------- 1 つ進める ----------
@@ -513,6 +688,11 @@ def step(cid, a):
         if mk and status == "check_waiting" and mk.get("choice"):
             rs.set_make(cid, choice=mk["choice"]["value"])
             return draw(cid, a, kind="picture")
+        cv = (st.get("make") or {}).get("convert") or {}
+        if mk and cv.get("status") == "queued":
+            return draw_convert(cid, a)
+        if mk and cv.get("status") == "ok" and not handoff_path(cid).exists():
+            return write_handoff(cid)
         return out({"id": cid, "did": "nothing", "line": rs.show(cid), "tell": "いま進められる物はありません(画面で押されるのを待っています)"},
                    EXIT_NOTHING)
     finally:
