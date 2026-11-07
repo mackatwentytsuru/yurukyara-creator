@@ -126,12 +126,15 @@ export function createCaptionFlow() {
     full = null;
     ahead = [];
     fullShown = false;
+    aheadUsed = false;
     phase = 'idle';
   };
+  let aheadUsed = false; // この返事で、文を先に見せたか(見せた返事は、話し終わりと同じ大きさの 1 つの段落で描く。字幕の箱が話し終わりより高くならない)
   /** 薄く見せる所: 先に見せていた今の文のまだ出ていない残りと、届いてまだ話していない文。無ければ欄を付けない */
   const withNext = (view, shown) => {
     const next = `${fullShown && full !== null ? full.slice(shown.length) : ''}${ahead.join('')}`;
-    return next ? { ...view, next } : view;
+    const v = aheadUsed ? { ...view, ahead: true } : view;
+    return next ? { ...v, next } : v;
   };
   return {
     get phase() {
@@ -142,6 +145,7 @@ export function createCaptionFlow() {
       const t = String(text ?? '');
       if (!t || phase === 'settled') return null;
       ahead.push(t);
+      aheadUsed = true;
       phase = 'reply';
       return withNext({ reply: true, prev: done.join(''), current: full ?? '', settled: false }, full ?? '');
     },
@@ -216,7 +220,8 @@ export function createUi() {
   /** 返事の字幕を描く(前の文は小さく、今の文は大きく、まだ話していない文は薄く。話し終わった後は全部を同じ大きさで) */
   const renderReply = (v) => {
     const root = document.documentElement.classList;
-    const { hide, next } = captionView(v, { onlyNow: root.contains('tv-mode') || root.contains('kb-tight') });
+    const onlyNow = root.contains('tv-mode') || root.contains('kb-tight');
+    const { hide, next } = captionView(v, { onlyNow });
     if (hide) {
       hideCaption(); // 1 文目の文字送りの始まり(まだ 1 字も無い)・まだ話していない文だけの時のテレビ表示
       return;
@@ -225,7 +230,8 @@ export function createUi() {
     const now = v.current || next ? [span('cap-now', v.current ?? '')] : [];
     if (next) now[0].append(span('cap-next', next)); // B3: 今の文の続きに、薄く並べる(同じ段落で読める)
     caption.replaceChildren(...(v.prev ? [span('cap-prev', v.prev)] : []), ...now);
-    caption.className = `caption reply${v.settled ? ' settled' : ''}`;
+    // 先に見せた返事(ahead)は、話し終わりと同じ大きさの 1 つの段落(style.css の B3 の印)。テレビ表示などの今の文だけの時は前の形
+    caption.className = `caption reply${v.settled ? ' settled' : ''}${v.ahead && !onlyNow && !v.settled ? ' ahead' : ''}`;
     caption.hidden = false;
     // 長い時は、今の文が見えるように(まだ話していない文は下に続く)
     const cur = caption.querySelector('.cap-now');

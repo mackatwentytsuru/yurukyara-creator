@@ -159,12 +159,12 @@ test('(4) 届いた文は、話し始める前から全部、字幕に先に出�
 
 test('(4) 字幕の流れ: 先に届いた文は next(薄く)。話し始めると今の文になり、話し終わると全部を同じ大きさで残す', () => {
   const f = createCaptionFlow();
-  assert.deepEqual(f.ahead('こんにちは!'), { reply: true, prev: '', current: '', settled: false, next: 'こんにちは!' });
-  assert.deepEqual(f.ahead('晴れデス。'), { reply: true, prev: '', current: '', settled: false, next: 'こんにちは!晴れデス。' });
+  assert.deepEqual(f.ahead('こんにちは!'), { reply: true, prev: '', current: '', settled: false, ahead: true, next: 'こんにちは!' });
+  assert.deepEqual(f.ahead('晴れデス。'), { reply: true, prev: '', current: '', settled: false, ahead: true, next: 'こんにちは!晴れデス。' });
   f.say('こんにちは!');
-  assert.deepEqual(f.caption('こんにちは!'), { reply: true, prev: '', current: 'こんにちは!', settled: false, next: '晴れデス。' });
+  assert.deepEqual(f.caption('こんにちは!'), { reply: true, prev: '', current: 'こんにちは!', settled: false, ahead: true, next: '晴れデス。' });
   f.say('晴れデス。');
-  assert.deepEqual(f.caption('晴れデス。'), { reply: true, prev: 'こんにちは!', current: '晴れデス。', settled: false }, '全部話したら next は無い');
+  assert.deepEqual(f.caption('晴れデス。'), { reply: true, prev: 'こんにちは!', current: '晴れデス。', settled: false, ahead: true }, '全部話したら next は無い(先に見せた返事の印 ahead は、話し終わるまで残る)');
   assert.deepEqual(f.caption(null, 1200), { reply: true, prev: '', current: 'こんにちは!晴れデス。', settled: true });
   assert.equal(f.ahead('もう一文。'), null, '話し終わった後に届いた文は、話す時に足す(前の決まり)');
 });
@@ -173,8 +173,8 @@ test('(4) 字幕の流れ(声が無い時の文字送り): 先に見せた文は
   const f = createCaptionFlow();
   f.ahead('やあ。');
   f.say('やあ。');
-  assert.deepEqual(f.caption(''), { reply: true, prev: '', current: '', settled: false, next: 'やあ。' }, '始まりでも消えない');
-  assert.deepEqual(f.caption('やあ'), { reply: true, prev: '', current: 'やあ', settled: false, next: '。' });
+  assert.deepEqual(f.caption(''), { reply: true, prev: '', current: '', settled: false, ahead: true, next: 'やあ。' }, '始まりでも消えない');
+  assert.deepEqual(f.caption('やあ'), { reply: true, prev: '', current: 'やあ', settled: false, ahead: true, next: '。' });
   // 先に見せていない文(前からの道)は、今までどおり残りを出さない
   const g = createCaptionFlow();
   g.say('うん。');

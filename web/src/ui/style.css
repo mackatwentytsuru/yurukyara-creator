@@ -73,9 +73,15 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
 .caption .cap-prev { display: block; font-size: 0.7em; font-weight: 600; line-height: 1.5; opacity: 0.8; margin-bottom: 2px; }
 .caption .cap-now { display: block; }
 .caption.settled { font-size: clamp(17px, 2.4vw, 28px); }
-/* ---- B3(第 12 波 b・会話): まだ話していない返事の文は、今の文の続きに薄く小さく(返事の全部が早く読める)。
-   テレビ表示と、キーボードで画面が低い時(1 行の字幕)は、今の文だけ ---- */
-.caption .cap-next { opacity: 0.55; font-size: 0.85em; font-weight: 500; }
+/* ---- B3(第 12 波 b・会話): まだ話していない返事の文は、今の文の続きに薄く(返事の全部が早く読める)。
+   先に見せた返事(.ahead)は、話し終わり(.settled)と同じ大きさの 1 つの段落にする(字幕の箱が、話し終わりより高くならない = キャラにかからない)。
+   前の文は少し薄く、今の文は濃く、まだの文は薄く。テレビ表示と、キーボードで画面が低い時(1 行の字幕)は、今の文だけ ---- */
+.caption .cap-next { opacity: 0.5; font-weight: 600; }
+.caption.ahead { font-size: clamp(17px, 2.4vw, 28px); }
+.caption.ahead .cap-prev { display: inline; font-size: 1em; font-weight: 700; line-height: inherit; opacity: 0.72; margin: 0; }
+.caption.ahead .cap-now { display: inline; }
+@media (max-width: 640px) { .caption.ahead { font-size: clamp(16px, 4.4vw, 21px); } }
+@media (max-height: 500px) { .caption.ahead { font-size: clamp(14px, 3.8vh, 20px); } }
 html.tv-mode .caption .cap-next, html.kb-tight .caption .cap-next { display: none; }
 
 /* 字幕の上: Claude が店のデータを見て答えている札(どの情報を、いつの更新として使ったか) */

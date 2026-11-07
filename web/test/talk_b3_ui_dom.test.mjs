@@ -74,6 +74,7 @@ test('字幕(本物の createUi): 届いた文は薄く先に、話し始める�
   ui.sayAhead({ text: '葉っぱデス!' });
   assert.equal(cap.hidden, false);
   assert.deepEqual(view(cap), [['cap-now', '', [['cap-next', '葉っぱデス!']]]], '1 文目は話す前から薄く出る');
+  assert.match(cap.className, /\bahead\b/, '先に見せた返事は、話し終わりと同じ大きさの段落(字幕の箱が高くならない)');
   ui.sayAhead({ text: 'くだものも。' });
   assert.deepEqual(view(cap), [['cap-now', '', [['cap-next', '葉っぱデス!くだものも。']]]], '届いた文は全部、先に読める');
   ui.say({ text: '葉っぱデス!', expression: 'happy', motion: 'none', gaze: 'person' });
@@ -84,6 +85,7 @@ test('字幕(本物の createUi): 届いた文は薄く先に、話し始める�
   assert.deepEqual(view(cap), [['cap-prev', '葉っぱデス!', []], ['cap-now', 'くだものも。', []]]);
   ui.caption(null, 1200);
   assert.match(cap.className, /settled/);
+  assert.doesNotMatch(cap.className, /\bahead\b/);
   // テレビ表示
   document.documentElement.classList.add('tv-mode');
   ui.caption(null);
@@ -94,5 +96,6 @@ test('字幕(本物の createUi): 届いた文は薄く先に、話し始める�
   ui.caption('テレビの文。');
   assert.equal(cap.hidden, false);
   assert.deepEqual(view(cap), [['cap-now', 'テレビの文。', []]], 'テレビ表示は今の文だけ');
+  assert.doesNotMatch(cap.className, /\bahead\b/, 'テレビ表示は前の大きさのまま(3 m 先から読める字)');
   document.documentElement.classList.remove('tv-mode');
 });
