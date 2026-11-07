@@ -84,6 +84,10 @@ const BLOCKER = () => {
 /** キャラの動き(体・目・口)を止める(同じ形で、PC と箱の変化の後を比べるため) */
 const freeze = () => {
   const c = window.__app.character;
+  // 仕草の層(B5G)も休みの形にしてから止める(しっぽ・体のゆれの形が、遠近で縦横の比べに入らないように)
+  c.cute?.rest?.();
+  c.update?.(0);
+  c.mixer?.setTime?.(0); // 動き(clip)も同じ時刻の形にする(止める時刻で待つ動きの形が変わり、PC の縦横が 1% ほどぶれた)
   c.update = () => {};
   c.lookAt = () => {};
   c.setMouth = () => {};

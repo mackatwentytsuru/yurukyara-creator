@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { HeadFollower, IdleGaze, anglesToTarget, smoothingAlpha } from './gaze.js';
 import { GESTURES, Pose } from './gestures.js';
+// B5G かわいい仕草の層: どのキャラにも同じ名前で効く仕草(待つ・聞く・考える・話す の状態と、返事で頼む仕草)
+import { CuteLayer } from './cuteLayer.js';
+
+/** 腕と体の形は gestures.js(VRM・2D)か、キャラの動き clip(rig)が作る仕草。仕草の層は体の添え物だけを足す */
+const ARM_BY_POSE = new Set(['bow', 'wave', 'point']);
 
 const EYE_TAU = 0.045; // 目は速く追う
 const EXPR_TAU = 0.09;
@@ -38,6 +43,14 @@ export class CharacterBase {
     this.blink = 0;
     this._eyeInit = false;
     this.debug = { headYaw: 0, headPitch: 0, eyeYaw: 0, eyePitch: 0 };
+    // 仕草の層。腕・首・耳・しっぽがあるかは、子クラスが骨を見て caps を直す
+    this.cute = new CuteLayer();
+    this.cuteOut = this.cute.out;
+  }
+
+  /** いまの状態('idle' | 'listening' | 'thinking' | 'talking')。画面(main.js)が毎コマ渡す */
+  setActivity(name) {
+    this.cute.setActivity(name);
   }
 
   /** 頭のワールド座標(子クラスが決める)。既定は 1.4m の高さ。 */
@@ -65,6 +78,7 @@ export class CharacterBase {
       if (key !== name) this.exprTarget.set(key, 0);
     }
     this.setExpression(name, weight);
+    this.cute.onEmotion(name, weight); // 仕草が頼まれなければ、表情に合う小さな仕草が付く
   }
 
   isCustomExpression() {
@@ -75,23 +89,34 @@ export class CharacterBase {
     this.mouth = THREE.MathUtils.clamp(level, 0, 1);
   }
 
-  /** 動きを始める。知らない名前なら false */
+  /** 動きを始める。知らない名前なら false。仕草の層の名前(happy・greet・shy …)はどのキャラでも動く */
   play(name, opts = {}) {
     if (!name || name === 'none') return false;
-    const def = GESTURES[name];
+    const key = String(name).trim().toLowerCase();
+    const def = GESTURES[key];
+    if (def && ARM_BY_POSE.has(key)) {
+      // 腕と体の形は gestures.js。仕草の層は顔・体の添え物だけ(腕を二重に上げない)
+      this.active = { def, t: 0, name: key, opts };
+      this.cute.trigger(key, { clipArm: true, intensity: opts.intensity });
+      return true;
+    }
+    if (this.cute.trigger(key, { intensity: opts.intensity, pointSide: opts.dx })) return true;
     if (!def) return false;
-    this.active = { def, t: 0, name, opts };
+    this.active = { def, t: 0, name: key, opts };
     return true;
   }
 
   get playing() {
-    return this.active ? this.active.name : null;
+    return this.active ? this.active.name : this.cute.playing;
   }
 
   update(dt) {
     dt = Math.min(dt, 0.1);
     this.time += dt;
     this.object3d.updateWorldMatrix(true, false);
+    // 0. 仕草の層を 1 コマ進める(聞く時は、前のコマで見ていた人の向きへ体を少し向ける)
+    const cute = this.cute.step(dt, { gazeYaw: this.target ? (this.debug.personYaw ?? 0) : 0, clipBusy: Boolean(this.active) });
+    this.cuteOut = cute;
 
     // 1. 視線の先をキャラの向きの座標に直し、目と頭に分ける
     this._headWorld(_origin);
@@ -105,6 +130,16 @@ export class CharacterBase {
       eyeWorld = this.target;
     } else {
       ({ yaw: wantYaw, pitch: wantPitch } = this.idle.step(dt));
+      eyeWorld = null;
+    }
+    this.debug.personYaw = wantYaw; // 仕草の層が「話す人の方へ向く」に使う(目線の足し分を入れる前)
+    // 仕草の目線(考える時は上・てれる時は下とよそ)を足す
+    if (cute.gazeX || cute.gazeY) {
+      wantYaw += cute.gazeX;
+      wantPitch += cute.gazeY;
+      eyeWorld = null;
+    }
+    if (!eyeWorld) {
       const d = 2;
       const local = new THREE.Vector3(
         localOrigin.x + Math.sin(wantYaw) * Math.cos(wantPitch) * d,
@@ -119,7 +154,8 @@ export class CharacterBase {
     } else {
       this.eyeTarget.lerp(eyeWorld, smoothingAlpha(dt, EYE_TAU));
     }
-    const h = this.head.step(dt, wantYaw, wantPitch);
+    // 首は、仕草の目線の足し分の 6 割だけ追う(残りは目が動く。考える時の上目・てれる時のよそ見で、首も目も回りすぎない)
+    const h = this.head.step(dt, wantYaw - 0.4 * cute.gazeX, wantPitch - 0.4 * cute.gazeY);
     this.debug.headYaw = h.yaw;
     this.debug.headPitch = h.pitch;
     this.debug.wantYaw = wantYaw;
@@ -127,7 +163,7 @@ export class CharacterBase {
 
     // 2. 動き・呼吸・口
     this.pose.reset();
-    this._idlePose();
+    this._idlePose(cute);
     if (this.active) {
       this.active.t += dt;
       if (this.active.t >= this.active.def.duration) this.active = null;
@@ -136,8 +172,8 @@ export class CharacterBase {
     this._mouthSm += (this.mouth - this._mouthSm) * smoothingAlpha(dt, 0.04);
     this.pose.add('head', 0.05 * this._mouthSm, 0, 0);
 
-    // 3. まばたき
-    this._updateBlink(dt);
+    // 3. まばたき(仕草の層が、間を毎回変えて決める。二度まばたきも)
+    this.blink = cute.blink;
 
     // 4. 表情をなめらかに
     const a = smoothingAlpha(dt, EXPR_TAU);
@@ -155,14 +191,26 @@ export class CharacterBase {
       expr: this.exprValue,
       mouth: this._mouthSm,
       blink: this.blink,
+      cute,
     });
   }
 
-  _idlePose() {
-    const b = Math.sin((this.time / 4.2) * Math.PI * 2);
-    this.pose.add('chest', 0.012 * b, 0, 0);
-    this.pose.add('spine', 0.006 * b, 0.01 * Math.sin(this.time * 0.37), 0);
-    this.pose.add('hips', 0, 0, 0.008 * Math.sin(this.time * 0.29));
+  /** 仕草の層の数字を、人型の骨の名前(VRM・2D の板が読む Pose)に書く。rig は cuteRig.js が骨に直接書く */
+  _idlePose(o = this.cuteOut) {
+    const p = this.pose;
+    p.add('head', o.headX * 0.6, o.headY * 0.6, o.headZ * 0.6);
+    p.add('neck', o.headX * 0.4, o.headY * 0.4, o.headZ * 0.4);
+    p.add('spine', o.spineX * 0.5, o.spineY * 0.5, o.spineZ * 0.5);
+    p.add('chest', o.spineX * 0.5, o.spineY * 0.5, o.spineZ * 0.5);
+    // 腕: 上げる(外へ 2.25 ラジアンまで)・外へ開く・ふる。右腕は z が −、左腕は +
+    p.add('rightUpperArm', 0, 0, -(2.25 * o.armRaiseR + o.armOutR) + 0.5 * o.armFwdR);
+    p.add('leftUpperArm', 0, 0, 2.25 * o.armRaiseL + o.armOutL - 0.5 * o.armFwdL);
+    p.add('rightLowerArm', 0, 0, -o.armSwingR * 1.4);
+    p.add('leftLowerArm', 0, 0, o.armSwingL * 1.4);
+    if (o.shoulderL || o.shoulderR) {
+      p.add('leftShoulder', 0, 0, o.shoulderL * 12);
+      p.add('rightShoulder', 0, 0, -o.shoulderR * 12);
+    }
   }
 
   _updateBlink(dt) {

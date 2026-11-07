@@ -25,6 +25,11 @@ export const DEFAULT_GAINS = {
   elbowFrom: 0.3, // 骨の上腕の角度(の大きさ)がこれを超えたら曲げ始める
   elbowTo: 2.25, // ここで最大(手を振る動きの上腕の角度)
   swing: 0.6, // 前腕の振り(骨の前腕の z 回転の効き)
+  // B5G かわいい仕草の層の効き(3D と同じ数字を 2D の板へ)
+  cuteHop: 1.0, // 弾み(背の高さに対する割合をそのまま)
+  cuteShift: 1.0, // 根元の横ずれ
+  cuteSway: 1.0, // 体の横へのゆれ(背骨と胸の z 回転の和)
+  cuteTail: 0.8, // しっぽの板の回し
 };
 
 const ease = (u) => u * u * (3 - 2 * u);
@@ -55,7 +60,9 @@ export function pose2d(pose, s = {}, gains = DEFAULT_GAINS) {
   const bowK = Math.min(1, bow * 2); // おじぎの深さ 0〜1(おじぎの動きの山で 1)
   const dropPitch = pitch * (1 - g.bowHoldHead * bowK); // おじぎの間は、首の傾きで頭を下げない(キャラによる)
   const t = s.time ?? 0;
-  const bounce = g.bounce * Math.max(0, Math.sin(t * Math.PI * 2 * 0.55)) * (1 - Math.min(1, bow * 3));
+  // B5G かわいい仕草の層(s.cute)があれば、弾み・左右のゆれ・しっぽ・耳は 3D と同じ数字から作る(いつも跳ねる前の弾みは使わない)
+  const cute = s.cute ?? null;
+  const bounce = cute ? cute.rootY * g.cuteHop : g.bounce * Math.max(0, Math.sin(t * Math.PI * 2 * 0.55)) * (1 - Math.min(1, bow * 3));
   const upR = get(pose, 'rightUpperArm')[2];
   const upL = get(pose, 'leftUpperArm')[2];
   const loR = get(pose, 'rightLowerArm')[2];
@@ -78,6 +85,12 @@ export function pose2d(pose, s = {}, gains = DEFAULT_GAINS) {
     upperL: upL * g.arm,
     foreR: elbowBend(upR, 'r', g) + loR * g.swing,
     foreL: elbowBend(upL, 'l', g) + loL * g.swing,
+    // B5G: 体の横へのゆれ(腰を中心に板を回す。見ている人から見て左回りが +)・根元の横ずれ・しっぽ・耳(部品があるキャラだけ使う)
+    rootX: cute ? cute.rootX * g.cuteShift : 0,
+    bodyRot: cute ? clamp(-(spine[2] + chest[2]) * g.cuteSway, -0.2, 0.2) : 0, // 頭(headRot = −roll)と同じ向きの決まり
+    tailRot: cute ? clamp(cute.tailY * g.cuteTail + cute.tailX * 0.3, -0.5, 0.5) : 0,
+    earRotL: cute ? clamp(cute.earL * 0.6, -0.4, 0.4) : 0,
+    earRotR: cute ? clamp(-cute.earR * 0.6, -0.4, 0.4) : 0,
   };
 }
 

@@ -505,6 +505,10 @@ function frame(rawMs) {
 
   // 5. 口・描画
   c.setMouth(speaker.level());
+  // ── B5G かわいい仕草の層(character/cuteLayer.js): いまの状態を渡す(話す > 聞く > 考える > 待つ)。文字を打っている間も「聞く」 ──
+  const typing = document.activeElement?.id === 'textInput' && Boolean(document.activeElement.value.trim());
+  c.setActivity?.(speaker.speaking ? 'talking' : listener?.voiceActive || listener?.transcribing || typing ? 'listening' : dialogue.busy ? 'thinking' : 'idle');
+  // ── B5G ここまで ──
   c.update(dt);
   if (vrPanel?.mesh.visible) {
     vrPanel.set({ state: vrState() });
