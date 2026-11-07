@@ -20,7 +20,8 @@ import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TOOL_FILES = ("yuru_update.py", "yuru_update_core.py")   # 道具と部品(写しの tools/ に置く)
+TOOL_FILES = ("yuru_update.py", "yuru_update_core.py", "yuru_update_hook.mjs")   # 道具・部品・起動役(写しの tools/ に置く)
+NODE = shutil.which("node")
 
 
 def tool_files():
@@ -341,6 +342,43 @@ class UpdateTest(unittest.TestCase):
         self.assertIn("自分で記録した変更", out)
         self.assertEqual(text(self.user, "VERSION").strip(), "1.0.0")
         self.assertEqual(self.backup_dirs(), [])
+
+    def hook(self, cwd=None, **env):
+        p = subprocess.run([NODE, os.path.join(cwd or self.user, "tools", "yuru_update_hook.mjs")], cwd=cwd or self.user,
+                           env=dict(self.env, **env), capture_output=True, timeout=30)
+        self.assertEqual(p.returncode, 0)   # 起動のおしらせは、何があっても止めない
+        return p.stdout.decode("utf-8", "replace").strip()
+
+    @unittest.skipUnless(NODE, "node が無い")
+    def test_start_hook_tells_once_a_day_and_never_stops(self):
+        self.advance()
+        self.assertEqual(self.hook(YURU_UPDATE_CHECK="0"), "")          # 止めてある時は何もしない
+        line = self.hook()
+        self.assertIn("新しい版 1.1.0 があります", line)
+        self.assertEqual(line.count("\n"), 0)
+        self.assertEqual(self.hook(), "")                               # 今日はもう見た
+        plain = os.path.join(self.tmp.name, "plain")
+        for rel_path, data in tool_files().items():
+            write(plain, rel_path, data)
+        self.assertEqual(self.hook(cwd=plain), "")                     # git clone でない
+        self.assertEqual(sorted(os.listdir(plain)), ["tools"])          # 何も書かない
+        shutil.move(self.origin, self.origin + ".away")
+        os.remove(os.path.join(self.user, ".yuru_update.json"))
+        self.assertEqual(self.hook(), "")                               # ネットに届かない
+
+    @unittest.skipUnless(NODE, "node が無い")
+    def test_start_hook_skips_the_store_python(self):
+        hook_url = "file:///" + os.path.join(HERE, "yuru_update_hook.mjs").replace(os.sep, "/").lstrip("/")
+        js = (f"const m = await import({json.dumps(hook_url)});"
+              "console.log(JSON.stringify(["
+              "m.findPython('C:\\\\Users\\\\a\\\\AppData\\\\Local\\\\Microsoft\\\\WindowsApps', 'win32', () => true),"
+              "m.findPython('C:\\\\Py310;C:\\\\Users\\\\a\\\\AppData\\\\Local\\\\Microsoft\\\\WindowsApps', 'win32', (f) => f.endsWith('python.exe'))[0],"
+              "m.findPython('', 'linux', () => true)]));")
+        p = subprocess.run([NODE, "--input-type=module", "-e", js], capture_output=True, timeout=30)
+        got = json.loads(p.stdout.decode("utf-8"))
+        self.assertIsNone(got[0])                       # ストアの入口だけなら、Python は無いとみなす
+        self.assertTrue(got[1].lower().startswith("c:\\py310"))
+        self.assertIsNone(got[2])
 
     def test_already_newest(self):
         code, out = self.tool("check")
