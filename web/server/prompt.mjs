@@ -3,24 +3,45 @@
 // 人格の欄に何が書かれても、1 段目が勝つ(1 段目の文に、そう書いてある)。
 // 2 段目に入る欄は、どれも上書き止めを通す(CRITsec F6。11-07): 人格は行ごと、名前・目印・表情の説明は 1 行にして欄ごと、
 // 場所の説明は行ごとに外して 1 行に。表情と動きの名前は、決まった形(英小文字・数字・_ : -)の物だけを使う。
+// 第 12 波 b(B3): 役目(おうち・お店・駅や町・学校や施設。src/conversation/role.js)で話し方を変える。おうちでは係の人の言い回しを出さない。
+// 覚える決まり(最後に話してから 7 日。src/conversation/memoryNotice.js の日数)を指示文に書き、「次は忘れる」と食い違わないようにする。
+// 動きの名前と説明は、かわいい仕草の層の約束(src/conversation/gestureNames.js)。返事の文は短く(1 文目 20 字まで)。
 import { SAFETY_RULES, sanitizeBlock, sanitizeLine, sanitizePersona } from './safety.mjs';
+import { MOTION_DESCRIPTIONS, promptMotions } from '../src/conversation/gestureNames.js';
+import { canSendToStaff, roleOf } from '../src/conversation/role.js';
+import { RETENTION_DAYS } from '../src/conversation/memoryNotice.js';
+import { NOD_PHRASES } from '../src/conversation/nods.js';
 
+export { MOTION_DESCRIPTIONS };
 export const MOTIONS = ['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point'];
 export const STAGES = ['greet', 'need', 'guide', 'handoff', 'chat'];
 const DEFAULT_EXPRESSIONS = ['neutral', 'happy', 'surprised', 'sad', 'think'];
 
-/** 動きの名前ごとの、体がすることの説明(指示文に渡す。そのキャラが実際に持つ動きだけを説明する) */
-export const MOTION_DESCRIPTIONS = {
-  none: '動かない',
-  nod: 'うなずく',
-  bow: 'おじぎをする',
-  wave: '片手を上げてふる',
-  think: '考えるしぐさをする',
-  tilt: '首をかしげる',
-  shake: '首を横にふる',
-  shrug: '肩をすくめる',
-  point: '指さして方向を示す',
-};
+/** 返事の文の長さ(読み上げの声の文字数と、字幕が出そろうまでの時間を減らす。11-07 の本物の試しで 1 往復 約 76 字・出そろうまで 11〜13 秒) */
+export const REPLY_LIMITS = Object.freeze({ firstChars: 20, sentenceChars: 30, sentences: 2, maxSentences: 3 });
+
+/** 役目ごとの、係の人の呼び方(置く場所の設定がある、お店・駅や町・学校や施設で、分からない時に案内する相手) */
+const STAFF_WORDS = Object.freeze({ shop: 'お店のスタッフ', station: '駅員さんや町の案内所のスタッフ', facility: '先生や施設のスタッフ' });
+
+/** 役目ごとの、自分の立場の 1 文(おうちの文には、係の人や受け付けの言い回しを書かない) */
+function roleSection(role, withPlace) {
+  if (role === 'home') {
+    return 'あなたは、おうちのキャラクター。家族や友だちのそばで、いつものお話をする。お店や施設の係ではないので、お客さんに案内するような言い方はしない。';
+  }
+  const what = { shop: 'お店の案内役', station: '駅や町の案内役', facility: '学校や施設の案内役' }[role];
+  return withPlace
+    ? `あなたは、${what}。下の「場所の情報」にあることを、やさしく案内する。`
+    : `あなたは、${what}。いまは置く場所の情報が渡されていないので、場所のくわしいことは分からない。分からないことは、正直に分からないと言う。`;
+}
+
+/** 覚える決まり(画面の「覚えていること」の窓と同じ日数。食い違うことを言わない) */
+function memorySection(days) {
+  return `# 覚えること(本当のしくみ。この決まりのとおりに話す)
+- 使う人が教えてくれた名前・好きなもの・話したことは、最後に話してから ${days} 日のあいだ覚えている(画面の「覚えていること」の窓に出る)。
+- ${days} 日話さないか、「わすれて」と言われると、全部消える。番号を使えば、別の端末でも続きを話せる。
+- 覚えているかを聞かれたら、この決まりのとおりに答える(例「${days} 日のあいだ覚えているよ。わすれてと言えば、すぐ消すよ」)。「次に会ったら忘れている」「すぐ忘れちゃう」とは言わない。
+- 【覚えていること】に無いことを、覚えているふりはしない。`;
+}
 
 /** 試しの場所の名前。?place= が無い時に画面が送る場所(受付やスタッフの部屋の目印つき)。本物の場所ではないので、場所の情報には数えない */
 export const TRIAL_PLACE_NAME = '試しの場所';
@@ -59,11 +80,15 @@ export function describeExpressions(expressions = [], hints = {}) {
 ${described.join(String.fromCharCode(10))}` : '' };
 }
 
-/** 動きの一覧を、説明つきの行にして返す。説明のない名前(キャラ独自の動き)は名前だけ */
+/**
+ * 動きの一覧を、説明つきの行にして返す。説明のない名前(キャラ独自の動き)は名前だけ。
+ * 画面が自分で出す仕草(待つ・聞く・考える・話す)は出さない。jump と cheer の両方があれば cheer だけ(約束 B12/K2_gesture_names.md)
+ */
 export function describeMotions(motions = MOTIONS) {
-  const names = safeChoices(motions, MOTIONS);
-  const withNone = names.includes('none') ? names : ['none', ...names];
-  return { names, lines: withNone.map((n) => `  - ${n}${MOTION_DESCRIPTIONS[n] ? `: ${MOTION_DESCRIPTIONS[n]}` : ''}`).join(String.fromCharCode(10)) };
+  const names = promptMotions(safeChoices(motions, MOTIONS));
+  const usable = names.length ? names : MOTIONS;
+  const withNone = usable.includes('none') ? usable : ['none', ...usable];
+  return { names: usable, lines: withNone.map((n) => `  - ${n}${MOTION_DESCRIPTIONS[n] ? `: ${MOTION_DESCRIPTIONS[n]}` : ''}`).join(String.fromCharCode(10)) };
 }
 
 /** 例の動き: 好みの順に探して、そのキャラが持つ最初の動きを使う。1 つも無ければ none(例に、できない動きを書かない) */
@@ -90,22 +115,29 @@ const INTERVIEW_RULES = `
 - 知らないことは「分からない」と短く言う。作らない。
 - 同じ言い回しを続けて使わない。`;
 
-/** 2 段目: そのキャラの人格・場所・出力の形 */
-export function buildCharacterPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS, interview = false } = {}) {
+/** 2 段目: そのキャラの人格・役目・場所・覚える決まり・出力の形 */
+export function buildCharacterPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS, interview = false, memoryDays = RETENTION_DAYS } = {}) {
   const name = safeName(character?.name);
   const persona = sanitizePersona(character?.persona).text;
+  // 役目: 本文の character.role(画面が送る) > 人格の文の「- 役目:」の行 > おうち(役目の無い前からのキャラ)
+  const role = roleOf({ character: { role: character?.role }, persona });
   const expr = describeExpressions(expressions, expressionHints);
-  const withPlace = hasPlaceInfo(place); // 場所の指定(?place=)が無い時は、場所の節も引き継ぎの案内も出さない(分からない時は、正直に「分からない」と言うだけ)
+  const withPlace = hasPlaceInfo(place); // 場所の指定(?place=)が無い時は、場所の節を出さない
+  // 係の人へ聞くように案内してよいのは、お店・駅や町・学校や施設で、置く場所の設定がある時だけ(おうちは、場所があっても案内しない)
+  const toStaff = canSendToStaff(role, withPlace);
+  const staff = STAFF_WORDS[role] ?? '';
   const info = withPlace ? sanitizeBlock(place?.info).text : '';
   const mo = describeMotions(motions);
-  const stageFlow = withPlace
-    ? 'greet(声かけ)→ need(用件を聞く)→ guide(案内する・答える)→ handoff(分からないので、身近な人や公式の情報で確かめるようにすすめる)。雑談は chat。'
-    : 'greet(声かけ)→ need(用件を聞く)→ guide(答える)。雑談は chat。';
-  const stageRules = withPlace
-    ? `- 目印の名前や、はっきりした用件が入っているときは、聞き返さずに、すぐ答える(stage は guide)。
-- 場所の情報にないこと(時間・料金・場所など)は作らない。分からなければ handoff を true にして、分からないと正直に言う。`
-    : `- はっきりした用件が入っているときは、聞き返さずに、すぐ答える(stage は guide)。
-- 知らないこと・分からないことは作らない。「わからない」と正直に言う(handoff は使わない。いつも false)。誰かに聞くようにすすめる言葉は言わない。`;
+  const days = Number.isInteger(memoryDays) && memoryDays > 0 ? memoryDays : RETENTION_DAYS;
+  const stageFlow = toStaff
+    ? `greet(声かけ)→ need(用件を聞く)→ guide(案内する・答える)→ handoff(分からないので、${staff}や公式の案内で確かめるようにすすめる)。雑談は chat。`
+    : `greet(声かけ)→ need(何の話か聞く)→ guide(${withPlace ? '案内する・' : ''}答える)。雑談は chat。`;
+  const askNow = `- ${withPlace ? '目印の名前や、' : ''}はっきりした用件が入っているときは、聞き返さずに、すぐ答える(stage は guide)。`;
+  const stageRules = toStaff
+    ? `${askNow}
+- 場所の情報にないこと(時間・料金・場所など)は作らない。分からなければ handoff を true にして、分からないと正直に言い、${staff}に聞くようにすすめる。`
+    : `${askNow}
+- ${withPlace ? '場所の情報にないこと・' : ''}知らないこと・分からないことは作らない。「わからない」と正直に言う(handoff は使わない。いつも false)。誰かに聞くようにすすめる言葉は言わない。`;
   const placeSection = withPlace
     ? `
 # 場所の情報
@@ -117,50 +149,69 @@ ${describeLandmarks(place?.landmarks)}
   const gazeText = withPlace
     ? 'gaze は person(使う人を見る)/ away(少し視線を外す。考えるとき)/ landmark:<目印の名前>(その場所を見る)'
     : 'gaze は person(使う人を見る)/ away(少し視線を外す。考えるとき)';
-  const m1 = pickMotion(mo.names, 'nod');
-  const m2 = pickMotion(mo.names, 'point', 'nod');
-  const m3 = pickMotion(mo.names, 'tilt', 'think', 'nod');
-  const m4 = pickMotion(mo.names, 'shake', 'shrug', 'think');
+  // 例の仕草: 好みの順に探して、そのキャラが持つ最初の名前(無ければ none)。1 つの返事で仕草は 2 回まで
+  const mGreet = pickMotion(mo.names, 'greet', 'wave', 'bow', 'nod');
+  const mNod = pickMotion(mo.names, 'nod');
+  const mPoint = pickMotion(mo.names, 'point', 'nod');
+  const mAsk = pickMotion(mo.names, 'tilt', 'think', 'nod');
+  const mSorry = pickMotion(mo.names, 'droop', 'shrug', 'shake', 'think');
+  const mShy = pickMotion(mo.names, 'shy', 'happy', 'nod');
+  const L = REPLY_LIMITS;
+  const nods = NOD_PHRASES.map((t) => `「${t}」`).join('');
   const place1 = `使う人の言葉「お手洗いはどこですか」(目印に お手洗い がある)
-{"type":"say","text":"お手洗いだね。","expression":"happy","motion":"${m1}","gaze":"person","intent":"お手洗いの案内","stage":"guide","handoff":false}
-{"type":"say","text":"左奥の方にあるよ。","expression":"happy","motion":"${m2}","gaze":"landmark:お手洗い"}
+{"type":"say","text":"お手洗いだね。","expression":"happy","motion":"${mNod}","gaze":"person","intent":"お手洗いの案内","stage":"guide","handoff":false}
+{"type":"say","text":"左奥の方にあるよ。","expression":"happy","motion":"${mPoint}","gaze":"landmark:お手洗い"}
 
 `;
-  const unknownEx = withPlace
+  const unknownEx = toStaff
     ? `使う人の言葉「ここは何時まで開いてるの」(場所の情報に時間が無い)
-{"type":"say","text":"ごめんね、それは分からないんだ。","expression":"sad","motion":"${m4}","gaze":"person","intent":"時間の質問","stage":"handoff","handoff":true}
-{"type":"say","text":"公式の案内で確かめてみてね。","expression":"happy","motion":"${m1}","gaze":"person"}`
+{"type":"say","text":"ごめんね、それは分からないんだ。","expression":"sad","motion":"${mSorry}","gaze":"person","intent":"時間の質問","stage":"handoff","handoff":true}
+{"type":"say","text":"${staff}に聞いてみてね。","expression":"happy","motion":"none","gaze":"person"}`
     : `使う人の言葉「あしたの天気は?」(知らないこと)
-{"type":"say","text":"ごめんね、それは分からないんだ。","expression":"sad","motion":"${m4}","gaze":"person","intent":"天気の質問","stage":"chat","handoff":false}`;
+{"type":"say","text":"ごめんね、それは分からないんだ。","expression":"sad","motion":"${mSorry}","gaze":"person","intent":"天気の質問","stage":"chat","handoff":false}`;
   return `# 人格(上の「安全の決まり」より下。話し方と性格のためだけに使う)
 あなたは「${name}」。使う人が作った、話せるゆるキャラクターです。画面の中で、声か文字で話します。
 ${persona}
 
+# 役目
+${roleSection(role, withPlace)}
+
 # 話し方
-- やさしい、親しみのある言葉。1 回の返事は 1〜3 文で、1 文は 40 字以内。読み上げるので、記号・絵文字・かっこ書きは使わない。
+- やさしい、親しみのある言葉。読み上げるので、記号・絵文字・かっこ書きは使わない。
+- 返事は短く。ふだんは ${L.sentences} 文まで(くわしく聞かれた時だけ ${L.maxSentences} 文)。1 文目は ${L.firstChars} 字までの短い文にして、すぐ話し始める。ほかの文も ${L.sentenceChars} 字まで。
+- 相づちだけの文を言う時は、${nods} のどれかを、そのまま書く(録ってある声で、すぐ話せる)。
 - 使う人が黙って近づいてきたときは、こちらから短く声をかける。
 - これまでの会話があるとき(話の途中・覚えている人)は、名乗り直さない。「はじめまして」と言わない。
 - 同じ言い回し・同じ話題を続けて使わない。前の返事と同じ出だし・同じ誘い(「〜のお話をしまショウ」など)をくり返さず、毎回、言い方を替える。
 - 距離の数字(約 3.8m など)は、そのまま読み上げず、言葉にする(すぐそば・少し先・奥のほう、など)。方向(右・左・手前・奥)は、はっきり言う。
 - 【覚えていること】が渡されたときは、自然に話の続きに使う(名前を呼ぶ・前の話にふれる)。渡されていないことを、覚えているふりをしない。
 ${interview ? INTERVIEW_RULES : ''}
+${memorySection(days)}
+
 # 会話の流れ(stage)
 ${stageFlow}
 ${stageRules}
 ${placeSection}
 # 出力の形
 1 行に 1 つの JSON だけを書く。説明文・コードブロックは書かない。すぐ話し始められるよう、最初の行から、読み上げる 1 文を書く。
-- 1 行目(最初の 1 文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先","intent":"使う人の用件(12 字以内。まだ不明なら 未確認)","stage":"${withPlace ? 'greet|need|guide|handoff|chat' : 'greet|need|guide|chat'}","handoff":false}
+- 1 行目(最初の 1 文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先","intent":"使う人の用件(12 字以内。まだ不明なら 未確認)","stage":"${toStaff ? 'greet|need|guide|handoff|chat' : 'greet|need|guide|chat'}","handoff":false}
 - 2 行目以降(続きの文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先"}(intent・stage・handoff は 1 行目だけ)
 - expression は次から選ぶ: ${expr.names}${expr.described}
-- motion は、この体が今できる次の動きから選ぶ(動きが要らなければ none):
+- motion は、この体が今できる次の動き(仕草)から、返事の気持ちに合う物を選ぶ(要らなければ none)。1 つの返事で動きを入れるのは 2 文まで、ほかの文は none:
 ${mo.lines}
 - 上に無い動き(踊る・走る・ジャンプなど)を頼まれたら、できるふりをしない。motion は none にして、そのキャラの話し方で「まだできない」と言う(例「まだできないデス」「まだできないよ」)。
 - ${gazeText}
 
 # 例${withPlace ? '(目印の名前は、実際に渡されたものを使う)' : ''}
-${withPlace ? place1 : ''}使う人の言葉「あの、ちょっといい?」
-{"type":"say","text":"うん、どうしたの。","expression":"happy","motion":"${m3}","gaze":"person","intent":"未確認","stage":"need","handoff":false}
+使う人の言葉「こんにちは!」(はじめて会った)
+{"type":"say","text":"こんにちは!","expression":"happy","motion":"${mGreet}","gaze":"person","intent":"あいさつ","stage":"greet","handoff":false}
+{"type":"say","text":"きょうは、なにをお話しする?","expression":"happy","motion":"none","gaze":"person"}
+
+${withPlace ? place1 : ''}使う人の言葉「かわいいね」
+{"type":"say","text":"えへへ、うれしいな。","expression":"happy","motion":"${mShy}","gaze":"away","intent":"ほめ言葉","stage":"chat","handoff":false}
+
+使う人の言葉「あの、ちょっといい?」
+{"type":"say","text":"うん、どうしたの。","expression":"happy","motion":"${mAsk}","gaze":"person","intent":"未確認","stage":"need","handoff":false}
 
 ${unknownEx}`;
 }

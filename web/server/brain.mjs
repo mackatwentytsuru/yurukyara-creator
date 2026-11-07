@@ -7,9 +7,11 @@ import { nearestExpression, oneCustomPerReply } from '../src/character/expressio
 import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { summarize } from './memory/reflect.mjs';
 import { aizuchi, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
+import { gestureBudget, gestureForIntent, resolveMotion } from '../src/conversation/gestureNames.js';
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
-const GREETING_MOTIONS = ['bow', 'nod', 'wave']; // 初めてのあいさつの 1 文目はおじぎ、2 文目はうなずき、3 文目は手をふる(無いキャラは none に落ちる)
+// 仮の頭脳の仕草(かわいい仕草の層の名前。そのキャラに無い名前は、emit が近い物へ落とす。1 つの返事で仕草は 2 回まで。第 12 波 b)
+const GREETING_MOTIONS = ['greet', 'bow', 'none']; // 初めてのあいさつ: 1 文目は手をふって弾む、2 文目はおじぎ、3 文目は表情だけ
 const EXAMPLE_MOTIONS = ['nod', 'tilt', 'none']; // 話し方の例の返事
 const AIZUCHI_MOTIONS = ['nod', 'tilt'];
 // 分からない・できないと言う文は、考える顔にする(話し方の例・あいづち)
@@ -58,7 +60,8 @@ export function normalizeEvent(obj, { expressions, motions = MOTIONS }) {
     if (!text) return null;
     // 一覧に無い表情は、近い物(ウインク → happy など)に落とす。無ければ neutral
     const expression = nearestExpression(String(obj.expression ?? ''), (n) => expressions.includes(n)) ?? 'neutral';
-    const motion = motions.includes(obj.motion) ? obj.motion : 'none';
+    // 仕草: そのキャラが使える名前ならそのまま。無ければ近い物(greet → wave → nod など)、画面が自分で出す仕草と知らない名前は none
+    const motion = resolveMotion(obj.motion, motions);
     return { type: 'say', text, expression, motion, gaze: String(obj.gaze ?? 'person') };
   }
   return null;
@@ -334,6 +337,8 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   // そのキャラが実際に使える動き(rig は、動きのファイルがある物だけ)
   const motions = Array.isArray(body.motions) && body.motions.length ? safeChoices(body.motions.slice(0, 24), MOTIONS) : MOTIONS;
   const limitCustom = oneCustomPerReply(expressions); // 特別な表情は、1 回の返事で 1 つまで
+  const limitGesture = gestureBudget(); // 仕草は、1 回の返事で 2 回まで(残りの文は none。かわいい仕草の層の約束)
+  let firstSay = true;
   const mockOnly = forceMock || want === 'mock';
   const brain = config.anthropicKey && !mockOnly ? 'haiku' : 'mock'; // 上限に当たった回・合言葉が無い回は、仮の頭脳で動き続ける
   let handoffFlagged = false;
@@ -353,7 +358,13 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     // 出力の確かめ(恋人役・独り占めの言葉は、決まった文に差し替える)
     const ev = guardOutput(normalizeEvent(obj, { expressions, motions }));
     if (ev) {
-      if (ev.type === 'say') ev.expression = limitCustom(ev.expression);
+      if (ev.type === 'say') {
+        ev.expression = limitCustom(ev.expression);
+        // 1 文目で頭脳が仕草を選ばなかった時は、返事の気持ち(会話の段・表情)から決める(あいさつ → greet など)
+        if (firstSay && ev.motion === 'none') ev.motion = gestureForIntent({ stage: obj.stage, expression: ev.expression }, motions);
+        ev.motion = limitGesture(ev.motion);
+        firstSay = false;
+      }
       onEvent(ev);
     }
   };

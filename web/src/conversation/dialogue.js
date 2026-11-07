@@ -5,6 +5,7 @@
 import { streamChat } from './brainClient.js';
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
+import { roleOf } from './role.js';
 
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 
@@ -97,6 +98,12 @@ export class Dialogue {
     // 返事が 1 文も来ないまま止める回の言葉は、捨てずに、次の言葉の頭につなげる(言い直しや割り込みで、前の言葉を取りこぼさない)
     const cur = this.cur;
     if (this.busy && cur && cur.said === 0 && cur.trigger !== 'approach' && cur.text) this.carry = { text: cur.text, at: Date.now() };
+    // B3(第 12 波 b): 返事が途中まで届いた回を止める時は、その言葉と届いた返事を履歴に残す(続けて送っても、前の話を落とさない)
+    if (this.busy && cur && cur.said > 0 && cur.sayEvents?.length) {
+      this.history.push({ role: 'user', content: cur.trigger === 'approach' ? '(使う人が近づいてきた)' : cur.text });
+      this.history.push({ role: 'assistant', content: assistantLines(cur.sayEvents, cur.thought) });
+      this.history = trimHistory(this.history);
+    }
     this.cur = null;
     this.turnId += 1;
     this.abort?.abort();
@@ -131,7 +138,8 @@ export class Dialogue {
       this.carry = null;
     }
     const id = this.turnId;
-    const cur = { text: askText, trigger, said: 0 };
+    const sayEvents = []; // 履歴に、指示どおりの JSON の形で戻すため(止めた回も、届いた分を履歴に残す)
+    const cur = { text: askText, trigger, said: 0, sayEvents, thought: null };
     this.cur = cur;
     this.busy = true;
     const ac = new AbortController();
@@ -163,9 +171,9 @@ export class Dialogue {
     }
     let sayCount = 0;
     const spoken = [];
-    const sayEvents = []; // 履歴に、指示どおりの JSON の形で戻すため
     let thoughtEv = null;
-    if (trigger !== 'approach') this.ui.userSaid(text);
+    // 前の言葉をつないで送る時は、つないだ言葉を見せる(2 回目の言葉だけが出て、前の言葉が消えたように見えないように。第 12 波 b)
+    if (trigger !== 'approach') this.ui.userSaid(askText);
 
     // 返事が来るまでの、うなずき
     for (const at of fillerPlayed ? NOD_AT_MS.slice(1) : NOD_AT_MS) {
@@ -182,7 +190,8 @@ export class Dialogue {
       text: askText,
       trigger,
       scene: ctx.scene,
-      character: ctx.character,
+      // 役目(第 12 波 b): 使う人が選んだ値 > character.json の role > 人格の文の行 > おうち(src/conversation/role.js)
+      character: { ...ctx.character, role: roleOf({ settings: ctx.character?.role ? { role: ctx.character.role } : null, character: this.character, persona: ctx.character?.persona }) },
       place: ctx.place,
       expressions: this.character.expressions,
       expressionHints: this.character.expressionHints,
@@ -205,6 +214,7 @@ export class Dialogue {
             if (ev.notice) this.ui.notice?.(ev.notice); // 「仮の頭脳です(…)」
           } else if (ev.type === 'thought') {
             thoughtEv = ev;
+            cur.thought = ev;
             this.ui.thought(ev);
           } else if (ev.type === 'say') {
             if (m.tFirstSay === null) m.tFirstSay = performance.now();
@@ -213,6 +223,8 @@ export class Dialogue {
             const isFirst = sayCount === 1;
             spoken.push(ev.text);
             sayEvents.push(ev);
+            // B3(第 12 波 b): 届いた文は、話し始める前から字幕に薄く出す(返事の全部が早く読める。声は今までどおり 1 文ずつ)
+            this.ui.sayAhead?.(ev);
             this.speaker
               .enqueue(ev.text, {
                 onFirstByte: (ms) => {

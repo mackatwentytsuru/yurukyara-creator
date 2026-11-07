@@ -7,6 +7,7 @@
 import { redactSecrets } from '../src/conversation/secrets.js';
 import { isUnsafeOutput, oneLine, sanitizeBlock, sanitizeLine } from './safety.mjs';
 import { STAGES, isChoiceName } from './prompt.mjs';
+import { normalizeRole } from '../src/conversation/role.js';
 
 const clean = (s) => redactSecrets(s).text;
 
@@ -141,7 +142,8 @@ export function sanitizeChatBody(raw, { publicPath = isPublicRuntime() } = {}) {
     trigger,
     interview: raw.interview === true,
     scene: clean(str(raw.scene, LIMITS.scene)),
-    character: { name: sanitizeLine(clean(str(character.name, LIMITS.name))) || undefined, persona: clean(str(lf(character.persona), LIMITS.persona)) },
+    // 役目(第 12 波 b): 4 つの id(画面の言葉も受ける)だけ。ほかの値は捨てる(指示文はおうちとして作る)
+    character: { name: sanitizeLine(clean(str(character.name, LIMITS.name))) || undefined, persona: clean(str(lf(character.persona), LIMITS.persona)), ...(normalizeRole(character.role) ? { role: normalizeRole(character.role) } : {}) },
     place: { name: sanitizeLine(clean(str(place.name, LIMITS.name))) || undefined, info: sanitizeBlock(clean(str(lf(place.info), LIMITS.placeInfo))).text, landmarks },
     expressions: choiceList(raw.expressions),
     motions: choiceList(raw.motions, 24),
