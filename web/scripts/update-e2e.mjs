@@ -209,6 +209,9 @@ async function browserPart() {
       writeFileSync(p, readFileSync(p, 'utf8').replace(/^throw new Error\('通しの確かめのために、わざと動かない版'\);\n/, ''));
     });
     check('取り先を 1.0.3 に進めた(画面の確かめ)', Boolean(v1));
+    // 開いた時の確かめは 1 日 1 回なので(今日はもう見た)、「アップデートを かくにん」と同じ呼び出しで、取り先の 1.0.3 を先に取っておく
+    const pre = (await getJson('/api/update/check', { method: 'POST', headers: LOCAL, body: JSON.stringify({}) })).body;
+    check('「アップデートを かくにん」で 1.0.3 が見える', pre?.theirs === '1.0.3' && pre?.available === true, `theirs ${pre?.theirs}`);
     const sizes = [['pc', 1280, 720], ['phone', 390, 844]];
     for (const [name, width, height] of sizes) {
       const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
