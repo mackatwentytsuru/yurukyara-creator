@@ -129,6 +129,11 @@ class BrowLookTest(unittest.TestCase):
         self.assertEqual(sr.look_of(d, png), {"brows": None}, "絵だけ(PNG)は分からない = おすすめを出さない")
         (d / "right.svg").write_text("<svg", encoding="utf-8")
         self.assertEqual(sr.look_of(d, man), {"brows": None}, "読めない SVG")
+        (d.parent / f"{d.name}_out.svg").write_text(fake_draw.svg_text("#f2a541", "#4caf50"), encoding="utf-8")
+        self.addCleanup(lambda: (d.parent / f"{d.name}_out.svg").unlink(missing_ok=True))
+        out = f"../{d.name}_out.svg"
+        bad = {"gate": "C0", "compare": {"left": None, "right": out}, "files": {out: "sha256:" + "0" * 64}}
+        self.assertEqual(sr.look_of(d, bad), {"brows": None}, "束のフォルダの外は読まない(在る SVG でも)")
 
 
 class BrowRedoFlowTest(MakeBase):

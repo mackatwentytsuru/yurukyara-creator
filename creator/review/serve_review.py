@@ -133,10 +133,13 @@ def look_of(bdir, man):
     right = (man.get("compare") or {}).get("right") or ""
     if man.get("gate") != "C0" or not right.endswith(".svg") or right not in (man.get("files") or {}):
         return look
+    target = (bdir / right).resolve()
+    if target.parent != bdir.resolve():     # 束のフォルダの外は読まない(_bundle_file と同じ決まり)
+        return look
     try:
-        text = (bdir / right).read_text(encoding="utf-8", errors="replace")
-        if len(text) <= 4 * 1024 * 1024:
-            look["brows"] = rc.brow_info(text)["has"]
+        if target.stat().st_size > 4 * 1024 * 1024:
+            return look
+        look["brows"] = rc.brow_info(target.read_text(encoding="utf-8", errors="replace"))["has"]
     except (OSError, ValueError, SyntaxError) as e:  # ET.ParseError は SyntaxError の仲間
         print(f"眉を読めませんでした: {type(e).__name__}", file=sys.stderr)
     return look
