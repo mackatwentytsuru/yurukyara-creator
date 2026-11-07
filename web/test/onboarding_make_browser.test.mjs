@@ -297,7 +297,7 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       await shot(page, 'make390_8_convert');
       await cframe.click('#convOk');
       await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
-      assert.match(await logText(page), /この かたちで 3D に するね/);
+      assert.match(await logText(page), /この かたちで 3D の ちゅうもんを 書くね。/);
       const pc5 = await pcNext(work, '--fake-draw');
       assert.equal(pc5.did, 'handoff', JSON.stringify(pc5));
       await shot(page, 'make390_9_persona');

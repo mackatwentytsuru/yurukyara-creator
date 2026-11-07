@@ -94,7 +94,7 @@ test('スマホだけで作る(390×844): 作る画面を直接開き、PC で�
     await page.waitForFunction(() => document.getElementById('convPic').naturalWidth > 0, null, { timeout: 15_000 });
     await shot(page, '6_convert');
     await page.click('#convOk');
-    await page.waitForFunction(() => /パソコンで つくるよ/.test(document.getElementById('convAct').textContent));
+    await page.waitForFunction(() => /3D の ちゅうもんを 書くね。3D は まだ できていないよ/.test(document.getElementById("convAct").textContent));
     const ids = (await page.evaluate(() => fetch('/api/review/state', { headers: { 'X-YC-Key': new URLSearchParams(location.hash.slice(1)).get('k') || '' } }).then((r) => r.status)));
     assert.ok([200, 401].includes(ids));
     // 受け渡しの紙は、サーバーの次の /yuru-next が書く
