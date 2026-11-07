@@ -12,7 +12,7 @@
 - デモの動画(3 分未満): *提出の時にリンクを入れる* 【確かめ待ち】
 - ブラウザで試す: *提出の時にリンクを入れる* 【確かめ待ち】
 
-[どう作ったか(docs/HOW_WE_BUILT.md)](docs/HOW_WE_BUILT.md) · [使っている部品とライセンス(THIRD_PARTY.md)](THIRD_PARTY.md)
+[どう作ったか(docs/HOW_WE_BUILT.md)](docs/HOW_WE_BUILT.md) · [使っている部品とライセンス(THIRD_PARTY.md)](THIRD_PARTY.md) · [ライセンス(コードは MIT・キャラは除く)](#ライセンス)
 
 ## 3 行で試す
 
@@ -130,10 +130,19 @@ python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 | フォルダ | 中身 |
 |---|---|
 | `creator/` | 言葉か絵からキャラを作る道具(描く・確かめる・Blender で組む・確かめる画面) |
-| `characters/` | キャラ(`character.json`・モデル・動き・2D の部品・人格)。再利用は許していません([characters/README.md](characters/README.md)) |
+| `characters/` | キャラ(`character.json`・モデル・動き・2D の部品・人格)。MIT ライセンスに含まず、再利用は許していません([characters/README.md](characters/README.md)) |
 | `web/` | ブラウザで話す本体と小さなサーバー。`web/api/` は公開の関数 2 つ |
 | `.claude/` | 作るのに使った Claude Code のスキル・作業役・フック |
 | `tools/` | 公開の前の点検・数字の表・フックの試験 |
 | `docs/` | どう作ったか・数字・最初のコミットの表・描画の重さ |
 
 ゆるキャラに絞る前の作業は、`before-pivot` の線に残しています。
+
+<a name="license"></a>
+
+## ライセンス
+
+- **コード**: MIT ライセンス([LICENSE](LICENSE))。
+- **キャラ**(ノリーと見本のキャラ): MIT ライセンスに含みません。再利用を許可しません。見ることと、このアプリの中でそのまま試すことだけができます。含まない物の一覧は、[LICENSE](LICENSE) の「Not covered」と [characters/README.md](characters/README.md) にあります。
+- ノリーの絵は、協力者が手で描き、この作品に使うことを許してくれた物です。絵そのものは、このリポジトリに入れていません。
+- 使っている部品は、それぞれのライセンスのままです。声(ElevenLabs)の決まりも含めて [THIRD_PARTY.md](THIRD_PARTY.md) にあります。

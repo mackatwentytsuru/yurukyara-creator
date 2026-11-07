@@ -13,7 +13,7 @@ When you open the app, you meet Norrie. Norrie speaks Japanese, politely and a l
 - Demo video (under 3 minutes): *link added at submission* 【確かめ待ち】
 - Try it in your browser: *link added at submission* 【確かめ待ち】
 
-[How we built it](docs/HOW_WE_BUILT.en.md) · [Third-party parts and licences](THIRD_PARTY.md)
+[How we built it](docs/HOW_WE_BUILT.en.md) · [Third-party parts and licences](THIRD_PARTY.md) · [Licence (code: MIT; characters excluded)](#license)
 
 ## Try it in 3 lines
 
@@ -133,10 +133,19 @@ Versions and licences of every part: [THIRD_PARTY.md](THIRD_PARTY.md).
 | Folder | What is inside |
 |---|---|
 | `creator/` | Tools that turn a word or a picture into a character (drawing, checks, Blender builders, review page) |
-| `characters/` | The characters (`character.json`, models, motions, 2D parts, personality). Not licensed for reuse; see [characters/README.md](characters/README.md) |
+| `characters/` | The characters (`character.json`, models, motions, 2D parts, personality). Not covered by the MIT License and not licensed for reuse; see [characters/README.md](characters/README.md) |
 | `web/` | The browser app and its small server; `web/api/` holds the two public functions |
 | `.claude/` | The Claude Code skills, sub-agents and hooks used to build this |
 | `tools/` | Release checks, numbers and hook tests |
 | `docs/` | How we built it, numbers, the first-commit table, render weights |
 
 The work from before the turn to yuru-chara is kept on the `before-pivot` branch.
+
+<a name="license"></a>
+
+## Licence
+
+- **Code**: the MIT License ([LICENSE](LICENSE)).
+- **Characters** (Norrie and the sample characters): not covered by the MIT License, and not licensed for reuse. You may look at them, and use them unchanged inside this app to try it out. The full list is under "Not covered" in [LICENSE](LICENSE) and in [characters/README.md](characters/README.md).
+- Norrie's design is a collaborator's hand drawing, used with permission. The drawing itself is not in this repository.
+- Third-party parts keep their own licences; they are listed in [THIRD_PARTY.md](THIRD_PARTY.md), together with the ElevenLabs rules for the voices.

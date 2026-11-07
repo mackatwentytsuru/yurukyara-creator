@@ -64,11 +64,11 @@ These are used for the fur and cloth looks in the browser. Poly Haven and ambien
 
 ## 6. Made during the hackathon (not third-party)
 
-- **Characters** (`characters/`): the models, motions, 2D parts and personalities were made during the hackathon with Claude Code. Norrie's design is the collaborator's hand drawing, used with permission; the drawing itself is not stored in this repository. The characters are not licensed for reuse ([characters/README.md](characters/README.md)).
+- **Characters** (`characters/`): the models, motions, 2D parts and personalities were made during the hackathon with Claude Code. Norrie's design is the collaborator's hand drawing, used with permission; the drawing itself is not stored in this repository. The characters are not covered by the MIT License and are not licensed for reuse ([characters/README.md](characters/README.md)).
 - **Sounds**: the retro sound effects are made in code while the app runs (Web Audio). There are no audio files.
 - **Ideas we read, with no code copied**: the public Claude skills in https://github.com/anthropics/skills (Apache-2.0), for how `yc-0-draw` draws an SVG: decide the style first, keep to 4–6 colours, refine instead of adding, and pair the drawing with a checker.
 - Parts that only the older work on the `before-pivot` branch used are listed in [docs/部品の一覧.md](docs/部品の一覧.md).
-- The licence of this repository's own code: decided by the owner before publishing 【確かめ待ち】.
+- The licence of this repository's own code: the MIT License ([LICENSE](LICENSE)). The characters are not covered and are not licensed for reuse (the "Not covered" part of [LICENSE](LICENSE), and [characters/README.md](characters/README.md)).
 
 ---
 
@@ -81,4 +81,4 @@ These are used for the fur and cloth looks in the browser. Poly Haven and ambien
 - **作る・試す時だけ使う物**: Vite、playwright-core(Apache-2.0)、iwer(MIT)。
 - **リポジトリに入れている外の素材**: Poly Haven の 2 つと ambientCG の 1 つの布の絵(どれも CC0)。
 - **期間中に作った物**: キャラ(ノリーの絵は協力者の手描きで、許可を得て使用。絵そのものはリポジトリに入れていない。キャラの再利用は許可しない)、レトロな音(コードでその場で作る)。
-- このリポジトリのコードのライセンスは、公開の前に本人が決めます【確かめ待ち】。
+- このリポジトリのコードは MIT ライセンスです([LICENSE](LICENSE))。キャラは MIT に含まず、再利用を許可しません([LICENSE](LICENSE) の「Not covered」と [characters/README.md](characters/README.md))。
