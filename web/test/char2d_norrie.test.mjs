@@ -71,16 +71,42 @@ test('部品は分かれている: 耳・頭・顔・鼻・目・口・体・お
   assert.match(extractGroup(svg, 'forearm_r'), /<g id="glove_r">/, '手袋は前腕の部品');
 });
 
-test('ふつうの顔は元の絵のまま: 黒い丸い目 2 つと、前歯 2 本の見える口', () => {
+test('ふつうの顔: 黒い丸い目 2 つ(絵の 1.3 倍まで)に白い光が大小 1 つずつ、前歯 2 本の見える口', () => {
   const eyes = extractGroup(svg, 'face.neutral.eyes');
-  const circles = [...eyes.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"/g)].map((m) => m.slice(1).map(Number));
+  // 11/7 本人と奥さんが 3D の案 C(大きな目と光)を選んだので、2D も目を大きくして白い光(大・小)を入れた
+  const all = [...eyes.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)" fill="(#[0-9A-Fa-f]+)"/g)].map((m) => [...m.slice(1, 4).map(Number), m[4].toUpperCase()]);
+  const circles = all.filter((c) => c[3] === '#000');
+  const lights = all.filter((c) => c[3] === '#FFFFFF');
   assert.equal(circles.length, 2);
-  for (const [, , r] of circles) assert.ok(r > 14 && r < 18, `目の大きさ ${r}`);
+  assert.equal(lights.length, 4, '光は目 1 つにつき大小 2 つ');
+  for (const [, , r] of circles) assert.ok(r > 14 && r <= 16 * 1.3 + 0.1, `目の大きさ ${r}`);
+  for (const [cx, cy, r] of lights) {
+    const eye = circles.find((e) => Math.hypot(e[0] - cx, e[1] - cy) + r <= e[2]);
+    assert.ok(eye, '光は目の円の中に収まる');
+  }
   assert.ok(Math.abs(circles[0][1] - circles[1][1]) < 0.5, '目の高さがそろう');
   // 口: 黒い形と、白い前歯
   const mouth = extractGroup(svg, 'face.neutral.mouth_closed');
   assert.match(mouth, /fill="#000000"/);
   assert.match(mouth, /fill="#FFFFFF"/);
+});
+
+test('目を開く表情には、どれも白い光が大小 2 つ。ほお(桃色)は顔の部品として表情に関係なく出る', () => {
+  for (const emotion of ['neutral', 'surprised', 'sad', 'angry', 'think']) {
+    const eyes = extractGroup(svg, `face.${emotion}.eyes`);
+    assert.equal((eyes.match(/fill="#000"/g) ?? []).length, 2, `${emotion} 黒い目 2 つ`);
+    assert.equal((eyes.match(/fill="#FFFFFF"/g) ?? []).length, 4, `${emotion} 白い光 4 つ(目 1 つにつき大小)`);
+  }
+  for (const emotion of ['happy', 'relaxed']) {
+    assert.doesNotMatch(extractGroup(svg, `face.${emotion}.eyes`), /#FFFFFF/, `${emotion} は目を閉じた線なので光は無い`);
+  }
+  const cheeks = extractGroup(svg, 'cheeks');
+  assert.equal((cheeks.match(/<ellipse/g) ?? []).length, 2, 'ほおは左右 1 つずつ');
+  assert.equal(full(cheeks.match(/fill="(#[0-9A-Fa-f]+)"/)[1]), '#e4b2bc', 'ほおは鼻と同じ桃色');
+  assert.ok(spec.faceLayers.some((l) => l.id === 'cheeks'), 'ほおは顔の上の部品(まばたきで消えない)');
+  const { c } = make();
+  assert.ok(c.faceLayers.cheeks, 'ほおの板がある');
+  assert.equal(c.faceLayers.cheeks.parent, c.face, '顔の枠と同じ親');
 });
 
 test('口を開いた形(半分・開き)には、どの表情でも前歯が残る', () => {

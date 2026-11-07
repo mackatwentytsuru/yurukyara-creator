@@ -39,7 +39,13 @@ export function applyVoiceRole(speaker, choice, persona) {
 }
 
 /** 性格の画面の「声」の下の一言(今どちらの声で話すか) */
-export function voiceRoleNote(result, choice = 'auto') {
+export function voiceRoleNote(result, choice = 'auto', provider = 'elevenlabs') {
+  const base = roleNoteBase(result, choice);
+  // 文字とレトロ音の間は、男の子・女の子を選んでも声は変わらない(鍵なしでは聞こえ方が同じ。CRITux3 低 2)
+  return provider === 'none' ? `${base} いまは「文字とレトロ音」なので、声は変わりません(ElevenLabs かこの端末の声の時に使います)。` : base;
+}
+
+function roleNoteBase(result, choice) {
   const c = normalizeVoiceRole(result?.choice ?? choice);
   if (!result?.own) {
     return c === 'auto' ? 'おまかせ: この子に合う声(男の子か女の子)で話します。声は ElevenLabs の声の時に使います。' : `${ROLE_WORD[c]}の声で話します。声は ElevenLabs の声の時に使います。`;

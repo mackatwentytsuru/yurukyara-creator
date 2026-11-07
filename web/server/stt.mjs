@@ -24,6 +24,17 @@ export function assertWav(buf) {
   if (buf.length > MAX_WAV_BYTES) throw Object.assign(new ValidationError('音が長すぎます'), { status: 413 });
 }
 
+/**
+ * 手がかりの言葉(話しかけているキャラの名前)。外から届く物なので、40 字までの、文字と数字と伸ばす棒だけにする
+ * (係へは 1 行で渡すので、改行・タブは入れさせない)。名前が無ければ空
+ */
+export function cleanHint(hint) {
+  return Array.from(String(hint ?? ''))
+    .filter((ch) => /[\p{L}\p{N}ー]/u.test(ch))
+    .slice(0, 40)
+    .join('');
+}
+
 export function cleanText(text) {
   const t = String(text ?? '').trim();
   return HALLUCINATIONS.some((re) => re.test(t)) ? '' : t;
@@ -77,7 +88,7 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
   }
 
   /** 1 つの WAV を係に渡して、返事を待つ */
-  async function ask(path) {
+  async function ask(path, hint = '') {
     const w = worker ?? startWorker();
     await w.ready;
     return new Promise((resolve, reject) => {
@@ -87,7 +98,7 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
         reject(new Error('聞き取りが時間内に終わりませんでした'));
       }, TIMEOUT_MS);
       w.waiting.push({ resolve, reject, timer });
-      w.proc.stdin.write(`${path}\n`);
+      w.proc.stdin.write(hint ? `${path}\t${hint}\n` : `${path}\n`);
     });
   }
 
@@ -110,7 +121,7 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
       if (installed && !worker) startWorker();
     },
     /** @returns {Promise<{text:string, ms:number}>} */
-    async transcribe(wav) {
+    async transcribe(wav, { hint = '' } = {}) {
       assertWav(wav);
       if (pending >= MAX_PENDING) throw Object.assign(new ValidationError('聞き取りが混んでいます'), { status: 429 });
       pending += 1;
@@ -118,7 +129,7 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
         const path = join(tmpdir(), `stt_${randomBytes(8).toString('hex')}.wav`);
         writeFileSync(path, wav);
         try {
-          const r = await ask(path);
+          const r = await ask(path, cleanHint(hint));
           return { text: cleanText(r.text), ms: r.ms ?? null };
         } finally {
           rmSync(path, { force: true });

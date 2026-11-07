@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..');
+const TABLE = join(SRC, '..', 'key_patterns.json'); // フックが読む鍵の形の表(tools/hooks の 1 つ上に置く)
 const MUTANTS = [
   ['前の段の OK を見ない', 'lib/gate-core.mjs', (s) => s.replace('if (PASS.has(rec?.decision)) return', 'if (true) return')],
   ['redo も OK にする', 'lib/gate-core.mjs', (s) => s.replace("new Set(['ok', 'auto'])", "new Set(['ok', 'auto', 'redo'])")],
@@ -14,7 +15,8 @@ const MUTANTS = [
   ['止める時の番号を 1 にする', 'lib/hook-io.mjs', (s) => s.replace('process.exitCode = 2;', 'process.exitCode = 1;')],
   ['おまかせの印を見ない', 'lib/hook-io.mjs', (s) => s.replace("process.env.YC_AUTOPILOT === '1'", 'false')],
   ['人が打った時を見ない', 'stage-gate.mjs', (s) => s.replace("input.hook_event_name === 'UserPromptSubmit'", 'false')],
-  ['Anthropic の鍵の形を消す', 'lib/secret-core.mjs', (s) => s.replace("[/sk-ant-[A-Za-z0-9_-]{20,}/, 'Anthropic の鍵らしい文字列'],", '')],
+  ['Anthropic の鍵の形を表から消す', '../key_patterns.json', (s) => s.replace('sk-ant-[A-Za-z0-9_-]{10,}', 'sk-ant-x')],
+  ['NVIDIA の鍵の形を表から消す', '../key_patterns.json', (s) => s.replace('nvapi-[A-Za-z0-9_-]{20,}', 'nvapi-Q')],
   ['鍵の値を理由に出す', 'lib/secret-core.mjs', (s) => s.replace('`${label}: ${mask(m[0])}`', '`${label}: ${m[0]}`')],
   ['語の一覧を使わない', 'lib/secret-core.mjs', (s) => s.replace('for (const re of [terms?.loose, terms?.strict, ...(terms?.regex ?? [])])', 'for (const re of [])')],
   ['rei: の行を見ない', 'lib/secret-core.mjs', (s) => s.replace('for (const re of [terms?.loose, terms?.strict, ...(terms?.regex ?? [])])', 'for (const re of [terms?.loose, terms?.strict])')],
@@ -32,8 +34,11 @@ const MUTANTS = [
 let survived = 0;
 for (const [name, file, fn] of MUTANTS) {
   const dir = mkdtempSync(join(tmpdir(), 'yc-mut-'));
-  cpSync(SRC, dir, { recursive: true });
-  const p = join(dir, file);
+  const root = join(dir, 'tools');
+  const hooks = join(root, 'hooks'); // 本物と同じ並び(tools/hooks と tools/key_patterns.json)
+  cpSync(SRC, hooks, { recursive: true });
+  cpSync(TABLE, join(root, 'key_patterns.json'));
+  const p = join(hooks, file);
   const before = readFileSync(p, 'utf8');
   const after = fn(before);
   if (after === before) {
@@ -43,7 +48,7 @@ for (const [name, file, fn] of MUTANTS) {
     continue;
   }
   writeFileSync(p, after);
-  const r = spawnSync(process.execPath, ['--test', join(dir, 'test', 'hooks.test.mjs')], { encoding: 'utf8', timeout: 300000 });
+  const r = spawnSync(process.execPath, ['--test', join(hooks, 'test', 'hooks.test.mjs')], { encoding: 'utf8', timeout: 300000 });
   const failed = r.status !== 0;
   console.log(`${failed ? 'ok' : 'NG'} ${name}: ${failed ? '試験が落ちた' : '試験が通ってしまった'}`);
   if (!failed) survived += 1;

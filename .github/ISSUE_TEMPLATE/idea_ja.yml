@@ -1,0 +1,20 @@
+name: "こうしてほしい(日本語)"
+description: "あるといい機能や、使いやすくなる案を知らせる"
+title: "[案] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **鍵・パスワード・個人の名前や連絡先・人の顔写真は、書かない・貼らないでください。**
+  - type: textarea
+    id: wish
+    attributes:
+      label: どうなるといいですか
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: なぜ、そう思いましたか
+      description: どんな時に困ったか、だれが助かるか(分かる範囲で)

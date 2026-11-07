@@ -726,3 +726,49 @@ test('PC(1280×720): 札が開いている間は、舞台の絵を札の左に�
     server.proc.kill();
   }
 });
+
+// 札は画面の高さの 45% まで(第 12 波。7 つのステップの札が見本の子を隠した: 390×664 で 98%・iPhone 15 で 75%・iPad 縦で 68%)。
+// 1 歩目と、絵を選んだ後(絵の欄が出る)と、見本の一覧で測る。選ぶ所は札の中で巻けるが、消えない(押す所が 1 つは見える)。
+test('札の高さ(スマホ 390×844・390×664・360×640・iPad 縦 768×1024): 画面の 45% まで。選ぶ所は消えない', { skip: SLOW, timeout: 150_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
+  const measure = (page) =>
+    page.evaluate(() => {
+      const sheet = document.querySelector('.fr-sheet');
+      const a = document.querySelector('.fr-actions');
+      const b = sheet.getBoundingClientRect();
+      const visibleBtn = [...a.querySelectorAll('button, label.fr-btn, a.fr-btn')].some((e) => {
+        const r = e.getBoundingClientRect();
+        const ar = a.getBoundingClientRect();
+        return r.height >= 40 && r.top >= ar.top - 1 && r.bottom <= ar.bottom + 1;
+      });
+      return { ratio: b.height / innerHeight, h: Math.round(b.height), vh: innerHeight, bottom: Math.round(innerHeight - b.bottom), visibleBtn, opaque: getComputedStyle(sheet).backgroundColor };
+    });
+  try {
+    for (const v of [{ width: 390, height: 844 }, { width: 390, height: 664 }, { width: 360, height: 640 }, { width: 768, height: 1024 }]) {
+      const label = `${v.width}×${v.height}`;
+      const { ctx, page, errors } = await openPage(browser, server.base, { ...v, query: 'onboard=1', reduced: true, touch: true });
+      try {
+        await waitAct(page, 'words');
+        let m = await measure(page);
+        assert.ok(m.ratio <= 0.451, `${label} 1 歩目: 札が画面の ${Math.round(m.ratio * 100)}%(${m.h}/${m.vh}px)`);
+        assert.equal(m.bottom, 0, `${label}: 札は画面の下いっぱい`);
+        assert.ok(m.visibleBtn, `${label} 1 歩目: 選ぶ所が 1 つも見えない`);
+        assert.match(m.opaque, /^rgb\(/, `${label}: 札の背景は不透明(WebKit で透けた。P1)`);
+        await page.setInputFiles('.fr-actions [data-act="pick"] input[type="file"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG_1PX });
+        await waitAct(page, 'kind_human');
+        m = await measure(page);
+        assert.ok(m.ratio <= 0.451, `${label} 絵の欄あり: 札が画面の ${Math.round(m.ratio * 100)}%(${m.h}/${m.vh}px)`);
+        assert.ok(m.visibleBtn, `${label} 絵の欄あり: 選ぶ所が 1 つも見えない`);
+        await shot(page, `card45_${label}`);
+        assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      } finally {
+        await ctx.close();
+      }
+    }
+  } finally {
+    await browser.close();
+    server.proc.kill();
+  }
+});

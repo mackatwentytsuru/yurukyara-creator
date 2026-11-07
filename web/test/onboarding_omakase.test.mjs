@@ -44,8 +44,8 @@ test('あと いくつ・あと 何分: どの歩みでも、子どもに分か�
     assert.match(p.time, /^あと \d+ 分くらい$/, `歩み ${s.n}: ${p.time}`);
     seen.push(p.main);
   }
-  assert.equal(seen[0], 'あと 6 つで できあがり');
-  assert.equal(seen[5], 'あと 1 つで できあがり');
+  assert.equal(seen[0], 'あと 6 ステップで できあがり');
+  assert.equal(seen[5], 'あと 1 ステップで できあがり');
   assert.equal(seen[6], 'これで さいご!');
   assert.deepEqual(progressText(8), { left: 0, main: 'できあがり!', time: '' });
   assert.equal(progressText(1).time, 'あと 2 分くらい', '見本の道の 7 歩は 2 分くらい');

@@ -111,7 +111,7 @@ The cost column is the `total_cost_usd` that `claude -p` reports for a run: an e
 ## Numbers and honesty
 
 - All numbers in [docs/metrics.md](metrics.md) come from logs and test output through `tools/metrics.py`, which also checks that every number in its tables has a source.
-- The numbers in the sections above come from the records named next to them. Collecting them into docs/metrics.md with the tool is still to do 【確かめ待ち】.
+- The numbers in the sections above come from the records named next to them. Collecting them into docs/metrics.md with the tool is still to do (not checked yet).
 - [docs/期間の表.md](期間の表.md) lists, for every file, the first commit and a comparison with what existed before the hackathon, so anyone can check that the code was written during the hackathon.
 - The judges are Claude models of the same family, so their agreement is not an independent check. We pair them with measured checks (outlines, colour differences, hashes, lint). Norrie's judge had not built Norrie, but it is still a Claude model.
 - What did not pass, we say: fur did not pass the judges in our skill tests (0 of 14 test characters); after the examples were rebuilt, both judges said yes to Yokoso-kun's fur, while the other examples failed on colour because glow, gloss and rims are missing ([creator/skilltest/結果表.md](../creator/skilltest/結果表.md)). From the side, Norrie's front teeth still look too small. The realistic human did not reach the quality we wanted.

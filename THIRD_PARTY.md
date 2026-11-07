@@ -11,10 +11,10 @@ npm versions are the ones locked in [`web/package-lock.json`](web/package-lock.j
 | three | 0.187.0 | MIT | © 2010–2026 three.js authors · https://github.com/mrdoob/three.js | Drawing the 3D characters |
 | @pixiv/three-vrm, with @pixiv/three-vrm-core, -materials-mtoon, -materials-hdr-emissive-multiplier, -materials-v0compat, -node-constraint, -springbone and the @pixiv/types-vrm* packages | 3.5.5 | MIT | © 2019–2026 pixiv Inc. · https://github.com/pixiv/three-vrm | Loading VRM characters, expressions and gaze |
 | @mediapipe/tasks-vision (JavaScript and WebAssembly; `npm ci` copies the wasm files to `web/public/mediapipe/wasm/`) | 1.2.0 | Apache-2.0 (the package's licence field; the package ships no licence file) | Google · https://github.com/google-ai-edge/mediapipe | Face tracking on the device |
-| MediaPipe Face Landmarker model (`face_landmarker.task`, float16, version 1) | 1 | See the model cards (Face Mesh V2 and Blendshape V2) 【確かめ待ち】 | Google · https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker | Where faces are and how wide mouths open. `npm ci` downloads it from Google's model storage; it is not stored in this repository |
+| MediaPipe Face Landmarker model (`face_landmarker.task`, float16, version 1) | 1 | See the model cards (Face Mesh V2 and Blendshape V2) (not checked yet) | Google · https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker | Where faces are and how wide mouths open. `npm ci` downloads it from Google's model storage; it is not stored in this repository |
 | Vite (a small module-preload helper ends up in the built files) | 8.3.5 | MIT | © 2019–present VoidZero Inc. and Vite contributors · https://github.com/vitejs/vite | Loading the app's code chunks |
 
-The build carries these notices: `vite build` writes `licenses.txt` next to the page (name, version, licence and licence text of each part inside the build, including Vite's small loader helpers, and the full Apache 2.0 text), and each JavaScript file that contains these parts starts with a one-line comment pointing to it (checked in `web/dist/` on 2026-11-07; `node --test web/api/_test/build_licenses.test.mjs`). On the public link it will be at `/licenses.txt` 【確かめ待ち】.
+The build carries these notices: `vite build` writes `licenses.txt` next to the page (name, version, licence and licence text of each part inside the build, including Vite's small loader helpers, and the full Apache 2.0 text), and each JavaScript file that contains these parts starts with a one-line comment pointing to it (checked in `web/dist/` on 2026-11-07; `node --test web/api/_test/build_licenses.test.mjs`). On the public link it will be at `/licenses.txt` (not checked yet).
 
 ## 2. Services called over the network
 
@@ -24,8 +24,8 @@ The build carries these notices: `vite build` writes `licenses.txt` next to the 
 | ElevenLabs text to speech | Only when you add your own ElevenLabs key | ElevenLabs Terms of Service · https://elevenlabs.io/terms-of-use, and the rules for the voices [below](#elevenlabs-voices) |
 | Speech recognition built into the browser | When you talk by voice in a browser that has it. Some browsers send the audio to their maker's online service | The browser's own terms |
 | Meta Web Launch (Meta's page that sends a link to a Quest's browser) | Only when you press 「Meta Quest に送る」, which appears only on https pages. Meta's page opens in a new tab with this screen's URL (only the address, the character id and 3D or 2D); no referrer is sent | Meta's own terms, on that page · how it works: https://developers.meta.com/horizon/documentation/web/web-launch/ |
-| Vercel (the public link: static pages and two functions) | Only for the public link 【確かめ待ち】 | Vercel's terms · https://vercel.com/legal/terms |
-| Upstash Redis (counts and memory for the public link) | Only when connected in Vercel 【確かめ待ち】 | Upstash's terms · https://upstash.com/trust/terms.pdf |
+| Vercel (the public link: static pages and two functions) | Only for the public link (not checked yet) | Vercel's terms · https://vercel.com/legal/terms |
+| Upstash Redis (counts and memory for the public link) | Only when connected in Vercel (not checked yet) | Upstash's terms · https://upstash.com/trust/terms.pdf |
 
 <a name="elevenlabs-voices"></a>
 
@@ -41,7 +41,7 @@ The app speaks aloud only with the viewer's own ElevenLabs key: either typed int
 | [Prohibited Use Policy](https://elevenlabs.io/use-policy) (2026-10-09) | Accounts are for people aged 18 or over, and apps "directed at individuals under 18" are prohibited (§1). Do not impersonate a real person's voice without consent (§3). Disclose AI interaction where the law requires it or where not doing so would materially mislead, and do not remove ElevenLabs watermarks, metadata or other provenance signals (§10). No commercial use on a free plan (§12). | The voice needs the viewer's own ElevenLabs account. We clone no one's voice; we use only voices that their owners share in the Voice Library. The README and this file say that the voices are AI voices made with ElevenLabs. |
 | [Voice Library Addendum](https://elevenlabs.io/vla) (2026-03-06) | Terms for people who share their own voices in the Voice Library. | Does not apply: we share no voice. |
 
-- The demo video's voices: made through the ElevenLabs API with Voice Library voices, on the team's own account. The voice names and the plan's commercial terms: 【確かめ待ち】 (added at submission).
+- The demo video's voices: made through the ElevenLabs API with Voice Library voices, on the team's own account. The voice names and the plan's commercial terms: (not checked yet) (added at submission).
 
 ## 3. Runs on your own PC (not bundled)
 

@@ -50,7 +50,7 @@ FAKE_DRAW = HERE / "tests" / "fake_draw.py"
 FAKE_CHECK = HERE / "tests" / "fake_check.py"
 MODEL = "claude-sonnet-5-5"
 DRAW_TIMEOUT = 540          # 絵の Claude の時間の上限(秒)。/yuru-next の 1 回の命令(10 分まで)に収める
-REDO_MAX = 3                # 同じ門のやり直しが 4 回目なら、作らずに人に聞く(yuru-next の決まり)
+REDO_MAX = rs.C0_REDO_MAX                # 同じ門のやり直しが 4 回目なら、作らずに人に聞く(yuru-next の決まり)
 EXIT_NOTHING, EXIT_REJECTED, EXIT_FAIL = 4, 5, 2
 
 
@@ -439,7 +439,7 @@ def draw(cid, a, kind, feedback=None, extra=None):
     beyond = [b for b in (check or {}).get("beyond", []) if b["kind"] != "name"]
     notice = rc.notice_text(beyond)
     try:
-        rs.publish(cid, "C0", svg, png=png, notice=notice)
+        rs.publish(cid, "C0", svg, png=png, notice=notice, metrics=(["fake=試しの絵=1"] if a.fake_draw else []))
     except rs.ReviewError as e:
         rs.set_make(cid, status="failed", notice="絵を出せませんでした。もう一度 /yuru-next と打ってください", activity="絵を出せませんでした")
         return out({"id": cid, "did": "failed", "round": rnd, "reason": e.reason, **(extra or {}), "tell": "絵を出せませんでした(" + e.msg + ")"}, EXIT_FAIL)
@@ -478,13 +478,16 @@ def do_claim(cid, a):
     if res["result"] == "ok":
         nxt = res.get("next") or {}
         return out({"id": cid, "did": "claimed_ok", "gate": gate, "round": res["round"], "next": nxt,
-                    "tell": f"{gate} は OK でした。次は段 {nxt.get('stage')}({nxt.get('key')})。形を作る段は make-character のスキルで進めます"})
+                    "tell": "絵は OK でした。3D は make-character のスキルで作ります(この命令では始まりません。約 20 分)"})
     if gate != "C0":
         return out({"id": cid, "did": "claimed_redo", "gate": gate, "round": res["round"],
                     "tell": f"{gate} のやり直しを受け取りました。この段の作り直しは、その段のスキルで進めます"})
     if res["round"] > REDO_MAX:
+        # 画面と PC が互いを待たないように: 画面には「この子にする」か「別の子にする」を出し直す(CRITux3 D1)
+        rs.reopen(cid, gate, f"直しは {REDO_MAX} 回までです。この子にするか、やり直す(別の子にする)を選んでね")
+        rs.set_make(cid, status="drawn", notice=None, activity=f"直しは {REDO_MAX} 回までです。画面で、この子にするか別の子にするかを選んでください")
         return out({"id": cid, "did": "ask_person", "gate": gate, "round": res["round"],
-                    "tell": f"C0 のやり直しが {res['round'] + 1} 回目になります。作らずに、どう直すかを人に聞いてください"})
+                    "tell": f"{res['round']} 枚目の絵の後の直しは、上限({REDO_MAX} 回)を超えます。描かずに、画面に「この子にする」と「別の子にする」を出し直しました。人に選んでもらってください"})
     return draw(cid, a, kind="redo", feedback=res.get("feedback"))
 
 

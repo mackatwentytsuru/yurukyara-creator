@@ -16,16 +16,22 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # works with python -I too
 import termlist
 
-# 鍵の形。誤検知を減らすため、長さを見る
-KEY_PATTERNS = {
-    "Anthropic の鍵": r"sk-ant-[A-Za-z0-9_-]{20,}",
-    "OpenAI 形式の鍵": r"\bsk-[A-Za-z0-9]{32,}",
-    "Google の鍵": r"\bAIza[A-Za-z0-9_-]{30,}",
-    "GitHub の鍵": r"\bgh[pousr]_[A-Za-z0-9]{30,}",
-    "AWS の鍵": r"\bAKIA[A-Z0-9]{16}\b",
-    "秘密鍵": r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
-    "鍵らしい代入": r"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*['\"][A-Za-z0-9_\-]{20,}['\"]",
-}
+# 鍵の形は 3 つの点検(この点検・push の点検・フック)で同じ表 tools/key_patterns.json を読む。誤検知を減らすため、長さを見る
+KEY_TABLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "key_patterns.json")
+
+
+def load_key_patterns(path):
+    """(名前 → 正規表現の文字)。表が読めなければ、動かせないと伝えて終わる(終わりの番号 2)"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            rows = json.load(f)["patterns"]
+        return {r["label"]: ("(?i)" if "i" in r.get("flags", "") else "") + r["pattern"] for r in rows if "history" in r.get("checks", ["history"])}
+    except (OSError, ValueError, KeyError) as e:
+        print(f"鍵の形の表が読めない({path}): {e}")
+        sys.exit(2)
+
+
+KEY_PATTERNS = load_key_patterns(KEY_TABLE)
 # 探す語(人名など)はリポジトリに書かない。手元のファイルから読む
 LOCAL_TERMS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history_terms.local.txt")
 

@@ -12,7 +12,7 @@ WORK=$TRIAL_BASE/$CHAR/$STAGE
 mkdir -p "$WORK" "$TRIAL_BASE/empty_cfg"
 git clone -q "$REPO" "$WORK/repo" || exit 2
 I_WIN=$(cygpath -m "$IMAGE")
-PROMPT="この絵を、お店の入口で話すキャラにしてください。絵: $I_WIN 。絵の権利は私が持っています。途中で質問には答えられないので、聞きたいことは既定で決めて進め、最後の報告に書いてください。id は ${CHAR}_trial にしてください。"
+PROMPT="この絵を、おうちで家族と話すキャラにしてください。絵: $I_WIN 。絵の権利は私が持っています。途中で質問には答えられないので、聞きたいことは既定で決めて進め、最後の報告に書いてください。id は ${CHAR}_trial にしてください。"
 echo "$PROMPT" > "$WORK/prompt.txt"
 # 鍵は環境変数の名前で選ぶ。値は表示も記録もしない
 KEY_VAR=${TRIAL_KEY_VAR:-CLAUDE_CREDIT_API_KEY}

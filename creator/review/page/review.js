@@ -46,7 +46,7 @@ async function poll() {
     const data = await res.json();
     app.fails = 0;
     app.state = data.state; app.pending = data.pending; app.server = data.server;
-    app.tags = data.tags || {}; app.noteMax = data.note_max || 40;
+    app.tags = data.tags || {}; app.noteMax = data.note_max || 40; app.redoMax = data.redo_max ?? 3;
     const turn = pickGate();
     const cur = app.gate && app.state.gates[app.gate];
     if (!cur || !READY_GATES.includes(app.gate) || (cur.status !== "waiting" && app.state.gates[turn].status === "waiting")) app.gate = turn;
@@ -312,7 +312,10 @@ function renderBar() {
   }
   const can = !reason && !app.sending;
   $("okBtn").disabled = !can;
-  $("redoBtn").disabled = !can;
+  // 絵(C0)の直しは 3 回まで。4 枚目の絵の後は「やり直し」を押せなくして、理由を出す(受け付ける所でも断る。CRITux3 D1)
+  const redoLimit = app.gate === "C0" && app.state?.gates?.C0?.round > (app.redoMax ?? 3);
+  $("redoBtn").disabled = !can || redoLimit;
+  if (redoLimit && !reason && !app.error) { msg.textContent = "直しは 3 回までです。この絵で OK にするか、PC で別の子を作ってください"; msg.className = "bar-msg"; msg.hidden = false; }
   const armed = Date.now() < app.armedUntil;
   $("okBtn").classList.toggle("armed", armed);
   $("okBtn").textContent = armed ? `${GATE_LABEL[app.gate]}を OK にする(もう一度)` : "OK";

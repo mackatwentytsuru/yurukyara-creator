@@ -2,11 +2,11 @@
 // 月の枠を使い切らないよう、1 日あたりの文字数の上限をここで数えて守る。
 // 声はキャラの役(男の子・女の子)ごと(11-07 第 11 波): 画面(speaker.js)が、話す役と、その子自身の声の id を本文で送る。
 // 読み方の表(speechReading.js。例: 執事 → しつじ)を、声のサービスに渡す直前に当てる(画面も当ててから送る。2 回通しても同じ)。
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { config } from './env.mjs';
+import { config, REPO_ROOT } from './env.mjs';
 import { toSpeechText } from '../src/conversation/speechReading.js';
-import { ROLE_DEFAULT_VOICES, isVoiceId, normalizeVoiceChoice } from '../src/conversation/voiceRole.js';
+import { ROLE_DEFAULT_VOICES, isVoiceId, normalizeVoiceChoice, personaVoice } from '../src/conversation/voiceRole.js';
 
 const LOG_DIR = config.logDir;
 const USAGE_FILE = join(LOG_DIR, 'tts_usage.json');
@@ -38,18 +38,48 @@ export function roleVoiceId(role, cfg = config) {
   return [r === 'male' ? cfg.voiceMale : cfg.voiceFemale, ROLE_DEFAULT_VOICES[r], cfg.voiceId].find(isVoiceId);
 }
 
+const KNOWN_VOICES_TTL_MS = 5000;
+let knownCache = { at: 0, ids: null };
+
+/**
+ * 使ってよい声の id の表(CRITsec3 L4): 役の既定・環境変数(ELEVEN_VOICE_MALE・FEMALE・ID・IDS)・characters/<id>/persona.md の「声の id」。
+ * 本文の voiceId が、形が正しいだけでは使わない(手元のサーバーに届く人が、持ち主のアカウントの別の声を言わせられないように)。
+ * 画面で作った子の persona.md は、作ってすぐ表に入る(5 秒ごとに読み直す)。
+ * @returns {Set<string>}
+ */
+export function knownVoiceIds(cfg = config, { now = Date.now(), dir = join(REPO_ROOT, 'characters') } = {}) {
+  const useCache = cfg === config && dir === join(REPO_ROOT, 'characters');
+  if (useCache && knownCache.ids && now - knownCache.at < KNOWN_VOICES_TTL_MS) return knownCache.ids;
+  const ids = new Set([...Object.values(ROLE_DEFAULT_VOICES), cfg.voiceMale, cfg.voiceFemale, cfg.voiceId, ...(cfg.voiceIds ?? [])].filter(isVoiceId));
+  try {
+    for (const d of readdirSync(dir, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue;
+      try {
+        const id = personaVoice(readFileSync(join(dir, d.name, 'persona.md'), 'utf8')).voiceId;
+        if (id) ids.add(id);
+      } catch {
+        // persona.md の無い物は飛ばす
+      }
+    }
+  } catch {
+    // characters が無い(公開の関数など)
+  }
+  if (useCache) knownCache = { at: now, ids };
+  return ids;
+}
+
 /**
  * /api/tts の本文から、話す声を決める。
  * 本文: { text, voice: 'auto'|'male'|'female'(話す役。画面は、性格の画面で選んだ役か、その子の役を送る), voiceId?: その子自身の声の id }
  * voice が 'auto'・無い・知らない値なら女の子(サーバーはキャラを知らない。11-07 までの既定の声と同じ)。
- * 声の id: その子自身の声(形が正しい時)> 役の既定 > ELEVEN_VOICE_ID
+ * 声の id: その子自身の声(形が正しく、使ってよい表 knownVoiceIds に入っている時)> 役の既定 > ELEVEN_VOICE_ID
  * @returns {{role: 'male'|'female', voiceId: string}}
  */
-export function voiceForRequest(body, cfg = config) {
+export function voiceForRequest(body, cfg = config, known = knownVoiceIds(cfg)) {
   const b = body && typeof body === 'object' ? body : {};
   const choice = normalizeVoiceChoice(b.voice);
   const role = choice === 'male' ? 'male' : 'female';
-  return { role, voiceId: isVoiceId(b.voiceId) ? b.voiceId : roleVoiceId(role, cfg) };
+  return { role, voiceId: isVoiceId(b.voiceId) && known.has(b.voiceId) ? b.voiceId : roleVoiceId(role, cfg) };
 }
 
 const speechUrl = (voiceId) => `${config.elevenUrl}${voiceId}/stream?output_format=pcm_${SAMPLE_RATE}`;
@@ -118,8 +148,9 @@ export async function streamSpeech(text, res, signal, voice = {}) {
   }
   if (!upstream.ok || !upstream.body) {
     refundChars(clean.length);
-    const detail = (await upstream.text()).slice(0, 200);
-    res.writeHead(502, { 'content-type': 'application/json' }).end(JSON.stringify({ error: `読み上げに失敗 (${upstream.status})`, detail }));
+    // 声のサービスの返事の文は、画面に返さない(手元の記録にだけ書く。CRITsec3 L4)
+    console.warn(`[声] 読み上げに失敗 (${upstream.status}): ${(await upstream.text()).slice(0, 200)}`);
+    res.writeHead(502, { 'content-type': 'application/json' }).end(JSON.stringify({ error: `読み上げに失敗 (${upstream.status})` }));
     return;
   }
   res.writeHead(200, {

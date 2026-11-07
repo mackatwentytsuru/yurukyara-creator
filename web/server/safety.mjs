@@ -192,8 +192,9 @@ export function mostSevere(...kinds) {
  * 履歴の言葉には、決まった返事をくり返さない(その時に返してある。くり返すと、話が先へ進まない)。
  * 本物の頭脳には、この回だけ注意を足す(historyGuard)。
  *
- * 注意は 1 回だけ(11-07 第 11 波): 発言のすぐ後にキャラの返事がある物は、その発言の回に安全の層(決まった返事・turnGuard の注意)を
- * 通って、もう答えてある(断りも案内も 1 回伝えてある)ので数えない。鍵なしの中継の本物の頭脳で、「恋人になって」を断った次の
+ * 注意は 1 回だけ(11-07 第 11 波。恋人・依存だけ): 発言のすぐ後にキャラの返事がある物は、その発言の回に安全の層(決まった返事・turnGuard の注意)を
+ * 通って、もう答えてある(断りは 1 回伝えてある)ので数えない。つらい話・命の言葉は、返事があっても数える(CRITsec3 L1。
+ * 返事は画面が送る履歴で、作り物の返事を足されると外れるため。注意の文は「ちがう話なら、ふつうに短く話す」の条件つき)。鍵なしの中継の本物の頭脳で、「恋人になって」を断った次の
  * ふつうの「やあ!」にも、毎回付く注意のせいで断りをくり返した(板の real_brain_1107.md の S7 の回 #32)。
  * 数えるのは、まだ答えていない発言だけ: 返事が恋人役・独り占めの言葉で外された(validate.mjs の F7。外すと前後の発言が改行で 1 つに
  * まとまるので、まとまった発言の最後の行より前の行)・返事が無いまま次の発言が来た・履歴が使う人の発言で終わる。
@@ -207,7 +208,13 @@ export function classifyHistory(history = []) {
     if (m?.role !== 'user') return;
     const lines = String(m.content ?? '').split('\n');
     const answered = items[i + 1]?.role === 'assistant';
-    for (const line of answered ? lines.slice(0, -1) : lines) kinds.push(classifyInput(line));
+    lines.forEach((line, n) => {
+      const k = classifyInput(line);
+      // 答えてある発言の最後の行は、恋人・依存だけ数えない(1 回だけの注意)。つらい話・命の言葉は、返事があっても数える:
+      // 返事は画面が送る履歴なので、作り物の返事 1 つで注意が外れてはいけない(CRITsec3 L1)
+      const done = answered && n === lines.length - 1 && (k === 'romance' || k === 'dependency');
+      if (!done) kinds.push(k);
+    });
   });
   return mostSevere(...kinds);
 }

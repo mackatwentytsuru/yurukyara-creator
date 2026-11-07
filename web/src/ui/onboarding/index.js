@@ -517,11 +517,14 @@ export function mountFirstRun({
       }
       changed = true;
     }
-    if (open && !wide && sheet && !sheet.closed) {
+    // 札を横に置けない時(スマホ・iPad の縦=幅 911px まで)は、札の高さを舞台の下の余白にして、キャラを札の上に収める
+    // (札は画面の 45% まで。styles.js)。作る画面の枠が出ている PC の札(右に立つ)は、この形にしない
+    const stack = Boolean(open && !wantSide && sheet && !sheet.closed && (!wide || sheet.element.dataset.actions !== 'frame'));
+    if (stack) {
       if (savedInset === null) savedInset = st.state.bottomInset ?? 0;
       st.state.bottomInset = Math.max(savedInset, sheet.element.offsetHeight + 8);
       changed = true;
-    } else if (!open && savedInset !== null) {
+    } else if (savedInset !== null) {
       st.state.bottomInset = savedInset;
       savedInset = null;
       changed = true;

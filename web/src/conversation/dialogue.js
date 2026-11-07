@@ -4,6 +4,7 @@
 // 返事が来るまでの間は、うなずきでつなぐ。割り込まれたら cancel() で全部止める。
 import { streamChat } from './brainClient.js';
 import { redactSecrets } from './secrets.js';
+import { setSttHint } from './sttHint.js';
 
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 
@@ -17,6 +18,19 @@ export function trimHistory(history, keep = HISTORY_KEEP) {
   const tail = history.slice(-keep);
   const firstUser = tail.findIndex((m) => m.role === 'user');
   return firstUser < 0 ? [] : tail.slice(firstUser);
+}
+
+export const CARRY_MAX_CHARS = 400; // つなげた言葉の長さの上限(サーバーの 1 回の発言は 500 字まで)
+export const CARRY_FRESH_MS = 30000; // 返事が 1 文も来ないまま止めた言葉を、次の言葉につなげておく時間
+
+/** 前の言葉と今の言葉をつなぐ(前が句読点で終わっていなければ「、」を入れる)。長すぎれば古い方を切る */
+export function joinWords(before, now) {
+  const a = String(before ?? '').trim();
+  const b = String(now ?? '').trim();
+  if (!a) return b;
+  if (!b) return a;
+  const joined = /[。.!！?？、,]$/u.test(a) ? a + b : `${a}、${b}`;
+  return Array.from(joined).slice(-CARRY_MAX_CHARS).join('');
 }
 
 /** 返事を、モデルに指示した出力の形(1 行 1 つの JSON)に戻す */
@@ -51,6 +65,13 @@ export class Dialogue {
     this.turnId = 0;
     this.busy = false;
     this.brain = 'unknown';
+    this.cur = null; // 返事を待っている最中の回 { text, trigger, said }
+    this.carry = null; // 返事が 1 文も来ないまま止められた回の言葉 { text, at }。次の言葉の頭につなげる(取りこぼさない)
+    try {
+      setSttHint(getContext?.()?.character?.name); // 聞き取りの手がかり(キャラの名前)。最初の声から効くように
+    } catch {
+      // キャラがまだ決まっていない
+    }
     this.pre = null; // 話し終わりの合図(声が止まった)で先に出した、あいづち { at, t0, fillerMs, fillerEndMs, text }
   }
 
@@ -73,6 +94,10 @@ export class Dialogue {
   }
 
   cancel({ keepFiller = false } = {}) {
+    // 返事が 1 文も来ないまま止める回の言葉は、捨てずに、次の言葉の頭につなげる(言い直しや割り込みで、前の言葉を取りこぼさない)
+    const cur = this.cur;
+    if (this.busy && cur && cur.said === 0 && cur.trigger !== 'approach' && cur.text) this.carry = { text: cur.text, at: Date.now() };
+    this.cur = null;
     this.turnId += 1;
     this.abort?.abort();
     this.abort = null;
@@ -99,11 +124,20 @@ export class Dialogue {
     this.pre = null;
     // 先に出したあいづちは、止めずに続ける(cancel は、前の返事とタイマーだけを止める)
     this.cancel({ keepFiller: Boolean(pre) });
+    // 前の回が、返事が 1 文も来ないまま止められていたら、その言葉を今の言葉の頭につなげて送る(近づいた合図の回はつなげない)
+    let askText = text;
+    if (trigger !== 'approach' && this.carry) {
+      if (Date.now() - this.carry.at <= CARRY_FRESH_MS) askText = joinWords(this.carry.text, text);
+      this.carry = null;
+    }
     const id = this.turnId;
+    const cur = { text: askText, trigger, said: 0 };
+    this.cur = cur;
     this.busy = true;
     const ac = new AbortController();
     this.abort = ac;
     const ctx = this.getContext();
+    setSttHint(ctx.character?.name); // 聞き取りの手がかり(今のキャラの名前)
     // 声の役(男の子・女の子)は、今の子の人格の文から決まる(おまかせの時)。返事の声もあいづちも、その役で話す(11-07 第 11 波)
     this.speaker.setVoicePersona?.(ctx.character?.persona);
     const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null };
@@ -145,7 +179,7 @@ export class Dialogue {
 
     const body = {
       history: this.history,
-      text,
+      text: askText,
       trigger,
       scene: ctx.scene,
       character: ctx.character,
@@ -175,6 +209,7 @@ export class Dialogue {
           } else if (ev.type === 'say') {
             if (m.tFirstSay === null) m.tFirstSay = performance.now();
             sayCount += 1;
+            cur.said = sayCount;
             const isFirst = sayCount === 1;
             spoken.push(ev.text);
             sayEvents.push(ev);
@@ -206,7 +241,8 @@ export class Dialogue {
       if (!ac.signal.aborted) this.ui.error(err.message);
     }
     if (id !== this.turnId) return;
-    this.history.push({ role: 'user', content: trigger === 'approach' ? '(使う人が近づいてきた)' : text });
+    this.cur = null;
+    this.history.push({ role: 'user', content: trigger === 'approach' ? '(使う人が近づいてきた)' : askText });
     // 前の返事は、指示で決めた形(1 行 1 つの JSON。最初の行に用件と段階)のまま履歴に戻す。
     // ふつうの文で戻すと、モデルがそれをまねて、JSON でなく文章で答える回が出た(2026-11-02)
     if (sayEvents.length) this.history.push({ role: 'assistant', content: assistantLines(sayEvents, thoughtEv) });

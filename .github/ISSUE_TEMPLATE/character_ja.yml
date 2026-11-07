@@ -1,0 +1,24 @@
+name: "キャラの相談(日本語)"
+description: "自分のキャラを作るときの相談や、キャラの使い方の質問"
+title: "[キャラ] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ノリーと見本のキャラは、MIT ライセンスに含みません(見ることと、このアプリの中で試すことだけ。LICENSE を見てください)。自分のキャラは、自分の言葉か自分の絵から作れます。
+        **鍵・パスワード・個人の名前や連絡先・人の顔写真は、書かない・貼らないでください。** 絵を見せたいときは、自分で描いた絵で、人の顔でないものにしてください。
+  - type: textarea
+    id: question
+    attributes:
+      label: 知りたいこと・困っていること
+    validations:
+      required: true
+  - type: dropdown
+    id: from
+    attributes:
+      label: キャラは何から作りますか
+      options:
+        - 言葉から
+        - 自分の絵から
+        - まだ決めていない

@@ -43,7 +43,10 @@
         "picture": {"type": "string"},
         "drawn_by": {"type": "string", "description": "元の絵を描いた者(claude・人 など)"},
         "run": {"type": "string", "description": "作った回の記録(run.jsonl)の場所"},
-        "created": {"type": "string"}
+        "created": {"type": "string"},
+        "made_with": {"type": "string", "pattern": "^(dev|[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?)$", "description": "取り付けた時の作る道の版(リポジトリの頭の VERSION。無ければ dev)。pk04_install.py が書く。無くてもよい(前のキャラ)"},
+        "capabilities": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9_]{1,40}$"}, "description": "取り付けた時にもっていた表現の id(creator/capabilities.json)。pk04_install.py が書く。無くてもよい"},
+        "sample": {"type": "boolean", "description": "true = プログラムと一緒に配る見本、false = 使う人のキャラ。無ければ git と見本の一覧で決める(creator/review/upgrade_offers.py)"}
       }
     },
     "looks": {
