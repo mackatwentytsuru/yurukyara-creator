@@ -72,6 +72,29 @@ description: 言葉か絵 1 枚から、ブラウザで話す 3D のゆるキャ
   - 写しの木での確かめ: LF で取り出す(上の行)→ `git merge --no-ff --no-commit <相手>`(コミットを作らない)→ 合格 → 作例の文字のファイルを全部 CRLF にしても合格。対照 2 つ: 自分の 1 本だけ → ④ NG(変わった本数が相手の分と同じ)/ 相手を入れたまま基準だけ前の版に戻す → ④ NG。2 本の合わせのぶつかりは `git merge-tree --write-tree <自分> <相手>` で書かずに見られる。
   - 対は id ではなく中身で決まる。相手が線を付け直して id が変わっても、ファイルの blob の番号(`git rev-parse <コミット>:<パス>`)が同じなら基準はそのまま使える。中身が変わったら控えを作り直してもらう。
 
+## あとから新しい表現を入れる(2026-11-07、版 1.0.0 から)
+作る道が新しい表現を覚えたら、前に作ったキャラにも入れられる。キャラ付け(名前・性格・思い出)は消さない。
+- **見る**: `python creator/review/upgrade_offers.py --text`(使う人のキャラだけ。見本は `--character <id>` で名指しした時だけ)。表は `creator/capabilities.json`。
+  - 種類(kinds): `rig_morph`(手組みの 3D。目と口は形の鍵)・`rig_atlas`(顔の表)・`vrm`・`2d`(2d/parts.json)。合わない種類の物は出さない(VRM には何も出ない)。
+  - 案内は「足りない物」と「キャラの版(origin.made_with)より新しい物」。新しい物を先に出す。
+- **人に言う文と、Claude が流す手順は分かれている**(11-07 の点検の直し)。
+  - 人に言うのは `--text` か、`--json` の `title`・`why`・`how`・`preview`・`undo` だけ(子どもと親が読める言葉。命令やファイルの名前を読み上げない)。
+  - Claude が流すのは `--json` の `steps`(上から順に。最初は控え)・`preview_steps`・`undo_steps`。`<id>`・`<名前>`・`<作業フォルダ>`(`creator/work/<id>/upgrade/<表現>`)・`<pack>`・`<出力>`・`<元の絵.png>`・`<元の絵.svg>`・`<2D の SVG>` は、そのキャラの本当の場所に替わっている(前に作った子の `creator/samples/<id>_元の絵_noshadow.png`・段 0 の `drawing.svg`・builder)。
+  - `kind` = 手を入れる種類(`kinds` に全部)、`look` = 変わる見た目(3d か 2d)、`picture` = yes なら先に使う人に絵をもらう、`ready` = false なら `missing` を先に読む(例: `creator/builders/<id>.py` が無い子は、段 ① 見る〜⑤ で builder を作ってから)。
+- **入れる順**(1 つずつ。人が決める): `steps` のとおり。3D は作業フォルダで作り直して pack を作り、**前と後を見せて「入れる」と言われてから** `t07_talk.py <pack> <id> --name <名前> --out <出力> --force` で置く(pk04 が、pack に無い声・記憶・知識・見た目の方式・生まれた時の記録と名前を前の character.json から残す)。2D は yc-2d で `characters/<id>/2d` を直し、`check_parts.mjs` と `validate_character.py` を通す。描くのは GPU だけ(CPU の描画はしない)。
+- **やめる**: 使う人が「<名前>を、入れる前に戻して」と言ったら `python creator/review/upgrade_offers.py --restore <id>`(控えの後に足したファイルも消す。戻す前の形も控えに取るので、`--from <名前>` でやり直せる)。版ごと戻す「元に戻して」(yuru-update)とは別。
+- **変えない物**: `persona.md`(性格の文)・知識のファイル・思い出(会話の記憶はサーバーの側)。`--restore` も性格の文と知識のファイルは戻さない。見本のキャラ(`capabilities.json` の samples・git が覚えている子)は `--migrate` と `--restore` で変えない。
+- **印**: `pk04_install.py` が `origin.made_with`(VERSION。無ければ "dev")と `origin.capabilities` を書く。`t07_talk.py` は origin を前の記録に戻した後に印を書き直し、あとから入れた 2D(looks.2d)を 3D の作り直しで消さない。
+- **古い形**: `python creator/review/upgrade_offers.py --migrate`(入れ子の rig・type・id・persona・schema_version・2d/parts.json のある子の looks)。人には「新しい版でも読めるように、書き方を少しそろえました」の 1 行と、2D を足した時の一言だけを出し、変えた項目は控えの `backup.json` の `changes` に残す。変える時だけ先に控えを取る。2 回目は何も変えない。looks は 2d/parts.json がある子にだけ足す(3D だけの子に足すと、画面が 2d/parts.json を探しに行って 404 が 1 つ出る)。
+- **表を足す時**: `capabilities.json` に 1 つ足し、`since` に新しい版、`detect` は決まり(rules)の組み合わせ。`title`・`why`・`preview`・`undo` は人に見せる言葉だけ(命令は `preview_steps`・`undo_steps` へ)。`apply` は種類ごとの手順の並びで、「…」で略さない。同じ手順は `step_sets` の `"@rebuild_groups"` などで呼ぶ。ファイルから見分けられない改良は `{"made_with_min": "<版>"}`。試験 `python -m unittest creator/review/tests/test_upgrade_offers.py`(25 件・6 秒・GPU なし)が、人に見せる文の命令・「…」・埋まらない場所・知らない決まりを落とす。
+- **学んだこと**:
+  - 新しい版にする道具(yuru-update)が `--migrate` と `--text` の出力を、そのまま使う人に見せる。だから表の文に命令(`python …`・`node …`)を混ぜると、子どもと親が読めない案内になる(11-07 の点検で見つかった)。人の文と手順は、表の欄から分ける。
+  - 手順の「…」や `<作業フォルダ>` のままでは、前に作った子のどこを使うかを Claude が決められない。道具が、その子の元の絵・作業フォルダ・pack の場所を埋め、見つからない物は「聞くこと」「足りない物」として書く。
+  - 試験の写しで `edit=lambda cj: (cj.pop(...), ...)` と書くと、組(tuple)が返って character.json がこわれる。character.json を変える時は def で書き、何も返さない。
+  - `python -I` は PYTHONIOENCODING も読まないので、Windows で出力をファイルに向けると cp932 になる。記録を UTF-8 で取る時は `-I` を付けないか、子の出力を受けて自分で書く。PowerShell の `[IO.File]::ReadAllText` は PowerShell の今の場所ではなく、起動した時の場所から読むので、絶対の場所で書く。
+  - この会話のフックは、作業の写しの `.claude/skills` も設定とみなして書き込みを止める。スキルの直しは差分(patch)にして合わせ係へ渡す。
+  - 3D と 2D は別の道: 3D は builder → 骨 → pack、2D は yc-2d の SVG と parts.json。3D の子に 2D を足す(`look_2d`)、2D の子に 3D を足す(`look_3d`)は、どちらも片方だけを入れられる。作例ではノリーとようこそくんだけが両方をもつ。作例 7 体を見分けると、ようこそくんは「うしろ姿(2D)」だけ、みかん・ロボ・パネル・ちょうちんは「2D の見た目」だけが足りない(みかんの looks.2d は部品の名前の並びだけで parts.json が無いので、画面では 2D を出せない)。
+
 ## 守ること
 - 描く・作る・判定・調べものは Claude だけ。画像の取り込み(`<image>`)・ほかの AI・Megascans は使わない。
 - 大きな PC で GPU を使うときは、命令ごとに機械の札で包む: `python <機械の札の道具>/machine_lock.py run --machine <機械> --kind gpu --who <流れ> --job "<中身>" --minutes <見込み> --wait <待てる分> -- <命令>`。終われば自動で返り、GPU の鍵も札が写す(11-06 夜、これで GPU の仕事を 3 本流した)。考えている間・判定を待つ間は札を持たない。今夜の順番は板の `GPUの順番.md`。ブラウザの道具は CPU の描画なら止まる。
