@@ -29,7 +29,7 @@ npm start        # http://127.0.0.1:8787/ を開く
 
 <a name="make-your-own-character-on-your-pc-with-claude-code"></a>
 
-## 自分の PC で、Claude Code と自分のキャラを作る(Make your own character on your PC with Claude Code)
+## 自分の PC で、Claude Code と自分のキャラを作る
 
 ブラウザだけでは、初めての会話の「言葉で書く」は、見本のキャラから近い子を選ぶだけです。言葉か自分の絵から Claude に本当に描かせるには、同じ PC で作る道を起こします。
 
