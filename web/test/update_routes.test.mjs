@@ -97,8 +97,9 @@ else if (cmd === 'apply' || cmd === 'undo') {
   console.log('新しい版 1.1.0 になりました(前は 1.0.0)。あなたのキャラ・性格・声・記憶・設定は、そのままです。');
 }
 `;
+// 本物の upgrade_offers.py --json と同じく、字下げした複数行の JSON を出す(通しの確かめで、最後の 1 行だけを読んで落ちたので)
 const FAKE_OFFERS = `
-console.log(JSON.stringify({ version: '1.0.0', characters: [{ id: 'mikan', name: 'みかん', offers: [{ cap: 'look_2d', title: '2D の見た目', why: 'w', preview: 'p', undo: 'u', new: false, ready: true, steps: ['x'] }] }] }));
+console.log(JSON.stringify({ version: '1.0.0', characters: [{ id: 'mikan', name: 'みかん', offers: [{ cap: 'look_2d', title: '2D の見た目', why: 'w', preview: 'p', undo: 'u', new: false, ready: true, steps: ['x'] }] }] }, null, 2));
 `;
 
 function makeRepo() {

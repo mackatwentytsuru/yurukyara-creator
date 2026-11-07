@@ -144,12 +144,15 @@ function runJson(python, args, { cwd, timeoutMs, env }) {
     child.on('error', () => finish(null));
     child.on('close', (code) => {
       if (code !== 0) return finish(null);
-      const last = out.trim().split(/\r?\n/).filter(Boolean).at(-1) ?? '';
-      try {
-        finish(JSON.parse(last));
-      } catch {
-        finish(null);
+      // 出力の全体が 1 つの JSON(upgrade_offers.py --json は字下げした複数行)か、最後の 1 行が JSON(yuru_update.py --json)
+      for (const text of [out.trim(), out.trim().split(/\r?\n/).filter(Boolean).at(-1) ?? '']) {
+        try {
+          return finish(JSON.parse(text));
+        } catch {
+          // 次の読み方へ
+        }
       }
+      finish(null);
     });
   });
 }
