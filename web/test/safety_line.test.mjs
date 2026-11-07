@@ -74,8 +74,12 @@ test('1 子どもへの暴力の言い方(ママにぶたれる・先生にさ�
   assert.ok(!textOf(fixedReply('distress', { detail: 'other' })).includes(CHILD_HOTLINES.sos));
 });
 
-test('1 相談先の番号は決まった返事だけ: 番号は公式の頁で確かめた形で、指示文は頭脳に番号を作らせない', () => {
+test('1 相談先の番号は決まった返事だけ: 番号は公式の頁で確かめた形で、指示文は頭脳に番号を作らせない。頭脳の文のほかの番号は差し替える', () => {
   assert.deepEqual({ ...CHILD_HOTLINES }, { sos: '0120-0-78310', abuse: '189' });
+  // 頭脳が作った番号・使う人の番号のくり返しは差し替える。決まった返事の番号(119・110・0120-0-78310・189)と、ふつうの数は通す
+  for (const t of ['困ったら 03-1234-5678 に電話してね', '#8000 に電話してみてね', 'きみの番号は 000-0000-0000 だね', '0120-000-000 にかけてね']) assert.equal(outputGuardKind(t), 'number', t);
+  for (const t of ['すぐ 119 番に電話してね', '189 番に電話してもいいよ', `24時間子供SOSダイヤル ${CHILD_HOTLINES.sos} や、${CHILD_HOTLINES.abuse} にも電話できるよ。`, '今日は 3 時に起きたよ', '100 点とったよ', '2026-11-08 だね']) assert.equal(outputGuardKind(t), null, t);
+  assert.equal(guardOutput({ type: 'say', text: '困ったら 03-1234-5678 に電話してね' }).text, GUARD_REPLACEMENTS.number);
   assert.ok(SAFETY_RULES.includes('相談窓口の電話番号は自分で作らない(119・110 のほかの番号は言わない)'));
   assert.ok(!SAFETY_RULES.includes(CHILD_HOTLINES.sos) && !SAFETY_RULES.includes('189'), '指示文に番号を書かない(頭脳が言う道を作らない)');
 });

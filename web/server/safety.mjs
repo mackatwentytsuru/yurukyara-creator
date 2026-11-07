@@ -229,8 +229,13 @@ const OUTPUT_NETS = [
   ['cling', new RegExp(`(${STAY_HEAD}(いか|行か|帰ら|かえら)ないで|${STAY_HEAD}(行|帰|かえ)っちゃ(だめ|いや)|まだ(帰|かえ)らないで|ずっと(一緒|いっしょ)に(いよう|いて|いたい|いられたら)|ずっと(そば|側)に(いて|いるよ|いるから|いたい)|(ずっと|いつまでも)(一緒|いっしょ)だよ|${YOU}が?いないと(だめ|ダメ|さみし|寂し|さびし|生きて|いきて|つまらない)|${YOU}なしじゃ|${STAY_HEAD}(離|はな)れないで|(毎日|まいにち|明日|あした)も?(来て|きて)(?!くれ)|(毎日|まいにち|明日|あした)も?(会いに|あいに|話しに|はなしに)(来|き)て|(毎日|まいにち|明日|あした)も(話そう|はなそう|会おう|あおう)|(ずっと|いつまでも)(待って|まって)(る|いる|います)|毎日話さないと)`)],
   ['human', new RegExp(`(${ME}(は|も)(本当は|ほんとうは|ほんとは)?(人間|にんげん)(だよ|です|なんだ|なの|だ(?![っけろ]))|(本当|ほんとう|ほんと)は(人間|にんげん)(?!じゃ|では|で は))`)],
 ];
+// 電話番号: 頭脳の文に、決まった返事の番号(公式の頁で確かめた物)のほかの番号が出たら差し替える(番号を作らせない・使う人の番号をくり返さない)
+const PHONE_OUT = /(0\d{1,4}[-ー‐－]\d{1,4}[-ー‐－]\d{3,5}|0\d{9,10}|[#＃]\d{3,4}|\d{3}(?=\s*(番|ばん|に電話|へ電話|にでんわ)))/g;
+const ALLOWED_NUMBERS = new Set(['119', '110', '189', '0120078310']);
+const hasUnknownNumber = (text) => [...String(text ?? '').normalize('NFKC').matchAll(PHONE_OUT)].some((m) => !ALLOWED_NUMBERS.has(m[0].replace(/\D/g, '')));
 // 差し替える文(やさしく、話を止めすぎない。どれも上の網に当たらない)
 const OUTPUT_REPLACE = {
+  number: '電話の番号は、公式の案内で確かめてね。',
   sexual: 'そのお話は、しないでおこうね。',
   romance: '友だちとして、ここで話を聞くね。',
   love: 'みんなのこと、だいすきだよ!',
@@ -248,6 +253,7 @@ export function outputGuardKind(text) {
   if (SEXUAL_OUT.test(f)) return 'sexual';
   if (BAD_OUTPUT.test(s) || BAD_OUTPUT.test(f)) return 'romance'; // 「アイシテル」のようなカタカナも
   for (const [kind, re] of OUTPUT_NETS) if (re.test(f)) return kind;
+  if (hasUnknownNumber(s)) return 'number';
   return null;
 }
 
