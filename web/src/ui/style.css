@@ -286,6 +286,51 @@ html.is-led .look-switch { display: none !important; }
 .memory-panel input[hidden] { display: none; }
 .mem-code { font-size: 22px; font-weight: 700; letter-spacing: 0.12em; color: var(--mint); font-variant-numeric: tabular-nums; }
 
+/* VR(Quest)で開く(本人の案 11/7): 上の段の小さなボタン(押す所は 44px)。押すと、上の段のすぐ下の左に、この画面の QR と URL の箱を出す。
+   箱の下の端は画面の高さの 45% より上で止める(キャラは main.js が箱の下へ置き直す。上の段の上限も 45%)。下の帯(入力)には届かない。
+   初めての会話(7 歩の札)の間・入口の LED・ヘッドセットでは出さない。「覚えていること」とは同時に開かない(main.js) */
+.quest-link { position: static; pointer-events: auto; }
+.quest-link[hidden] { display: none; }
+html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link { display: none !important; }
+/* ボタンの言葉は QR の印と「VR」だけ(読み上げの名前と title は「VR(Quest)で開く」。箱の 1 行目にも出す)。上の段の幅を 60px 足らずに保つ:
+   長い言葉では PC(1280)で見た目の切り替えがキャラの横の範囲まで押し出され、キャラが上の段の下へ置き直されて 2 割小さくなった */
+.quest-link-btn {
+  font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px;
+  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.quest-link-btn[aria-expanded="true"] { border-color: var(--lav); }
+.quest-link-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.quest-link-box {
+  --ql-size: clamp(96px, calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px), 220px);
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; display: grid; grid-template-columns: var(--ql-size) minmax(0, 220px); gap: 12px; align-items: start;
+  max-height: calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 22px); overflow: auto;
+  padding: 12px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+@supports (height: 1dvh) {
+  .quest-link-box {
+    --ql-size: clamp(96px, calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px), 220px);
+    max-height: calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 22px);
+  }
+}
+.quest-link-box[hidden] { display: none; }
+.quest-link-box:focus { outline: none; }
+.quest-link-box[data-kind="private"], .quest-link-box[data-kind="none"] { grid-template-columns: minmax(0, 320px); }
+.ql-qr { display: block; width: var(--ql-size); height: var(--ql-size); border-radius: 6px; background: #fff; }
+.ql-text { display: grid; gap: 6px; min-width: 0; }
+.ql-title { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--text); }
+.ql-how, .ql-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.ql-url { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text); word-break: break-all; }
+/* スマホ: 箱は上の段の左右いっぱい。QR は幅の 44% まで(横に読み取り方と URL) */
+@media (max-width: 760px) {
+  .quest-link-box { --ql-size: clamp(96px, min(44vw, calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px)), 186px); right: 0; grid-template-columns: var(--ql-size) minmax(0, 1fr); gap: 10px; padding: 10px; }
+  @supports (height: 1dvh) {
+    .quest-link-box { --ql-size: clamp(96px, min(44vw, calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px)), 186px); }
+  }
+  .ql-how { font-size: 11.5px; line-height: 1.45; }
+  .ql-url { font-size: 12px; }
+}
+
 /* 合言葉(公開の URL のときだけ出す。契約 K5) */
 .gate .pass { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 .gate .pass[hidden] { display: none; }

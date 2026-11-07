@@ -18,7 +18,8 @@ import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
 import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
-import { createUi, FALLBACK_BRAIN_NOTICE } from './ui/panel.js';
+import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink } from './ui/panel.js';
+import { questLinkPlan } from './stage/questLink.js'; // 「VR(Quest)で開く」: この画面の QR に入れてよい物の決まり
 import { getDemoPass, setDemoPass } from './conversation/demoPass.js'; // 合言葉(S3。会話と記憶の通信に見出し x-demo-pass で付く)
 import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
 import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
@@ -640,8 +641,9 @@ async function setupPresentation() {
 
 /* ---------- キャラの見せ方(上の段と下の帯の間に収める) ---------- */
 // 上の段: 上の札・見せ方のボタン・覚えていること・見た目の切り替え・「Claude の考え」の見出し。
-// 「Claude の考え」を開いている間は、窓の全体も数える(CRITux 21: スマホで開くと顔に重なった。キャラを窓の下へ置き直す)
-const TOP_GUARD = '.top .chip, .top .top-row > *, #thoughtToggle, #thought:not(.collapsed)';
+// 「Claude の考え」を開いている間は、窓の全体も数える(CRITux 21: スマホで開くと顔に重なった。キャラを窓の下へ置き直す)。
+// 「VR(Quest)で開く」の QR の箱も、開いている間は数える(キャラを箱の下へ。箱の下の端は style.css が画面の 45% より上で止める)
+const TOP_GUARD = '.top .chip, .top .top-row > *, #thoughtToggle, #thought:not(.collapsed), #questLinkBox:not([hidden])';
 const TOP_GAP_PX = 8; // 上の段とキャラの頭のすき間
 
 /** 画面の横の範囲 [left, right] に重なる上の段の、下の端(px)。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
@@ -850,6 +852,43 @@ function setupMemory() {
   });
 }
 
+/* ---------- VR(Quest)で開く(本人の案 11/7。決まりは stage/questLink.js、入口の部品は ui/panel.js) ---------- */
+// PC やスマホの画面に、この画面の QR を出す(Quest 3・3S の QR コードスキャナーで読む)。Quest の中(immersive-vr が使える・
+// ヘッドセットのブラウザ)では出さない。この PC・家の中のアドレスでは、QR の代わりに 1 行。QR に入れるのは、この画面の場所と、
+// 舞台の子の id(主役でアドレスに ?character= が無い時は付けない)と見た目(両方ある子か、アドレスに ?look= がある時)だけ
+function questLinkState() {
+  const asked = new URLSearchParams(location.search);
+  const id = characterKey(app.character) || app.characterId || '';
+  const character = id === MAIN_CHARACTER.id && !asked.has('character') && !asked.has('char') ? '' : id;
+  const look = hasBothLooks(lookKinds.get(id)) || asked.has('look') ? (app.character?.look ?? '') : '';
+  return questLinkPlan({ loc: location, character, look, immersiveVr: Boolean(modes?.available?.vr), headset: IS_HEADSET });
+}
+
+function setupQuestLink() {
+  const root = $('questLink');
+  if (!root || LOOK_SWITCH_OFF || !questLinkState().show) return; // Quest の中・入口の LED・自動で始める画面・重さを測る時は出さない
+  const drawer = $('memoryDrawer');
+  const link = mountQuestLink({
+    root,
+    button: $('questLinkBtn'),
+    box: $('questLinkBox'),
+    plan: questLinkState,
+    onToggle: (open) => {
+      if (open && drawer?.open) drawer.open = false; // 「覚えていること」の札とは同時に開かない(重ねない)
+    },
+  });
+  drawer?.addEventListener('toggle', () => {
+    if (drawer.open) link.close();
+  });
+  // 初めての会話(7 歩の札)が出たら閉じる(入口は style.css が隠す)
+  new MutationObserver(() => {
+    if (document.documentElement.classList.contains('fr-open')) link.close();
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  new ResizeObserver(reframe).observe($('questLinkBox')); // 開く・閉じる・QR が出来た時に、キャラを箱の下へ置き直す(戻す)
+  app.questLink = link;
+  root.hidden = false;
+}
+
 async function boot() {
   const status = $('gateStatus');
   const buttons = [$('startCam'), $('startSim')];
@@ -929,6 +968,7 @@ async function boot() {
   setInterval(refreshStatus, 15000);
   setupPass();
   setupMemory();
+  setupQuestLink(); // 見せ方を調べた後(Quest の中なら出さない)
   void refreshLookSwitch(app.character); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない。舞台の子が替わるたびにも作り直す)
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));

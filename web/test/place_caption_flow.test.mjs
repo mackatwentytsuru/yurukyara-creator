@@ -121,7 +121,7 @@ test('main.js の上の札と考えの窓の下の文は、分かる言葉(CRITu
 
 test('考えの窓(CRITux 21): 開いている間は窓の全体を上の段として数え、キャラを窓の下へ置き直す。切り替えは窓より手前', () => {
   const main = read('main.js');
-  assert.match(main, /const TOP_GUARD = '\.top \.chip, \.top \.top-row > \*, #thoughtToggle, #thought:not\(\.collapsed\)';/);
+  assert.match(main, /const TOP_GUARD = '\.top \.chip, \.top \.top-row > \*, #thoughtToggle, #thought:not\(\.collapsed\)(, #questLinkBox:not\(\[hidden\]\))?';/);
   assert.match(main, /new ResizeObserver\(reframe\)\.observe\(\$\('thought'\)\);/, '開く・閉じるで置き直す');
   const css = read('ui', 'style.css');
   const z = (sel) => Number(new RegExp(`\\n${sel.replace('.', '\\.')} \\{[^}]*z-index: (\\d+)`).exec(css)?.[1]);
