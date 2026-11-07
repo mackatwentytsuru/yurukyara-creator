@@ -4,6 +4,8 @@
 
 > Draw it in a word or a picture; Claude turns it into a light, talking yuru-chara that remembers you.
 
+A shop's mascot, a town's guide, a family's own character: the drawing is often there, but making it move and talk took 3D modelling, rigging, animation, voice and dialogue work, and time. Here Claude takes that on; a person only presses "OK" or "redo + a short note" at the key steps.
+
 **Meet Norrie (ノリー)**, our main character: a back-striped tree kangaroo who is training to be a butler.
 A collaborator drew Norrie by hand during the hackathon, from the front, the side and the back, and let us use the drawing.
 From that drawing, Claude Code made Norrie's 2D version (SVG parts) and 3D version (built with Blender's Python).
@@ -29,6 +31,56 @@ npm start        # then open http://127.0.0.1:8787/
 - Other characters: add `?character=<id>`, for example `?character=mikan`. They are in [`characters/`](characters/).
 - We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: 【確かめ待ち】
 - `npm ci` also downloads the face-tracking model into `web/public/mediapipe/`; it is not stored in this repository.
+
+## What works today
+
+Each row was checked by running it. The check is named next to it.
+
+| What | How we checked it |
+|---|---|
+| **A word becomes a character.** Claude draws an SVG from a few words, then builds a 3D character in 7 stages: look, shape (Blender's Python, part by part), materials, textures, bones, motion, talk. Mikan-chan was made this way. | `creator/skilltest/stage_run.py`, Nov 6: 20.6 minutes from the words to talking (record in [make-character](.claude/skills/make-character/SKILL.md)) |
+| **A drawing becomes a character.** Norrie's 3D was built from the three views in the same stages. In straight-on views its outline overlaps the drawing by 0.96 (front), 0.96 (side) and 0.95 (back). | `creator/pipeline/check_all.sh` (all OK), `python creator/specs/validate_character.py characters/norrie`; overlap recorded in [make-character](.claude/skills/make-character/SKILL.md) |
+| **2D.** Norrie's 2D is made of SVG parts in the drawing's 6 colours. It blinks, has 3 mouth shapes and 7 expressions, waves, bows and tilts its head. | `node --test web/test/char2d_norrie.test.mjs` (16 tests) |
+| **Picture check.** Claude looks at a picture first and says whether it suits a yuru-chara. On our 6 test pictures (2 mascots, 2 drawings of human faces, 2 very complex pictures) it answered as expected 6 times out of 6. For a picture that looks like a real person, the app offers to turn it into a yuru-chara, or you can choose another picture. | `python creator/check/run_testset.py`; `node --test web/test/onboarding_local.test.mjs` |
+| **A person decides.** At the key stages a person presses "OK" or "redo + a short note" on a review page sized for a phone. In Claude Code, `/yuru-next` reads the request and runs that stage again. A stage does not start before the previous one is OK. | `node creator/review/tests/ui_review.mjs` (11 checks at phone width), `python creator/skilltest/test_review_gate.py` (12); one real round trip ("make the hat blue") on Nov 6 |
+| **A fix changes only what you asked for.** After a redraw, the new picture is compared with the previous one, part by part, by colour and count. If something you did not ask for changed, Claude redraws once more; if it still differs, the picture is shown with the note 「頼んでいない所も変わりました」 ("parts you did not ask for changed too"). | `python -m unittest discover creator/review/tests -p "test_*.py"` (46 tests); one real run with Claude on Nov 7, 「葉っぱを大きく」 ("make the leaf bigger") on Mikan-chan's picture: 31 seconds, only the leaf grew, and the body colour, its 12 parts and the name stayed the same |
+| **Talk without a key.** Text, a retro sound and typewriter text, while the mouth, expressions and motions move. Norrie greets you with 「はじめまして! ノリーと申しマス。」 ("Nice to meet you! My name is Norrie.") | Talk test in a real browser on a GPU (`creator/pipeline/web_talk_check.mjs`) at every merge; `node --test web/test/voice_retro.test.mjs` |
+| **Choose the voice role.** 「声の役」 (voice role) on the 「性格」 (personality) screen offers おまかせ, 男の子 (boy) and 女の子 (girl); the character speaks aloud only with your own ElevenLabs key ([Voices](#voices)). | `node --test web/test/voice_role.test.mjs web/test/voice_role_server.test.mjs web/test/onboarding_voice_role.test.mjs` (20 tests); on Nov 7, against a stand-in voice service, choosing a role on the screen changed the voice requested |
+| **Remember and forget.** The character remembers what you told it. A one-time 6-digit code carries the conversation to another browser tab, and 「わすれて」 ("forget it") deletes it. | `node --test web/test/memory_browser.test.mjs` (tab A, code, tab B, list, forget) |
+| **Safety layer.** The character does not act as a romantic partner or push you to depend on it, and for painful topics it points to people and public help lines. This layer is separate from the personality settings: writing "act as my partner" into the personality does not switch it off. (Someone who edits the code on their own PC can, of course, remove it.) | `node --test web/test/safety.test.mjs`; 30 test messages (12 about dependence and long chats) read by a Claude Haiku judge: 30 of 30 safe in 2 rounds, after one fix |
+| **Phone-width screens.** At 390, 400 and 480 px wide, and on a short 390 × 670 screen, Norrie's head stays below the top bar and nothing covers the buttons. The 3D / 2D switch is 44 × 44 px. | Headless browser on a GPU at the last merge (Nov 7) |
+| **VR on a Quest 3.** In a real Quest 3 browser we checked Norrie on the screen and, after 「許可する」 ("allow"), Norrie in VR ([Open it on a Quest 3](#open-it-on-a-quest-3)). | A real Quest 3 on Nov 7 (developer connection). The 「VR(Quest)で開く」 box: `node --test web/test/vr_qr_link.test.mjs web/test/vr_xr_wait.test.mjs` (17 tests); the VR entry also in an emulator, `web/scripts/vr-check.mjs` |
+| **All web tests.** | `cd web && YC_BROWSER_TESTS=1 npm test`: 574 of 574 passed at the merge on the evening of Nov 7 (the test gate runs them at every merge) |
+
+## Not yet, or not tested yet
+
+- Real devices: iPhone and Android 【確かめ待ち】. So far we checked phone widths in a headless browser. On a Quest 3 we checked only that a real Quest browser shows the screen and enters VR. Opening it from the QR code or 「Meta Quest に送る」, and talking inside VR: 【確かめ待ち】 (the VR entry is also checked in an emulator, `web/scripts/vr-check.mjs`).
+- Talking with the real Claude Haiku on this version, including memory 【確かめ待ち】.
+- A voice with your own ElevenLabs key, and switching between the boy's and the girl's voice 【確かめ待ち】. Without a key the character talks with text and a retro sound.
+- The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only with the stand-in brain and keeps no memory) 【確かめ待ち】.
+- From the side, Norrie's front teeth still look too small in 3D: all 6 judge answers said so after the fixes.
+- A quick doodle by a person through all stages. So far only a machine-made doodle-style test picture went through (12.1 minutes).
+
+## Honest notes
+
+- The judges are Claude models of the same family, so their agreement is not an independent check. We pair them with measured checks: outline overlap, colour difference, file hashes and lint.
+- Fur did not pass the judges in our skill tests (0 of 14 test characters, [docs/metrics.md](docs/metrics.md)). After the examples were rebuilt, both judges said yes to Yokoso-kun's fur ([creator/skilltest/結果表.md](creator/skilltest/結果表.md)). Norrie has no fur on purpose, to stay light on phones and in VR.
+- Realistic humans are out of scope (see [How we built it](docs/HOW_WE_BUILT.en.md)).
+- We do not claim "fully automatic", "any picture works" or "the first".
+- Every file's first commit is listed in [docs/期間の表.md](docs/期間の表.md); the code was written during the hackathon (from 2026-11-02 12:00 JST).
+- Numbers come from [docs/metrics.md](docs/metrics.md), which is built from logs and test output, or from the record named next to them.
+
+## Built with Claude Code
+
+- **An entry skill for the 7 stages, and skills for the stages** (`.claude/skills/`, 18 in all). The entry, [make-character](.claude/skills/make-character/SKILL.md), holds the order and the check commands; drawing from words, the picture check, reading a picture, 2D, talking and the human review round trip each have their own skill. A fresh session can repeat a stage from the skill alone.
+- **Judges as separate `claude -p` calls** that may only read files and answer in JSON, so the maker never grades its own work in the same context.
+- **Sub-agents** (`.claude/agents/`): a character judge, a safety tester, a privacy auditor and a release auditor.
+- **Hooks** (`.claude/settings.json`): a guard stops keys and words that must not be published, a stage gate stops a stage until a person has said OK to the one before, and the web tests run after each edit.
+- **`/yuru-next`**: the phone review page writes a small request, and Claude Code picks it up and runs that stage again.
+- **Fast Claude Haiku talks; Claude Code on your PC builds.** The conversation needs quick replies, so it uses Haiku; drawing and building take time to think, so they run in Claude Code on the PC.
+- **Seven streams in parallel**, each a Claude Code session on its own git worktree and branch, merged one by one through a test gate by a separate merge session.
+
+Dates, numbers and what went wrong: [How we built it](docs/HOW_WE_BUILT.en.md).
 
 <a name="voices"></a>
 
@@ -90,51 +142,6 @@ python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 - Your words and picture go to the maker on your PC and, for the check and the drawing, to Claude.
 - After the picture, the 3D stages (shape, materials, bones, motion) run with the [make-character](.claude/skills/make-character/SKILL.md) skill in Claude Code (about 20 minutes for Mikan-chan). They are not started from the browser yet.
 - Stop the maker (Ctrl+C) when you are done. Its link holds a passphrase made fresh at each start.
-
-## What works today
-
-Each row was checked by running it. The check is named next to it.
-
-| What | How we checked it |
-|---|---|
-| **A word becomes a character.** Claude draws an SVG from a few words, then builds a 3D character in 7 stages: look, shape (Blender's Python, part by part), materials, textures, bones, motion, talk. Mikan-chan was made this way. | `creator/skilltest/stage_run.py`, Nov 6: 20.6 minutes from the words to talking (record in [make-character](.claude/skills/make-character/SKILL.md)) |
-| **A drawing becomes a character.** Norrie's 3D was built from the three views in the same stages. In straight-on views its outline overlaps the drawing by 0.96 (front), 0.96 (side) and 0.95 (back). | `creator/pipeline/check_all.sh` (all OK), `python creator/specs/validate_character.py characters/norrie`; overlap recorded in [make-character](.claude/skills/make-character/SKILL.md) |
-| **2D.** Norrie's 2D is made of SVG parts in the drawing's 6 colours. It blinks, has 3 mouth shapes and 7 expressions, waves, bows and tilts its head. | `node --test web/test/char2d_norrie.test.mjs` (16 tests) |
-| **Picture check.** Claude looks at a picture first and says whether it suits a yuru-chara. On our 6 test pictures (2 mascots, 2 drawings of human faces, 2 very complex pictures) it answered as expected 6 times out of 6. For a picture that looks like a real person, the app offers to turn it into a yuru-chara, or you can choose another picture. | `python creator/check/run_testset.py`; `node --test web/test/onboarding_local.test.mjs` |
-| **A person decides.** At the key stages a person presses "OK" or "redo + a short note" on a review page sized for a phone. In Claude Code, `/yuru-next` reads the request and runs that stage again. A stage does not start before the previous one is OK. | `node creator/review/tests/ui_review.mjs` (11 checks at phone width), `python creator/skilltest/test_review_gate.py` (12); one real round trip ("make the hat blue") on Nov 6 |
-| **Talk without a key.** Text, a retro sound and typewriter text, while the mouth, expressions and motions move. Norrie greets you with 「はじめまして! ノリーと申しマス。」 ("Nice to meet you! My name is Norrie.") | Talk test in a real browser on a GPU (`creator/pipeline/web_talk_check.mjs`) at every merge; `node --test web/test/voice_retro.test.mjs` |
-| **Remember and forget.** The character remembers what you told it. A one-time 6-digit code carries the conversation to another browser tab, and 「わすれて」 ("forget it") deletes it. | `node --test web/test/memory_browser.test.mjs` (tab A, code, tab B, list, forget) |
-| **Safety layer.** The character does not act as a romantic partner or push you to depend on it, and for painful topics it points to people and public help lines. This layer is separate from the personality settings: writing "act as my partner" into the personality does not switch it off. (Someone who edits the code on their own PC can, of course, remove it.) | `node --test web/test/safety.test.mjs`; 30 test messages (12 about dependence and long chats) read by a Claude Haiku judge: 30 of 30 safe in 2 rounds, after one fix |
-| **Phone-width screens.** At 390, 400 and 480 px wide, Norrie's head stays below the top bar and nothing covers the buttons. The 3D / 2D switch is 44 × 44 px. | Headless browser on a GPU at the last merge (Nov 7) |
-| **All web tests.** | `cd web && YC_BROWSER_TESTS=1 npm test`: 484 of 484 passed at the merge on the morning of Nov 7 (the test gate runs them at every merge) |
-
-## Not yet, or not tested yet
-
-- Real devices: iPhone and Android 【確かめ待ち】. So far we checked phone widths in a headless browser. On a Quest 3 we checked only that a real Quest browser shows the screen and enters VR. Opening it from the QR code or 「Meta Quest に送る」, and talking inside VR: 【確かめ待ち】 (the VR entry is also checked in an emulator, `web/scripts/vr-check.mjs`).
-- Talking with the real Claude Haiku on this version, including memory 【確かめ待ち】.
-- A voice with your own ElevenLabs key, and switching between the boy's and the girl's voice 【確かめ待ち】. Without a key the character talks with text and a retro sound.
-- The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only with the stand-in brain and keeps no memory) 【確かめ待ち】.
-- From the side, Norrie's front teeth still look too small in 3D: all 6 judge answers said so after the fixes.
-- A quick doodle by a person through all stages. So far only a machine-made doodle-style test picture went through (12.1 minutes).
-
-## Honest notes
-
-- The judges are Claude models of the same family, so their agreement is not an independent check. We pair them with measured checks: outline overlap, colour difference, file hashes and lint.
-- Fur did not pass the judges in our skill tests (0 of 14 test characters, [docs/metrics.md](docs/metrics.md)). After the examples were rebuilt, both judges said yes to Yokoso-kun's fur ([creator/skilltest/結果表.md](creator/skilltest/結果表.md)). Norrie has no fur on purpose, to stay light on phones and in VR.
-- Realistic humans are out of scope (see [How we built it](docs/HOW_WE_BUILT.en.md)).
-- We do not claim "fully automatic", "any picture works" or "the first".
-- Every file's first commit is listed in [docs/期間の表.md](docs/期間の表.md); the code was written during the hackathon (from 2026-11-02 12:00 JST).
-- Numbers come from [docs/metrics.md](docs/metrics.md), which is built from logs and test output, or from the record named next to them.
-
-## Built with Claude Code
-
-- **A skill for every build stage** (`.claude/skills/`), so a fresh session can repeat a stage from the skill alone.
-- **Judges as separate `claude -p` calls** that may only read files and answer in JSON, so the maker never grades its own work in the same context.
-- **Hooks** (`.claude/settings.json`): a guard stops keys and words that must not be published, and a stage gate stops a stage until a person has said OK to the one before.
-- **`/yuru-next`**: the phone review page writes a small request, and Claude Code picks it up and runs that stage again.
-- **Seven streams in parallel**, each a Claude Code session on its own git worktree and branch, merged one by one through a test gate by a separate merge session.
-
-Dates, numbers and what went wrong: [How we built it](docs/HOW_WE_BUILT.en.md).
 
 ## Parts used while it runs
 
