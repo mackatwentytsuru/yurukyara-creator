@@ -49,7 +49,11 @@ beforeEach(() => {
 test('読み方の表: 執事 → しつじ。表の言葉だけを、何回出ても替える。ほかの文字はそのまま。2 回通しても同じ', () => {
   assert.deepEqual(
     SPEECH_READINGS.map(([w, s]) => [w, s]),
-    [['執事', 'しつじ']],
+    [
+      ['執事', 'しつじ'],
+      ['0120-0-78310', 'ぜろいちにーぜろのぜろのななはちさんいちぜろ'], // BSF 11-08: 子どもの相談先の番号(安全の層の決まった返事)
+      ['189 にも', 'いちはちきゅうにも'],
+    ],
   );
   assert.ok(Object.isFrozen(SPEECH_READINGS) && SPEECH_READINGS.every((r) => Object.isFrozen(r)), '表は書き換えられない');
   for (const [written, spoken] of SPEECH_READINGS) {

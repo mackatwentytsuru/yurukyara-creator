@@ -5,7 +5,12 @@
 // 足す時は、[書いてある言葉, 読み] の 1 行を足し、web/test/voice_reading.test.mjs の見込みにも 1 行足す。
 // 読みには、書いてある言葉を含めない(2 回通しても同じになるように。画面とサーバーの両方で通す)。DOM も通信も使わない。
 
-export const SPEECH_READINGS = Object.freeze([Object.freeze(['執事', 'しつじ'])]);
+// BSF 11-08: 安全の層の決まった返事の電話番号は、数字の区切りどおり 1 字ずつ読ませる(大きな数として読まないように)
+export const SPEECH_READINGS = Object.freeze([
+  Object.freeze(['執事', 'しつじ']),
+  Object.freeze(['0120-0-78310', 'ぜろいちにーぜろのぜろのななはちさんいちぜろ']),
+  Object.freeze(['189 にも', 'いちはちきゅうにも']),
+]);
 
 /**
  * 声のサービスに渡す文。表の言葉を読みに置き換える(字幕には使わない)。

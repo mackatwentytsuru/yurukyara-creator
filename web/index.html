@@ -54,7 +54,11 @@
     <p id="uiNotice" class="ui-notice" role="status" hidden></p>
     <p id="shopBadge" class="shop-badge" role="status" hidden></p>
     <section id="caption" class="caption" aria-live="polite" hidden></section>
+    <!-- BSF(11-08 安全): いつも見える 1 行。字幕の列のいちばん下(下の帯のすぐ上)。下の帯の高さを変えないので、キャラは小さくならない。
+         はじめての会話の間(下を札が覆う)は、下の #aiNoticeTop が上の段のすぐ下に出す。置き場所は style.css の BSF の段 -->
+    <p class="ai-notice" id="aiNotice" role="note">AI のキャラクターと話しています</p>
   </div>
+  <p class="ai-notice ai-notice-top" id="aiNoticeTop" aria-hidden="true">AI のキャラクターと話しています</p>
 
   <aside id="thought" class="thought" aria-label="Claude の考え">
     <button class="thought-head" id="thoughtToggle" type="button" aria-expanded="true">
@@ -105,6 +109,8 @@
   <div id="gate" class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
     <div class="gate-card">
       <h1 id="gateTitle">ゆるキャラクリエイター</h1>
+      <!-- BSF(11-08 安全): 入口で、AI と話すことと、子どもの使い方を 1 行で -->
+      <p class="gate-ai" id="gateAi" role="note">AI のキャラクターと話します。小学生以下は、おうちの人といっしょに使ってね。</p>
       <p class="gate-what" id="gateWhat">言葉か絵 1 枚から、話して覚えるゆるキャラを作れます。</p>
       <p class="gate-guide" id="gateGuide">案内するのは主役の<b>ノリー</b>。協力者が手で描いた、セスジキノボリカンガルーの執事見習いです。</p>
       <p class="lead" id="gateLead">キャラがあなたの方を見て、文字で答えます。声は、声の鍵があるときだけ出ます。</p>

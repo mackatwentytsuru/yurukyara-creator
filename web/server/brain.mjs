@@ -6,6 +6,7 @@ import { config } from './env.mjs';
 import { buildSystemBlocks, buildUserTurn, MOTIONS, safeChoices } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, turnGuard, SAFETY_VERSION } from './safety.mjs';
+import { mentionsRest, restGuard, restLine, restNeed } from './safety.mjs'; // BSF 11-08: 長い会話・夜おそくの「休もうか」(1 回の会話で 1 回)
 import { summarize } from './memory/reflect.mjs';
 import { aizuchi, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
 
@@ -204,7 +205,7 @@ export function* mockReply(o) {
   const { text, trigger, seen, persona = '' } = o;
   const { kind, source } = classifyTurn({ text, trigger, scene: seen });
   if (kind) {
-    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: distressDetail(source) });
+    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: distressDetail(source), text: source });
     const { intent, stage, handoff, safety, ...line } = first;
     yield { type: 'thought', seen: seen || '', intent, stage, handoff, safety };
     yield line;
@@ -375,12 +376,21 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   // 履歴の中の、まだ答えていない使う人の発言も分ける。決まった返事はくり返さず、本物の頭脳に注意を足すだけ(F7)。
   // 答えてある発言(すぐ後にキャラの返事がある)には足さない: 注意は 1 回だけ(11-07 第 11 波。断った後のふつうの回は、ふつうに話す)
   const historyKind = classifyHistory(history);
-  const fixed = kind === 'emergency' || kind === 'distress' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
+  // 性的な話は、どちらの頭脳でも呼ばずに決まった返事(BSF 11-08)
+  const fixed = kind === 'emergency' || kind === 'distress' || kind === 'sexual' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
   if (fixed) {
     onEvent({ type: 'meta', brain, safety: kind, safetyVersion: SAFETY_VERSION });
-    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(source) })) emit(obj);
+    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(source), text: source })) emit(obj);
     return;
   }
+  // BSF 11-08: 長い会話・夜おそく。決まった返事の回と、近づいた時の声かけには付けない(次のふつうの回に回す)
+  const rest = trigger === 'approach' ? null : restNeed(body.session);
+  let restSaid = false;
+  const emitRest = () => {
+    if (!rest) return;
+    if (!restSaid) emit(restLine(rest));
+    onEvent({ type: 'meta', rest });
+  };
 
   if (brain === 'mock') {
     onEvent({ type: 'meta', brain: 'mock' });
@@ -390,12 +400,13 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       if (paceMs > 0) await new Promise((r) => setTimeout(r, paceMs));
       emit(obj);
     }
+    emitRest();
     return;
   }
 
   onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}) });
   const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true });
-  const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : ''].filter(Boolean).join('\n');
+  const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : '', restGuard(rest)].filter(Boolean).join('\n');
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
     { role: 'user', content: buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard, hasHistory: history.length > 0 }) },
@@ -406,6 +417,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     const obj = parseLine(line);
     if (obj) {
       if (obj.type === 'say') said += 1;
+      if (obj.type === 'say' && mentionsRest(obj.text)) restSaid = true; // BSF: 頭脳がもう休むことをすすめた
       emit(obj);
     }
   });
@@ -430,6 +442,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       emit(i === 0 ? { type: 'say', text: line, expression: 'neutral', motion: 'none', gaze: 'person', intent: '未確認', stage: 'chat', handoff: false } : { type: 'say', text: line, expression: 'neutral', motion: 'none', gaze: 'person' });
     }
   }
+  emitRest(); // BSF: すすめていなければ、決まった 1 文を最後に足す
   // 2 本目を送ったか・どちらが勝ったか・キャッシュを読めたか(記録と測定のため。画面は使わない)
   onEvent({
     type: 'meta',

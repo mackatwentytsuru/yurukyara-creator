@@ -4,9 +4,16 @@
 // 返事が来るまでの間は、うなずきでつなぐ。割り込まれたら cancel() で全部止める。
 import { roleOf } from './role.js'; // B3(第 12 波 b): 役目を会話に付けて送る
 import { streamChat } from './brainClient.js';
+import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
 import { VOICE_CAP_NOTICE } from './speaker.js';
+
+/** 店の入口の画面(LED・テレビ表示)か。夜に動く画面なので、時間帯の休むすすめは付けない(BSFf) */
+function inShopScreen() {
+  const cl = globalThis.document?.documentElement?.classList;
+  return Boolean(cl && (cl.contains('is-led') || cl.contains('tv-mode')));
+}
 
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 
@@ -84,6 +91,7 @@ export class Dialogue {
       // キャラがまだ決まっていない
     }
     this.pre = null; // 話し終わりの合図(声が止まった)で先に出した、あいづち { at, t0, fillerMs, fillerEndMs, text }
+    this.talk = createTalkSession({ hourOf: (ms) => (inShopScreen() ? null : new Date(ms).getHours()) }); // 店の入口の画面(LED・テレビ表示)は夜に動くので、時間帯のすすめは使わない(BSFf) // BSF: 往復の数・分・端末の時・すすめた後か(このタブの中だけ)
   }
 
   /**
@@ -204,6 +212,7 @@ export class Dialogue {
     }
 
     const body = {
+      session: this.talk.snapshot(), // BSF: 1 回の会話の長さ(休むすすめ。すすめるかはサーバーが決める)
       history: this.history,
       text: askText,
       trigger,
@@ -231,6 +240,7 @@ export class Dialogue {
               m.brain = ev.brain;
             }
             if (ev.notice) this.ui.notice?.(ev.notice); // 「仮の頭脳です(…)」
+            if (ev.rest) this.talk.markRested(); // BSF: 休むことをすすめた(この 1 回の会話では、もうすすめない)
           } else if (ev.type === 'thought') {
             thoughtEv = ev;
             cur.thought = ev;
@@ -294,6 +304,7 @@ export class Dialogue {
     // ふつうの文で戻すと、モデルがそれをまねて、JSON でなく文章で答える回が出た(2026-11-02)
     if (sayEvents.length) this.history.push({ role: 'assistant', content: assistantLines(sayEvents, thoughtEv) });
     this.history = trimHistory(this.history);
+    if (trigger !== 'approach' && sayEvents.length) this.talk.countTurn(); // BSF: 1 往復(近づいた時の声かけは数えない)
     this.busy = false;
     // 音が出た瞬間を待って記録する
     const waitStart = () => {
