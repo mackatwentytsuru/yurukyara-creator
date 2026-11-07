@@ -9,10 +9,10 @@ import { runTurn } from './brain.mjs';
 import { createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memory/store.mjs';
 import { createMemoryRoutes, forgetReplyEvents, isForgetRequest } from './memory/routes.mjs';
 import { extractFacts } from './memory/reflect.mjs';
-import { streamSpeech, ttsStatus } from './tts.mjs';
+import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
-import { ensureFillers, fillerPath, listFillers } from './fillers.mjs';
+import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
 
 const DIST = join(WEB_ROOT, 'dist');
@@ -221,7 +221,11 @@ const handler = async (req, res) => {
         latency: latencySummary(),
       });
     }
-    if (req.method === 'GET' && path === '/api/fillers') return json(res, 200, { sampleRate: 24000, fillers: listFillers() });
+    // あいづちの声: fillers は女の子の役の組(前からの形)、roles は役ごとの組(画面は話す役の組を使う。11-07 第 11 波)
+    if (req.method === 'GET' && path === '/api/fillers') {
+      const roles = listFillerSets();
+      return json(res, 200, { sampleRate: 24000, fillers: roles.female, roles });
+    }
     if (req.method === 'GET' && path.startsWith('/api/fillers/')) {
       const file = fillerPath(path.slice('/api/fillers/'.length));
       if (file && existsSync(file)) {
@@ -235,7 +239,8 @@ const handler = async (req, res) => {
       const body = await readBody(req);
       const ac = new AbortController();
       res.on('close', () => ac.abort());
-      return await streamSpeech(body.text, res, ac.signal);
+      // 声は話す役ごと(本文の voice: 'auto'|'male'|'female' と、その子自身の声 voiceId。形の違う値は使わない)
+      return await streamSpeech(body.text, res, ac.signal, voiceForRequest(body));
     }
     if (req.method === 'POST' && path === '/api/stt/warm') {
       stt.warm();

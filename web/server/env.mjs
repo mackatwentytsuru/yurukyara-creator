@@ -2,6 +2,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VOICE_MODEL_ID } from '../src/conversation/voiceRole.js';
 
 export const WEB_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const REPO_ROOT = join(WEB_ROOT, '..');
@@ -36,8 +37,18 @@ export const config = {
   },
   elevenKey: process.env.ELEVENLABS_API_KEY ?? '',
   model: process.env.CLAUDE_MODEL ?? 'claude-haiku-5-5',
+  // 声は役(男の子・女の子)ごと(11-07 第 11 波。src/conversation/voiceRole.js)。役の既定を環境変数で替えられる(無ければ voiceRole.js の既定)。
+  // ELEVEN_VOICE_ID は最後の控え(役の既定がいつもあるので、ふつうは使われない。.env の例の Yui が男の子の役に付かないように後ろに置く)
+  voiceMale: process.env.ELEVEN_VOICE_MALE ?? '',
+  voiceFemale: process.env.ELEVEN_VOICE_FEMALE ?? '',
   voiceId: process.env.ELEVEN_VOICE_ID ?? 'fUjY9K2nAIwlALOwSiwc',
-  ttsModel: process.env.ELEVEN_MODEL_ID ?? 'eleven_flash_v2_5',
+  ttsModel: process.env.ELEVEN_MODEL_ID || VOICE_MODEL_ID, // 空の値は「無い」と同じ(既定のモデル)
+  // 試験では偽の声のサーバーに向ける(呼ぶたびに読む)
+  get elevenUrl() {
+    return process.env.ELEVEN_API_URL ?? 'https://api.elevenlabs.io/v1/text-to-speech/';
+  },
+  // あいづちの声の置き場所(既定は web/cache/fillers。git に入らない)。試験は別の場所にする
+  fillerDir: process.env.FILLER_DIR ?? join(WEB_ROOT, 'cache', 'fillers'),
   dailyCharCap: Number(process.env.ELEVEN_DAILY_CHAR_CAP ?? 3000),
   tlsCert: process.env.TLS_CERT ?? '', // 証明書があれば HTTPS で配る(iPhone のカメラとマイクに必要)
   tlsKey: process.env.TLS_KEY ?? '',

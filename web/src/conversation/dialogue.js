@@ -104,6 +104,8 @@ export class Dialogue {
     const ac = new AbortController();
     this.abort = ac;
     const ctx = this.getContext();
+    // 声の役(男の子・女の子)は、今の子の人格の文から決まる(おまかせの時)。返事の声もあいづちも、その役で話す(11-07 第 11 波)
+    this.speaker.setVoicePersona?.(ctx.character?.persona);
     const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null };
     // あいづち: 先に出していればそれを、まだなら今出す(声で話しかけられた回だけ)。数字は本当の返事とは別に残す
     let fillerWanted = mode === 'voice' && trigger !== 'approach';

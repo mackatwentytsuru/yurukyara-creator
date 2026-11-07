@@ -361,7 +361,8 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   // 安全の層(1 段目): つらい話・命の危険は、頭脳を呼ばずに決まった一般の案内を返す(診断しない)。
   // 使う人の言葉に加えて、見えている様子(scene)も分ける(CRITsec F7。近づいた時の scene に言葉を入れても、決まった案内を通る)
   const { kind, source } = classifyTurn({ text, trigger, scene });
-  // 履歴の中の使う人の発言も分ける。決まった返事はくり返さず、本物の頭脳に注意を足すだけ(F7)
+  // 履歴の中の、まだ答えていない使う人の発言も分ける。決まった返事はくり返さず、本物の頭脳に注意を足すだけ(F7)。
+  // 答えてある発言(すぐ後にキャラの返事がある)には足さない: 注意は 1 回だけ(11-07 第 11 波。断った後のふつうの回は、ふつうに話す)
   const historyKind = classifyHistory(history);
   const fixed = kind === 'emergency' || kind === 'distress' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
   if (fixed) {
