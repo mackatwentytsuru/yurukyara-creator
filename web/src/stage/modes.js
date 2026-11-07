@@ -1,7 +1,9 @@
 // 見せ方の 3 つ(screen / ar / vr)を、ページから 1 か所で切りかえる入口。web/ はこれだけ呼べばよい。
 //   const modes = await createPresentation({ renderer, scene, camera, place, background, onViewer, onChange });
 //   modes.available   … { screen, ar, vr, ar_kind: 'webxr'|'native'|null, reason }
-//   await modes.enter('ar' | 'vr')   … 入る(いまのモードは先に終わらせる)。失敗したら例外(日本語)
+//   await modes.enter('ar' | 'vr')   … 入る(いまのモードは先に終わらせる)。失敗したら例外(日本語)。
+//                                       頼んでいる途中(ブラウザの「許可する」を待つ間)に呼んでも、2 回目は頼まず同じ約束を返す
+//   modes.pending                     … 頼んでいる途中の見せ方('ar' | 'vr')。無ければ null
 //   await modes.exit()                … screen に戻る
 //   modes.mode / modes.viewerPeople() … いまのモード / 見ている人(会話の柱の getPeople と同じ形)
 //
@@ -68,7 +70,19 @@ export async function createPresentation({
     if (mode !== 'screen') setMode('screen');
   }
 
-  async function enter(next) {
+  // 頼んでいる途中の入り方({ mode, promise })。実機の Quest は requestSession の間にブラウザの「許可する」の帯を出し、答えるまで返さない。
+  // その間にもう一度頼むと InvalidStateError(already an active, immersive XRSession)になったので、2 回目は頼まずに同じ約束を返す
+  let pending = null;
+  function enter(next) {
+    if (pending) return pending.promise;
+    const promise = enterNow(next).finally(() => {
+      if (pending?.promise === promise) pending = null;
+    });
+    pending = { mode: next, promise };
+    return promise;
+  }
+
+  async function enterNow(next) {
     if (next === 'screen') return exit();
     if (next !== 'ar' && next !== 'vr') throw new Error(`mode は screen・ar・vr のどれか: ${next}`);
     if (!available[next]) throw new Error(available.reason || `この端末では ${next} を使えない`);
@@ -96,6 +110,7 @@ export async function createPresentation({
     get mode() { return mode; },
     get nativeAR() { return native; },
     get session() { return session; },
+    get pending() { return pending?.mode ?? null; },
     enter,
     exit,
     /** モードが変わるたび fn(mode) を呼ぶ(ボタンの表示の更新など)。戻り値で解除。 */

@@ -1,6 +1,6 @@
 // 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ・短い知らせ(ui.notice)・「VR(Quest)で開く」の入口。
 // 合言葉(契約 K5)は会話の側の web/src/conversation/demoPass.js が 1 か所で持つ(会話と記憶の通信が同じ値を読む)。
-import { SCAN_HOW, NO_QR_NOTE } from '../stage/questLink.js';
+import { SCAN_HOW, NO_QR_NOTE, SEND_LABEL, SEND_NAME } from '../stage/questLink.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -75,6 +75,22 @@ export function actWords(ev = {}) {
   const expr = e ? EXPRESSION_WORDS[e] ?? 'この子の表情' : 'ふつう';
   const motion = m ? MOTION_WORDS[m] ?? 'この子の動き' : '動きなし';
   return `${expr}・${motion}・${gazeWords(ev.gaze)}`;
+}
+
+/* ---------- 考えの窓の下の「返事が始まるまで」(点検 CRITux 18) ---------- */
+/** 仮の頭脳で話した回に、秒の後ろへ付ける一言 */
+export const FAKE_BRAIN_LATENCY_NOTE = '(仮の頭脳なので、参考の値)';
+
+/**
+ * 「返事が始まるまで ○ 秒」の後ろに付ける一言。付けるのは、仮の頭脳で話した回だけ。
+ * 前は「本物の頭脳と声」で測った回の外は全部「(仮の頭脳か声なしなので、参考の値)」で、本物の頭脳が声なしで答えた回にも
+ * 「仮の頭脳」と出ていた(11/7 の本物の Haiku の録画。声の有無は上の札「声」が出す)
+ * @param {{brain?: string}} entry 会話の 1 回の記録(Dialogue の onMetric。brain は 'haiku' | 'mock' | 'unknown')
+ * @param {{fakeBrain?: boolean}} [o] 会話のイベントで仮の頭脳と分かっている時(公開の関数の fallback の知らせ。記録に brain が無い)
+ */
+export function latencyNote(entry = {}, { fakeBrain = false } = {}) {
+  const brain = entry?.brain;
+  return brain === 'mock' || (brain !== 'haiku' && fakeBrain) ? FAKE_BRAIN_LATENCY_NOTE : '';
 }
 
 /* ---------- 字幕の流れ(点検 CRITux 12: 話し終わった後も、返事の全部を読めるように) ---------- */
@@ -274,6 +290,13 @@ export function createUi() {
       el.textContent = text ?? '';
       el.classList.toggle('bad', bad);
     },
+    /** VR・AR を頼んでから入るか断られるまでの、画面の真ん中の知らせ(ブラウザの「許可する」を待つ間)。null で隠す。文字は textContent だけで入れる */
+    xrWait(text) {
+      const el = $('xrWait');
+      if (!el) return;
+      el.hidden = !text;
+      el.textContent = text ?? '';
+    },
     error(message) {
       els.reply.textContent = `エラー: ${message}`;
       mirror?.({ error: `エラー: ${message}` });
@@ -326,10 +349,11 @@ export function createUi() {
 /* ---------- 「VR(Quest)で開く」(本人の案 11/7。決まりは web/src/stage/questLink.js) ---------- */
 /**
  * 上の段の小さなボタンと、押すと出る箱。箱には、この画面の QR(Quest 3・3S の QR コードスキャナーで読む)と、同じ URL の文字
- * (スキャナーの無い Quest では手で入れる)。この PC・家の中のアドレスなら 1 行だけ。
- * 閉じるのは、ボタンをもう一度・箱を押す・外を押す・Escape。開くたびに plan() を読む(その時の舞台の子と見た目)。
+ * (スキャナーの無い Quest では手で入れる)と、https の時は「Meta Quest に送る」(Meta 公式のウェブローンチを新しいタブで開く。
+ * 本人の答え、11/7)。この PC・家の中のアドレスなら 1 行だけ。
+ * 閉じるのは、ボタンをもう一度・箱を押す・外を押す・Escape(「Meta Quest に送る」を押しても閉じない)。開くたびに plan() を読む(その時の舞台の子と見た目)。
  * QR の部品(stage/qrCode.js)は、初めて開いた時に読む(最初の読み込みを軽くする)。文字は textContent だけで入れる。
- * @param {{root: HTMLElement, button: HTMLButtonElement, box: HTMLElement, plan: () => {show: boolean, kind: string, target?: string, note?: string},
+ * @param {{root: HTMLElement, button: HTMLButtonElement, box: HTMLElement, plan: () => {show: boolean, kind: string, target?: string, launch?: string, note?: string},
  *   onToggle?: (open: boolean) => void, loadQr?: () => Promise<{encodeQr: Function, qrPath: Function}>}} o
  * @returns {{open(): void, close(focusButton?: boolean): void, readonly isOpen: boolean}}
  */
@@ -360,6 +384,22 @@ export function mountQuestLink({ root, button, box, plan, onToggle = () => {}, l
     return svg;
   };
 
+  /**
+   * 「Meta Quest に送る」: 決まりの launch(ウェブローンチ。questLink.js が作る)だけを新しいタブで開くリンク。
+   * この頁の URL(合言葉・番号が入りうる)は Referer で送らない。押しても箱は閉じない(送った後も QR と URL を見られる)
+   */
+  const sendLink = (href) => {
+    const a = el('a', 'ql-send', SEND_LABEL);
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.referrerPolicy = 'no-referrer';
+    a.setAttribute('aria-label', SEND_NAME);
+    a.title = SEND_NAME;
+    a.addEventListener('click', (e) => e.stopPropagation());
+    return a;
+  };
+
   async function render() {
     const id = ++renderId;
     const p = plan();
@@ -375,6 +415,7 @@ export function mountQuestLink({ root, button, box, plan, onToggle = () => {}, l
     const qr = svgNs ? (lib?.encodeQr(p.target) ?? null) : null;
     const text = el('div', 'ql-text');
     text.append(el('p', 'ql-title', 'VR(Quest)で開く'), el('p', 'ql-how', qr ? SCAN_HOW : NO_QR_NOTE), el('p', 'ql-url', p.target));
+    if (p.launch) text.append(sendLink(p.launch)); // https の公開の URL の時だけ(決まりは questLink.js)
     box.replaceChildren(...(qr ? [qrSvg(qr.matrix, lib.qrPath)] : []), text);
     box.dataset.target = p.target; // QR に入れた文(確かめの道具が読む。画面に出す URL と同じ)
   }
