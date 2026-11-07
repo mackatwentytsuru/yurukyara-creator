@@ -198,6 +198,7 @@ try {
       // アップデートの窓(歯車の窓の下の「アプリの アップデート」から。印は新しい版がある時だけ)
       await page.click('#ycAudioBtn');
       await page.waitForSelector('#ycAudio:not([hidden])');
+      await page.waitForSelector('#ycAudioUpdate:not([hidden])', { timeout: 8000 }).catch(() => {}); // 手元のサーバーの答えを待つ
       const hasLink = await page.isVisible('#ycAudioUpdate');
       check(`${name}: この PC の中では「アプリの アップデート」への道がある`, hasLink);
       if (hasLink) {
