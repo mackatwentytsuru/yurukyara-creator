@@ -41,13 +41,15 @@ In the browser alone, the first conversation's word box only picks the nearest o
 - **Claude Code, signed in.** `/yuru-next` and the picture check use your Claude Code plan.
 - On Mac and Linux the Python command may be `python3` (we ran these steps on Windows only).
 
+Open two terminals in the folder where you ran `git clone` (the folder that holds `yuru-chara`):
+
 ```bash
-# Terminal 1: the app. Skip this if it is still running from "Try it in 3 lines".
+# Terminal 1: the app (skip this if it is still running from "Try it in 3 lines")
 cd yuru-chara/web
 npm start
 
-# Terminal 2: the maker. Open a new terminal in the folder where you ran git clone.
-cd yuru-chara          # the repository root (not web)
+# Terminal 2: the maker, from the repository root (yuru-chara, not web)
+cd yuru-chara
 python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 ```
 

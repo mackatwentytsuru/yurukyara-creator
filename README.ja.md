@@ -40,13 +40,15 @@ npm start        # http://127.0.0.1:8787/ を開く
 - **ログインした Claude Code**。`/yuru-next` と絵の確かめは、あなたの Claude Code のプランを使います。
 - Mac と Linux では、Python の命令が `python3` のことがあります(この手順は Windows でだけ流しました)。
 
+2 つの窓を、git clone をしたフォルダ(`yuru-chara` が入っているフォルダ)で開きます:
+
 ```bash
-# 窓 1: アプリ。「3 行で試す」で起こしたままなら、ここは飛ばします。
+# 窓 1: アプリ(「3 行で試す」で起こしたままなら飛ばす)
 cd yuru-chara/web
 npm start
 
-# 窓 2: 作る道。新しい窓を開き、git clone をしたフォルダで:
-cd yuru-chara          # リポジトリの頭のフォルダ(web ではない)
+# 窓 2: 作る道。リポジトリの頭のフォルダ(yuru-chara。web ではない)から
+cd yuru-chara
 python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 ```
 
