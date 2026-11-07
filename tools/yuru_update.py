@@ -2,10 +2,12 @@
 """ゆるキャラクリエイターを新しい版にする道具。あなたのキャラ・性格・声・記憶・設定は消しません。
 
 使い方(リポジトリの頭のフォルダで):
-  python tools/yuru_update.py check [--quiet] [--once-a-day]  新しい版があるかを見る
+  python tools/yuru_update.py check [--quiet] [--once-a-day] [--json]  新しい版があるかを見る
   python tools/yuru_update.py apply [--rename 今のid=新しいid]  控えを取ってから、新しい版にする
   python tools/yuru_update.py undo [--save-mine]               いちばん新しい控えの時に戻す
-  python tools/yuru_update.py status                           今の版・線・最後に見た時・いちばん新しい控え
+  python tools/yuru_update.py status [--json]                  今の版・線・最後に見た時・いちばん新しい控え
+- --json は、アプリの手元のサーバー(web/server/update.mjs)が画面に出すための形(1 行の JSON)。
+  check --json --once-a-day は、今日もう取り先を見ていれば、ネットに出ずに手元に取ってある分だけでくらべる。
 
 - Python 3 の標準の物だけで動く(Windows・macOS・Linux)。git とネットの呼び出しには、どれも時間の上限がある。
 - 鍵のファイル(web/.env など)は、名前を控えに書くだけ。中身は読まない・写さない・出さない。
@@ -14,13 +16,14 @@
 - 部品(使う人の物の地図・控え・版の読み方)は tools/yuru_update_core.py。試験は tools/test_yuru_update.py。
 """
 import argparse
+import json
 import os
 import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I でも部品を読めるように
 from yuru_update_core import (  # noqa: E402
-    BACKUP_DIR, DOCTOR, ID_FORM, MERGE_TIMEOUT, OFFERS, REQ_FILE, UNDO_HINT, WEB_LOCK,
+    BACKUP_DIR, DOCTOR, ID_FORM, MERGE_TIMEOUT, NEWS_FILE, OFFERS, REQ_FILE, UNDO_HINT, WEB_LOCK, news_between,
     Offline, Stop, absp, after_hashes, backups, branch_info, busy_with_merge, collisions_message,
     current_hash, fetch, git, incoming, is_clone, is_newer, load_state, local_version, make_backup,
     my_character_ids, now, own_files, put_back, put_back_tracked, rename_back, rename_character, renamed_file,
@@ -33,6 +36,21 @@ TOOL_TIMEOUT = 120
 DOCTOR_TIMEOUT = 60
 NODE_TIMEOUT = 30
 RESTART_HINT = "アプリ(npm start)を動かしていたら、一度止めて、もう一度 npm start で起こしてください。"
+# アプリの画面の「アップデートする」から流した時(手元のサーバーが YURU_UPDATE_FROM_APP=1 で起こす)の、終わりの一言
+APP_RESTART_HINT = "このあと、アプリが じぶんで いちど とじて、ひらきなおします。"
+APP_UNDO_HINT = "もとに もどすときは、おなじ まどの「もとに もどす」を おしてね。"
+
+
+def from_app():
+    return os.environ.get("YURU_UPDATE_FROM_APP") == "1"
+
+
+def restart_hint():
+    return APP_RESTART_HINT if from_app() else RESTART_HINT
+
+
+def undo_hint():
+    return APP_UNDO_HINT if from_app() else UNDO_HINT
 SAVE_MINE_HINT = ("いまの中身を控えに写してから元に戻すときは、「写してから元に戻して」と頼むか、"
                   "python tools/yuru_update.py undo --save-mine")
 STOPPED_HINT = ("止めました。あなたの物は消していません。もう一度「アップデートして」と言うと、"
@@ -44,7 +62,59 @@ MOVE_OUT = ("新しい版は、取ってきた所からもう一度取ってく�
 
 # ---------- check ----------
 
+def news_items(commit, ours, theirs):
+    """「できるようになったこと」の、今の版より新しい節。[{version, title, lines}](行の頭の「- 」は外す)"""
+    try:
+        secs = news_between(git("show", f"{commit}:{NEWS_FILE}"), ours, theirs)
+    except (RuntimeError, TimeoutError):
+        return []
+    return [{"version": s["version"], "title": s["title"], "lines": [ln.lstrip("-* ").strip() for ln in s["lines"]]}
+            for s in secs]
+
+
+def check_report(once_a_day):
+    """画面(アプリの手元のサーバー)向けの答え。ネットに出るのは取り先を見る fetch の 1 回だけ。
+    once_a_day で今日もう見ていれば fetch せず、前に取ってある取り先の物でくらべる。失敗は update: False(画面は何も出さない)"""
+    out = {"schema": "yc-update-check/1", "clone": False, "upstream": False, "fetched": False, "offline": False,
+           "ours": local_version(), "theirs": None, "ahead": 0, "newer": False, "update": False, "own_commits": False,
+           "interrupted": False, "news": []}
+    if not shutil.which("git") or not is_clone():
+        return out
+    out["clone"], out["interrupted"] = True, bool(interrupted())
+    branch, up, remote = branch_info()
+    if not up:
+        return out
+    out["upstream"] = True
+    if not (once_a_day and load_state().get("last_try", "")[:10] == now().date().isoformat()):
+        save_state(last_try=now().isoformat(timespec="seconds"))
+        try:
+            fetch(remote, quiet=once_a_day)
+        except Offline:
+            out["offline"] = True
+            return out
+        out["fetched"] = True
+    head, target = git("rev-parse", "HEAD").strip(), git("rev-parse", "@{u}").strip()
+    ours, theirs = out["ours"], version_at(target)
+    ahead = int(git("rev-list", "--count", f"{head}..{target}").strip() or 0)
+    try:
+        git("merge-base", "--is-ancestor", head, target)
+    except RuntimeError:
+        out["own_commits"] = True   # 自分で記録した変更があると、apply は何も変えずに止まる
+    if out["fetched"]:
+        save_state(last_check=now().isoformat(timespec="seconds"), latest=theirs)
+    out.update(theirs=theirs, ahead=ahead, newer=is_newer(theirs, ours),
+               update=bool(ahead) and not out["own_commits"], news=news_items(target, ours, theirs) if ahead else [])
+    return out
+
+
+def say_json(obj):
+    say(json.dumps(obj, ensure_ascii=False))
+
+
 def cmd_check(args):
+    if args.json:
+        say_json(check_report(args.once_a_day))
+        return 0
     if args.once_a_day and load_state().get("last_try", "")[:10] == now().date().isoformat():
         if not args.quiet:
             say("今日はもう確かめました。もう一度見るときは --once-a-day を付けずに流してください。")
@@ -256,8 +326,8 @@ def after_steps(changes_in, base, man):
     man["after_tracked"] = {p: current_hash(p) for p, _ in tracked_changes()}
     man["finished"] = True
     save_manifest(base, man)
-    say(RESTART_HINT)
-    say(UNDO_HINT)
+    say(restart_hint())
+    say(undo_hint())
 
 
 # ---------- 途中で止まった時 ----------
@@ -319,6 +389,9 @@ def cmd_apply(args):
 # ---------- 新しくした後の段 ----------
 
 def run_npm_ci():
+    if os.environ.get("YURU_UPDATE_SKIP_NPM") == "1":   # アプリの見張り役(web/scripts/yuru-run.mjs)が、止めている間に入れ直す
+        say("・アプリの部品が変わりました。アプリを ひらきなおす時に、入れなおします。")
+        return
     npm = shutil.which("npm")
     if not npm:
         say("・アプリの部品が変わりました。Node.js 22 を入れてから、web のフォルダで npm ci をしてください。")
@@ -495,13 +568,38 @@ def cmd_undo(args):
             say(f"  {p}  → {s}")
     if lock_changed:
         run_npm_ci()
-    say(RESTART_HINT)
+    say(restart_hint())
     return 0
 
 
 # ---------- status ----------
 
+def status_report():
+    """画面向けの今のようす。元に戻せるか(can_undo)は undo_target と同じ決まり"""
+    st = load_state()
+    out = {"schema": "yc-update-status/1", "version": local_version(), "clone": False, "branch": None,
+           "upstream": False, "last_check": st.get("last_check"), "latest": st.get("latest"), "backup": None,
+           "can_undo": False, "undo_to": None, "interrupted": False}
+    clone = bool(shutil.which("git")) and is_clone()
+    if clone:
+        branch, up, _ = branch_info()
+        out.update(clone=True, branch=branch, upstream=bool(up), interrupted=bool(interrupted()))
+    b = backups()
+    if b:
+        name, man = b[0]
+        out["backup"] = {"name": name, "status": man.get("status"), "finished": man.get("finished"),
+                         "from_version": man.get("from_version"), "to_version": man.get("to_version")}
+    applied = [m for _, m in b if m.get("status") == "applied"]
+    if clone and applied and not busy_with_merge():
+        out["can_undo"] = git("rev-parse", "HEAD").strip() == applied[0].get("to_commit")
+        out["undo_to"] = applied[0].get("from_version") if out["can_undo"] else None
+    return out
+
+
 def cmd_status(args):
+    if args.json:
+        say_json(status_report())
+        return 0
     st = load_state()
     say(f"版: {local_version()}")
     if shutil.which("git") and is_clone():
@@ -530,11 +628,13 @@ def parse_args(argv):
     c = sub.add_parser("check", help="新しい版があるかを見る")
     c.add_argument("--quiet", action="store_true", help="新しい版がある時だけ 1 行出す")
     c.add_argument("--once-a-day", action="store_true", help="1 日に 1 回だけ確かめる")
+    c.add_argument("--json", action="store_true", help="画面向けに、1 行の JSON で出す")
     a = sub.add_parser("apply", help="控えを取ってから、新しい版にする")
     a.add_argument("--rename", action="append", metavar="今のid=新しいid", help="見本とぶつかる自分のキャラの名前を替える")
     u = sub.add_parser("undo", help="いちばん新しい控えの時に戻す")
     u.add_argument("--save-mine", action="store_true", help="新しくした後に変わった物を、控えに写してから戻す")
-    sub.add_parser("status", help="今の版・線・最後に見た時・いちばん新しい控え")
+    s = sub.add_parser("status", help="今の版・線・最後に見た時・いちばん新しい控え")
+    s.add_argument("--json", action="store_true", help="画面向けに、1 行の JSON で出す")
     return ap.parse_args(argv)
 
 
@@ -556,6 +656,9 @@ def main(argv=None):
             return 3
         return 0
     except (RuntimeError, TimeoutError, FileNotFoundError, OSError) as e:
+        if getattr(args, "json", False):   # 画面向け: 失敗は「何も無い」として 1 行の JSON(画面は何も出さない)
+            say_json({"schema": f"yc-update-{args.cmd}/1", "error": type(e).__name__, "update": False, "can_undo": False})
+            return 0
         if args.cmd == "check" and args.quiet:
             return 0
         say("思わぬ所で止まりました。あなたの物は消していません。" + (UNDO_HINT if args.cmd == "apply" else ""))

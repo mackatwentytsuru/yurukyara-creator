@@ -200,12 +200,27 @@ export class Speaker {
       this.analyser.fftSize = 1024;
       this.analyser.connect(this.ctx.destination);
       this.buf = new Float32Array(this.analyser.fftSize);
+      if (this.outputId) this.setOutput(this.outputId); // BUX: 選んだスピーカーへ
     }
     if (this.ctx.state !== 'running') this.ctx.resume();
     const s = this.ctx.createBufferSource();
     s.buffer = this.ctx.createBuffer(1, 1, 24000);
     s.connect(this.ctx.destination);
     s.start(0);
+  }
+
+  /**
+   * 声を出すスピーカー(第 12 波 b・BUX。「マイクとスピーカー」の窓で選んだ物)。'' か 'default' は既定。
+   * 選べるのは Web Audio の setSinkId があるブラウザ(Chrome・Edge)だけ。無ければ覚えるだけで、既定から出す(false を返す)
+   */
+  setOutput(deviceId = '') {
+    this.outputId = deviceId === 'default' ? '' : String(deviceId ?? '');
+    if (!this.ctx || typeof this.ctx.setSinkId !== 'function') return false;
+    this.ctx.setSinkId(this.outputId).catch(() => {
+      this.outputId = ''; // 抜かれた・使えないスピーカー: 既定に戻す
+      this.ctx?.setSinkId?.('').catch(() => {});
+    });
+    return true;
   }
 
   get speaking() {

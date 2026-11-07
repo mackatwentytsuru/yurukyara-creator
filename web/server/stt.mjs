@@ -35,6 +35,19 @@ export function cleanHint(hint) {
     .join('');
 }
 
+// BUX(第 12 波 b): 音がほぼ 0 の区間(消音のマイク・違うマイクを選んだ時)は、係に渡さず「音が届いていない」と答える。
+// Whisper は無音から文を作りがちなので、渡さない方が正しい。0.3 秒より短い物は、今までどおり係に任せる
+const SILENT_PEAK = 64; // 16bit の最大 32767 の約 0.2%
+const SILENT_MIN_S = 0.3;
+export function isSilentWav(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 44 || buf.readUInt16LE(34) !== 16) return false;
+  const rate = buf.readUInt32LE(24) || 16000;
+  const n = Math.floor((buf.length - 44) / 2);
+  if (n < rate * SILENT_MIN_S) return false;
+  for (let i = 0; i < n; i++) if (Math.abs(buf.readInt16LE(44 + i * 2)) >= SILENT_PEAK) return false;
+  return true;
+}
+
 export function cleanText(text) {
   const t = String(text ?? '').trim();
   return HALLUCINATIONS.some((re) => re.test(t)) ? '' : t;
@@ -123,6 +136,7 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
     /** @returns {Promise<{text:string, ms:number}>} */
     async transcribe(wav, { hint = '' } = {}) {
       assertWav(wav);
+      if (isSilentWav(wav)) return { text: '', ms: 0, silent: true }; // BUX: 音が届いていない(画面が「マイクを えらびなおしてね」と出す)
       if (pending >= MAX_PENDING) throw Object.assign(new ValidationError('聞き取りが混んでいます'), { status: 429 });
       pending += 1;
       const run = async () => {

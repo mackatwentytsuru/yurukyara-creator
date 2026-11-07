@@ -4,6 +4,25 @@
 //   server … このページを配っているサーバーへ声の区間を送る(/api/stt)。Quest のブラウザには Web Speech API が無い報告があるので、こちらを使う
 import { encodeWav, resample, SegmentCollector, STT_RATE } from './wav.js';
 import { getSttHint, sttHintHeaders } from './sttHint.js';
+// BUX: 「マイクとスピーカー」の窓で選んだマイク。既定でないマイクは PC の聞き取りへ。音が来ない時は画面へ知らせる
+import { AUDIO_WORDS, NOTE_EVENT, SILENT_EVENT, createSilenceWatch, decideListening, isDefaultMic, loadChoice, micConstraints, resolveDevice, serverSttAvailable, splitDevices, tell } from './audioDevices.js';
+
+const MIC_BASE = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+
+/** 覚えている選びと今の一覧から、この回の聞き取りの道とマイクを決める */
+export async function micPlan(baseProvider, { choice = loadChoice(), enumerate = () => navigator.mediaDevices.enumerateDevices(), serverOk = serverSttAvailable() } = {}) {
+  const chosen0 = choice?.mic ?? null;
+  if (!chosen0) return { provider: baseProvider, useChosen: false, chosen: null, note: '' };
+  let mics = [];
+  try {
+    mics = splitDevices(await enumerate()).mics;
+  } catch {
+    // 一覧が取れない時は、選んだ時の印で決める
+  }
+  const chosen = resolveDevice(mics, chosen0) ?? chosen0;
+  const plan = decideListening(baseProvider, { chosen, isDefault: isDefaultMic(mics, { ...chosen, def: chosen0.def }), serverOk });
+  return { ...plan, chosen };
+}
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const MIN_SEGMENT_S = 0.3; // これより短い音は、声でないとみなして送らない
@@ -38,6 +57,8 @@ export class Listener {
     this.cb = cb;
     this.hint = hint;
     this.provider = provider;
+    this.baseProvider = provider; // 頼まれた道(選んだマイクで server に替えても、ここは変えない)
+    this.micLabel = ''; // 使っているマイクの名前(選んだ時だけ)
     this.isBusy = isBusy;
     this.listening = false;
     this.voiceActive = false;
@@ -55,11 +76,25 @@ export class Listener {
 
   async start() {
     if (this.listening) return;
+    // BUX: 選んだマイク。既定でないマイクは、その音を PC の聞き取りへ(ブラウザの聞き取りは既定のマイクしか使えない)
+    const plan = await micPlan(this.baseProvider);
+    this.provider = plan.provider;
+    if (plan.note) tell(NOTE_EVENT, { text: plan.note });
     if (this.provider === 'web' && !webSpeechSupported()) throw new Error('このブラウザは声の聞き取りに対応していません');
     // 声の有無を見るためのマイク(エコーは打ち消す)
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(MIC_BASE, plan.chosen, !plan.useChosen) });
+      this.micLabel = plan.useChosen ? plan.chosen.label : '';
+    } catch (err) {
+      if (!plan.useChosen || !['OverconstrainedError', 'NotFoundError'].includes(err?.name)) throw err;
+      // 選んだマイクが抜かれた: 頼まれた道と既定のマイクに戻す
+      tell(NOTE_EVENT, { text: AUDIO_WORDS.gone });
+      this.provider = this.baseProvider;
+      if (this.provider === 'web' && !webSpeechSupported()) throw new Error('このブラウザは声の聞き取りに対応していません');
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { ...MIC_BASE } });
+      this.micLabel = '';
+    }
+    this._silence = createSilenceWatch({ startedAt: performance.now() });
     const AC = window.AudioContext || window.webkitAudioContext;
     this.ctx = new AC();
     const src = this.ctx.createMediaStreamSource(this.stream);
@@ -92,13 +127,18 @@ export class Listener {
   }
 
   _vad() {
-    if (this.provider === 'server' && this._ignoreWhileBusy()) return;
+    if (this.provider === 'server' && this._ignoreWhileBusy()) {
+      this._silence?.feed(0, performance.now(), true); // キャラが話している間は、音が来ない時間に数えない
+      return;
+    }
     this.analyser.getFloatTimeDomainData(this.samples);
     let sum = 0;
     for (const v of this.samples) sum += v * v;
     const rms = Math.sqrt(sum / this.samples.length);
     this.level = rms;
     const now = performance.now();
+    // BUX: 押してから何秒か音がまったく来ない(消音・違うマイク)なら、画面へ 1 回だけ知らせる
+    if (this._silence?.feed(rms, now, this.isBusy()) === 'silent') tell(SILENT_EVENT, { provider: this.provider, mic: this.micLabel });
     const threshold = Math.max(0.025, this.floor * 3);
     if (rms > threshold) {
       this.lastVoicedAt = now;
@@ -181,6 +221,7 @@ export class Listener {
       tm.serverMs = data.ms ?? null;
       if (!res.ok) throw new Error(data.error ?? `聞き取りのサーバー (${res.status})`);
       if (!this.listening) return;
+      if (data.silent) tell(SILENT_EVENT, { provider: this.provider, mic: this.micLabel }); // BUX: サーバーが「音がほぼ 0」と答えた
       if (data.text) this.cb.onFinal(data.text, { lastVoicedAt });
       else this.cb.onEmpty?.();
     } catch (err) {

@@ -615,6 +615,102 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
   .tv-enter { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
   .tv-cast-close { grid-column: 2; grid-row: 4; align-self: start; }
 }
+/* ---- BUX(第 12 波 b): 「マイクと スピーカー」の窓・画面のアップデートの印と窓。ほかの規則は変えない ----
+   窓(.yc-sheet)は body の直下で浮かせる。幅 1200 未満は画面の上(上の段にかぶせる)、幅 1200 以上は左(右には「Claude の考え」)。開いている間は main.js の頭の線に
+   窓の下の端が足され(ui/sheet.js の sheetGuard)、キャラは窓の下へ置き直される(重ならない・形は変えない)。下の帯は動かさない。字は 14px 以上 */
+.yc-update-badge {
+  pointer-events: auto; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 999px;
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--warn); border: 1px solid rgba(255, 255, 255, 0.4); cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.yc-update-badge[hidden] { display: none; }
+.yc-update-badge:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.yc-update-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); flex: none; }
+.yc-update-short { display: none; }
+@media (max-width: 640px) {
+  .yc-update-long { display: none; }
+  .yc-update-short { display: inline; }
+  .yc-update-badge { padding: 0 12px; }
+}
+.yc-audio-btn {
+  flex: none; width: 44px; min-height: 44px; padding: 0 !important; display: grid; place-items: center;
+  background: var(--glass) !important; border: 1px solid var(--line) !important; color: var(--text);
+}
+.yc-audio-btn[aria-expanded="true"] { border-color: var(--lav) !important; color: var(--lav); }
+.yc-sheet {
+  position: fixed; z-index: 8; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; margin: 0 auto;
+  width: min(calc(100% - 24px), 560px); max-height: min(40vh, 400px); max-height: min(40dvh, 400px); overflow: auto; overscroll-behavior: contain;
+  padding: 12px 14px 14px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); /* 不透明(上の段の字が透けて見えないように) */
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  display: grid; gap: 10px; align-content: start; font-size: 15px; line-height: 1.55; color: var(--text);
+}
+.yc-sheet[hidden] { display: none; }
+.yc-sheet:focus { outline: none; }
+@media (min-width: 641px) {
+  .yc-sheet { max-height: min(46vh, 430px); max-height: min(46dvh, 430px); }
+}
+@media (min-width: 1200px) {
+  /* 左に浮かせる(右には「Claude の考え」がある。キャラは真ん中) */
+  .yc-sheet {
+    left: max(12px, env(safe-area-inset-left)); right: auto; margin: 0; width: 380px; z-index: 6;
+    top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px);
+    max-height: calc(100vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - var(--bottom-h, 120px) - 24px);
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - var(--bottom-h, 120px) - 24px);
+  }
+}
+.yc-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.yc-sheet-head h2 { margin: 0; font-size: 17px; letter-spacing: 0.04em; }
+.yc-sheet-close, .yc-btn, .yc-link-btn {
+  font: inherit; font-size: 14px; min-height: 44px; padding: 8px 14px; border-radius: 14px; cursor: pointer; color: var(--text);
+  background: transparent; border: 1px solid var(--line);
+}
+.yc-sheet-close:focus-visible, .yc-btn:focus-visible, .yc-link-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.yc-btn:disabled { opacity: 0.55; cursor: wait; }
+.yc-btn[hidden], .yc-link-btn[hidden] { display: none; }
+.yc-btn-main { border: 0; font-weight: 700; background: linear-gradient(135deg, #7d62ff, #c15bff); }
+.yc-btn-small { min-height: 40px; padding: 6px 12px; justify-self: start; }
+.yc-link-btn { justify-self: start; border-style: dashed; color: var(--muted); }
+.yc-sheet p, .yc-sheet ul, .yc-sheet ol, .yc-sheet h3 { margin: 0; }
+.yc-sheet h3 { font-size: 15px; color: var(--muted); font-weight: 700; }
+.yc-sheet [hidden] { display: none !important; }
+.yc-field { display: grid; gap: 4px; }
+.yc-field > span { font-size: 14px; color: var(--muted); }
+.yc-select {
+  font: inherit; font-size: 15px; min-height: 44px; width: 100%; min-width: 0; padding: 0 10px; border-radius: 12px;
+  color: var(--text); background: var(--ink); border: 1px solid var(--line);
+}
+.yc-select:focus-visible { outline: 2px solid var(--lav); outline-offset: 1px; }
+.yc-meter-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.yc-meter-label { font-size: 14px; color: var(--muted); }
+.yc-meter { height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.yc-meter-bar { display: block; height: 100%; width: 100%; transform: scaleX(0); transform-origin: left center; background: linear-gradient(90deg, var(--mint), var(--lav)); transition: transform 0.06s linear; }
+.yc-au-actions, .yc-up-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.yc-au-route, .yc-au-foot, .yc-au-lead, .yc-up-keep { font-size: 14px; color: var(--muted); }
+.yc-au-heard { min-height: 1.55em; font-size: 15px; }
+.yc-au-msg, .yc-up-msg { font-size: 14px; color: var(--warn); }
+.yc-up-version { font-size: 16px; font-weight: 700; }
+.yc-up-news { padding-left: 1.2em; display: grid; gap: 2px; }
+.yc-up-steps { padding-left: 1.4em; display: grid; gap: 2px; font-size: 15px; }
+.yc-up-steps li::marker { color: var(--mint); font-weight: 700; }
+.yc-up-details summary { cursor: pointer; font-size: 14px; color: var(--muted); min-height: 32px; }
+.yc-up-raw { margin: 6px 0 0; max-height: 9em; overflow: auto; white-space: pre-wrap; word-break: break-all; font: inherit; font-size: 14px; color: var(--muted); }
+.yc-up-offer-list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.yc-up-offer { display: grid; gap: 4px; padding: 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+.yc-up-offer > span { font-size: 14px; color: var(--muted); }
+.yc-up-asked { font-size: 14px; color: var(--mint); }
+/* 知らせは低く(ボタンを横に並べる。字幕の場所の高さに収め、キャラの足元へ伸びない) */
+.yc-note { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; text-align: left; border-radius: 16px; padding: 6px 8px 6px 14px; }
+.yc-note[hidden] { display: none; }
+.yc-note-text { flex: 1 1 auto; min-width: 0; }
+.yc-note-action { flex: none; font: inherit; font-size: 14px; min-height: 40px; padding: 4px 12px; border-radius: 999px; cursor: pointer; color: var(--ink); background: var(--lav); border: 0; pointer-events: auto; }
+@media (max-width: 640px) {
+  .yc-au-lead { display: none; } /* 電話の幅: 窓の名前で分かるので、押す所を先に見せる */
+}
+.yc-note-action[hidden] { display: none; }
+.yc-gate-update { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 15px; line-height: 1.5; background: rgba(123, 224, 195, 0.14); border: 1px solid var(--mint); }
+html.tv-mode .yc-update-badge, html.tv-mode .yc-sheet, html.tv-mode .yc-note { display: none !important; }
+/* ---- BUX ここまで ---- */
+
 /* 画面のキーボード(ui/keyboardInset.js が --kb・--kbt・--vvh を入れ、出ている間だけ html.kb-open を付ける)。
    iOS の Safari は、キーボードでページの高さを変えず見える範囲だけ縮めるので、下に貼り付いた帯は、そのままだとキーボードの下に残る。
    translate は transform と別の指定なので、.subs の translateX(-50%) と重なっても壊れない。
