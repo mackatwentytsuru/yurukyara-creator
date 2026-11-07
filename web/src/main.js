@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { createStage } from './scene.js';
 import { loadFirstCharacter, loadCharacter, availableLooks, motionChoices, MAIN_CHARACTER } from './character/index.js';
-import { writeRemembered } from './character/looks.js'; // このタブで選んだ見た目(3D・2D)を覚える
+import { writeRemembered, characterKey, lookKey, hasBothLooks } from './character/looks.js'; // 見た目(3D・2D)の切り替えの決まり・このタブで選んだ見た目を覚える
 import { guardBottom } from './stage/framing.js'; // キャラを上の段の下に収める
 import { pickSpec, isLoopbackPage, SPEC_NOTICE } from './character/urlSpec.js'; // ?character= ?place= は公開の URL では id だけ(CRITsec F5)
 import { shouldOpenFirstRun, FIRST_RUN_DONE_KEY } from './stage/firstVisit.js'; // 初めての訪問なら、入口の後に 7 歩を出す(CRITux 2)
@@ -656,25 +656,46 @@ function reframe() {
 }
 
 /* ---------- 見た目の切り替え(3D と 2D。両方あるキャラだけ。このタブだけで覚える) ---------- */
-const lookCache = new Map(); // 見た目 → 読み込んだキャラ(捨てずに持つ。2 回目からはすぐ替わる)
+// 舞台の子が替わるたび(見た目の切り替え・初めての会話の見本の子・案内役に戻す)に、今の子に合わせて作り直す(S4 の頼み。CRITux2 高 1 の残り)。
+// 前は最初の子で 1 回だけ作り、控えも見た目だけを鍵にしていたので、入れ替えた後に押すと最初の子の見た目が戻った
+const lookCache = new Map(); // lookKey(キャラの id と見た目)→ 読み込んだキャラ(捨てずに持つ。2 回目からはすぐ替わる。ほかの子の控えと混ぜない)
+const lookKinds = new Map(); // キャラの id → 出せる見た目(['3d', '2d'] など。調べるのは子ごとに 1 回)
 let lookBusy = false;
+let lookClicks = false; // 押した時の受け口を付けたか(付けるのは 1 回だけ)
+let lookCheck = 0; // 何回目の作り直しか(調べている間に舞台の子が替わったら、古い答えは使わない)
+let bootLookId = null; // 最初に出した子の id(URL の ?look= を書き換えるのは、この子の見た目を替えた時だけ)
+const LOOK_SWITCH_OFF = IS_HEADSET || ['led', 'autostart'].some((k) => params.get(k) === '1') || params.get('perf') === '1';
 
-/** 両方の見た目があるキャラなら、上の段に切り替えを出す */
-async function setupLookSwitch() {
+/**
+ * 舞台の子に合わせて、上の段の切り替えを出す・隠す・押された方を合わせる。両方の見た目がある子だけ出す
+ * (片方だけの子・調べられない時は隠す)。swapCharacter と起動の最後に呼ぶ
+ */
+async function refreshLookSwitch(character = app.character) {
   const box = $('lookSwitch');
-  if (!box || IS_HEADSET || ['led', 'autostart'].some((k) => params.get(k) === '1') || params.get('perf') === '1') return;
-  const looks = await availableLooks(app.character).catch((err) => {
-    console.warn('見た目の種類を調べられませんでした:', err.message);
-    return [];
-  });
-  if (!(looks.includes('3d') && looks.includes('2d'))) return;
-  lookCache.set(app.character.look, app.character);
-  box.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-look]');
-    if (btn) void switchLook(btn.dataset.look);
-  });
+  if (!box || !character || LOOK_SWITCH_OFF) return;
+  const check = ++lookCheck;
+  const id = characterKey(character);
+  lookCache.set(lookKey(id, character.look), character);
+  let looks = id ? lookKinds.get(id) : null;
+  if (!looks) {
+    box.hidden = true; // 調べ終わるまで、前の子の切り替えを出したままにしない
+    looks = await availableLooks(character).catch((err) => {
+      console.warn('見た目の種類を調べられませんでした:', err.message);
+      return null;
+    });
+    if (looks && id) lookKinds.set(id, looks);
+  }
+  if (check !== lookCheck || app.character !== character) return; // 調べている間に舞台の子が替わった(新しい回が決める)
+  const shown = hasBothLooks(looks);
+  if (shown && !lookClicks) {
+    lookClicks = true;
+    box.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-look]');
+      if (btn) void switchLook(btn.dataset.look);
+    });
+  }
   syncLookSwitch();
-  box.hidden = false;
+  box.hidden = !shown;
 }
 
 function syncLookSwitch() {
@@ -685,23 +706,26 @@ function syncLookSwitch() {
   }
 }
 
-/** 見た目を替える。読み込めなければ、今の見た目のまま理由を出す */
+/** 見た目を替える(今の舞台の子の、もう一方の見た目)。読み込めなければ、今の見た目のまま理由を出す */
 async function switchLook(look) {
   if (lookBusy || !app.character || look === app.character.look) return;
   if (modes && modes.mode !== 'screen') return; // AR・VR の間は替えない(位置合わせと舞台がキャラを持っている)
   lookBusy = true;
   syncLookSwitch();
+  const from = app.character;
+  const id = characterKey(from);
   try {
-    let next = lookCache.get(look);
+    let next = lookCache.get(lookKey(id, look));
     if (!next) {
-      next = await loadCharacter(app.character.lookSource.url, { ...app.tierOverrides, look });
+      next = await loadCharacter(from.lookSource.url, { ...app.tierOverrides, look });
       if (next.look !== look) throw new Error(`${look === '2d' ? '2D' : '3D'} の形を読めませんでした`);
-      lookCache.set(look, next);
+      lookCache.set(lookKey(id, look), next);
     }
+    if (app.character !== from) return; // 読んでいる間に舞台の子が替わった(初めての会話の見本の子など)。その子は替えない
     swapCharacter(next);
-    writeRemembered(tabMemory, next.lookSource?.json?.id ?? next.id ?? app.characterId, look); // 読む側(loadCharacter)と同じ id
-    // URL に ?look= があれば、選んだ方に書き換える(読み込み直しても、選んだ見た目のまま)
-    if (params.has('look')) {
+    writeRemembered(tabMemory, id || app.characterId, look); // 読む側(loadCharacter)と同じ id
+    // URL に ?look= があれば、選んだ方に書き換える(読み込み直しても、選んだ見た目のまま)。最初に出した子の時だけ(見本の子の見た目は URL に書かない)
+    if (params.has('look') && id === bootLookId) {
       const url = new URL(location.href);
       url.searchParams.set('look', look);
       history.replaceState(history.state, '', url);
@@ -729,6 +753,7 @@ function swapCharacter(next) {
   dialogue.character = next;
   document.documentElement.dataset.look = next.look ?? '3d';
   stage.frameCharacter(next, characterView(next), app.place?.loaded?.object3d);
+  void refreshLookSwitch(next); // 見た目の切り替えを、今の子に合わせて作り直す(両方ある子だけ出す・押された方を合わせる)
 }
 
 /**
@@ -755,10 +780,19 @@ function characterView(character) {
 /* ---------- 入口の文(CRITux 2・10・15・24) ---------- */
 // 製品の名前と案内役(主役ノリー。ほかの子なら、その子の名前)・本当にできる事(声は、声の鍵がある時だけ)・押すボタンの言葉(指かマウスか)・
 // 初めての訪問なら、入口の後に 7 歩が始まる事。文字は textContent だけで入れる
-function fillGate() {
+
+/**
+ * 案内役の 1 行。キャラを読んだすぐ後(app.character を入れたのと同じ流れの中)に書き、書いてから見せる(html.guide-ready)。
+ * それまでは style.css が隠す: ?character=<id> で開いた時、遅い端末で HTML の初めの文「案内するのは主役のノリー…」が先に見えていた(M8b 4)
+ */
+function fillGuide() {
   const c = app.character;
   const guide = $('gateGuide');
   if (guide && c && (app.characterId ?? c.id) !== MAIN_CHARACTER.id) guide.textContent = `案内するのは「${c.name ?? app.characterId ?? 'この子'}」です。`;
+  document.documentElement.classList.add('guide-ready');
+}
+
+function fillGate() {
   const lead = $('gateLead');
   const voice = Boolean(app.status?.tts?.available);
   if (lead) lead.textContent = voice ? 'キャラがあなたの方を見て、声と文字で答えます。' : 'キャラがあなたの方を見て、文字で答えます。声は、声の鍵があるときだけ出ます。';
@@ -866,6 +900,8 @@ async function boot() {
     const { character, id } = await loadFirstCharacter(charPick.spec, { ...tierOverrides, look: params.get('look') ?? '', lookMemory: tabMemory });
     app.character = character;
     app.characterId = id;
+    bootLookId = characterKey(character);
+    fillGuide(); // 入口の案内役の名前は、読んだすぐ後に書いてから見せる(状態を読むのを待たない)
     dialogue.character = character;
     speaker.setVoice({ seed: character.name ?? id ?? '' }); // 声が無い時の「ピッ」の高さと音色をキャラごとに(S3 の speaker)
     document.documentElement.dataset.look = character.look ?? '3d';
@@ -893,7 +929,7 @@ async function boot() {
   setInterval(refreshStatus, 15000);
   setupPass();
   setupMemory();
-  void setupLookSwitch(); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない)
+  void refreshLookSwitch(app.character); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない。舞台の子が替わるたびにも作り直す)
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();

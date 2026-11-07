@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LOOKS, normalizeLook, pickLook, partsPath, twoDHint, rememberKey, readRemembered, writeRemembered } from '../src/character/looks.js';
+import { LOOKS, normalizeLook, pickLook, partsPath, twoDHint, rememberKey, readRemembered, writeRemembered, characterKey, lookKey, hasBothLooks } from '../src/character/looks.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CHARACTERS = join(HERE, '..', '..', 'characters');
@@ -123,4 +123,47 @@ test('画面: 切り替えのボタンは 44px 以上・上の段の押す所も
   const narrow = css.slice(css.indexOf('@media (max-width: 640px)'));
   assert.match(narrow, /\.thought \{ top: calc\(max\(12px, env\(safe-area-inset-top\)\) \+ var\(--top-h, 64px\) \+ 8px\)/, 'スマホの幅の考えの窓は、上の段の高さの下');
   assert.doesNotMatch(css, /\+ 76px\)/, '決め打ちの 76px は使わない');
+});
+
+test('切り替えの控えの鍵は「キャラの id と見た目」: ほかの子の同じ見た目と混ぜない(S4 の頼み。入れ替えた後に押すと最初の子が戻った)', () => {
+  assert.equal(characterKey({ id: 'vrm', lookSource: { json: { id: 'norrie' } } }), 'norrie', 'character.json の id が先(読む側・覚える側と同じ)');
+  assert.equal(characterKey({ id: 'yokoso' }), 'yokoso');
+  assert.equal(characterKey({}), '');
+  assert.equal(characterKey(null), '');
+  assert.equal(lookKey('norrie', '2d'), 'norrie|2d');
+  assert.equal(lookKey('norrie', '2D'), 'norrie|2d');
+  assert.equal(lookKey('norrie', 'vr'), 'norrie|3d', '知らない見た目は 3d');
+  assert.notEqual(lookKey('norrie', '3d'), lookKey('yokoso', '3d'), '子が違えば別の控え');
+  assert.notEqual(lookKey('norrie', '3d'), lookKey('norrie', '2d'));
+});
+
+test('切り替えを出すのは 3D と 2D の両方がある子だけ(片方だけ・調べられなかった時は隠す)', () => {
+  assert.equal(hasBothLooks(['3d', '2d']), true);
+  assert.equal(hasBothLooks(['2d', '3d']), true);
+  assert.equal(hasBothLooks(['3d']), false, 'みかん・ちょうちんくんなど');
+  assert.equal(hasBothLooks(['2d']), false);
+  assert.equal(hasBothLooks([]), false);
+  assert.equal(hasBothLooks(null), false, '調べられなかった');
+});
+
+test('main.js: 舞台の子が替わるたびに切り替えを作り直す(swapCharacter・起動の最後)。控えは子ごと・押す受け口は 1 回だけ', () => {
+  const main = readFileSync(join(HERE, '..', 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
+  const swap = main.slice(main.indexOf('function swapCharacter(next)'), main.indexOf('async function readPersona('));
+  assert.match(swap, /app\.character = next;[\s\S]*void refreshLookSwitch\(next\);/, '入れ替えたら、その子に合わせて作り直す');
+  assert.match(main, /void refreshLookSwitch\(app\.character\);/, '起動の最後にも');
+  assert.doesNotMatch(main, /setupLookSwitch/, '最初の子で 1 回だけ作る形は使わない');
+  assert.doesNotMatch(main, /lookCache\.(get|set)\(look[,)]/, '見た目だけを鍵にしない');
+  assert.match(main, /lookCache\.get\(lookKey\(id, look\)\)/);
+  const refresh = main.slice(main.indexOf('async function refreshLookSwitch('), main.indexOf('function syncLookSwitch()'));
+  assert.match(refresh, /box\.hidden = true;/, '調べ終わるまで前の子の切り替えを出したままにしない');
+  assert.match(refresh, /if \(check !== lookCheck \|\| app\.character !== character\) return;/, '調べている間に替わったら古い答えは使わない');
+  assert.match(refresh, /const shown = hasBothLooks\(looks\);/);
+  assert.match(refresh, /box\.hidden = !shown;/, '片方だけの子では隠す');
+  assert.match(refresh, /if \(shown && !lookClicks\) \{\n    lookClicks = true;\n    box\.addEventListener\('click'/, '押す受け口は 1 回だけ付ける');
+  assert.equal((main.match(/box\.addEventListener\('click'/g) ?? []).length, 1);
+  const sync = main.slice(main.indexOf('function syncLookSwitch()'), main.indexOf('async function switchLook('));
+  assert.match(sync, /b\.setAttribute\('aria-pressed', String\(b\.dataset\.look === app\.character\.look\)\);/, '押された方は今の子の見た目');
+  const sw = main.slice(main.indexOf('async function switchLook('), main.indexOf('function swapCharacter(next)'));
+  assert.match(sw, /if \(app\.character !== from\) return;/, '読んでいる間に舞台の子が替わったら、その子は替えない');
+  assert.match(sw, /if \(params\.has\('look'\) && id === bootLookId\)/, 'URL の ?look= は最初に出した子の時だけ書き換える');
 });

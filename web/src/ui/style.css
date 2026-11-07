@@ -156,6 +156,9 @@ html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: n
 /* 案内役(主役ノリー)と、本当にできる事(声は鍵がある時だけ)と、初めての訪問なら 7 歩が始まる事(CRITux 2・10) */
 .gate-guide { margin: 0; font-size: 15px; line-height: 1.6; color: var(--text); }
 .gate-guide b { color: var(--mint); }
+/* 案内役の 1 行は、キャラを読んで main.js が書くまで隠す(場所は空けたまま)。?character=<id> で開いた時、遅い端末で HTML の初めの文
+   「案内するのは主役のノリー…」が先に見えていた(M8b 4)。書いた所で main.js が html に guide-ready を付ける */
+html:not(.guide-ready) .gate-guide { visibility: hidden; }
 .lead { margin: 0 0 6px; color: var(--muted); line-height: 1.6; }
 .gate-first { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.6; color: var(--lav); background: rgba(183, 168, 255, 0.1); border: 1px solid rgba(183, 168, 255, 0.28); }
 .gate-first[hidden] { display: none; }
