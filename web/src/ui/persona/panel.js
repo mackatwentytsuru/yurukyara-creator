@@ -109,7 +109,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   const reply = el('p', { className: 'yp-reply', ariaLive: 'polite' }, replyName, replyText);
   const note = el('p', { className: 'yp-note yp-brain-note' });
   const block = el('pre', { className: 'yp-block' });
-  const randomBtn = el('button', { type: 'button', className: 'yp-random', textContent: 'おまかせ' });
+  // くじびき: 性格を くじで選び直す(画面は閉じない)。上の「おまかせ(ぜんぶ じどう)」と同じ名前にしない(押した後が違うので。11/7 S4w11d)
+  const randomBtn = el('button', { type: 'button', className: 'yp-random', textContent: 'くじびき', title: '性格を くじで えらびなおします(この画面は とじません)' });
   const saveBtn = el('button', { type: 'button', className: 'yp-save', textContent: 'これにする' });
   const cancelBtn = el('button', { type: 'button', className: 'yp-cancel', textContent: 'もどす' });
   // おまかせ(ぜんぶ じどう): この子のおすすめの性格と、声の役「おまかせ」で決めて、すぐ閉じる(本人 11/7。あとから変えられる)
