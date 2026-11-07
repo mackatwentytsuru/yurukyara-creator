@@ -48,7 +48,9 @@ them, in whole or in part, outside that.
   3. Files made for one particular character, which reproduce it:
      creator/builders/<id>.py, creator/specs/<id>_*, creator/draw/gen_<id>.py
      and creator/d2/from_drawing/<id>_*.py, where <id> is one of norrie,
-     yokoso, robo, f_led, d_lantern, mikan, kumomaru and pokotake.
+     yokoso, robo, f_led, d_lantern, mikan, kumomaru and pokotake. This
+     also covers the rig settings made for one character, such as
+     creator/builders/norrie_rig_c.json (Norrie's rig settings, version C).
   4. The characters themselves (their looks, names and personalities),
      wherever they appear in this repository, for example in tests, skills,
      documents and pictures.
@@ -67,7 +69,8 @@ picture (README.en.md, "Make your own character on your PC with Claude Code").
 - キャラ: MIT ライセンスに含みません。権利はすべて権利を持つ人に残り、再利用を
   許可しません。見ることと、このアプリの中でそのまま試すことだけができます。
   含まない物: characters/ の全部・creator/samples/ の全部・1 体のキャラのために
-  作った作り方のファイル(上の 3)・キャラそのもの(見た目・名前・性格)・
+  作った作り方のファイル(上の 3。ノリーの骨の設定 creator/builders/norrie_rig_c.json
+  も含む)・キャラそのもの(見た目・名前・性格)・
   ノリーの絵(協力者がハッカソンの期間中に手で描き、この作品に使うことを許して
   くれた物。絵そのものは、このリポジトリに入れていません)。
 - 自分のキャラは、コードを使って、自分の言葉か自分の絵から作ってください

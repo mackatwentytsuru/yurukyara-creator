@@ -1,17 +1,13 @@
 // 鍵と入れない語の見張りの判定(純粋な関数。フックと試験の両方が使う)。
 import { readFileSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// 鍵の形。値は理由に出さない(伏せ字にする)
-export const SECRET_PATTERNS = [
-  [/sk-ant-[A-Za-z0-9_-]{20,}/, 'Anthropic の鍵らしい文字列'],
-  [/\bsk_[a-f0-9]{32,}\b/, 'ElevenLabs の鍵らしい文字列'],
-  [/\bgh[pousr]_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}/, 'GitHub の鍵らしい文字列'],
-  [/\bAKIA[0-9A-Z]{16}\b/, 'AWS の鍵らしい文字列'],
-  [/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/, '秘密鍵'],
-  [/(ANTHROPIC|ELEVEN(?:LABS)?|UPSTASH_REDIS_REST|KV_REST_API)_?(?:API_?)?(?:KEY|TOKEN)\s*[=:]\s*['"]?[A-Za-z0-9_=-]{16,}/i, '鍵の代入'],
-  [/xi-api-key['"]?\s*[:=]\s*['"][A-Za-z0-9_-]{16,}['"]/i, 'xi-api-key に直接書いた値'],
-];
+// 鍵の形は tools/key_patterns.json の 1 つの表から読む(push の点検・履歴の点検と同じ表)。値は理由に出さない(伏せ字にする)
+const KEY_TABLE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'key_patterns.json');
+export const SECRET_PATTERNS = JSON.parse(readFileSync(KEY_TABLE, 'utf8')).patterns
+  .filter((r) => !r.checks || r.checks.includes('hook'))
+  .map((r) => [new RegExp(r.pattern, r.flags ?? ''), r.label]);
 
 // 記録してはいけないファイルの名前
 export function badPath(path) {

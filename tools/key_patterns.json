@@ -1,0 +1,18 @@
+{
+  "about": "鍵の形の 1 つの表。push の点検(prepush_check.py)・履歴の点検(history_check.py)・フック(hooks/lib/secret-core.mjs)が同じ表を読む。形を足す・直す時は、ここだけを直す。pattern は Python と JavaScript のどちらでも同じに読める書き方にする。flags は i(大文字小文字を区別しない)だけ。checks は、どの点検が見るか(省くと 3 つとも)。",
+  "patterns": [
+    { "id": "anthropic", "label": "Anthropic の鍵らしい文字列", "pattern": "sk-ant-[A-Za-z0-9_-]{10,}" },
+    { "id": "sk-prefix", "label": "sk- で始まる鍵らしい文字列", "pattern": "\\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}" },
+    { "id": "nvidia", "label": "NVIDIA の鍵らしい文字列", "pattern": "\\bnvapi-[A-Za-z0-9_-]{20,}" },
+    { "id": "elevenlabs", "label": "ElevenLabs の鍵らしい文字列", "pattern": "\\bsk_[a-f0-9]{30,}\\b" },
+    { "id": "google", "label": "Google の鍵らしい文字列", "pattern": "\\bAIza[A-Za-z0-9_-]{30,}" },
+    { "id": "github", "label": "GitHub の鍵らしい文字列", "pattern": "\\bgh[pousr]_[A-Za-z0-9]{20,}|\\bgithub_pat_[A-Za-z0-9_]{40,}" },
+    { "id": "aws", "label": "AWS の鍵らしい文字列", "pattern": "\\bAKIA[0-9A-Z]{16}\\b" },
+    { "id": "private-key", "label": "秘密鍵", "pattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----" },
+    { "id": "jwt", "label": "JWT らしい文字列", "pattern": "\\beyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}" },
+    { "id": "service-assign", "label": "鍵の代入", "flags": "i", "checks": ["hook"], "pattern": "(?:ANTHROPIC|ELEVEN(?:LABS)?|UPSTASH_REDIS_REST|KV_REST_API)_?(?:API_?)?(?:KEY|TOKEN)\\s*[=:]\\s*['\"]?[A-Za-z0-9_=-]{16,}" },
+    { "id": "upstash-assign", "label": "Upstash の鍵の代入", "flags": "i", "pattern": "(?:UPSTASH_REDIS_REST|KV_REST_API)_TOKEN\\s*[=:]\\s*['\"]?[A-Za-z0-9_=-]{30,}" },
+    { "id": "xi-api-key", "label": "xi-api-key に直接書いた値", "flags": "i", "pattern": "xi-api-key['\"]?\\s*[:=]\\s*['\"][A-Za-z0-9_-]{16,}['\"]" },
+    { "id": "generic-assign", "label": "鍵らしい代入", "flags": "i", "checks": ["history"], "pattern": "\\b(?:api[_-]?key|secret|token|password)\\b\\s*[:=]\\s*['\"][A-Za-z0-9_-]{20,}['\"]" }
+  ]
+}

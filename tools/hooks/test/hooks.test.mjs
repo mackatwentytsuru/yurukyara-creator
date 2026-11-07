@@ -102,6 +102,17 @@ describe('鍵の見張り(check-secrets)', () => {
     assert.match(r.err, /Anthropic/);
     assert.ok(!r.err.includes(fakeKey));
   });
+  test('Write: NVIDIA・sk-proj- の形の鍵も止める(表の形を 3 つの点検がそろえて見る)', () => {
+    const nv = ['nvapi', 'x'.repeat(40)].join('-'); // 試験だけの偽の鍵(形だけ)
+    const proj2 = ['sk', 'proj', 'y'.repeat(40)].join('-');
+    const a = write('a.md', `k = ${nv}`);
+    assert.equal(a.code, 2);
+    assert.match(a.err, /NVIDIA/);
+    assert.ok(!a.err.includes(nv));
+    const b = write('b.md', `k = ${proj2}`);
+    assert.equal(b.code, 2);
+    assert.ok(!b.err.includes(proj2));
+  });
   test('Write: きれいな文は通す', () => {
     assert.equal(write('a.md', 'こんにちは。ふつうの文です。').code, 0);
   });

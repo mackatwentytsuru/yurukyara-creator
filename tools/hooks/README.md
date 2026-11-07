@@ -47,3 +47,7 @@ Claude Code のフックとして使う見張りです。中身と試験はこ�
 - 今の `check-secrets` の登録(Bash だけ、`.claude/hooks/check-secrets.mjs`)は、この形に置き換える。古いファイルは `web/scripts/guard-check.mjs` が読んでいるので、すぐには消さない。`run-web-tests` はそのまま。
 - `stage-gate` は今は UserPromptSubmit だけ。PreToolUse の Skill に足すのは、段のスキルを Claude が呼ぶ時の `tool_input` の項目の名前(`skill`・`args`。違う時のために `name` も読む)を 1 回確かめてから。
 - 登録した後に 1 回ずつ確かめる: ① リポジトリの中に鍵の形の文字列を書こうとして止まる ② 板(リポジトリの外)には書ける ③ OK の無い段を `/yc-<N>-…` で打って止まる。
+
+## 鍵の形の表(1 つ)
+- 鍵の形は `tools/key_patterns.json` の 1 つの表です。フック(`lib/secret-core.mjs`)・push の点検(`tools/prepush_check.py`)・履歴の点検(`tools/history_check.py`)が同じ表を読みます。形を足す・直す時は、この表だけを直します(`checks` で、見る点検を絞れます)。
+- 表が読めない時は、3 つとも黙って通さず止まります。表は `tools/hooks` の 1 つ上に置きます(`mutation.mjs` の写しも同じ並びにします)。
