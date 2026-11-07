@@ -258,6 +258,14 @@ async function walkWords(page, label, { full }) {
   await page.click('.yp-seg [data-key="short"]');
   const short = await waitPreview(page, n);
   assert.ok([...short.matchAll(/[。!?…]/g)].length <= 2, `短めなのに長い: ${short}`);
+  // 声の役(第 11 波): おまかせ / 男の子 / 女の子。押すと選ばれ、下の一言が今の声を言う(舞台の読み上げにも渡す)
+  assert.deepEqual(await page.$$eval('.yp-roles button', (bs) => bs.map((b) => b.textContent)), ['おまかせ', '男の子', '女の子']);
+  assert.equal(await page.$eval('.yp-roles [data-key="auto"]', (e) => e.getAttribute('aria-checked')), 'true', '初めは おまかせ');
+  await page.click('.yp-roles [data-key="male"]');
+  assert.equal(await page.$eval('.yp-roles [data-key="male"]', (e) => e.getAttribute('aria-checked')), 'true');
+  assert.match(await page.$eval('.yp-role-note', (e) => e.textContent), /男の子の声で話します/);
+  await page.click('.yp-roles [data-key="auto"]');
+  assert.match(await page.$eval('.yp-role-note', (e) => e.textContent), /^おまかせ: /);
   assert.match(await page.$eval('.yp-brain-note', (e) => e.textContent), /仮の頭脳です/);
   assert.match(await page.$eval('.yp-block', (e) => e.textContent), /恥ずかしがり屋/);
   await shot(page, `${label}_4_persona_shy`);
@@ -527,6 +535,53 @@ test('「性格」のボタン(幅 400): 開く → おまかせ → これに�
       assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    server.proc.kill();
+  }
+});
+
+// 背の低い画面(本物の Quest 3 のブラウザは 1280×670): 1 歩目の最初の一言が欄の下で切れていた(第 11 波)。
+// 字の幅は端末の書体で変わる(Quest では 3 行、この PC の Chrome では 2 行)ので、「今の文が全部見える」に加えて
+// 「3 行の一言が入るだけの高さが欄にある」も見る。PC の上の段・下の帯の高さは、Quest で測った値(92px・103px)をまねる
+test('背の低い画面(390×670・1280×670・400×640): 1 歩目の最初の一言が欠けずに見え、3 行でも入る', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
+  try {
+    for (const v of [{ width: 390, height: 670 }, { width: 1280, height: 670, bars: [92, 103] }, { width: 400, height: 640 }]) {
+      const label = `${v.width}×${v.height}`;
+      const { ctx, page, errors } = await openPage(browser, server.base, { ...v, query: 'onboard=1', reduced: true });
+      try {
+        if (v.bars) {
+          await page.evaluate(([top, bottom]) => {
+            document.documentElement.style.setProperty('--top-h', `${top}px`);
+            document.documentElement.style.setProperty('--bottom-h', `${bottom}px`);
+          }, v.bars);
+        }
+        await waitAct(page, 'words');
+        const m = await page.evaluate(() => {
+          const log = document.querySelector('.fr-log');
+          const first = log.querySelector('.fr-line');
+          const text = first.querySelector('.fr-text');
+          const lb = log.getBoundingClientRect();
+          const fb = first.getBoundingClientRect();
+          const padTop = parseFloat(getComputedStyle(log).paddingTop);
+          const lh = parseFloat(getComputedStyle(text).lineHeight);
+          const lines = Math.round(text.getBoundingClientRect().height / lh);
+          const extra = fb.height - lines * lh; // 名前・吹き出しの余白
+          return { text: text.textContent, top: fb.top - lb.top, below: fb.bottom - lb.bottom, room: log.clientHeight - padTop, need3: extra + 3 * lh, scrollTop: log.scrollTop };
+        });
+        assert.match(m.text, /^はじめまして! 執事見習いのノリーデス。.*ノリー、がんばりマス!$/u, `${label}: 1 歩目の最初の一言`);
+        assert.ok(m.top >= -1 && m.below <= 1 && m.scrollTop === 0, `${label}: 最初の一言が欠けている ${JSON.stringify(m)}`);
+        assert.ok(m.room >= m.need3, `${label}: 3 行の一言(${Math.round(m.need3)}px)が欄(${Math.round(m.room)}px)に入らない`);
+        await checkLayout(page, `${label} 1 歩目`);
+        await shot(page, `short_${v.width}x${v.height}_1_start`);
+        assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      } finally {
+        await ctx.close();
+      }
     }
   } finally {
     await browser.close();

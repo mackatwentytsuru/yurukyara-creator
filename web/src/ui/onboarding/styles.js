@@ -105,6 +105,24 @@ export const CSS = `
   .fr-actions > .fr-field, .fr-actions > form, .fr-actions > .fr-wide { grid-column: 1 / -1; }
   .fr-steps li b { font-size: 11px; }
 }
+/* 背の低い画面(高さ 700px まで。本物の Quest の 1280×670・横向きや小さいスマホ): 1 歩目の最初の一言(3 行)が欠けずに見えるように、
+   札の頭・会話の欄・下のボタンの余白を詰め、PC は上の段との間を狭くする(Quest の実機で「…がんばりマス!」が欄の下で切れた。第 11 波)。
+   押す所は 44px 以上、本文の文字は 16px のまま */
+@media (max-height: 700px) {
+  .fr-head { padding: 8px 14px 6px; gap: 6px; }
+  .fr-steps li { gap: 1px; }
+  .fr-log { padding: 8px 14px; gap: 8px; }
+  .fr-actions { padding: 8px 14px 10px; gap: 6px; }
+  .fr-btn { min-height: 44px; padding: 8px 12px; }
+  .fr-field input[type="text"], .fr-field input[type="password"] { min-height: 44px; padding: 8px 12px; }
+  .fr-field-label { margin: 0 0 -2px; }
+}
+@media (min-width: 720px) and (max-height: 700px) {
+  .fr-sheet, .fr-sheet[data-step], .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] {
+    max-height: min(760px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 24px)); }
+  @supports (height: 1dvh) { .fr-sheet, .fr-sheet[data-step], .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] {
+    max-height: min(760px, calc(100dvh - var(--top-h, 64px) - var(--bottom-h, 0px) - 24px)); } }
+}
 
 /* 性格の画面 */
 .yp-back { position: fixed; inset: 0; z-index: 40; background: rgba(12, 10, 22, 0.6); display: grid; place-items: end center; }
