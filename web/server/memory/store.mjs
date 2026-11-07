@@ -7,8 +7,9 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MEMORY_NOTICE, RETENTION_DAYS } from '../../src/conversation/memoryNotice.js'; // 画面の札と同じ文と日数
 
-export const RETENTION_DAYS = 7;
+export { RETENTION_DAYS };
 export const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
 export const PAIR_TTL_MS = 10 * 60 * 1000;
 export const MAX_FAILS = 5;
@@ -16,7 +17,7 @@ export const LOCK_MS = 10 * 60 * 1000;
 export const GLOBAL_FAIL_LIMIT = 30; // 10 分の間に、全部の接続元で合わせてこれだけ間違えたら、今ある番号を全部取り消す
 export const MAX_ITEMS = 40;
 export const ITEM_TEXT_MAX = 80;
-export const NOTICE = `記憶は、最後に話してから ${RETENTION_DAYS} 日で消えます。「わすれて」と言うか、消すボタンで、いつでも全部消せます。`;
+export const NOTICE = MEMORY_NOTICE;
 
 const KEY_RE = /^[A-Za-z0-9_-]{43}$/;
 const CODE_RE = /^[0-9]{6}$/;

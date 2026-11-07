@@ -1,7 +1,8 @@
 // 記憶の札(画面の部品)。覚えていることの一覧・1 つずつ消す・全部わすれる・別の端末へ渡す番号・番号を入れる。
 // 使い方(S5 が main.js に 1 行で付ける): mountMemoryPanel(document.body) → 返り値の onChatEvent を会話のイベントに渡す。
 // 文字は textContent だけで入れる(覚えた言葉に HTML が入っていても、そのまま文字として出す)。
-import { claimCode, clearKey, ensureKey, forgetAll, forgetItem, listMemory, pairCode } from './memoryKey.js';
+// 札は合鍵を作らない(11-07 CRITsec F8): 開いただけ・全部わすれた後は空の一覧。合鍵は会話のイベント(key)か番号で受け取る。
+import { adoptKey, claimCode, clearKey, emptyMemory, forgetAll, forgetItem, loadMemory, pairCode } from './memoryKey.js';
 
 const el = (tag, props = {}, ...children) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -61,7 +62,7 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
     codeOut.textContent = '';
   };
   const render = (data) => {
-    notice.textContent = data.notice ?? '';
+    notice.textContent = data.notice || emptyMemory().notice; // 合鍵が無い時も「7 日で消えます」を出す
     list.replaceChildren(
       ...(data.items ?? []).map((it) => {
         const x = el('button', { type: 'button', className: 'mem-item-forget', textContent: '消す', ariaLabel: `${it.text} を消す` });
@@ -78,7 +79,25 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
       say(err.message);
     }
   };
-  const refresh = async () => render(await listMemory());
+  // 一覧の世代。全部わすれた・番号で受け取った時に上げ、その前に始めた読み直しの返事では描き直さない
+  // (消した直後に、消す前の読み直しが遅れて届いて、古い一覧が戻るのを防ぐ)
+  let generation = 0;
+  const show = (data) => {
+    generation += 1;
+    render(data);
+  };
+  // 読み直し: 合鍵が無ければ聞かずに空、消えていれば合鍵を捨てて空(作り直さない)
+  const refresh = async () => {
+    const mine = generation;
+    const data = await loadMemory();
+    if (mine === generation) render(data);
+  };
+  // 消した直後: 知らせと同じ瞬間に一覧を空にする(新しい合鍵の通信を待たない。S4w8a で測った順の揺れ)
+  const showForgotten = (text) => {
+    clearCode();
+    show(emptyMemory());
+    say(text);
+  };
 
   pairBtn.addEventListener('click', () =>
     run(async () => {
@@ -102,21 +121,20 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
     run(async () => {
       const r = await claimCode(codeIn.value, { pass: pass.value }); // 公開では受け取りにも合言葉が要る(札の欄か、会話の合言葉)
       codeIn.value = '';
-      render(r);
+      show(r);
       say('受け取りました。前の端末の続きから話せます');
     }),
   );
   forgetBtn.addEventListener('click', () =>
     run(async () => {
-      await forgetAll();
-      clearCode();
-      say('全部わすれました');
-      render(await ensureKey()); // 新しい空の合鍵で始め直す
+      await forgetAll(); // この端末の合鍵も捨てる。次に覚える事が出た時に、会話のイベントで新しい合鍵が届く
+      showForgotten('全部わすれました');
     }),
   );
 
+  // 開いた時: 合鍵がある時だけ一覧を読む(合鍵は作らない)
   const ready = run(async () => {
-    render(await ensureKey());
+    await refresh();
     root.dataset.ready = '1';
   });
 
@@ -126,23 +144,22 @@ export function mountMemoryPanel(parent, { askPass = false } = {}) {
     refresh: () => run(refresh),
     /**
      * 会話のイベントを渡す。覚えた・消したの知らせが来たら、一覧を読み直す。
+     * 覚える事が出た最初の回は、サーバーが作った合鍵が key で届くので、持ってから読む(CRITsec F8)。
      * 会話の「わすれて」で消えた時(サーバーの印 via: 'chat')は、出していた番号と「受け取りました」などの古い知らせも消す(CRITux 19)。
      * 印の無い {type:'memory', forgotten:true} は、引き出しを開いた時の読み直し(main.js)なので、番号と知らせはそのまま
      */
     onChatEvent(ev) {
       if (ev?.type !== 'memory') return;
       if (ev.via === 'chat' && Object.hasOwn(ev, 'forgotten')) {
-        clearCode();
-        say(ev.forgotten ? '全部わすれました' : '');
-        // サーバーの記録はもう無いので、確かめに行かずに合鍵を捨てて作り直す(確かめると 404 が console に赤く出た。本物の画面で見た)
+        // サーバーの記録はもう無いので、確かめに行かずに合鍵を捨てる(確かめると 404 が console に赤く出た)。新しい合鍵も作らない
         clearKey();
-        run(async () => render(await ensureKey()));
+        showForgotten(ev.forgotten ? '全部わすれました' : '');
         return;
       }
-      if (Object.hasOwn(ev, 'forgotten')) run(async () => render(await ensureKey()));
-      else run(refresh);
+      adoptKey(ev.key);
+      run(refresh);
     },
-    /** 合鍵を確かめて(消えていれば作り直し)、一覧を読み直す。番号と知らせはそのまま(引き出しを開いた時など) */
-    resync: () => run(async () => render(await ensureKey())),
+    /** 合鍵を確かめて(消えていれば捨てて空に。作り直さない)、一覧を読み直す。番号と知らせはそのまま(引き出しを開いた時など) */
+    resync: () => run(refresh),
   };
 }

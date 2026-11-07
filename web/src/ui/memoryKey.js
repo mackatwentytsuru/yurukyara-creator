@@ -1,7 +1,10 @@
 // 端末をまたぐ記憶の「合鍵」を、この端末に持つ。合鍵は URL に入れず、ヘッダー x-memory-key で送る。
 // 合鍵が無いと、サーバーの記憶は読めない。別の端末へは 6 桁の番号で渡す(10 分・1 回だけ)。
 // ブラウザの保存(localStorage)が使えない時は、この画面を開いている間だけ覚える。
+// 画面は合鍵を自分で作らない(11-07 CRITsec F8)。開いただけ・全部わすれた後は合鍵なしのまま。
+// 合鍵は、会話で覚える事が出た最初の回に、サーバーが返事のイベント { type:'memory', key } で渡す(adoptKey で持つ)か、番号で受け取る。
 import { demoHeaders } from '../conversation/demoPass.js';
+import { MEMORY_NOTICE, RETENTION_DAYS } from '../conversation/memoryNotice.js';
 
 const STORAGE = 'yc.memoryKey';
 const KEY_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -57,23 +60,53 @@ const passHeaders = (pass) => {
 };
 // 宛先は、どれも文字で書く(画面の通信先の点検 privacy.test が見る)
 const api = {
-  list: async () => read(await fetch('/api/memory', { headers: memoryHeaders() }), '記憶を読めません'),
+  list: async (key = getKey()) => read(await fetch('/api/memory', { headers: key ? { 'x-memory-key': key } : {} }), '記憶を読めません'),
   create: async () => read(await fetch('/api/memory/new', { method: 'POST' }), '合鍵を作れません'),
   forget: async (body) => read(await fetch('/api/memory', { method: 'DELETE', headers: jsonHeaders(), body: JSON.stringify(body) }), '記憶を消せません'),
   pair: async (pass) => read(await fetch('/api/memory/pair', { method: 'POST', headers: { ...memoryHeaders(), ...passHeaders(pass) } }), '番号を作れません'),
   claim: async (code, pass) => read(await fetch('/api/memory/claim', { method: 'POST', headers: { 'content-type': 'application/json', ...passHeaders(pass) }, body: JSON.stringify({ code }) }), '番号を受け取れません'),
 };
 
-/** 合鍵が無ければ作る。あれば、まだサーバーに記憶があるかを確かめ、無ければ作り直す */
-export async function ensureKey() {
-  if (getKey()) {
-    try {
-      return { key: getKey(), ...(await api.list()) };
-    } catch (err) {
-      if (err.status !== 404 && err.status !== 401) throw err;
-      clearKey(); // 消えた・7 日たった合鍵は捨てる
-    }
+/** 合鍵がまだ無い時の、空の一覧(サーバーに聞かない。知らせの文は同じ) */
+export const emptyMemory = () => ({ items: [], notice: MEMORY_NOTICE, retentionDays: RETENTION_DAYS, expiresAt: null });
+
+/** 番号を出そうとした時、まだ合鍵が無い(何も覚えていない)時の知らせ */
+export const NOTHING_TO_PAIR = 'まだ何も覚えていないので、番号は出せません。先に、名前や好きなものを話しかけてね';
+
+/**
+ * 今の一覧を読む。合鍵が無ければ、サーバーに聞かずに空の一覧(合鍵は作らない。CRITsec F8)。
+ * 合鍵が消えていた・7 日たっていた(404・401)時は、その合鍵を捨てて空の一覧。
+ * 読んでいる間に会話のイベントで新しい合鍵が届いていたら、新しい方は捨てない。
+ */
+export async function loadMemory() {
+  const key = getKey();
+  if (!key) return emptyMemory();
+  try {
+    return { key, ...(await api.list(key)) };
+  } catch (err) {
+    if (err.status !== 404 && err.status !== 401) throw err;
+    if (getKey() === key) clearKey();
+    return emptyMemory();
   }
+}
+
+/**
+ * 会話の返事のイベントで届いた合鍵を持つ(覚える事が出た最初の回に、サーバーが作って渡す)。
+ * 形の違う値は持たない。持ったら true
+ */
+export function adoptKey(key) {
+  if (typeof key !== 'string' || !KEY_RE.test(key)) return false;
+  setKey(key);
+  return true;
+}
+
+/**
+ * 合鍵を作って一覧を返す(道具・試しのための口。画面の札はもう呼ばない: 開いただけで合鍵を作らない。CRITsec F8)。
+ * 合鍵があれば確かめ、消えていれば作り直す。
+ */
+export async function ensureKey() {
+  const have = await loadMemory();
+  if (have.key) return have;
   const made = await api.create();
   setKey(made.key);
   return made;
@@ -82,15 +115,22 @@ export async function ensureKey() {
 export const listMemory = () => api.list();
 export const forgetItem = (id) => api.forget({ id: String(id) });
 
-/** 全部消して、この端末の合鍵も捨てる */
+/** 全部消して、この端末の合鍵も捨てる。合鍵が無ければ、消す物も無いので聞かない(新しい合鍵も作らない) */
 export async function forgetAll() {
+  if (!getKey()) return { ok: true, forgotten: false };
   const r = await api.forget({});
   clearKey();
   return r;
 }
 
-/** 別の端末へ渡す 6 桁の番号を作る。合言葉(公開のとき)は画面の入力欄から受け、見出し x-demo-pass で送る(空なら、会話の合言葉を使う) */
-export const pairCode = ({ pass = '' } = {}) => api.pair(pass);
+/**
+ * 別の端末へ渡す 6 桁の番号を作る。合言葉(公開のとき)は画面の入力欄から受け、見出し x-demo-pass で送る(空なら、会話の合言葉を使う)。
+ * まだ合鍵が無い(何も覚えていない)時は、サーバーに聞かずに知らせの文で断る(合鍵は作らない)
+ */
+export async function pairCode({ pass = '' } = {}) {
+  if (!getKey()) throw Object.assign(new Error(NOTHING_TO_PAIR), { reason: 'no_memory' });
+  return api.pair(pass);
+}
 
 /**
  * 番号を入れて、合鍵を受け取る。この端末の前の合鍵は置き換える。

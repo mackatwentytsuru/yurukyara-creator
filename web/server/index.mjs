@@ -120,6 +120,36 @@ function latencySummary() {
   };
 }
 
+const memoryAdded = (learned) => learned.map(({ id, kind, text }) => ({ id, kind, text }));
+
+/** 合鍵がある回: 覚えていることを読み、この回の言葉から覚える事を足す(知らせは send で) */
+function rememberWithKey(memoryKey, text, send) {
+  const recalled = memory.recall(memoryKey);
+  let learned = [];
+  try {
+    learned = memory.add(memoryKey, extractFacts(text));
+  } catch {
+    learned = []; // 合鍵の記憶が無い(消えた・7 日たった)ときは、覚えずに話す
+  }
+  if (learned.length) send({ type: 'memory', added: memoryAdded(learned) });
+  return { recalled, learned };
+}
+
+/**
+ * 合鍵がまだ無い回(公開の関数の rememberForChat と同じ決まり。CRITsec F8): 覚える事が出た最初の回にだけ合鍵を作り、
+ * 返事のイベント { type:'memory', key, added, ... } で画面に渡す。あいさつだけ・開いただけでは作らない。
+ * 作る回数は /api/memory/new と同じ上限(1 分 10 回・1 日 2000 回)で数え、超えたら覚えずに話す。合鍵は記録に書かない
+ */
+function rememberFirstTime(text, client, send) {
+  const none = { recalled: null, learned: [] };
+  const facts = extractFacts(text);
+  if (!facts.length || !memoryLimiter.take(client).ok) return none;
+  const made = memory.create();
+  const learned = memory.add(made.key, facts);
+  send({ type: 'memory', key: made.key, added: memoryAdded(learned), notice: made.notice, retentionDays: made.retentionDays, expiresAt: made.expiresAt });
+  return { recalled: null, learned };
+}
+
 async function handleChat(req, res) {
   // 型・長さを確かめてから先へ(枠を使う前に、おかしな本文を断る)
   const body = sanitizeChatBody(await readBody(req, 256 * 1024)); // 日本語は 1 字 3 バイトなので、読む上限は余裕を持たせ、長さは sanitize が切る
@@ -133,6 +163,7 @@ async function handleChat(req, res) {
   res.on('close', () => ac.abort());
   const send = (ev) => res.write(`data: ${JSON.stringify(ev)}\n\n`);
   const t0 = Date.now();
+  const client = req.socket.remoteAddress ?? 'unknown';
   // 記憶: 合鍵(ヘッダー)があれば、覚えていることを読み、この回の言葉から覚える事を足す
   const memoryKey = typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
   if (memoryKey && isForgetRequest(body.text)) {
@@ -140,19 +171,8 @@ async function handleChat(req, res) {
     send({ type: 'done', serverMs: Date.now() - t0 });
     return res.end();
   }
-  let recalled = null;
-  let learned = [];
-  if (memoryKey) {
-    recalled = memory.recall(memoryKey);
-    try {
-      learned = memory.add(memoryKey, extractFacts(body.text));
-    } catch {
-      learned = []; // 合鍵の記憶が無い(消えた・7 日たった)ときは、覚えずに話す
-    }
-    if (learned.length) send({ type: 'memory', added: learned.map(({ id, kind, text }) => ({ id, kind, text })) });
-  }
+  const { recalled, learned } = memoryKey ? rememberWithKey(memoryKey, body.text, send) : rememberFirstTime(body.text, client, send);
   // 本物の Claude を呼ぶときだけ、回数の上限を数える(仮の頭脳は無料)。上限に当たったら、仮の頭脳で話し続ける
-  const client = req.socket.remoteAddress ?? 'unknown';
   let paid = Boolean(config.anthropicKey);
   if (paid) {
     const slot = claudeLimiter.take(client);
