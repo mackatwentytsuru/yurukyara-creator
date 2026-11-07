@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Dialogue } from '../src/conversation/dialogue.js';
-import { createCaptionFlow } from '../src/ui/panel.js';
+import { createCaptionFlow, captionView } from '../src/ui/panel.js';
 import { Speaker } from '../src/conversation/speaker.js';
 
 const fakeCharacter = () => ({ expressions: ['neutral', 'happy'], play() {}, setEmotion() {}, setMouth() {}, isCustomExpression: () => false });
@@ -179,6 +179,14 @@ test('(4) 字幕の流れ(声が無い時の文字送り): 先に見せた文は
   const g = createCaptionFlow();
   g.say('うん。');
   assert.deepEqual(g.caption('う'), { reply: true, prev: '', current: 'う', settled: false });
+});
+
+test('(4) テレビ表示とキーボードで低い画面は今の文だけ: まだ話していない文だけの時は、空の字幕の箱を出さない(iOS のシミュレーターで見つけた)', () => {
+  const onlyAhead = { reply: true, prev: '', current: '', next: 'こんにちは!' };
+  assert.deepEqual(captionView(onlyAhead), { hide: false, next: 'こんにちは!' }, 'ふだんは薄く出す');
+  assert.deepEqual(captionView(onlyAhead, { onlyNow: true }), { hide: true, next: '' }, 'テレビ表示では箱ごと隠す');
+  assert.deepEqual(captionView({ reply: true, prev: '', current: 'やあ', next: '。' }, { onlyNow: true }), { hide: false, next: '' }, '今の文はテレビ表示でも出す');
+  assert.deepEqual(captionView({ reply: true, prev: '', current: '' }), { hide: true, next: '' });
 });
 
 /** node で動く偽の音(読み上げの部品が、声を順に並べられる最小限) */

@@ -103,6 +103,18 @@ export function latencyNote(entry = {}, { fakeBrain = false } = {}) {
  * @returns {{say(text: string): void, caption(text: string|null|undefined, hideAfterMs?: number, kind?: string): object, readonly phase: string}}
  *   caption の返す物: { hide: true, afterMs } / { reply: true, prev, current, settled } / { text, kind }
  */
+/**
+ * B3(第 12 波 b): 返事の字幕の描く物を決める(DOM は触らない)。onlyNow(テレビ表示・キーボードで低い画面の 1 行の字幕)の時は、
+ * まだ話していない文(next)を出さない。描く物が何も無ければ hide(字幕の箱ごと隠す。空の箱を出さない)
+ * @param {{prev?: string, current?: string, next?: string}} v createCaptionFlow の返す返事の形
+ * @param {{onlyNow?: boolean}} [o]
+ * @returns {{hide: boolean, next: string}}
+ */
+export function captionView(v, { onlyNow = false } = {}) {
+  const next = onlyNow ? '' : (v?.next ?? '');
+  return { hide: !v?.prev && !v?.current && !next, next };
+}
+
 export function createCaptionFlow() {
   let done = []; // この返事の、話し終えた文
   let full = null; // 話している文(全部)
@@ -203,19 +215,21 @@ export function createUi() {
   const span = (className, text) => Object.assign(document.createElement('span'), { className, textContent: text });
   /** 返事の字幕を描く(前の文は小さく、今の文は大きく、まだ話していない文は薄く。話し終わった後は全部を同じ大きさで) */
   const renderReply = (v) => {
-    if (!v.prev && !v.current && !v.next) {
-      hideCaption(); // 1 文目の文字送りの始まり(まだ 1 字も無い)
+    const root = document.documentElement.classList;
+    const { hide, next } = captionView(v, { onlyNow: root.contains('tv-mode') || root.contains('kb-tight') });
+    if (hide) {
+      hideCaption(); // 1 文目の文字送りの始まり(まだ 1 字も無い)・まだ話していない文だけの時のテレビ表示
       return;
     }
     // 文字は textContent だけで入れる
-    const now = v.current || v.next ? [span('cap-now', v.current ?? '')] : [];
-    if (v.next) now[0].append(span('cap-next', v.next)); // B3: 今の文の続きに、薄く並べる(同じ段落で読める)
+    const now = v.current || next ? [span('cap-now', v.current ?? '')] : [];
+    if (next) now[0].append(span('cap-next', next)); // B3: 今の文の続きに、薄く並べる(同じ段落で読める)
     caption.replaceChildren(...(v.prev ? [span('cap-prev', v.prev)] : []), ...now);
     caption.className = `caption reply${v.settled ? ' settled' : ''}`;
     caption.hidden = false;
     // 長い時は、今の文が見えるように(まだ話していない文は下に続く)
     const cur = caption.querySelector('.cap-now');
-    caption.scrollTop = v.next && cur ? Math.max(0, cur.offsetTop - caption.offsetTop - 4) : caption.scrollHeight;
+    caption.scrollTop = next && cur ? Math.max(0, cur.offsetTop - caption.offsetTop - 4) : caption.scrollHeight;
   };
   const setCaption = (text, hideAfterMs = 0, kind = '') => {
     clearTimeout(captionTimer);
