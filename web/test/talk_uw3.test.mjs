@@ -296,7 +296,7 @@ test('UW3f 高1: ふつうの学校の話(きのう・たのしい・いつも)�
     assert.equal(personalWarn(t), null, t);
     assert.ok(!said(await talk(t)).some((l) => /書かないでね/.test(l)), t);
   }
-  for (const t of ['ことのは第二小学校だよ', 'ことのは第一小学校です', 'きのうさくら小学校でね']) assert.equal(personalWarn(t), 'school', t);
+  for (const t of ['ことのは第二小学校だよ', '桜山第一小学校です', 'きのうさくら小学校でね']) assert.equal(personalWarn(t), 'school', t);
 });
 
 test('UW3f 高2: ノリーの仮の返事は回ごとに替わる(4 つの話で 3 とおり以上)', async () => {
