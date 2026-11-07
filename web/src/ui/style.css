@@ -73,6 +73,10 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
 .caption .cap-prev { display: block; font-size: 0.7em; font-weight: 600; line-height: 1.5; opacity: 0.8; margin-bottom: 2px; }
 .caption .cap-now { display: block; }
 .caption.settled { font-size: clamp(17px, 2.4vw, 28px); }
+/* ---- B3(第 12 波 b・会話): まだ話していない返事の文は、今の文の続きに薄く小さく(返事の全部が早く読める)。
+   テレビ表示と、キーボードで画面が低い時(1 行の字幕)は、今の文だけ ---- */
+.caption .cap-next { opacity: 0.55; font-size: 0.85em; font-weight: 500; }
+html.tv-mode .caption .cap-next, html.kb-tight .caption .cap-next { display: none; }
 
 /* 字幕の上: Claude が店のデータを見て答えている札(どの情報を、いつの更新として使ったか) */
 .shop-badge {
@@ -530,7 +534,3 @@ html.kb-open .privacy, html.kb-open .choices { display: none; } /* 低い見え�
 html.kb-open .caption, html.kb-open .caption.settled { max-height: min(calc(2 * 1.45em + 24px), 22vh); }
 html.kb-open .gate { top: var(--kbt, 0px); bottom: var(--kb, 0px); height: auto; place-items: safe center; overflow-y: auto; }
 html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - var(--top-h, 64px) - 24px); overflow-y: auto; }
-
-/* ---- B3(第 12 波 b・会話): まだ話していない返事の文は、今の文の続きに薄く小さく(返事の全部が早く読める)。テレビ表示は今の文だけ ---- */
-.caption .cap-next { opacity: 0.55; font-size: 0.85em; font-weight: 500; }
-html.tv-mode .caption .cap-next { display: none; }

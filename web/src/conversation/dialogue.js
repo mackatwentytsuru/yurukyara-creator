@@ -2,10 +2,10 @@
 // サーバーから thought / say が順に届く。say が届くたびに読み上げを始め、
 // その文が話し始める瞬間に、表情・動き・視線・字幕を合わせる。
 // 返事が来るまでの間は、うなずきでつなぐ。割り込まれたら cancel() で全部止める。
+import { roleOf } from './role.js'; // B3(第 12 波 b): 役目を会話に付けて送る
 import { streamChat } from './brainClient.js';
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
-import { roleOf } from './role.js';
 
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 

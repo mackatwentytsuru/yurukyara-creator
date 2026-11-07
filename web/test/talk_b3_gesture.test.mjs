@@ -41,8 +41,11 @@ test('指示文の動きの一覧: 画面が自分で出す仕草は出さない
   assert.match(p, /1 つの返事で動きを入れるのは 2 文まで/);
 });
 
+// 仕草の層が入った後の、ノリー(rig)の motionChoices の形(B5G の作業の形: 動きのファイル + cuteChoices。15 個)
+const NORRIE_CUTE = ['none', 'bow', 'nod', 'wave', 'greet', 'happy', 'cheer', 'shy', 'surprised', 'think', 'tilt', 'droop', 'shake', 'shrug', 'point'];
+
 test('例の仕草は、そのキャラが使える名前だけ(今のノリー・仕草の層のノリー・動きが無いキャラ)', () => {
-  for (const motions of [NORRIE_NOW, CUTE_ALL, ['none']]) {
+  for (const motions of [NORRIE_NOW, NORRIE_CUTE, CUTE_ALL, ['none']]) {
     const allowed = new Set(['none', ...promptMotions(motions)]);
     for (const place of [undefined, { landmarks: [{ name: 'お手洗い', where: '左奥' }] }]) {
       const used = motionsIn(buildSystemPrompt({ character: NORRIE, place, motions }));
@@ -113,7 +116,7 @@ test('本物の頭脳の道: 1 文目のあいさつに仕草が無ければ gre
     say('よろしくデス。', 'listening'),
   ];
   await withFakeBrain(lines, async (runTurn) => {
-    for (const [motions, want] of [[CUTE_ALL, ['greet', 'shy', 'none', 'none']], [NORRIE_NOW, ['wave', 'nod', 'none', 'none']]]) {
+    for (const [motions, want] of [[CUTE_ALL, ['greet', 'shy', 'none', 'none']], [NORRIE_CUTE, ['greet', 'shy', 'none', 'none']], [NORRIE_NOW, ['wave', 'nod', 'none', 'none']]]) {
       const events = [];
       await runTurn({ text: 'こんにちは', character: NORRIE, motions }, { onEvent: (e) => events.push(e) });
       assert.deepEqual(events.filter((e) => e.type === 'say').map((e) => e.motion), want, JSON.stringify(motions));
