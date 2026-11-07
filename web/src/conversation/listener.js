@@ -3,6 +3,7 @@
 //   web    … ブラウザ内蔵の聞き取り(Web Speech API。Chrome は Google、Safari は Apple のサービスに音を送る)
 //   server … このページを配っているサーバーへ声の区間を送る(/api/stt)。Quest のブラウザには Web Speech API が無い報告があるので、こちらを使う
 import { encodeWav, resample, SegmentCollector, STT_RATE } from './wav.js';
+import { getSttHint, sttHintHeaders } from './sttHint.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const MIN_SEGMENT_S = 0.3; // これより短い音は、声でないとみなして送らない
@@ -31,9 +32,11 @@ export class Listener {
    * @param {object} [opts]
    * @param {'web'|'server'} [opts.provider]
    * @param {()=>boolean} [opts.isBusy] server で、キャラが話している(このあいだの音は聞かない。スピーカーが近いヘッドセットでの自分の声の拾い込みを防ぐ)
+   * @param {()=>string} [opts.hint] server で、聞き取りの手がかりにする言葉(話しかけているキャラの名前)。無ければ会話が入れた名前(sttHint.js)
    */
-  constructor(cb, { provider = 'web', isBusy = () => false } = {}) {
+  constructor(cb, { provider = 'web', isBusy = () => false, hint = getSttHint } = {}) {
     this.cb = cb;
+    this.hint = hint;
     this.provider = provider;
     this.isBusy = isBusy;
     this.listening = false;
@@ -151,6 +154,14 @@ export class Listener {
     src.connect(this.capture);
   }
 
+  _hintNow() {
+    try {
+      return String(this.hint() ?? '');
+    } catch {
+      return ''; // 手がかりが取れなくても、聞き取りは止めない
+    }
+  }
+
   async _sendSegment() {
     const pcm = this.collector?.end();
     if (!pcm || pcm.length < this.ctx.sampleRate * MIN_SEGMENT_S) return;
@@ -162,7 +173,7 @@ export class Listener {
     try {
       const res = await fetch('/api/stt', {
         method: 'POST',
-        headers: { 'content-type': 'audio/wav' },
+        headers: { 'content-type': 'audio/wav', ...sttHintHeaders(this._hintNow()) },
         body: encodeWav(resample(pcm, this.ctx.sampleRate, STT_RATE)),
       });
       const data = await res.json();

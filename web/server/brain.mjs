@@ -387,7 +387,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : ''].filter(Boolean).join('\n');
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
-    { role: 'user', content: buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard }) },
+    { role: 'user', content: buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard, hasHistory: history.length > 0 }) },
   ];
   let raw = '';
   let said = 0;

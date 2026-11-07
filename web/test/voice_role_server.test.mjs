@@ -11,12 +11,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ROLE_DEFAULT_VOICES } from '../src/conversation/voiceRole.js';
 import { FILLER_PHRASES } from '../server/fillers.mjs';
-import { roleVoiceId, voiceForRequest } from '../server/tts.mjs';
+import { knownVoiceIds, roleVoiceId, voiceForRequest } from '../server/tts.mjs';
 
 const WEB = join(import.meta.dirname, '..');
 const FAKE_VOICE_KEY = ['fake', 'voice', 'value', 'not', 'real'].join('-');
 const LEGACY = ['Legacy', 'Voice', '00001'].join(''); // ELEVEN_VOICE_ID(最後の控え)
 const OWN = ['Own', 'Voice', 'Id', '12345'].join('');
+const STRANGER = 'Z'.repeat(20); // 形は正しいが、使ってよい声の表に無い id(CRITsec3 L4)
+const FAKE_DETAIL = ['upstream', 'detail', 'text', 'for', 'the', 'log', 'only'].join('-'); // 声のサービスの返事の文(画面に返さない)
 
 const freePort = () =>
   new Promise((resolve) => {
@@ -28,7 +30,7 @@ const freePort = () =>
   });
 
 /** 偽の声のサービス。頼まれた声の id(道の中)とモデル(本文)を覚え、短い PCM を返す */
-async function fakeVoice() {
+async function fakeVoice({ failWith = 0 } = {}) {
   const asked = [];
   const server = createHttpServer((req, res) => {
     let raw = '';
@@ -37,6 +39,7 @@ async function fakeVoice() {
       const m = /\/v1\/text-to-speech\/([^/]+)\/stream/.exec(req.url);
       const body = JSON.parse(raw || '{}');
       asked.push({ voiceId: m?.[1] ?? '', model: body.model_id, text: body.text, key: req.headers['xi-api-key'] === FAKE_VOICE_KEY });
+      if (failWith) return res.writeHead(failWith, { 'content-type': 'text/plain' }).end(FAKE_DETAIL);
       res.writeHead(200, { 'content-type': 'application/octet-stream' });
       res.end(Buffer.alloc(4800));
     });
@@ -50,7 +53,7 @@ async function startServer(voiceBase, extraEnv = {}) {
   const port = await freePort();
   const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', LOG_DIR: join(dir, 'logs'), MEMORY_DIR: join(dir, 'memory'), FILLER_DIR: join(dir, 'fillers') };
   // 鍵と声の設定は空の値で渡す(web/.env があっても埋め戻さない)。モデルは空 = 既定(eleven_v4_turbo)
-  Object.assign(env, { ANTHROPIC_API_KEY: '', ELEVENLABS_API_KEY: FAKE_VOICE_KEY, ELEVEN_API_URL: voiceBase, ELEVEN_VOICE_ID: LEGACY, ELEVEN_VOICE_MALE: '', ELEVEN_VOICE_FEMALE: '', ELEVEN_MODEL_ID: '', APP_PASSPHRASE: '' });
+  Object.assign(env, { ANTHROPIC_API_KEY: '', ELEVENLABS_API_KEY: FAKE_VOICE_KEY, ELEVEN_API_URL: voiceBase, ELEVEN_VOICE_ID: LEGACY, ELEVEN_VOICE_MALE: '', ELEVEN_VOICE_FEMALE: '', ELEVEN_MODEL_ID: '', ELEVEN_VOICE_IDS: OWN, APP_PASSPHRASE: '' });
   Object.assign(env, extraEnv);
   const proc = spawn(process.execPath, [join(WEB, 'server', 'index.mjs')], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let out = '';
@@ -87,13 +90,22 @@ async function speak(base, body) {
 }
 
 test('声を決める関数: 話す役の既定(環境変数 > 決まった既定)> ELEVEN_VOICE_ID。その子の声の id は形が正しい時だけ。auto・知らない値は女の子', () => {
-  const cfg = { voiceMale: '', voiceFemale: '', voiceId: LEGACY };
+  const cfg = { voiceMale: '', voiceFemale: '', voiceId: LEGACY, voiceIds: [OWN] }; // OWN = 使ってよい声の表への追加(ELEVEN_VOICE_IDS)
   assert.deepEqual(voiceForRequest({ voice: 'male' }, cfg), { role: 'male', voiceId: ROLE_DEFAULT_VOICES.male });
   assert.deepEqual(voiceForRequest({ voice: 'female' }, cfg), { role: 'female', voiceId: ROLE_DEFAULT_VOICES.female });
   for (const v of [undefined, 'auto', 'robot', 3]) assert.deepEqual(voiceForRequest({ voice: v }, cfg), { role: 'female', voiceId: ROLE_DEFAULT_VOICES.female }, String(v));
   assert.deepEqual(voiceForRequest(null, cfg), { role: 'female', voiceId: ROLE_DEFAULT_VOICES.female });
   assert.deepEqual(voiceForRequest({ voice: 'male', voiceId: OWN }, cfg), { role: 'male', voiceId: OWN });
   assert.deepEqual(voiceForRequest({ voice: 'male', voiceId: '../../evil' }, cfg), { role: 'male', voiceId: ROLE_DEFAULT_VOICES.male }, '形の違う id は使わない');
+  // CRITsec3 L4: 形が正しくても、使ってよい声の表(役の既定・環境変数・characters の persona.md の声の id)に無い id は使わない
+  assert.deepEqual(voiceForRequest({ voice: 'male', voiceId: STRANGER }, cfg), { role: 'male', voiceId: ROLE_DEFAULT_VOICES.male }, '表に無い id は役の既定');
+  for (const bad of ['../../../v1/user', 'abc%2F..%2Fuser', 'abcdefgh?x=1', ['abcdefgh1'], { toString: () => OWN }]) {
+    assert.deepEqual(voiceForRequest({ voice: 'female', voiceId: bad }, cfg), { role: 'female', voiceId: ROLE_DEFAULT_VOICES.female }, JSON.stringify(bad));
+  }
+  const known = knownVoiceIds(cfg);
+  for (const id of [ROLE_DEFAULT_VOICES.male, ROLE_DEFAULT_VOICES.female, LEGACY, OWN]) assert.ok(known.has(id), `表に ${id.slice(0, 4)}… がある`);
+  assert.ok(!known.has(STRANGER));
+  assert.deepEqual(voiceForRequest({ voice: 'male', voiceId: 'Persona' + 'Voice0001' }, cfg, new Set(['Persona' + 'Voice0001'])), { role: 'male', voiceId: 'Persona' + 'Voice0001' }, '表を渡せば、その表の id');
   const env = { ...cfg, voiceMale: 'EnvMaleVoice0001', voiceFemale: 'bad id' };
   assert.equal(roleVoiceId('male', env), 'EnvMaleVoice0001');
   assert.equal(roleVoiceId('female', env), ROLE_DEFAULT_VOICES.female, '形の違う環境変数は飛ばす');
@@ -119,6 +131,7 @@ test('/api/tts: 男の子・女の子の役の声で頼む(モデルは eleven_v
       [{ text: 'うん' }, ROLE_DEFAULT_VOICES.female, 'female'],
       [{ text: 'ええ', voice: 'male', voiceId: OWN }, OWN, 'male'],
       [{ text: 'はい', voice: 'male', voiceId: '../evil' }, ROLE_DEFAULT_VOICES.male, 'male'],
+      [{ text: 'どうも', voice: 'male', voiceId: STRANGER }, ROLE_DEFAULT_VOICES.male, 'male'], // 形は正しいが表に無い id(CRITsec3 L4)
       [{ text: 'そう', voice: 'robot' }, ROLE_DEFAULT_VOICES.female, 'female'],
     ];
     for (const [body, voiceId, role] of cases) {
@@ -188,6 +201,22 @@ test('声の鍵が無いサーバーは、今までどおり 204(役を送って
     const fillers = await (await fetch(`${server.base}/api/fillers`)).json();
     assert.deepEqual(fillers.roles, { male: [], female: [] });
     assert.equal(voice.asked.length, 0);
+  } finally {
+    server.proc.kill();
+    voice.close();
+  }
+});
+
+test('/api/tts: 声のサービスが失敗した時、返事の文を画面へ返さない(手元の記録にだけ書く)。文字数は返す(CRITsec3 L4)', async () => {
+  const voice = await fakeVoice({ failWith: 500 });
+  const server = await startServer(voice.base);
+  try {
+    const res = await speak(server.base, { text: 'はじめまして', voice: 'male' });
+    assert.equal(res.status, 502);
+    const text = JSON.stringify(await fetch(`${server.base}/api/tts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'もう一度' }) }).then((r) => r.json()));
+    assert.ok(!text.includes(FAKE_DETAIL), '声のサービスの返事の文は、画面へ返さない');
+    assert.match(text, /読み上げに失敗 \(500\)/);
+    assert.ok(server.log().includes(FAKE_DETAIL), '手元の記録には書く');
   } finally {
     server.proc.kill();
     voice.close();

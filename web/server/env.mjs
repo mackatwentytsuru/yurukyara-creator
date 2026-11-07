@@ -42,6 +42,8 @@ export const config = {
   voiceMale: process.env.ELEVEN_VOICE_MALE ?? '',
   voiceFemale: process.env.ELEVEN_VOICE_FEMALE ?? '',
   voiceId: process.env.ELEVEN_VOICE_ID ?? 'fUjY9K2nAIwlALOwSiwc',
+  // 使ってよい声の id の追加分(カンマ区切り)。表は、役の既定・上の環境変数・characters/*/persona.md の「声の id」・これ(CRITsec3 L4)
+  voiceIds: (process.env.ELEVEN_VOICE_IDS ?? '').split(',').map((v) => v.trim()).filter(Boolean),
   ttsModel: process.env.ELEVEN_MODEL_ID || VOICE_MODEL_ID, // 空の値は「無い」と同じ(既定のモデル)
   // 試験では偽の声のサーバーに向ける(呼ぶたびに読む)
   get elevenUrl() {

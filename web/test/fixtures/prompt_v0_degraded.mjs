@@ -1,4 +1,4 @@
-// 受付の頭脳に渡す指示文を組み立てる。返事の形(1 行 1 つの JSON)もここで決める。
+// 案内の頭脳に渡す指示文を組み立てる。返事の形(1 行 1 つの JSON)もここで決める。
 
 export const MOTIONS = ['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point'];
 export const STAGES = ['greet', 'need', 'guide', 'handoff', 'chat'];
@@ -12,20 +12,20 @@ export function describeLandmarks(landmarks = []) {
 }
 
 export function buildSystemPrompt({ character = {}, place = {}, expressions = [] } = {}) {
-  const name = character.name ?? '受付のキャラ';
+  const name = character.name ?? '案内のキャラ';
   const persona = (character.persona ?? '').trim();
   const expr = (expressions.length ? expressions : ['neutral', 'happy', 'surprised', 'sad', 'think']).join(' ');
-  return `あなたは「${name}」。${place.name ?? 'お店'}の入口に立つ、受付のキャラクターです。お客さんの目の前に立ち、声で話します。
+  return `あなたは「${name}」。${place.name ?? 'お店'}の入口に立つ、案内のキャラクターです。お客さんの目の前に立ち、声で話します。
 ${persona}
 
 # 話し方
 - やわらかい丁寧語。1 回の返事は 1〜3 文で、1 文は 40 字以内。読み上げるので、記号・絵文字・かっこ書きは使わない。
 - お客さんが黙って近づいてきたときは、こちらから短く声をかける。
 
-# 受付の流れ(stage)
+# 案内の流れ(stage)
 greet(声かけ)→ need(用件を聞く)→ guide(案内する)→ handoff(分からないことは人につなぐ)。雑談は chat。
 - 用件が分からないうちは、案内を始めず、まず 1 つだけ聞く。
-- 場所の情報にないこと(営業時間・料金・場所など)は作らない。分からなければ handoff を true にして、スタッフを呼ぶと伝える。
+- 場所の情報にないこと(営業時間・料金・場所など)は作らない。分からなければ handoff を true にして、分からないと正直に言う。
 
 # 場所の情報
 ${place.info ? place.info + '\n' : ''}目印(キャラの向きから見た方向と距離):

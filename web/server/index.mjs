@@ -6,9 +6,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createRe
 import { extname, join, normalize, sep } from 'node:path';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
+import { isAbortError } from './abort.mjs';
 import { createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memory/store.mjs';
 import { createMemoryRoutes, forgetReplyEvents, isForgetRequest } from './memory/routes.mjs';
-import { extractFacts } from './memory/reflect.mjs';
+import { extractFacts, selfNamesOf } from './memory/reflect.mjs';
 import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
@@ -123,11 +124,11 @@ function latencySummary() {
 const memoryAdded = (learned) => learned.map(({ id, kind, text }) => ({ id, kind, text }));
 
 /** 合鍵がある回: 覚えていることを読み、この回の言葉から覚える事を足す(知らせは send で) */
-function rememberWithKey(memoryKey, text, send) {
+function rememberWithKey(memoryKey, text, send, selfNames = []) {
   const recalled = memory.recall(memoryKey);
   let learned = [];
   try {
-    learned = memory.add(memoryKey, extractFacts(text));
+    learned = memory.add(memoryKey, extractFacts(text, { selfNames }));
   } catch {
     learned = []; // 合鍵の記憶が無い(消えた・7 日たった)ときは、覚えずに話す
   }
@@ -140,9 +141,9 @@ function rememberWithKey(memoryKey, text, send) {
  * 返事のイベント { type:'memory', key, added, ... } で画面に渡す。あいさつだけ・開いただけでは作らない。
  * 作る回数は /api/memory/new と同じ上限(1 分 10 回・1 日 2000 回)で数え、超えたら覚えずに話す。合鍵は記録に書かない
  */
-function rememberFirstTime(text, client, send) {
+function rememberFirstTime(text, client, send, selfNames = []) {
   const none = { recalled: null, learned: [] };
-  const facts = extractFacts(text);
+  const facts = extractFacts(text, { selfNames });
   if (!facts.length || !memoryLimiter.take(client).ok) return none;
   const made = memory.create();
   const learned = memory.add(made.key, facts);
@@ -171,7 +172,8 @@ async function handleChat(req, res) {
     send({ type: 'done', serverMs: Date.now() - t0 });
     return res.end();
   }
-  const { recalled, learned } = memoryKey ? rememberWithKey(memoryKey, body.text, send) : rememberFirstTime(body.text, client, send);
+  const selfNames = selfNamesOf(body.character); // 話しかけているキャラの名前は、使う人の名前や好きなものとして覚えない
+  const { recalled, learned } = memoryKey ? rememberWithKey(memoryKey, body.text, send, selfNames) : rememberFirstTime(body.text, client, send, selfNames);
   // 本物の Claude を呼ぶときだけ、回数の上限を数える(仮の頭脳は無料)。上限に当たったら、仮の頭脳で話し続ける
   let paid = Boolean(config.anthropicKey);
   if (paid) {
@@ -250,7 +252,14 @@ const handler = async (req, res) => {
       const slot = sttLimiter.take(req.socket.remoteAddress ?? 'unknown');
       if (!slot.ok) return json(res, 429, { error: slot.message });
       if (!stt.status().available) return json(res, 503, { error: '聞き取りの部品がありません(pip install faster-whisper)' });
-      return json(res, 200, await stt.transcribe(await readRaw(req, MAX_WAV_BYTES + 1024)));
+      // 手がかり = 話しかけているキャラの名前(画面が x-stt-hint で送る。URL エンコード)。聞き違い(ノリー → 乗り)を減らす
+      let hint = '';
+      try {
+        hint = decodeURIComponent(String(req.headers['x-stt-hint'] ?? '').slice(0, 300));
+      } catch {
+        // 形の違う値は、手がかり無しで聞く
+      }
+      return json(res, 200, await stt.transcribe(await readRaw(req, MAX_WAV_BYTES + 1024), { hint }));
     }
     if (req.method === 'POST' && path === '/api/metrics') {
       const body = await readBody(req);
@@ -271,7 +280,7 @@ const handler = async (req, res) => {
     }
     json(res, 405, { error: 'この方法は使えません' });
   } catch (err) {
-    if (!(err instanceof ValidationError)) console.error(err);
+    if (!(err instanceof ValidationError) && !isAbortError(err)) console.error(err); // 声を途中で止めた(画面が切った)時の AbortError は、失敗ではない
     if (!res.headersSent) json(res, err instanceof ValidationError ? err.status : 500, { error: err.message });
     else res.end();
   }
