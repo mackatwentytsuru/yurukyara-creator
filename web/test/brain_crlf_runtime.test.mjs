@@ -95,7 +95,7 @@ test('ノリーの人格の文: 取り出したまま・LF・CRLF のどれを�
     assert.deepEqual(systems[1], systems[0], 'LF でも同じ');
     assert.deepEqual(systems[2], systems[0], 'CRLF でも同じ');
     assert.equal(systems[0][0], SAFETY_RULES, '1 段目は安全の決まりのまま');
-    assert.ok(systems[0][1].includes('ノリー') && systems[0][1].includes('ノリ、がんばりマス!'), '2 段目にノリーの人格');
+    assert.ok(systems[0][1].includes('ノリー') && systems[0][1].includes('ノリー、がんばりマス!'), '2 段目にノリーの人格');
     for (const block of systems[0]) assert.ok(!block.includes('\r'), '頭脳に CR が届いていない');
   } finally {
     server.proc.kill();

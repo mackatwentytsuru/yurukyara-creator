@@ -19,7 +19,7 @@ test('ノリー: はじめての「はじめまして」に、人格の文の初
   const { events, said } = await turn({ text: 'はじめまして', character: { name: 'ノリー', persona: PERSONA } });
   assert.equal(events[0].type, 'meta');
   assert.equal(events[0].brain, 'mock');
-  assert.deepEqual(said.map((s) => s.text), ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリ、がんばりマス! なにをお手伝いしまショウ?']);
+  assert.deepEqual(said.map((s) => s.text), ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリー、がんばりマス! なにをお手伝いしまショウ?']);
   assert.deepEqual(said.map((s) => s.motion), ['bow', 'nod', 'wave']);
   assert.equal(events.find((e) => e.type === 'thought').stage, 'greet');
 });
@@ -63,7 +63,7 @@ test('人格の欄に書かれた危ないあいさつは、出力の確かめ�
 // 後から「はじめまして」と打ってもノリーの名乗りが出なかった。近づいた時も、その子の言葉で声をかける。
 test('近づいた時(話の始め・覚えていない人): 初めてのあいさつで名乗る(おじぎ → うなずき → 手をふる)', async () => {
   const { events, said } = await turn({ text: '', trigger: 'approach', character: { name: 'ノリー', persona: PERSONA } });
-  assert.deepEqual(said.map((s) => s.text), ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリ、がんばりマス! なにをお手伝いしまショウ?']);
+  assert.deepEqual(said.map((s) => s.text), ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリー、がんばりマス! なにをお手伝いしまショウ?']);
   assert.deepEqual(said.map((s) => s.motion), ['bow', 'nod', 'wave']);
   const th = events.find((e) => e.type === 'thought');
   assert.equal(th.stage, 'greet');
@@ -74,7 +74,7 @@ test('近づいた時(話の途中)と、話の途中の「こんにちは」: �
   const history = [{ role: 'user', content: 'はじめまして' }, { role: 'assistant', content: 'はじめまして! ノリーと申しマス。' }];
   for (const body of [{ text: '', trigger: 'approach' }, { text: 'こんにちは' }]) {
     const { said } = await turn({ ...body, history, character: { name: 'ノリー', persona: PERSONA } });
-    assert.deepEqual(said.map((s) => s.text), ['ノリ、がんばりマス! なにをお手伝いしまショウ?'], JSON.stringify(body));
+    assert.deepEqual(said.map((s) => s.text), ['ノリー、がんばりマス! なにをお手伝いしまショウ?'], JSON.stringify(body));
     assert.equal(said[0].motion, 'wave');
   }
 });
@@ -83,7 +83,7 @@ test('近づいた時: 覚えている人には、その子の言葉で「また
   const memory = { text: '- 名前: タロウ', items: [{ kind: 'name', text: '名前: タロウ' }] };
   const again = await turn({ text: '', trigger: 'approach', character: { name: 'ノリー', persona: PERSONA } }, { memory });
   assert.equal(again.said[0].text, 'タロウさん、またお会いできマシタ!');
-  assert.equal(again.said[1].text, 'ノリ、がんばりマス! なにをお手伝いしまショウ?', '覚えている話が無ければ、あいさつの最後の 1 文');
+  assert.equal(again.said[1].text, 'ノリー、がんばりマス! なにをお手伝いしまショウ?', '覚えている話が無ければ、あいさつの最後の 1 文');
   assert.ok(!again.said.some((s) => s.text.includes('ノリーと申しマス')));
   const plainMem = await turn({ text: '', trigger: 'approach', character: { name: 'みかんちゃん', persona: '# みかんちゃん\n- 一人称は「わたし」。' } }, { memory });
   assert.deepEqual(plainMem.said.map((s) => s.text), ['タロウさん、また会えたね。', 'どんなお話をしようか。']);
