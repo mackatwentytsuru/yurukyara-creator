@@ -234,6 +234,44 @@ test('切り替え: 入れられなかった時は、やさしい理由を出し
   assert.equal(m.button.getAttribute('aria-pressed'), 'true', '外で入った時(入口で選んだ・VR から戻った)は見た目だけ合わせる');
 });
 
+test('会話(Dialogue の本物): 話しかけた回だけ絵を 1 枚。近づいた合図の回は getImage を呼びもしない。履歴に絵を残さず、次の回にも送り直さない', async () => {
+  const { Dialogue } = await import('../src/conversation/dialogue.js');
+  const bodies = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    bodies.push(JSON.parse(init.body));
+    const events = [{ type: 'say', text: 'はい。', expression: 'neutral', motion: 'none', gaze: 'person' }];
+    return new Response(JSON.stringify({ brain: 'mock', events, ms: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const d = new Dialogue({
+      character: { expressions: ['neutral'], play() {}, setEmotion() {}, setMouth() {}, isCustomExpression: () => false },
+      speaker: { speaking: false, pending: 0, setVoicePersona() {}, playFiller: () => null, stop() {}, enqueue: () => Promise.resolve() },
+      ui: { thought() {}, say() {}, userSaid() {}, caption() {}, notice() {}, error: (m) => assert.fail(m) },
+      getContext: () => ({ scene: '', character: { name: 'ノリー', persona: '' }, place: undefined }),
+      setGaze: () => null,
+      onMetric() {},
+    });
+    const asked = [];
+    d.getImage = (turn) => {
+      asked.push(turn.trigger ?? null);
+      return { type: 'jpeg', data: 'QUJDRA==', width: 512, height: 384 };
+    };
+    await d.send({ text: 'これなに?', mode: 'text' });
+    await d.send({ trigger: 'approach', mode: 'text' });
+    await d.send({ text: 'こんにちは', mode: 'voice' });
+    assert.equal(bodies.length, 3);
+    assert.deepEqual(bodies[0].image, { type: 'jpeg', data: 'QUJDRA==', width: 512, height: 384 }, '文字で話しかけた回は 1 枚');
+    assert.equal(bodies[1].image, undefined, '近づいた合図の回は送らない');
+    assert.deepEqual(asked, [null, null], '近づいた合図の回は getImage を呼ばない(2 回 = 文字と声の回だけ)');
+    assert.equal(bodies[2].image.data, 'QUJDRA==', '声で話しかけた回も 1 枚(その回の新しい 1 枚)');
+    assert.ok(!JSON.stringify(bodies[2].history).includes('QUJDRA=='), '前の回の絵を履歴で送り直さない');
+    assert.ok(!JSON.stringify(d.history).includes('QUJDRA=='), '画面の履歴に絵を残さない');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('画面の形: 入力の列にカメラのボタン(最初は隠す)・テレビ表示の隅・知らせの窓・入口の文。印の札は高さ 500 未満でも残す', () => {
   const html = read('index.html');
   assert.match(html, /<button type="button" id="camBtn" class="cam" aria-pressed="false"[^>]* hidden>/);
