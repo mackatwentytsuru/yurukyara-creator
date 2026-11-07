@@ -5,7 +5,8 @@
 作業フォルダにできる commit-map.txt(古い SHA → 新しい SHA)を読み、`<リポジトリの URL>/commit/<新しい SHA>` に置き換える。
 
 使い方:
-  python tools/fill_commit_links.py --map <作業フォルダ>/commit-map.txt --repo https://github.com/<持ち主>/<名前> docs/HOW_WE_BUILT.md
+  python tools/fill_commit_links.py --map <作業フォルダ>/commit-map.txt --repo https://github.com/<持ち主>/<名前> docs/HOW_WE_BUILT.md docs/HOW_WE_BUILT.en.md
+  (どう作ったかは日本語の docs/HOW_WE_BUILT.md と英語の docs/HOW_WE_BUILT.en.md の 2 つ。両方を渡す)
   --check だけを付けると、書かずに、全部の印が置き換えられるかだけを見る。
 終わりの番号: 0 = 全部置き換えた(か、置き換えられる)、1 = 見つからない・書き換えで消えた・1 つに決まらない印がある、2 = 動かせない
 """
