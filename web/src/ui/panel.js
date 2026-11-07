@@ -53,6 +53,13 @@ const MOTION_WORDS = Object.freeze({
   point: '指さす',
   jump: 'はねる',
   sad: 'しょんぼり',
+  // B3(第 12 波 b): かわいい仕草の層の名前(B5G の約束 B12/K2_gesture_names.md の日本語)
+  greet: 'あいさつ',
+  happy: 'うれしい',
+  cheer: 'ばんざい',
+  shy: 'てれる',
+  surprised: 'びっくり',
+  droop: 'しょんぼり',
 });
 
 /** 視線の指定(person・away・landmark:<名前>)を、画面の言葉に */

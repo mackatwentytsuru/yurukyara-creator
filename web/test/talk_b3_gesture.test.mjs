@@ -124,6 +124,16 @@ test('本物の頭脳の道: 1 文目のあいさつに仕草が無ければ gre
   });
 });
 
+test('「Claude の考え」の窓: 返事で頼める仕草の名前は、全部日本語で出る(中の名前・「この子の動き」にならない)', async () => {
+  const { actWords } = await import('../src/ui/panel.js');
+  for (const n of REPLY_GESTURES) {
+    const words = actWords({ expression: 'happy', motion: n, gaze: 'person' });
+    assert.doesNotMatch(words, /この子の動き|[a-z]/, `${n} → ${words}`);
+  }
+  assert.match(actWords({ motion: 'greet' }), /あいさつ/);
+  assert.match(actWords({ motion: 'shy' }), /てれる/);
+});
+
 test('約束の相手(B5G の cuteLayer.js)が入ったら、返事の名前がその一覧に全部ある', { skip: !existsSync(join(ROOT, 'web', 'src', 'character', 'cuteLayer.js')) }, async () => {
   const cute = await import(pathToFileURL(join(ROOT, 'web', 'src', 'character', 'cuteLayer.js')).href);
   const list = new Set(Array.isArray(cute.CUTE_GESTURES) ? cute.CUTE_GESTURES : Object.keys(cute.CUTE_GESTURES ?? {}));
