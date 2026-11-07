@@ -104,7 +104,8 @@ test('Claude に渡す設定の文: この子の話し方のまま。フレン�
   assert.equal(sanitizePersona(block).removed, 0);
   const composed = composePersona(MAIN_PERSONA, s);
   assert.ok(composed.startsWith('# '), '人格の文が先、設定の節が後ろ');
-  assert.ok(composed.indexOf('ノリ、がんばりマス') < composed.indexOf('# 性格と話し方'));
+  const habit = composed.indexOf('ノリー、がんばりマス'); // 主役の persona.md(S3)の口ぐせ。無い時に -1 で通らないように、在ることも見る
+  assert.ok(habit >= 0 && habit < composed.indexOf('# 性格と話し方'), `人格の文の口ぐせが設定の節より先に無い: ${habit}`);
   assert.equal(normalize({ tone: 'own', ending: 'ぽよ' }).ending, '', 'own の時は語尾を持たない');
 });
 

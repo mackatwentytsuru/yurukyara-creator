@@ -142,7 +142,7 @@ function harness({ frameWaitMs } = {}) {
 test('言葉 → PC の絵 → 直したい(一言)= G1 → 2 回目 → この子にする → 性格へ(枠からの知らせで進む)', async () => {
   const h = harness();
   await h.fr.start();
-  assert.ok(h.texts('guide')[0].includes('ノリ、がんばりマス'), '案内役はノリー');
+  assert.ok(h.texts('guide')[0].includes('ノリー、がんばりマス'), '案内役はノリー');
   assert.ok(h.texts('note').some((t) => t.includes('Anthropic に送られます')), '言葉と絵がどこへ行くかを先に言う');
   assert.deepEqual(h.offered, ['frame'], '1〜3 歩の入力は PC の作る画面(枠)');
   assert.equal(h.offeredAll[0].url, 'http://127.0.0.1:8796/m/#k=test-key&p=http%3A%2F%2Flocalhost%3A5173');

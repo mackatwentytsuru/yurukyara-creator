@@ -192,7 +192,7 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       const frame = await frameOf(page);
       assert.equal(new URL(page.url()).hash, '', '合言葉をアドレスの欄に残さない');
       assert.equal(new URL(frame.url()).hash, '', '枠の中でも消す');
-      assert.match(await logText(page), /ノリ、がんばりマス/);
+      assert.match(await logText(page), /ノリー、がんばりマス/);
       assert.match(await logText(page), /Anthropic に送られます/);
       await fits(page, frame, '1 歩目');
       await shot(page, 'make390_1_input');
