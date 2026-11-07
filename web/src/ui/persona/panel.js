@@ -124,6 +124,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   panel.append(
     el('h2', { textContent: `${characterName}の性格` }),
     el('p', { className: 'yp-lead', textContent: '選ぶと、すぐ上の返事が変わります。' }),
+    // BSF(11-08 安全): 付けられない性格を 1 行で(人格の文のその行は、サーバーの安全の層が外す。safety.mjs の CLINGY_PERSONA)
+    el('p', { className: 'yp-note yp-safety-note', textContent: '恋人の役・ひとりじめ・ひきとめる性格は、つけられません(安全のきまりが先に効きます)。' }),
     el('div', { className: 'yp-auto-row' }, autoBtn, autoNote),
     el('div', { className: 'yp-try' }, el('div', { className: 'yp-try-row' }, tryIn, tryBtn), reply, note),
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '性格' }), presets.box),
