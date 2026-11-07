@@ -1,5 +1,7 @@
-// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ・短い知らせ(ui.notice)。
+// 画面の部品: 「Claude の考え」の窓・字幕・上の小さな状態表示・仮の頭脳の知らせ・短い知らせ(ui.notice)・「VR(Quest)で開く」の入口。
 // 合言葉(契約 K5)は会話の側の web/src/conversation/demoPass.js が 1 か所で持つ(会話と記憶の通信が同じ値を読む)。
+import { SCAN_HOW, NO_QR_NOTE } from '../stage/questLink.js';
+
 const $ = (id) => document.getElementById(id);
 
 /** 仮の頭脳の知らせの決まりの文(理由が分からない時) */
@@ -317,6 +319,102 @@ export function createUi() {
       noticeTimer = setTimeout(() => {
         el.hidden = true;
       }, NOTICE_MS);
+    },
+  };
+}
+
+/* ---------- 「VR(Quest)で開く」(本人の案 11/7。決まりは web/src/stage/questLink.js) ---------- */
+/**
+ * 上の段の小さなボタンと、押すと出る箱。箱には、この画面の QR(Quest 3・3S の QR コードスキャナーで読む)と、同じ URL の文字
+ * (スキャナーの無い Quest では手で入れる)。この PC・家の中のアドレスなら 1 行だけ。
+ * 閉じるのは、ボタンをもう一度・箱を押す・外を押す・Escape。開くたびに plan() を読む(その時の舞台の子と見た目)。
+ * QR の部品(stage/qrCode.js)は、初めて開いた時に読む(最初の読み込みを軽くする)。文字は textContent だけで入れる。
+ * @param {{root: HTMLElement, button: HTMLButtonElement, box: HTMLElement, plan: () => {show: boolean, kind: string, target?: string, note?: string},
+ *   onToggle?: (open: boolean) => void, loadQr?: () => Promise<{encodeQr: Function, qrPath: Function}>}} o
+ * @returns {{open(): void, close(focusButton?: boolean): void, readonly isOpen: boolean}}
+ */
+export function mountQuestLink({ root, button, box, plan, onToggle = () => {}, loadQr = () => import('../stage/qrCode.js') }) {
+  const doc = root.ownerDocument;
+  let opened = false;
+  let renderId = 0;
+  const el = (tag, className, text) => Object.assign(doc.createElement(tag), { className, textContent: text ?? '' });
+
+  // SVG の名前空間は、ボタンの印(index.html の <svg>。ブラウザが名前空間を付ける)から読む。画面のコードには、外の住所の形の文字を
+  // 書かない決まり(web/test/privacy.test.mjs)。印が無い時は QR を描かず、URL の文字だけにする
+  const svgNs = button.querySelector('svg')?.namespaceURI ?? null;
+
+  /** QR の絵(SVG。白い地と 4 マスの縁・暗いマスの 1 本の path。外の画像は使わない) */
+  const qrSvg = (matrix, qrPath) => {
+    const { d, view } = qrPath(matrix);
+    const svg = doc.createElementNS(svgNs, 'svg');
+    const attrs = { viewBox: `0 0 ${view} ${view}`, class: 'ql-qr', role: 'img', 'aria-label': 'この画面を開く QR コード', 'shape-rendering': 'crispEdges' };
+    for (const [k, v] of Object.entries(attrs)) svg.setAttribute(k, v);
+    const bg = doc.createElementNS(svgNs, 'rect');
+    bg.setAttribute('width', String(view));
+    bg.setAttribute('height', String(view));
+    bg.setAttribute('fill', '#fff');
+    const path = doc.createElementNS(svgNs, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', '#000');
+    svg.append(bg, path);
+    return svg;
+  };
+
+  async function render() {
+    const id = ++renderId;
+    const p = plan();
+    box.dataset.kind = p.kind;
+    delete box.dataset.target;
+    if (p.kind !== 'qr') {
+      box.replaceChildren(el('p', 'ql-note', p.note ?? ''));
+      return;
+    }
+    box.replaceChildren(el('p', 'ql-note', 'QR を作っています…'));
+    const lib = await loadQr().catch(() => null);
+    if (id !== renderId) return; // 作っている間に閉じた・開き直した
+    const qr = svgNs ? (lib?.encodeQr(p.target) ?? null) : null;
+    const text = el('div', 'ql-text');
+    text.append(el('p', 'ql-title', 'VR(Quest)で開く'), el('p', 'ql-how', qr ? SCAN_HOW : NO_QR_NOTE), el('p', 'ql-url', p.target));
+    box.replaceChildren(...(qr ? [qrSvg(qr.matrix, lib.qrPath)] : []), text);
+    box.dataset.target = p.target; // QR に入れた文(確かめの道具が読む。画面に出す URL と同じ)
+  }
+
+  function open() {
+    if (opened) return;
+    opened = true;
+    box.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    onToggle(true);
+    void render();
+    box.focus({ preventScroll: true });
+  }
+
+  function close(focusButton = false) {
+    if (!opened) return;
+    opened = false;
+    renderId += 1;
+    box.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+    onToggle(false);
+    if (focusButton) button.focus({ preventScroll: true });
+  }
+
+  button.addEventListener('click', () => (opened ? close() : open()));
+  box.addEventListener('click', () => close(true)); // 箱を押すと閉じる(指で 1 回)
+  doc.addEventListener('pointerdown', (e) => {
+    if (opened && !root.contains(e.target)) close();
+  }, true);
+  doc.addEventListener('keydown', (e) => {
+    if (opened && e.key === 'Escape') {
+      e.preventDefault();
+      close(true);
+    }
+  });
+  return {
+    open,
+    close,
+    get isOpen() {
+      return opened;
     },
   };
 }
