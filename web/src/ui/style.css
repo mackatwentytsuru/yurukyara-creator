@@ -844,6 +844,20 @@ html.top-simple.top-more #modes > .fr-launch, html.top-simple.top-more #modes > 
       radial-gradient(farthest-side at 50% 100%, rgba(190, 160, 255, 0.55), rgba(190, 160, 255, 0)) center bottom / 100% 14px no-repeat scroll;
   }
 }
+/* Quest の箱を開いている間(html.quest-open。main.js が付ける): 上の段の入口のほかの物はしまう。上の段が低くなり、箱は
+   「画面の 45% − 上の段」の中で、送るボタンまで切れずに入る(「もっと」の段が何行にもなると、箱が 129px ほどに縮んで切れた)。
+   しまうのは見た目だけ(閉じると戻る)。テレビと見た目の切り替えの固定の行も無くなるので、箱はその行の分を空けずに上の段のすぐ下から開く */
+html.top-simple.quest-open .top .grown-up, html.top-simple.quest-open .top .chips, html.top-simple.quest-open #thought,
+html.top-simple.quest-open #tvBtn { display: none !important; }
+@media (max-width: 640px) {
+  html.top-simple.quest-open .quest-link-box {
+    top: calc(100% + 6px);
+    max-height: calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 22px);
+    max-height: calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 22px);
+    --ql-size: clamp(96px, min(44vw, calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px)), 186px);
+    --ql-size: clamp(96px, min(44vw, calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px)), 186px);
+  }
+}
 /* カメラもマイクも使っていない時の注意書き(「カメラは使っていません…」)は、来場者の段では出さない(2 行が下の帯を高くし、字幕がキャラの足にかかった)。
    カメラかマイクを使っている間は今までどおり出す(テレビ表示と同じ決まり) */
 html.top-simple .privacy.off:not(.mic) { display: none; }

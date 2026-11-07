@@ -430,10 +430,10 @@ export function createUi() {
  * 閉じるのは、ボタンをもう一度・箱を押す・外を押す・Escape(「Meta Quest に送る」を押しても閉じない)。開くたびに plan() を読む(その時の舞台の子と見た目)。
  * QR の部品(stage/qrCode.js)は、初めて開いた時に読む(最初の読み込みを軽くする)。文字は textContent だけで入れる。
  * @param {{root: HTMLElement, button: HTMLButtonElement, box: HTMLElement, plan: () => {show: boolean, kind: string, target?: string, launch?: string, note?: string},
- *   onToggle?: (open: boolean) => void, loadQr?: () => Promise<{encodeQr: Function, qrPath: Function}>}} o
+ *   onToggle?: (open: boolean) => void, holdOpenFor?: (target: EventTarget | null) => boolean, loadQr?: () => Promise<{encodeQr: Function, qrPath: Function}>}} o
  * @returns {{open(): void, close(focusButton?: boolean): void, readonly isOpen: boolean}}
  */
-export function mountQuestLink({ root, button, box, plan, onToggle = () => {}, loadQr = () => import('../stage/qrCode.js') }) {
+export function mountQuestLink({ root, button, box, plan, onToggle = () => {}, holdOpenFor = () => false, loadQr = () => import('../stage/qrCode.js') }) {
   const doc = root.ownerDocument;
   let opened = false;
   let renderId = 0;
@@ -519,7 +519,8 @@ export function mountQuestLink({ root, button, box, plan, onToggle = () => {}, l
   button.addEventListener('click', () => (opened ? close() : open()));
   box.addEventListener('click', () => close(true)); // 箱を押すと閉じる(指で 1 回)
   doc.addEventListener('pointerdown', (e) => {
-    if (opened && !root.contains(e.target)) close();
+    // holdOpenFor: 押した物が「押し終わりで自分が箱を閉じる」物の時は、押し始めでは閉じない(閉じると上の段の高さが変わり、押し終わりの前に押した物が動いて押せなかった)
+    if (opened && !root.contains(e.target) && !holdOpenFor(e.target)) close();
   }, true);
   doc.addEventListener('keydown', (e) => {
     if (opened && e.key === 'Escape') {

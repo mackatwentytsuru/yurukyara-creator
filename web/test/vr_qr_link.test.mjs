@@ -129,7 +129,7 @@ test('panel.js: QR に入れるのは決まりの target だけ。文字は text
   assert.match(body, /import\('\.\.\/stage\/qrCode\.js'\)/, 'QR の部品は初めて開いた時に読む');
   assert.match(body, /box\.addEventListener\('click', \(\) => close\(true\)\);/, '箱を指で押すと閉じる');
   assert.match(body, /e\.key === 'Escape'/);
-  assert.match(body, /if \(opened && !root\.contains\(e\.target\)\) close\(\);/);
+  assert.match(body, /if \(opened && !root\.contains\(e\.target\) && !holdOpenFor\(e\.target\)\) close\(\);/);
   assert.doesNotMatch(body, /innerHTML|<img|url\(|data:|https?:\/\//);
   // 画面のコードの外の住所は、questLink.js の WEB_LAUNCH の 1 か所だけ(privacy.test.mjs の例外 1 つ。コメントは数えない)
   const link = read('src', 'stage', 'questLink.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '');
