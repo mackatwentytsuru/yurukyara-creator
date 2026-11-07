@@ -49,7 +49,7 @@ test('相づちの言葉: 指示文が教える言葉は、サーバーが録っ
   assert.deepEqual([...SERVER_FILLERS], [...FILLER_PHRASES], 'サーバーのあいづちの声と同じ言葉の表');
   for (const t of NOD_PHRASES) assert.ok(FILLER_PHRASES.includes(t), t);
   const p = buildSystemPrompt({ character: NORRIE });
-  assert.match(p, new RegExp(`相づちだけの文を言う時は、${NOD_PHRASES.map((t) => `「${t}」`).join('')} のどれかを、そのまま書く`));
+  assert.ok(p.includes(`相づちだけの文を言う時は、${NOD_PHRASES.map((t) => `「${t}」`).join('')}のどれかを、そのまま書く`));
   assert.equal(recordedNod('はい。'), 'はい。');
   assert.equal(recordedNod(' なるほど! '), 'なるほど。', '「!」で終わっても同じ声');
   assert.equal(recordedNod('ﾊｲ。'), null, '半角のカナは全角のカタカナになり、ひらがなの「はい。」とは別(違う声にしない)');
