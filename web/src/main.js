@@ -1348,10 +1348,11 @@ import { mountUpdate, startUpdateCheck } from './ui/updatePanel.js';
 import { setSheetLayoutHook, setSheetRoom, sheetGuard } from './ui/sheet.js';
 import { MIN_USABLE as YC_MIN_USABLE } from './stage/framing.js';
 // 窓を開いている間は、頭の線に窓の下の端を足す(キャラを窓の下へ置き直す。窓が開いた・閉じた・大きさが変わった時に置き直す)。
-// 窓の下の端は、キャラに画面の高さの MIN_USABLE が残る所まで(それより下だと、キャラが窓と下の帯にはみ出す)
+// 窓の下の端は、キャラに画面の高さの MIN_USABLE が残る所まで(それより下だと、キャラが窓と下の帯にはみ出す)、かつ下の帯の高さまで
+// (それより下だと、キャラが画面の真ん中より下へずれて写り、遠近で縦横の比が PC から 3% を超えた。390x844)
 const ycBaseGuard = stage.state.topGuard;
 stage.state.topGuard = (left, right) => Math.max(ycBaseGuard(left, right), sheetGuard(left, right));
-setSheetRoom(() => window.innerHeight * (1 - YC_MIN_USABLE) - (stage.state.bottomInset || 0));
+setSheetRoom(() => Math.min(window.innerHeight * (1 - YC_MIN_USABLE) - (stage.state.bottomInset || 0), stage.state.bottomInset || Infinity));
 setSheetLayoutHook(() => reframe());
 const ycUpdate = mountUpdate({ app });
 startUpdateCheck(ycUpdate, app);

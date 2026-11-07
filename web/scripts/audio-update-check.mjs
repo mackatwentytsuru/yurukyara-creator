@@ -152,7 +152,14 @@ async function openPage(browser, w, h, extra = '') {
   return page;
 }
 
-function judge(label, m, base) {
+/** 同じ頁・同じ止めた姿勢のまま 1280x720 にして測った縦横(PC の基準)。頁を開き直すと止まる姿勢がちがい、±2% ゆれたため */
+async function sameBase(page) {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.waitForTimeout(700);
+  return (await page.evaluate(MEASURE)).ratio;
+}
+
+function judge(label, m, base, plain = null) {
   const hit = (list) => list.reduce((s, r) => s + overlap(m.box, r), 0);
   const area = m.box ? (m.box.right - m.box.left) * (m.box.bottom - m.box.top) : 0;
   check(`${label}: キャラが見えている`, m.box && area > 400, m.box ? `${Math.round(m.box.right - m.box.left)}x${Math.round(m.box.bottom - m.box.top)}px` : 'なし');
@@ -160,7 +167,8 @@ function judge(label, m, base) {
   check(`${label}: 上の段がキャラに重ならない`, hit(m.covers.top) === 0, `重なり ${Math.round(hit(m.covers.top))}px²`);
   check(`${label}: 知らせがキャラに重ならない`, hit(m.covers.note) === 0, `重なり ${Math.round(hit(m.covers.note))}px²`);
   check(`${label}: 引き伸ばしなし(描く大きさと画角の縦横が箱の 1% 以内)`, Math.abs(m.stretch.buffer - 1) <= 0.01 && Math.abs(m.stretch.camera - 1) <= 0.01, `${m.stretch.buffer.toFixed(4)}・${m.stretch.camera.toFixed(4)}`);
-  check(`${label}: キャラの縦横が PC の 3% 以内`, base && Math.abs(m.ratio / base - 1) <= SHAPE_TOL, `${m.ratio.toFixed(4)} / PC ${base?.toFixed(4)}(${((m.ratio / base - 1) * 100).toFixed(1)}%)`);
+  check(`${label}: キャラの縦横が PC の 3% 以内(同じ姿勢)`, base && Math.abs(m.ratio / base - 1) <= SHAPE_TOL, `${m.ratio.toFixed(4)} / PC ${base?.toFixed(4)}(${((m.ratio / base - 1) * 100).toFixed(1)}%)`);
+  if (plain) check(`${label}: 窓を開いても、窓なしと縦横が同じ(1% 以内)`, Math.abs(m.ratio / plain - 1) <= 0.01, `${m.ratio.toFixed(4)} / 窓なし ${plain.toFixed(4)}`);
   check(`${label}: 字は 14px 以上`, m.smallFonts.length === 0, m.smallFonts.join(','));
   if (m.minTap !== null) check(`${label}: 押す所は 40px 以上`, m.minTap >= 40, `${m.minTap.toFixed(0)}px`);
 }
@@ -183,8 +191,9 @@ try {
     await p0.close();
     for (const [name, w, h] of SIZES) {
       const page = await openPage(browser, w, h);
+      const later = [];
       const before = await page.evaluate(MEASURE);
-      judge(`${name} 窓なし`, before, base);
+      later.push([`${name} 窓なし`, before]);
       // マイクとスピーカーの窓
       await page.click('#ycAudioBtn');
       await page.waitForSelector('#ycAudio:not([hidden])');
@@ -193,7 +202,7 @@ try {
       await page.waitForTimeout(900);
       await page.evaluate(FREEZE);
       const mAudio = await page.evaluate(MEASURE);
-      judge(`${name} マイクの窓`, mAudio, base);
+      later.push([`${name} マイクの窓`, mAudio]);
       await page.screenshot({ path: join(OUT, `${name}_audio.png`) });
       if (name === 'pc720') {
         const opts2 = await page.$$eval('#ycMicSelect option', (os) => os.map((o) => ({ v: o.value, t: o.textContent })));
@@ -226,7 +235,7 @@ try {
         await page.waitForTimeout(1500);
         await page.evaluate(FREEZE);
         const mUp = await page.evaluate(MEASURE);
-        judge(`${name} アップデートの窓`, mUp, base);
+        later.push([`${name} アップデートの窓`, mUp]);
         await page.screenshot({ path: join(OUT, `${name}_update.png`) });
         await page.click('#ycUpdate .yc-sheet-close');
       }
@@ -234,8 +243,10 @@ try {
       await page.evaluate(() => window.dispatchEvent(new CustomEvent('yc-mic-silent')));
       await page.waitForSelector('#ycAudioNote:not([hidden])');
       const mNote = await page.evaluate(MEASURE);
-      judge(`${name} 音が来ない時の知らせ`, mNote, base);
+      later.push([`${name} 音が来ない時の知らせ`, mNote]);
       await page.screenshot({ path: join(OUT, `${name}_silent_note.png`) });
+      const same = await sameBase(page);
+      for (const [l, mm] of later) judge(l, mm, same, l.endsWith('窓なし') ? null : before.ratio);
       await page.close();
     }
     // 2D の見た目(板)でも、窓を開くとキャラを窓の下へ置き直し、縦横は変わらない
@@ -247,8 +258,9 @@ try {
       if (await p2.isVisible('#ycAudioAllow')) await p2.click('#ycAudioAllow');
       await p2.waitForTimeout(1200);
       await p2.evaluate(FREEZE);
-      judge(`${name} マイクの窓`, await p2.evaluate(MEASURE), b2);
+      const m2 = await p2.evaluate(MEASURE);
       await p2.screenshot({ path: join(OUT, `${name}_audio.png`) });
+      judge(`${name} マイクの窓`, m2, await sameBase(p2), b2);
       await p2.close();
     }
     // テレビ表示
@@ -323,8 +335,11 @@ try {
       const route = await quest.textContent('.yc-au-route');
       check('Quest のまね: 聞き取りは PC(歯車の窓の一言)', /この PC で もじに する|PC の ききとりが ないと/.test(route ?? ''), route);
       const mq = await quest.evaluate(MEASURE);
-      judge('Quest のまね マイクの窓', mq, base);
       await quest.screenshot({ path: join(OUT, 'quest_audio.png') });
+      await quest.click('#ycAudio .yc-sheet-close');
+      await quest.waitForTimeout(500);
+      const qPlain = (await quest.evaluate(MEASURE)).ratio;
+      judge('Quest のまね マイクの窓', mq, qPlain, qPlain);
     } catch (err) {
       check('Quest のまね', false, String(err?.message ?? err));
     } finally {
