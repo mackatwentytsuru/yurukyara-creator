@@ -660,7 +660,7 @@ def _texts(items):
                 label = PAIR_LABEL.get(key[0], LABEL.get(p, p)) if p.endswith(("_R", "_L")) else LABEL.get(p, p)
                 txt.append(f"{label}の色({change})")
             out.append({"kind": kind, "parts": parts, "text": "・".join(txt),
-                        "brief": "色を前の回に戻す: " + "、".join(briefs)})
+                        "brief": "色を前の回に戻す(下の「前の回の絵の部品」の表の hex にする。次の数字は部品の色の平均): " + "、".join(briefs)})
         elif kind == "added":
             out.append({"kind": kind, "parts": parts, "text": f"{names}が増えた",
                         "brief": f"増えた部品を外す(前の回に無かった): {', '.join(parts)}"})
