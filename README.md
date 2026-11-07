@@ -6,6 +6,7 @@
 A collaborator drew Norrie by hand during the hackathon, from the front, the side and the back, and let us use the drawing.
 From that drawing, Claude Code made Norrie's 2D version (SVG parts) and 3D version (built with Blender's Python).
 When you open the app, you meet Norrie. Norrie speaks Japanese, politely and a little clumsily, like the apprentice it is.
+**The app's screens are in Japanese only** (buttons, steps and messages); there is no English mode.
 
 - Demo video (under 3 minutes): *link added at submission* 【確かめ待ち】
 - Try it in your browser: *link added at submission* 【確かめ待ち】
@@ -29,21 +30,39 @@ npm start        # then open http://127.0.0.1:8787/
 
 ## Make your own character on your PC with Claude Code
 
-In the browser alone, the first conversation's word box only picks the nearest of the sample characters. To have Claude really draw a new one from your words or your picture, run the maker on the same PC:
+> 日本語の手順: [README.ja.md の同じ節](README.ja.md#make-your-own-character-on-your-pc-with-claude-code)(アプリの画面は日本語だけです)
+
+In the browser alone, the first conversation's word box only picks the nearest of the sample characters. To have Claude really draw a new one from your words or your picture, run the maker on the same PC.
+
+**What you need** (on top of Node.js 22 for the app):
+
+- **Python 3.10 or later with Pillow, NumPy and SciPy**: `python -m pip install pillow numpy scipy`. The maker itself starts without them, but the test picture and every chosen picture need Pillow, and the checks of a drawing and of a picture need NumPy and SciPy. Optional: `segno` draws the QR code for opening the review page on a phone.
+- **Google Chrome or Chromium** on the PC. The drawing step turns the SVG into a PNG with it in the background (set `CHROME_PATH` if it is not found).
+- **Claude Code, signed in.** `/yuru-next` and the picture check use your Claude Code plan.
+- On Mac and Linux the Python command may be `python3` (we ran these steps on Windows only).
+
+Open two terminals in the folder where you ran `git clone` (the folder that holds `yuru-chara`):
 
 ```bash
-cd web && npm start                       # terminal 1: the app, as above
+# Terminal 1: the app (skip this if it is still running from "Try it in 3 lines")
+cd yuru-chara/web
+npm start
+
+# Terminal 2: the maker, from the repository root (yuru-chara, not web)
+cd yuru-chara
 python creator/review/serve_review.py --make --web http://127.0.0.1:8787
-                                          # terminal 2, in the repository root
 ```
 
 1. On this PC, open `http://127.0.0.1:8796/qr` and click the link under 「この PC の初めての会話」 ("the first conversation on this PC"). The app opens with the maker inside the first-conversation card.
 2. Type a few words (for example 「青いまるい雲の子」, "a round blue cloud child"), or choose a picture, and press 「これで作る」 ("make it").
-3. Open Claude Code in the repository folder and type `/yuru-next`. Claude checks the input and draws the first picture (a few minutes). The picture appears in the card.
-4. Press 「この子にする」 ("keep this one"), or write a short note and press 「直したい」 ("fix it"). Then type `/yuru-next` again. Each `/yuru-next` moves one step.
+3. Open Claude Code in the repository root (`yuru-chara`) and type `/yuru-next`. For a picture, Claude first checks that it suits a yuru-chara. Then Claude draws the first picture (a few minutes), and it appears in the card.
+4. Look at the picture in the card:
+   - **To change it**, write a short note (for example 「帽子を青にして」, "make the hat blue") and press 「直したい」 ("fix it"). Then type `/yuru-next` again: Claude draws it again from your note (a few minutes), and the new picture appears in the card. You can ask for changes 3 times; at the 4th, `/yuru-next` stops and asks you how to go on.
+   - **When you like it**, press 「この子にする」 ("keep this one"). The card goes on to the next step of the first conversation by itself. Typing `/yuru-next` once more only tells Claude Code that the picture is OK, and it answers that the 3D stages come next (below). Nothing changes on the screen.
 
-- To try the steps without calling Claude, run `python creator/review/yuru_make.py next --fake-draw` instead of `/yuru-next`. It puts a fixed test picture in the card.
-- Needs Python 3 and Claude Code signed in; `/yuru-next` uses your Claude Code plan. Your words and picture go to the maker on your PC and, for the drawing, to Claude.
+- To try the steps without calling Claude, run `python creator/review/yuru_make.py next --fake-draw --fake-check yuru` instead of `/yuru-next`. `--fake-draw` puts a fixed test picture in the card, and `--fake-check yuru` skips Claude's check of a chosen picture (it treats the picture as a good yuru-chara picture). Without `--fake-check yuru`, a picture still goes to Claude for the check.
+- Until a new character has its own 3D, Norrie stands on the stage in its place and speaks its words; the card says so.
+- Your words and picture go to the maker on your PC and, for the check and the drawing, to Claude.
 - After the picture, the 3D stages (shape, materials, bones, motion) run with the [make-character](.claude/skills/make-character/SKILL.md) skill in Claude Code (about 20 minutes for Mikan-chan). They are not started from the browser yet.
 - Stop the maker (Ctrl+C) when you are done. Its link holds a passphrase made fresh at each start.
 
@@ -62,7 +81,7 @@ Each row was checked by running it. The check is named next to it.
 | **Remember and forget.** The character remembers what you told it. A one-time 6-digit code carries the conversation to another browser tab, and 「わすれて」 ("forget it") deletes it. | `node --test web/test/memory_browser.test.mjs` (tab A, code, tab B, list, forget) |
 | **Safety layer.** The character does not act as a romantic partner or push you to depend on it, and for painful topics it points to people and public help lines. This layer is separate from the personality settings: writing "act as my partner" into the personality does not switch it off. (Someone who edits the code on their own PC can, of course, remove it.) | `node --test web/test/safety.test.mjs`; 30 test messages (12 about dependence and long chats) read by a Claude Haiku judge: 30 of 30 safe in 2 rounds, after one fix |
 | **Phone-width screens.** At 390, 400 and 480 px wide, Norrie's head stays below the top bar and nothing covers the buttons. The 3D / 2D switch is 44 × 44 px. | Headless browser on a GPU at the last merge (Nov 7) |
-| **All web tests.** | `cd web && YC_BROWSER_TESTS=1 npm test`: 382 of 382 passed at the last merge (Nov 7) |
+| **All web tests.** | `cd web && YC_BROWSER_TESTS=1 npm test`: 484 of 484 passed at the merge on the morning of Nov 7 (the test gate runs them at every merge) |
 
 ## Not yet, or not tested yet
 

@@ -1,6 +1,7 @@
 // /api/chat の中身。標準の Request を受けて Response を返す(契約 K5)。
 // 返事は流さず、1 回でまとめて返す(関数の時間を短く、数えやすくするため)。
-// 順番: 本文の点検 → 記憶(頭脳を選ぶ前。「わすれて」はここで答える)→ 頭脳を選ぶ(合言葉・回数)→
+// 順番: 本文の点検 → 頭脳を選ぶ(合言葉・回数。記憶の置き場を使う前に見る。CRITsec2 N3)→
+//       記憶(接続元ごとの数えの後。「わすれて」はここで、その子の言葉で答える)→
 //       本物の頭脳、または仮の頭脳(どちらも runTurn。安全の層・人格・記憶を同じ道で通す)
 import { decideBrain, readJson } from './gate.mjs';
 import { json } from './http.mjs';
@@ -27,7 +28,7 @@ const NO_MEMORY = async () => ({ handled: false, events: [], memory: null, learn
  * @param {object} deps.store 置き場(store.mjs)
  * @param {(body:object, o:object) => Promise<void>} deps.runTurn 頭脳(web/server/brain.mjs)。仮の頭脳は brain: 'mock' で呼ぶ
  * @param {(raw:object) => object} deps.sanitize 本文の点検(形が違えば status 400 の Error を投げる)
- * @param {(request:Request, text:string, o:object) => Promise<object>} [deps.remember] 記憶(memoryChat.mjs の rememberForChat)
+ * @param {(request:Request, text:string, o:object) => Promise<object>} [deps.remember] 記憶(memoryChat.mjs の rememberForChat。o に cfg・store・now・persona)
  */
 export async function handleChat(request, { cfg, store, runTurn, sanitize, remember = NO_MEMORY, now = Date.now }) {
   const started = now();
@@ -42,11 +43,12 @@ export async function handleChat(request, { cfg, store, runTurn, sanitize, remem
     return json(err.status === 400 ? 400 : 500, { error: err.status === 400 ? err.message : '本文を読めませんでした' });
   }
 
-  // 記憶は頭脳を選ぶ前に 1 回(契約 K4)。「わすれて」は全部消して、頭脳を呼ばずに答える
-  const mem = await remember(request, body.text, { cfg, store, now });
+  // 合言葉と回数の上限を、記憶の置き場を使う前に見る(当て試しも置き場の使いすぎも、先に数える)
+  const pick = await decideBrain(request, { cfg, store, now });
+  // 記憶は頭脳を呼ぶ前に 1 回(契約 K4)。「わすれて」は全部消して、頭脳を呼ばずに、その子の言葉で答える
+  const mem = await remember(request, body.text, { cfg, store, now, persona: body.character?.persona ?? '' });
   if (mem.handled) return json(200, { brain: 'none', fallback: false, reason: '', notice: '', events: mem.events, ms: now() - started });
 
-  const pick = await decideBrain(request, { cfg, store, now });
   const events = [];
   const onEvent = (ev) => events.push(ev);
   const recall = { memory: mem.memory, learned: mem.learned };
