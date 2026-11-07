@@ -14,15 +14,12 @@ export const CAMERA_LABEL_ON = 'カメラ オン';
 export const CAMERA_YES = 'カメラを つかう';
 export const CAMERA_NO = 'やめる';
 export const CAMERA_STARTING = 'カメラを じゅんびしています…';
-export const CAMERA_BACK = 'うしろの カメラを つかう';
 export const CAMERA_TITLE_OFF = 'カメラを つかう(いまは きっています)';
 export const CAMERA_TITLE_ON = 'カメラを きる(いまは つかっています)';
 /** 下の注意書き(絵を送るカメラが入っている間) */
 export const CAMERA_PRIVACY = 'カメラの映像で、この端末の中で人の位置を調べます。話しかけた時だけ、その時の絵を 1 枚、答えを作るために Claude に送ります(保存しません)。';
 /** 下の注意書き(うしろのカメラ。顔の向きは調べない) */
 export const CAMERA_PRIVACY_BACK = 'うしろのカメラを使っています。話しかけた時だけ、その時の絵を 1 枚、答えを作るために Claude に送ります(保存しません)。';
-/** 上の札の先頭に出す印(赤い点の札) */
-export const CAMERA_MARK = 'カメラ オン';
 
 /**
  * カメラの切り替えを出すか。この端末のカメラを、使う人が選んで使う入口の時だけ出す。
@@ -45,7 +42,7 @@ export function cameraSwitchPlan({ headset = false, led = false, autostart = fal
  * @param {{secure?: boolean, mediaDevices?: object|null}} [env]
  */
 export function cameraFailureText(err, { secure = true, mediaDevices = {} } = {}) {
-  if (!secure) return 'カメラを つかうには、https の ページで ひらいてね。もじと こえの おはなしは このまま できます';
+  if (!secure) return 'カメラを つかうには、https の ページで ひらいてね。もじの おはなしは このまま できます'; // 声も https が要るので、文字だけを言う
   if (!mediaDevices?.getUserMedia) return 'この ブラウザでは カメラを つかえません。もじの おはなしは このまま できます';
   const name = String(err?.name ?? '');
   if (name === 'NotAllowedError' || name === 'SecurityError') return 'カメラを つかえませんでした。ブラウザで カメラを「ゆるす」に してから、もう いちど おしてね';
