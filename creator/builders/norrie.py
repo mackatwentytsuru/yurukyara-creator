@@ -7,7 +7,9 @@
 しっぽは P.tube(正面と横と後ろの 3 枚で 3D の中心線)。
 輪郭は P.outline の殻(黒・背面を描かない)。毛の殻は使わない(平らな塗り)。
 色は元の絵の画素の色。材質は「地の色 A_SCALE 倍 + 発光 E_SCALE 倍」で、光の向きによる明暗を浅くする(影の側も絵の色に近い)。
-使い方: blender -b -P norrie.py -- <出力.blend> work=<作業フォルダ>"""
+使い方: blender -b -P norrie.py -- <出力.blend> work=<作業フォルダ>
+案 C(既定。NORRIE_CUTE=0 で前の形): 組んだ後に頭を首の骨のまわりに大きく、胴を縦に短くする。骨の位置が変わるので、
+骨と動きは作業フォルダに書く rig_spec.json で b07 に渡す(写しは norrie_rig_c.json。creator/specs/norrie_built.json は前の骨)。"""
 import json
 import math
 import os
@@ -168,6 +170,53 @@ STRIPE_W, STRIPE_ROWS, STRIPE_SEG = 0.060, 21, 80
 CORE_HALF_U = 0.40          # 21 列のうち真ん中の 9 列(0.026 m)
 CORE_Z = (0.756, 0.208)
 CORE_TIP = 0.14
+
+# ==== 案 C「思い切ってかわいく」(2026-11-07): 赤ちゃんらしい頭身 ====
+# 絵の色・仮面の形・ピンクの鼻・蝶ネクタイ・しっぽ・背中の筋はそのまま。頭を首の骨のまわりに一様に大きく、胴を縦に短く(全高はそのまま)、
+# 目を絵の直径の 1.6 倍(頭の幅に対して)にして少し下・仮面の先寄りへ、目の光(大と小)、ほお、ほおのふくらみ、短い鼻づら、細い前歯、
+# 丸いおなか、少し大きい手袋と耳、太い輪郭。NORRIE_CUTE=0 で前の形に戻る。
+CUTE = os.environ.get("NORRIE_CUTE", "1") == "1"
+HEAD_K = float(os.environ.get("NORRIE_HEAD_K", 1.12)) if CUTE else 1.0     # 頭の大きさ(首の骨のまわりに一様に)
+TOP_Z = float(os.environ.get("NORRIE_TOP_Z", 0.9788))      # 耳の先の高さ(殻なし)。前のノリーと同じ(全高 1.0 m 級)
+HEAD_PIV = Vector((0.0, -0.17, 0.60))                       # 頭の骨(頭を大きくする中心)
+OL_SHELL = float(os.environ.get("NORRIE_OL", 0.0095)) if CUTE else OL      # 体・腕・足・しっぽの輪郭の殻(絵の太い線に近づける)
+OL_HEAD = float(os.environ.get("NORRIE_OL_HEAD", 0.011)) if CUTE else OL   # 頭と耳の殻(大きくした後の厚み)
+HAND_E = (0.9, 1.0) if CUTE else (0.8, 1.0)                 # 手袋の丸さ(縦の指数。1 で楕円体)
+CATCH = [(-0.36, 0.40, 0.30), (0.34, -0.36, 0.13)]          # 目の光: (横, 縦, 目の横の半径に対する半径)。見る人の左上に大、右下に小(両目で同じ向き)
+CATCH_T, CATCH_LIFT = 0.0006, 0.0003                        # 光の板の厚みの半分と、目の面からの持ち上げ(m)
+BLUSH = [((499.0, 386.0), (21.0, 14.0)), ((638.0, 386.0), (21.0, 14.0))]     # ほお(仮面の下の左右、鼻づらの横)
+BLUSH_RGB = (244, 192, 198)
+BOW_PY = 508.0 if CUTE else 499.0                          # 蝶ネクタイの高さ(絵の画素)。頭が大きいので 9 px 下げ、うなずき・おじぎで、あごと重ならない
+TOOTH_K = 0.62 if CUTE else 1.0                             # 前歯の幅の倍率(真ん中の線のまわりに細く)
+TOOTH_ROWS_BASE = list(TOOTH_ROWS) + list(TOOTH_EXT_ROWS)    # 前歯の後ろの黒い段は元の幅のまま(横から透けない)
+if CUTE:
+    # 頭: てっぺんを少し丸く(上の 5 行を 2〜4 px 広く。低くすると検査 ④ でてっぺんが抜けた)、ほおをふっくら(下の行の半幅を広げ、いちばん下を丸く)、鼻づらを短く(前の端を 12〜18 px 後ろへ)
+    HEAD = [(80, 6, 395, 425), (86, 64, 340, 458), (100, 112, 292, 478), (130, 153, 246, 528), (160, 165, 226, 547),
+            (190, 182, 215, 563), (220, 196, 205, 570), (250, 208, 184, 575), (280, 217, 166, 576), (310, 220, 168, 570),
+            (340, 214, 174, 562), (370, 194, 184, 548), (400, 166, 204, 526), (425, 132, 234, 504), (445, 102, 274, 482),
+            (461, 50, 338, 446)]
+    # 目の行は前を平らに寄せて目を前へ向け、ほおの行(330〜412)は p を上げてふくらませる
+    FACE_SHAPE = [(150, 2.0, 0), (185, 2.0, 0), (204, 1.6, 18), (211, 1.5, 22), (222, 1.38, 40), (240, 1.2, 70), (300, 1.16, 72),
+                  (330, 1.3, 58), (350, 1.32, 28), (365, 1.34, 5), (380, 1.45, 0), (400, 1.65, 0), (412, 1.95, 0), (425, 2.5, 0),
+                  (440, 3.0, 0), (452, 2.6, 0), (461, 2.0, 0)]
+    # おなかを丸く(下のおなかの前を 4〜12 px 前へ、半幅を 2〜6 px 広く。腕の近く(py 740 より上)は変えない)
+    BODY = [(424, 108, 352, 488), (450, 128, 348, 565), (480, 148, 342, 598), (520, 152, 338, 642), (560, 146, 338, 676),
+            (600, 144, 342, 706), (640, 150, 352, 730), (680, 165, 372, 750), (720, 186, 394, 764), (760, 194, 404, 774),
+            (800, 204, 405, 778), (840, 220, 400, 778), (880, 230, 396, 773), (910, 236, 392, 772), (940, 235, 390, 765),
+            (970, 223, 392, 745), (1000, 215, 399, 712), (1030, 195, 392, 665), (1055, 160, 388, 620), (1068, 110, 395, 590)]
+    # 耳を幅だけ 1.12 倍(付け根の真ん中のまわりに。高さは絵のまま: 高くすると全高を保つために胴を縮めすぎ、頭のてっぺんが耳の先より下がって検査 ④ の抜けになった)
+    _ecx, _ecy, _ez = 461.5, 487.5, 175.0
+    EAR_ROWS = [(py, _ecx + (xl - _ecx) * 1.12, _ecx + (xr - _ecx) * 1.12, _ecy + (yf - _ecy) * 1.12,
+                 _ecy + (yb - _ecy) * 1.12) for py, xl, xr, yf, yb in EAR_ROWS]
+    HAND_R = (0.037, 0.033, 0.063)
+    # 肩を丸く太く(袖の付け根の半径を太らせる)。頭を大きく胴を短くすると、あごの下と肩の間に、絵に無いくぼみができた(検査 ④ の抜け)
+    ARM_R = [float(os.environ.get("NORRIE_SHOULDER_R", 0.066)), 0.052, 0.040, 0.037, 0.032]
+    # 目: 絵の直径の 1.6 倍。中心は 7 px 下・内へ 1 px(仮面の先に寄せる)。少し前へ出す
+    EYE_C = (520.0, 219.0), (617.0, 219.0)
+    EYE_R = (15.9 * 1.6, 17.4 * 1.6)
+    EYE_BULGE = float(os.environ.get("EYE_BULGE", 0.0050))
+    TOOTH_ROWS = [(py, CX + (a - CX) * TOOTH_K, CX + (b - CX) * TOOTH_K) for py, a, b in TOOTH_ROWS]
+    TOOTH_EXT_ROWS = [(py, CX + (a - CX) * TOOTH_K, CX + (b - CX) * TOOTH_K) for py, a, b in TOOTH_EXT_ROWS]
 
 
 def smooth_path(pts, radii, k=4):
@@ -624,7 +673,7 @@ def tooth_in_hole(surf, mats):
     def lip_edge(py, px, x):
         yc = surf(0.0, Z(py))
         return yc - TOOTH_FRONT - LIP_EDGE_T[0], yc - TOOTH_FRONT + LIP_EDGE_T[1]
-    behind_rows = [(py, a + 0.4, b - 0.4) for py, a, b in rows]
+    behind_rows = [(py, a + 0.4, b - 0.4) for py, a, b in TOOTH_ROWS_BASE]
     tooth = block_rows("Tooth", rows, tooth_edge, mats["tooth"], ncols=8)
     gum = block_rows("Gum", GUM_ROWS, gum_edge, mats["mouth"], ncols=6)
     # 前歯の後ろの段と下の唇の縁は頭に合わせる(ほとんどが前歯と頭の中なので、別の部品にすると検査 ③ の「飲まれている」に落ちる)
@@ -708,11 +757,16 @@ def build_face(surf_head, mats):
         # 前歯 1 本: 上の唇から下がる白い塊(正面は絵の形、横からは口の前に白く見える)
         tooth = slab("Tooth", TOOTH_ROWS, surf_head, TOOTH_AHEAD, TOOTH_IN, mats["white"], ncols=8, ahead_tip=TOOTH_AHEAD_TIP)
     parts["flat"] = [mask_line, mask, nose, arc, phil]
+    # 案 C: ほお(やわらかい桃色の楕円を仮面の上、鼻づらの横に。後ろの板なし)
+    parts["cheeks"] = []
+    if CUTE:
+        for i, (c, r) in enumerate(BLUSH):
+            parts["cheeks"].append(plate("cheek%d" % i, ellipse_rows(c, r, 16), surf_head, 0.0031, 0, mats["blush"], ncols=12))
     parts["Mouth"] = mouth
     parts["Tooth"] = tooth
     # 目: 黒い玉(頭に半分埋めた楕円体)。向きは頭の面の横向き(水平の向き)に、上へ EYE_TILT 度。
     # 顔の前半分を細くしたので、目の所の面は横を向く(約 30 度)。正面から見た幅が細らないよう、横の半径を 1/cos だけ広げる
-    eyes_parts, eye_ctr = [], []
+    eyes_parts, eye_ctr, catch_parts, catch_ctr = [], [], [], []
     up = Vector((0.0, 0.0, 1.0))
     al = math.radians(EYE_TILT)
     for ci, c in enumerate(EYE_C):
@@ -755,18 +809,41 @@ def build_face(surf_head, mats):
               "protrude_mm", round((surf_head(tip.x, tip.z) - tip.y) * 1000, 1))
         eyes_parts.append(P.superquadric("eye%d" % ci, (rx, EYE_BULGE, rz), (1.0, 1.0), tuple(ctr), mat=mats["black"], seg=(24, 14),
                                          rot_deg=tuple(math.degrees(a) for a in rot.to_euler("XYZ"))))
+        if CUTE:
+            # 目の光(白、発光): 玉の前の面の点に、その点の面の向きで置いた薄い円板。目の物に合わせるので、目の骨と一緒に動く
+            for (u, v, kr) in CATCH:
+                lp = Vector((u * rx, -EYE_BULGE * max(1.0 - u * u - v * v, 0.02) ** 0.5, v * rz))
+                nl = Vector((lp.x / rx ** 2, lp.y / EYE_BULGE ** 2, lp.z / rz ** 2)).normalized()
+                nw = (rot @ nl).normalized()
+                cpos = ctr + rot @ lp + nw * CATCH_LIFT
+                eul = nw.to_track_quat("Y", "Z").to_euler()
+                r = kr * rx
+                catch_parts.append(P.superquadric("catch%d_%d" % (ci, len(catch_parts)), (r, CATCH_T, r * rz / rx), (1.0, 1.0), tuple(cpos),
+                                                  mat=mats["tooth"], seg=(12, 6), rot_deg=tuple(math.degrees(a) for a in eul)))
+                catch_ctr.append(cpos)
     parts["eye_ctr"] = eye_ctr
-    eyes = P.join(eyes_parts, "Eyes")
+    eyes = P.join(eyes_parts + catch_parts, "Eyes")
     gL = eyes.vertex_groups.new(name="eye_L")
     gR = eyes.vertex_groups.new(name="eye_R")
     for v in eyes.data.vertices:
         (gL if v.co.x > 0 else gR).add([v.index], 1.0, "REPLACE")
     zc = Z(EYE_C[0][1])
+    # 光の頂点(白い材質の面の頂点)。まばたきでは、光の板の真ん中へ縮めて消す(目と同じく zc へ寄せる)
+    white = {i for i, m in enumerate(eyes.data.materials) if m is not None and m.name == mats["tooth"].name}
+    cv = set()
+    for pg in eyes.data.polygons:
+        if pg.material_index in white:
+            cv.update(pg.vertices)
     eyes.shape_key_add(name="Basis")
     bl = eyes.shape_key_add(name="eye_blink")
     for i, v in enumerate(eyes.data.vertices):
-        bl.data[i].co = Vector((v.co.x, v.co.y, zc + (v.co.z - zc) * 0.08))
+        if i in cv:
+            c = min(catch_ctr, key=lambda q: (q - v.co).length)
+            bl.data[i].co = Vector((c.x, c.y, zc + (c.z - zc) * 0.08))
+        else:
+            bl.data[i].co = Vector((v.co.x, v.co.y, zc + (v.co.z - zc) * 0.08))
     bl.value = 0.0
+    print("BUILD eyes catch_verts", len(cv), "verts", len(eyes.data.vertices))
     parts["Eyes"] = eyes
     return parts
 
@@ -818,6 +895,7 @@ def main():
     mats = dict(
         brown=flat_mat("Brown", BROWN), cream=flat_mat("Cream", CREAM), pink=flat_mat("Pink", PINK), green=flat_mat("Green", GREEN),
         white=flat_mat("Glove", WHITE), stripe=flat_mat("Stripe", STRIPE), black=flat_mat("Ink", BLACK), mouth=flat_mat("MouthIn", BLACK),
+        blush=flat_mat("Blush", BLUSH_RGB),
     )
     # 前歯は光の向きによらず絵の白のまま(地の色 0・発光 1)。横から見ると前歯の横の壁は下向きで、ほかと同じ材質だと灰色になり、
     # 判定役に「白い前歯が小さい」と言われた(白く写る所が上半分だけだった)
@@ -863,7 +941,7 @@ def main():
         cutter = hole_cutter(surf_head, mats["mouth"])
         # 殻は穴をあける前の頭から(切らない)。穴をあけた頭から作ると、切り口の細い三角の法線が乱れて口の角から黒い棘が 25 mm 出た。
         # 殻を口の形に切り抜くと、横から前歯が輪郭の外の背景に乗って見えにくかった。正面からは殻の手前の面は裏向きで描かれない
-        ol_parts = [with_outline(head, OL, mats)] + [with_outline(e, OL, mats) for e in ears]
+        ol_parts = [with_outline(head, OL_HEAD / HEAD_K, mats)] + [with_outline(e, OL_HEAD / HEAD_K, mats) for e in ears]
         cut_hole(head, cutter, sheet=False)
         for o in face["flat"][:3]:
             cut_hole(o, cutter, sheet=True)
@@ -901,7 +979,7 @@ def main():
         tube = P.tube(nm + "_sleeve", sp, sr, mat=mats["brown"], n=22)
         hd = Vector((sign * HAND_DIR[0], HAND_DIR[1], HAND_DIR[2])).normalized()
         heul = hd.to_track_quat("Z", "Y").to_euler()
-        hand = P.superquadric(nm + "_hand", HAND_R, (0.8, 1.0), (sign * HAND_C[0], HAND_C[1], HAND_C[2]), mat=mats["white"], seg=(24, 14),
+        hand = P.superquadric(nm + "_hand", HAND_R, HAND_E, (sign * HAND_C[0], HAND_C[1], HAND_C[2]), mat=mats["white"], seg=(24, 14),
                               rot_deg=tuple(math.degrees(a) for a in heul))
         d = (Vector(pts[-1]) - Vector(pts[-2])).normalized() + hd
         eul = d.normalized().to_track_quat("Z", "Y").to_euler()
@@ -916,7 +994,7 @@ def main():
         objs_shell.append(arm)
 
     # ---- 蝶ネクタイ(緑。首の前。横の絵で少し前へ出る) ----
-    zb = Z(499)
+    zb = Z(BOW_PY)
     yb = surf_torso(0.0, zb) - 0.004
     bows = []
     for sign in (-1, 1):
@@ -930,17 +1008,45 @@ def main():
     group(knot, "body")
     objs_shell.append(bow)
 
+    # ---- 案 C: 頭を首の骨のまわりに一様に大きく、胴(と腕・足・蝶ネクタイ)を縦に短く。全高(耳の先)はそのまま。しっぽは変えない ----
+    # 筋・輪郭の殻(頭の殻を除く)・骨の位置は、このあと形を変えた物から作る
+    head_objs = [head_all] + ([ol_head_all] if ol_head_all is not None else []) + face["flat"] + face["cheeks"] + \
+        [face["Mouth"], face["Tooth"], face["Eyes"]] + ([face["Gum"]] if face["Gum"] is not None else [])
+    top = max((head_all.matrix_world @ v.co).z for v in head_all.data.vertices)
+    body_kz = (TOP_Z - (top - HEAD_PIV.z) * HEAD_K) / HEAD_PIV.z if CUTE else 1.0
+    piv2 = Vector((HEAD_PIV.x, HEAD_PIV.y, HEAD_PIV.z * body_kz))
+    m_head = Matrix.Translation(piv2) @ Matrix.Scale(HEAD_K, 4) @ Matrix.Translation(-HEAD_PIV)
+    m_body = Matrix.Diagonal((1.0, 1.0, body_kz, 1.0))
+    hn = {o.name for o in head_objs}
+    if CUTE:
+        for o in list(bpy.context.scene.objects):
+            if o.type != "MESH" or o.name == tail.name:
+                continue
+            o.data.transform((m_head if o.name in hn else m_body) @ o.matrix_world, shape_keys=True)
+            o.matrix_world = Matrix.Identity(4)
+            o.data.update()
+    print("BUILD cute head_k", HEAD_K, "body_kz", round(body_kz, 4), "ratio", round(HEAD_K / body_kz, 3), "top_before", round(top, 4),
+          "head_pivot", [round(c, 4) for c in piv2])
+
+    def xh(p):
+        return m_head @ Vector(p)
+
+    def xb(p):
+        return m_body @ Vector(p)
+
     # ---- 背中の筋: 1 本の帯(クリーム)の真ん中の列を濃い色にする。2 本に分けると首で濃い芯が途切れた(判定 ④) ----
     surfaces = [head_all, torso]
-    st = W.wrap_band("stripe", surfaces, STRIPE_PATH, STRIPE_W, thick=0.003, clearance=0.0012, mat=mats["cream"],
+    stripe_path = [(STRIPE_PATH[0][0], xh((0, 0, STRIPE_PATH[0][1])).z), (STRIPE_PATH[1][0], xb((0, 0, STRIPE_PATH[1][1])).z)]
+    core_z = (xh((0, 0, CORE_Z[0])).z, xb((0, 0, CORE_Z[1])).z)
+    st = W.wrap_band("stripe", surfaces, stripe_path, STRIPE_W, thick=0.003, clearance=0.0012, mat=mats["cream"],
                      seg=STRIPE_SEG, rows=STRIPE_ROWS, taper=0.2, taper_min=0.05)
     st.data.materials.append(mats["stripe"])
     nv = STRIPE_ROWS + 1
-    z0, z1 = STRIPE_PATH[0][1], STRIPE_PATH[1][1]
+    z0, z1 = stripe_path[0][1], stripe_path[1][1]
     n_core = 0
     for k in range(STRIPE_SEG):
         zc = z0 + (z1 - z0) * (k + 0.5) / STRIPE_SEG
-        s = (CORE_Z[0] - zc) / (CORE_Z[0] - CORE_Z[1])
+        s = (core_z[0] - zc) / (core_z[0] - core_z[1])
         if not 0.0 < s < 1.0:
             continue
         f = min(min(s, 1.0 - s) / CORE_TIP, 1.0)
@@ -953,7 +1059,7 @@ def main():
                 n_core += 1
     print("BUILD stripe core faces", n_core)
     # 筋の上半分は頭の骨、下半分は胴の骨(首の高さで分ける)
-    z_neck = 0.63
+    z_neck = xh((0, 0, 0.63)).z
     gh = st.vertex_groups.new(name="head")
     gb = st.vertex_groups.new(name="body")
     for v in st.data.vertices:
@@ -964,6 +1070,9 @@ def main():
         group(o, "head")
     group(face["Mouth"], "head")
     group(face["Tooth"], "head")
+    for o in face["cheeks"]:
+        group(o, "head")
+        o["surface_only"] = True     # ほおは地の色の当て布と同じ扱い
     if face["Gum"] is not None:
         group(face["Gum"], "head")
     with_outline(face["Tooth"], OL_TOOTH, mats)        # 前歯の黒い縁(横から見た時に絵と同じ線が出る)
@@ -977,40 +1086,49 @@ def main():
 
     # ---- 輪郭の殻(黒)。目・口・鼻・筋・結び目・当て布には付けない ----
     for ob in objs_shell:
-        th = OL_SMALL if ob.name == "BowWings" else OL
+        th = OL_SMALL if ob.name == "BowWings" else OL_SHELL
         with_outline(ob, th, mats)
 
     # ---- 骨の位置(目の骨は玉の中心) ----
     eL = next(c for c in face["eye_ctr"] if c.x > 0)
     eR = next(c for c in face["eye_ctr"] if c.x < 0)
+    def r4(p):
+        return [round(p[0], 4), round(p[1], 4), round(p[2], 4)]
+    eL, eR = xh(eL), xh(eR)
     rig = {
         "root": [0, 0, 0],
-        "body": [0, 0.0, 0.36],
-        "head": [0, -0.17, 0.60],
-        "arm_L": list(arms["arm_L"]["pivot"]),
-        "arm_R": list(arms["arm_R"]["pivot"]),
-        "leg_L": [0.152, -0.06, 0.09],
-        "leg_R": [-0.152, -0.06, 0.09],
-        "eye_L": [round(eL.x, 4), round(eL.y, 4), round(eL.z, 4)],
-        "eye_R": [round(eR.x, 4), round(eR.y, 4), round(eR.z, 4)],
+        "body": r4(xb((0, 0.0, 0.36))),
+        "head": r4(piv2),
+        "arm_L": r4(xb(arms["arm_L"]["pivot"])),
+        "arm_R": r4(xb(arms["arm_R"]["pivot"])),
+        "leg_L": r4(xb((0.152, -0.06, 0.09))),
+        "leg_R": r4(xb((-0.152, -0.06, 0.09))),
+        "eye_L": r4(eL),
+        "eye_R": r4(eR),
     }
     # ---- 色と横顔の点検に使う点(作業フォルダへ。8 方向の写真のどの画素を測るか) ----
     def on(surf, px, py, off):
         hit, nor = surf.n(X(px), Z(py))
         p = hit + nor.normalized() * off
-        return [round(p.x, 4), round(p.y, 4), round(p.z, 4)]
+        return r4(xh(p) if surf is surf_head else xb(p))
     samples = {
         "chin": [on(surf_head, 568.5, 428, 0.0022), on(surf_head, 520, 418, 0.0022), on(surf_head, 617, 418, 0.0022)],
         "belly": [on(surf_torso, 568.5, 650, 0.0032), on(surf_torso, 568.5, 760, 0.0032), on(surf_torso, 520, 900, 0.0032)],
         "tail": [list(TAIL[i]) for i in (6, 8, 10, 12)],
         "nose_tip": [on(surf_head, 568.5, 300, 0.003)],
-        "tooth": [[0.0, round(surf_head(0.0, Z(346)) + (tooth_mid_y(346)), 4), round(Z(346), 4)]],
+        "tooth": [r4(xh((0.0, surf_head(0.0, Z(346)) + tooth_mid_y(346), Z(346))))],
         "eye_L": [rig["eye_L"]], "eye_R": [rig["eye_R"]],
     }
     json.dump(samples, open(WORK + "/samples_at.json", "w"), indent=1)
     tri = {o.name: sum(len(p.vertices) - 2 for p in o.data.polygons) for o in bpy.context.scene.objects if o.type == "MESH"}
     print("BUILD tris", sum(tri.values()), json.dumps(sorted(tri.items(), key=lambda kv: -kv[1])[:8]))
     json.dump(rig, open(WORK + "/rig_at.json", "w"), indent=1)
+    # 骨の spec(b07 に渡す)。骨の位置は形を変えた後の物
+    parent = dict(root=None, body="root", head="body", arm_L="body", arm_R="body", leg_L="root", leg_R="root", eye_L="head", eye_R="head")
+    spec = {"id": "norrie", "height_m": 1.0, "bones": [{"name": k, "at": rig[k], "parent": parent[k]} for k in parent],
+            "roles": {k: k for k in ("root", "body", "head", "arm_L", "arm_R", "leg_L", "leg_R")},
+            "motion": {"only": ["idle", "talk", "nod", "bow", "wave"], "arm_amp": 0.45}}
+    json.dump(spec, open(WORK + "/rig_spec.json", "w"), indent=1)
     bpy.ops.wm.save_as_mainfile(filepath=out)
     print("BUILD norrie ok", json.dumps(rig))
 
