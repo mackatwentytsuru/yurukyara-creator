@@ -263,7 +263,7 @@ export function mountUpdate({ app, loc = globalThis.location } = {}) {
     report: () => report,
   };
 
-  // 開き直した後の 1 回だけの知らせ
+  // 開き直した後の 1 回だけの知らせ。開き直すと入口(ゲート)から始まるので、入口の札の中にも出し、入口を閉じた後に字幕の上へも出す
   const done = readSession(DONE_KEY);
   if (done) {
     writeSession(DONE_KEY, null);
@@ -275,7 +275,20 @@ export function mountUpdate({ app, loc = globalThis.location } = {}) {
       } catch {
         // 形が違えば、ふつうの知らせ
       }
-      note.show(kind === 'undo' ? `まえの はんに もどったよ(いまの はん ${r.ours})` : `アップデートが おわったよ(いまの はん ${r.ours})`, { ms: 12000 });
+      const text = kind === 'undo' ? `まえの はんに もどったよ(いまの はん ${r.ours})` : `アップデートが おわったよ(いまの はん ${r.ours})`;
+      const card = document.querySelector('.gate-card');
+      const html = document.documentElement;
+      if (card && html.classList.contains('gate-up')) {
+        card.append(el('p', { id: 'ycGateUpdate', class: 'yc-gate-update', role: 'status', text }));
+        const watch = new MutationObserver(() => {
+          if (html.classList.contains('gate-up')) return;
+          watch.disconnect();
+          note.show(text, { ms: 12000 });
+        });
+        watch.observe(html, { attributes: true, attributeFilter: ['class'] });
+      } else {
+        note.show(text, { ms: 12000 });
+      }
     });
   }
   return api;

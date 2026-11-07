@@ -613,5 +613,6 @@ html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - va
 .yc-note[hidden] { display: none; }
 .yc-note-action { font: inherit; font-size: 14px; min-height: 36px; padding: 4px 12px; border-radius: 999px; cursor: pointer; color: var(--ink); background: var(--lav); border: 0; pointer-events: auto; }
 .yc-note-action[hidden] { display: none; }
+.yc-gate-update { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 15px; line-height: 1.5; background: rgba(123, 224, 195, 0.14); border: 1px solid var(--mint); }
 html.tv-mode .yc-update-badge, html.tv-mode .yc-sheet, html.tv-mode .yc-note { display: none !important; }
 /* ---- BUX ここまで ---- */
