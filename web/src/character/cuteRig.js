@@ -49,6 +49,83 @@ function tailChain(bones) {
   return tails.sort((a, b) => depth(a) - depth(b));
 }
 
+/**
+ * しっぽの骨が無いのに、しっぽの部品(名前に tail。体の骨 1 本に付いた皮)があるキャラに、読み込みの時だけ骨を 1 本足す(B5G)。
+ * 根元 = 部品のうち体の骨にいちばん近い端の点。根元から遠い点ほど、新しい骨の重みを大きくする(根元は体に付いたまま、先がしなる)。
+ * 輪郭の殻(ol_tail など)も、同じ根元・同じ長さで重みを付ける(本体と殻が同じに動く)。足せなければ null。
+ * @returns {{bone: THREE.Bone, wagAxis: THREE.Vector3, liftAxis: THREE.Vector3, rest: THREE.Quaternion, len: number}|null}
+ */
+export function autoTail(scene, body) {
+  if (!body) return null;
+  const meshes = [];
+  scene.traverse((o) => {
+    if (o.isSkinnedMesh && /tail/i.test(o.name) && o.geometry?.attributes?.skinIndex) meshes.push(o);
+  });
+  if (!meshes.length) return null;
+  scene.updateMatrixWorld(true);
+  const bodyW = body.getWorldPosition(new THREE.Vector3());
+  // いちばん点の多い部品で、根元と先を決める
+  const main = meshes.reduce((a, b) => (b.geometry.attributes.position.count > a.geometry.attributes.position.count ? b : a));
+  const pos = main.geometry.attributes.position;
+  const p = new THREE.Vector3();
+  let root = null;
+  let rootD = Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos, i).applyMatrix4(main.matrixWorld);
+    const d = p.distanceTo(bodyW);
+    if (d < rootD) [rootD, root] = [d, p.clone()];
+  }
+  let tip = root.clone();
+  let len = 0;
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos, i).applyMatrix4(main.matrixWorld);
+    const d = p.distanceTo(root);
+    if (d > len) [len, tip] = [d, p.clone()];
+  }
+  if (!(len > 1e-3)) return null;
+  const bone = new THREE.Bone();
+  bone.name = 'tail_auto';
+  body.add(bone);
+  bone.position.copy(body.worldToLocal(root.clone()));
+  bone.updateMatrixWorld(true);
+  const inv = bone.matrixWorld.clone().invert();
+  const smooth = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+  for (const m of meshes) {
+    const sk = m.skeleton;
+    if (!sk.bones.includes(bone)) {
+      sk.bones.push(bone);
+      sk.boneInverses.push(inv.clone());
+      sk.boneMatrices = new Float32Array(sk.bones.length * 16);
+      if (sk.boneTexture) {
+        sk.boneTexture.dispose();
+        sk.boneTexture = null;
+      }
+    }
+    const ti = sk.bones.indexOf(bone);
+    const si = m.geometry.attributes.skinIndex;
+    const sw = m.geometry.attributes.skinWeight;
+    const mp = m.geometry.attributes.position;
+    for (let i = 0; i < mp.count; i++) {
+      // 今いちばん重い骨(体)と、しっぽの骨の 2 本にする
+      let bi = 0;
+      for (let k = 1; k < 4; k++) if (sw.getComponent(i, k) > sw.getComponent(i, bi)) bi = k;
+      const keep = si.getComponent(i, bi);
+      p.fromBufferAttribute(mp, i).applyMatrix4(m.matrixWorld);
+      const w = smooth((p.distanceTo(root) / len - 0.08) / 0.7);
+      si.setXYZW(i, keep, ti, 0, 0);
+      sw.setXYZW(i, 1 - w, w, 0, 0);
+    }
+    si.needsUpdate = true;
+    sw.needsUpdate = true;
+  }
+  // 振る向き: 先がキャラの横(±x)へ動く軸。持ち上げる向き: キャラの横の軸(x)
+  const dir = tip.clone().sub(root).normalize();
+  const toLocal = body.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const wagAxis = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(1, 0, 0)).normalize().applyQuaternion(toLocal);
+  const liftAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(toLocal);
+  return { bone, wagAxis, liftAxis, rest: bone.quaternion.clone(), len, meshes: meshes.map((m) => m.name) };
+}
+
 /** 骨の世界の行列 × 逆の行列(点を動かす行列)を、骨ごとに作る */
 function skinMatrices(mesh) {
   const sk = mesh.skeleton;
@@ -227,6 +304,8 @@ export class CuteRig {
     this.earL = findBone(bones, NAMES.earL);
     this.earR = findBone(bones, NAMES.earR);
     this.tail = tailChain(bones);
+    // しっぽの骨が無く、しっぽの部品がある子は、読み込みの時に骨を 1 本足す(根元から先へしなる)
+    this.tailAuto = this.tail.length ? null : autoTail(scene, this.body);
     const box = new THREE.Box3().setFromObject(scene);
     const sy = scene.getWorldScale(new THREE.Vector3()).y || 1;
     this.unit = (box.max.y - box.min.y) / sy || 1; // 背の高さ(骨の座標の長さ)
@@ -279,7 +358,7 @@ export class CuteRig {
       limitAngle(r.q, RAISE_MAX);
       if (a0 > 1e-6) r.off.multiplyScalar(angleOf(r.q) / a0); // 肩のずらし(clip の形の補い)も、同じ割合で小さく
     }
-    this.caps = { arms: Boolean(this.armL || this.armR), head: Boolean(this.head && this.head !== this.body), ears: Boolean(this.earL || this.earR), tail: this.tail.length > 0 };
+    this.caps = { arms: Boolean(this.armL || this.armR), head: Boolean(this.head && this.head !== this.body), ears: Boolean(this.earL || this.earR), tail: this.tail.length > 0 || Boolean(this.tailAuto) };
     this.limited = { L: 0, R: 0 }; // 腕の角度を縮めたコマの数(確かめ用)
     // 頬の部品(名前か材質の名前に cheek・blush)。てれる・うれしい時に赤みを強くする(材質を差しかえられても、その時の材質で数える)
     this.blushMeshes = [];
@@ -368,6 +447,13 @@ export class CuteRig {
     if (this.blushMeshes.length) this._blush(o.blush ?? 0);
     if (this.earL) this._rot(this.earL, -o.earL, 0, 0.3 * o.earL);
     if (this.earR) this._rot(this.earR, -o.earR, 0, -0.3 * o.earR);
+    // 足したしっぽの骨: ミキサーは触らないので、毎コマ休みの形から作る(振る 0.3・持ち上げ 0.2 ラジアンまで)
+    const ta = this.tailAuto;
+    if (ta) {
+      const wag = THREE.MathUtils.clamp(o.tailY, -0.3, 0.3);
+      const lift = THREE.MathUtils.clamp(o.tailX, -0.2, 0.2);
+      ta.bone.quaternion.copy(ta.rest).premultiply(_q.setFromAxisAngle(ta.wagAxis, wag)).premultiply(_q2.setFromAxisAngle(ta.liftAxis, -lift));
+    }
     const n = this.tail.length;
     this.tail.forEach((b, i) => {
       const k = (0.6 + (0.8 * i) / Math.max(1, n - 1)) / n;
