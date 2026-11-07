@@ -144,7 +144,7 @@ export class FirstRun {
       {
         who: 'guide',
         text: nori
-          ? `はじめまして! 執事見習いの${this.guideName}デス。きみだけのゆるキャラを生み出すお手伝い、ノリ、がんばりマス!`
+          ? `はじめまして! 執事見習いの${this.guideName}デス。きみだけのゆるキャラを生み出すお手伝い、ノリー、がんばりマス!`
           : `はじめまして。${this.guideName}だよ。きみだけのゆるキャラを、いっしょに生み出そう。`,
       },
       { who: 'guide', text: 'どんな子を生み出そうか?' },
@@ -411,7 +411,7 @@ export class FirstRun {
     this.character = main;
     await this._say(
       { who: 'note', text: `見本: ${main.name}(${main.note})` },
-      { who: 'guide', text: main.id === MAIN_CHARACTER.id ? 'じゃあ、ノリで続けマス。性格やあいさつを、ためしてみてくだサイ!' : `じゃあ、${main.name}で続けるね。` },
+      { who: 'guide', text: main.id === MAIN_CHARACTER.id ? 'じゃあ、ノリーで続けマス。性格やあいさつを、ためしてみてくだサイ!' : `じゃあ、${main.name}で続けるね。` },
     );
     const stay = await (this.d.showCharacter?.(main) ?? true);
     if (stay === false) {

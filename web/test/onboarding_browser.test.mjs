@@ -546,7 +546,7 @@ test('?character=<id> で開いた初めての訪問(幅 390): その子が案�
       await waitAct(page, 'words');
       const guideLines = await page.$$eval('.fr-line.guide .fr-text', (els) => els.map((e) => e.textContent));
       assert.match(guideLines[0], /^はじめまして。みかんちゃんだよ。/, `案内役の名乗り: ${guideLines[0]}`);
-      assert.ok(!guideLines.join('').includes('ノリ、'), '主役の口調で名乗らない');
+      assert.ok(!guideLines.join('').includes('ノリー、'), '主役の口調で名乗らない');
       assert.deepEqual(await page.$$eval('.fr-name', (els) => [...new Set(els.map((e) => e.textContent))]), ['みかんちゃん']);
       assert.equal(await page.evaluate(() => window.__fr.lead.id), 'mikan');
       await page.waitForTimeout(500);

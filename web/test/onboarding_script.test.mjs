@@ -135,6 +135,7 @@ test('絵の入口(見本の道): 人の絵なら「ゆるキャラにしてみ�
   assert.ok(!JSON.stringify(h.fr.snapshot()).includes('blob:'));
   await h.fr.act('use_guide');
   assert.equal(h.fr.character.id, MAIN.id, '使う人が選んだ時だけ主役で続ける');
+  assert.ok(h.texts('guide').includes('じゃあ、ノリーで続けマス。性格やあいさつを、ためしてみてくだサイ!'), '主役は自分のことも「ノリー」と呼ぶ');
   assert.equal(h.fr.character.sample, true);
   assert.ok(h.texts('note').some((t) => t.startsWith(`見本: ${MAIN.name}(協力者が手で描いた絵から`)), '主役も見本の子だと書く');
   assert.equal(h.fr.step, 4, '主役は 3 歩目の「この子はどうかな?」をとばして性格へ');
@@ -394,7 +395,7 @@ test('?character=<id> の子が案内役: 名乗り・「〜で続きを試す�
   const h = harness({ creator: c, guide: lead });
   await h.fr.start();
   assert.match(h.texts('guide')[0], /^はじめまして。みかんちゃんだよ。/);
-  assert.ok(!h.texts('guide').join('').includes('ノリ、'), '主役の口調で名乗らない');
+  assert.ok(!h.texts('guide').join('').includes('ノリー、'), '主役の口調で名乗らない');
   await h.fr.act('words', { text: '空を飛ぶペンギンの郵便屋さん' });
   assert.deepEqual(h.offered, ['use_guide', 'choose_sample', 'again']);
   assert.equal(h.offeredAll[0].label, 'みかんちゃんで続きを試す');

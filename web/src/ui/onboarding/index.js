@@ -26,7 +26,7 @@ import { openPersonaPanel } from '../persona/panel.js';
 import { composePersona, fixesOwnSpeech, loadSettings, normalize, ownSettings, ownSpeechFor, personalityOf, randomSettings, saveSettings } from '../persona/settings.js';
 import { MOCK_NOTICE_SHORT, styleLines } from '../persona/preview.js';
 import { streamChat } from '../../conversation/brainClient.js';
-// 主役で案内役(協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリ」と呼ぶ)。three を読まない小さな部品
+// 主役で案内役(協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリー」と呼ぶ)。three を読まない小さな部品
 import { MAIN_CHARACTER } from '../../character/defaults.js';
 // ?character= の id の形(英小文字・数字・_ の 32 字まで。main.js と同じ決まり。three を読まない小さな部品)
 import { isSpecId } from '../../character/urlSpec.js';
@@ -263,7 +263,7 @@ export function mountFirstRun({
   }
 
   /* ---------- 舞台(その場で入れ替える。D2・D4) ---------- */
-  let home = null; // 初めて入れ替える前の舞台 { character, id }(主役に戻す時、同じ物を戻す。見た目の切り替えの控えが合うまま)
+  let home = null; // 初めて入れ替える前の舞台 { character, id }(主役に戻す時、同じ物を戻す。舞台にいる間に見た目を替えたら、次に入れ替える前に控え直す)
 
   /** 舞台のキャラが読み終わるまで待つ(読み込みの途中に入れ替えると、2 体が並ぶ) */
   async function whenStageReady() {
@@ -310,6 +310,9 @@ export function mountFirstRun({
     if (!home) {
       home = { character: app.character, id: stageId() };
       rawPersona(home.id); // 主役の persona.md の文を覚えておく(戻した時に、人格の文を失わないように。S4 からは読み直せない)
+    } else if (stageId() === home.id) {
+      // 案内役が舞台にいる間に見た目(3D/2D)を替えていたら、その見た目を控え直す(前は最初の見た目に戻した。S5 の返事 w9)
+      home = { ...home, character: app.character };
     }
     let next;
     if (id === home.id) next = home.character;
@@ -332,7 +335,7 @@ export function mountFirstRun({
     } catch {
       // 声の高さを替えられなくても続ける
     }
-    root.classList.toggle('fr-guest', id !== home.id); // 見本の子がいる間は、見た目の切り替え(主役の控え)を隠す
+    root.classList.toggle('fr-guest', id !== home.id); // 見本の子がいる間の印(切り替えは main.js が舞台の子ごとに作り直すので、隠さない)
     return true;
   }
 

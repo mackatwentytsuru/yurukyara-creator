@@ -163,8 +163,7 @@ html.fr-open .gate, html.fr-after .gate { opacity: 0 !important; pointer-events:
 /* 初めての会話の間は「Claude の考え」を隠す(会話は札に出る)。スマホでは考えの欄が上の段のボタンに重なり、
    PC(1280×720)では札が考えの箱に重なっていた(CRITux 14) */
 html.fr-open .thought { display: none !important; }
-/* 見本の子が舞台にいる間は、見た目の切り替え(主役の 3D/2D の控え)を隠す。押すと主役に戻ってしまうため */
-html.fr-guest #lookSwitch { display: none !important; }
+/* 見本の子が舞台にいる間も、見た目の切り替え(#lookSwitch)は隠さない。main.js が舞台の子ごとに作り直し、片方の見た目だけの子では隠す */
 /* PC で札(右)が開いている間は、舞台の絵を札の左までにする(キャラは札の左の真ん中に立つ。幅の広い見本の右の端が札に隠れていた。
    CRITux2 低 13)。札の左の端 = 右から 16px + 札の幅 min(460px, 100% - 32px)、そこからさらに 16px 空ける。index.js の fitStage が付け外しする */
 @media (min-width: 720px) { html.fr-side #stage { width: calc(100% - 32px - min(460px, 100% - 32px)); } }
