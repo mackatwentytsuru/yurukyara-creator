@@ -45,6 +45,7 @@
     <p class="mk-drift" id="drift" role="status" hidden></p>
     <div class="mk-brow" id="browSlot" hidden></div>
     <button type="button" class="mk-btn primary" id="okBtn">この子にする</button>
+    <p class="mk-limit" id="limit" role="status" hidden>直しは 3 回までです。この子にするか、「やり直す(別の子にする)」を選んでね。</p>
     <form id="noteForm" class="mk-row" autocomplete="off">
       <label class="mk-label" for="note">直したい所を一言(<span id="noteMax">40</span> 字まで<span class="mk-label-more">。人の感想として渡します</span>)</label>
       <div class="mk-quick" id="quick"></div>
@@ -52,7 +53,7 @@
       <p class="mk-count" id="noteCount">0 / 40</p>
       <button type="submit" class="mk-btn" id="noteBtn" disabled><span class="mk-long">直したい(一言を送る)</span><span class="mk-short">直したい</span></button>
     </form>
-    <button type="button" class="mk-btn ghost" id="againBtn">やり直す(別の子にする)</button>
+    <button type="button" class="mk-btn ghost" id="againBtn"><span class="mk-long">やり直す(別の子にする)</span><span class="mk-short">別の子に</span></button>
     <button type="button" class="mk-btn auto" id="autoPick">おまかせ(おすすめで きめる)</button>
   </section>
 

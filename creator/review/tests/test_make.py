@@ -101,6 +101,53 @@ class MakeFlowTest(MakeBase):
         code, res = self.next("--fake-draw")
         self.assertEqual(code, 4, res)
 
+    def test_fourth_redo_is_refused_and_the_screen_keeps_a_next_step(self):
+        """4 枚目の絵の後の「直したい」は、受け付ける所で断る。画面は 4 枚目の絵のまま(CRITux3 D1)。
+        古い画面が直接送った 4 回目は、PC が描かずに確認を出し直す(画面と PC が互いを待たない)。"""
+        rec = rs.make_new({"from": "words", "words": "くもの子"}, "pc")
+        cid = rec["id"]
+        self.assertEqual(self.next("--fake-draw")[1].get("round"), 1)
+        for n in (2, 3, 4):  # 直し 3 回 → 4 枚目の絵
+            self.decide(cid, "redo", note="帽子を青にして")
+            code, res = self.next("--fake-draw")
+            self.assertEqual((code, res.get("round")), (0, n), res)
+        g = rs.load_state(cid)["gates"]["C0"]
+        self.assertEqual((g["status"], g["round"]), ("waiting", 4))
+        with self.assertRaises(rs.ReviewError) as cm:
+            self.decide(cid, "redo", note="目を大きくして")
+        self.assertEqual(cm.exception.reason, "redo_limit")
+        self.assertIn("3 回まで", cm.exception.msg)
+        g = rs.load_state(cid)["gates"]["C0"]
+        self.assertEqual(g["status"], "waiting", "断られても、4 枚目の絵の確認は出たまま")
+        self.assertFalse((rs.review_dir(cid) / "request.json").exists())
+        self.decide(cid, "ok")  # 「この子にする」は通る
+        code, res = self.next("--fake-draw")
+        self.assertEqual(res.get("did"), "claimed_ok", res)
+
+    def test_fourth_redo_that_slipped_in_reopens_the_gate(self):
+        rec = rs.make_new({"from": "words", "words": "くもの子"}, "pc")
+        cid = rec["id"]
+        self.next("--fake-draw")
+        for _ in range(3):
+            self.decide(cid, "redo", note="帽子を青にして")
+            self.next("--fake-draw")
+        g = rs.load_state(cid)["gates"]["C0"]
+        old_ticket = g["ticket"]
+        # 古い画面(上限を知らない)の 4 回目: 受け付けの上限をこの試験の中だけ外して、request.json を置く
+        saved, rs.C0_REDO_MAX = rs.C0_REDO_MAX, 99
+        try:
+            self.decide(cid, "redo", note="目を大きくして")
+        finally:
+            rs.C0_REDO_MAX = saved
+        code, res = self.next("--fake-draw")
+        self.assertEqual(res.get("did"), "ask_person", res)
+        g = rs.load_state(cid)["gates"]["C0"]
+        self.assertEqual((g["status"], g["round"]), ("waiting", 4))
+        self.assertNotEqual(g["ticket"], old_ticket, "新しい番号で出し直す")
+        self.assertIn("3 回まで", g["notice"])
+        self.decide(cid, "ok")  # 出し直した確認で、この子にできる
+        self.assertEqual(self.next("--fake-draw")[1].get("did"), "claimed_ok")
+
     def test_picture_human_needs_choice(self):
         rec = rs.make_new({"from": "picture", "picture": png_data_url()}, "iphone")
         cid = rec["id"]

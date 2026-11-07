@@ -335,7 +335,7 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
                 import segno
                 qr = segno.make(url, error="m").svg_inline(scale=6)
             except ImportError:
-                qr = ""
+                qr = "<p>QR を出すには、先に python -m pip install segno を打ってください。下のリンクは、そのまま使えます。</p>"
             first = ""
             if cur.make and web:
                 from html import escape
@@ -343,7 +343,7 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
                 # 画面の文字には合言葉を出さない(画面の録画や写真に残らないように。リンクと QR の中だけ。CRITux 22)
                 first = ("<h2 style='font-size:18px'>この PC の初めての会話(言葉か絵で作る)</h2>"
                          f"<p style='word-break:break-all'><a href='{escape(link, quote=True)}'>{escape(link.replace(gate.token, '••••••'))}</a></p>"
-                         "<p>開くと、初めての会話の 1〜3 歩の中に、この PC の作る画面が出ます。言葉か絵を入れたら、"
+                         "<p>開くと、初めての会話の 1〜3 つ目のステップの中に、この PC の作る画面が出ます。言葉か絵を入れたら、"
                          "Claude Code で /yuru-next と打ってください。</p>")
             html = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                     "<title>確認画面の入口</title><body style='font:16px sans-serif;margin:24px'>"
@@ -351,7 +351,7 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
                     f"<p style='word-break:break-all'><a href='{url}'>{url.replace(gate.token, '••••••')}</a></p>"
                     "<p>合言葉は伏せて出しています(リンクと QR には入っています)。</p>"
                     f"{first}"
-                    "<p>この画面は人にだけ見せてください。撮影のあとは serve_review.py を止めて、合言葉を捨ててください。</p></body>")
+                    "<p>この画面は人にだけ見せてください。使い終わったら serve_review.py を止めて、合言葉を捨ててください。</p></body>")
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8",
                        csp="default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'")
 
@@ -359,7 +359,7 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
             cid = cur.id
             if cid is None:  # --make で、まだ「作って」が来ていない
                 return self._json(200, {"state": None, "pending": None, "make": None, "tags": {g: rs.TAGS[g] for g in ("C0", "C2")},
-                                        "note_max": rs.NOTE_MAX, "words_max": rs.WORDS_MAX,
+                                        "note_max": rs.NOTE_MAX, "words_max": rs.WORDS_MAX, "redo_max": rs.C0_REDO_MAX,
                                         "server": {"mode": "live", "can_write": gate.has(self._sid()) or self._key_ok(),
                                                    "lan": bind_public, "make": cur.make}})
             st = rs.load_state(cid)
@@ -376,7 +376,7 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
             can_write = (gate.has(self._sid()) or self._key_ok()) and not gate.expired()
             make = ({"from": mk["from"], "created_at": mk["created_at"], "choice": choice.get("value")} if mk else None)
             self._json(200, {"state": st, "pending": pend, "make": make, "tags": {g: rs.TAGS[g] for g in ("C0", "C2")},
-                             "note_max": rs.NOTE_MAX, "words_max": rs.WORDS_MAX,
+                             "note_max": rs.NOTE_MAX, "words_max": rs.WORDS_MAX, "redo_max": rs.C0_REDO_MAX,
                              "server": {"mode": "live", "can_write": can_write, "lan": bind_public, "make": cur.make}},
                        extra={"ETag": etag})
 

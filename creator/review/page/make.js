@@ -23,8 +23,10 @@ const PARENT = (() => {
 history.replaceState(null, "", location.pathname); // 合言葉をアドレスの欄と履歴に残さない
 
 const S = { phase: "input", id: null, drawn: 0, ticket: null, hash: null, check: null, checkTold: false, seenAt: 0, lastAct: null, busy: false,
-  wordsMax: 60, noteMax: 40, name: "", picUrl: null, look: null, auto: false, autoBrow: false };
+  wordsMax: 60, noteMax: 40, redoMax: 3, shownTicket: null, name: "", picUrl: null, look: null, auto: false, autoBrow: false };
 /** おまかせ(ぜんぶ じどう)で作る時の言葉 */
+/** 4 枚目の絵の後は、もう直せない(サーバーも断る) */
+const overLimit = () => S.drawn > S.redoMax;
 const OMAKASE_WORDS = "まるくて げんきな ゆるキャラ";
 const SIDE = 1254;
 const chars = (s) => [...String(s ?? "")].length;
@@ -209,7 +211,7 @@ async function decide(decision, note) {
     await api("/api/review/decision", { method: "POST", body: { gate: "C0", decision, ticket: S.ticket, seen_hash: S.hash, note: note || null, tags: [], focus: null } });
     const auto = S.auto ? { auto: true } : {};
     if (decision === "ok") {
-      $("doneMsg").textContent = `${S.name}にきまりました。形(3D)は PC の Claude Code が続けて作ります。`
+      $("doneMsg").textContent = `${S.name}にきまりました。3D は、PC の Claude Code で make-character のスキルを始めると作れます(約 20 分。この画面からはまだ始まりません)。`
         + (S.auto ? "おまかせで きめました。あとから「直したい」で いつでも 直せます。" : "");
       $("donePic").src = $("pic").src; // 決めた絵は、決めた後も見せる
       show("done");
@@ -232,7 +234,7 @@ async function decide(decision, note) {
 $("okBtn").addEventListener("click", () => decide("ok"));
 /** おまかせの決め方: 眉の無い絵なら 1 回だけ眉を足す(ふつう)。ほかは OK */
 function autoDecide() {
-  if (wantBrow(S.look, S.id) && !S.autoBrow) {
+  if (wantBrow(S.look, S.id) && !S.autoBrow && !overLimit()) {
     S.autoBrow = true;
     return decide("redo", BROW_AUTO.note);
   }
@@ -264,15 +266,21 @@ async function showDrawn(st) {
   const blob = await api(`/api/review/file/C0/r${g.round}/${file}`, { blob: true });
   if (S.picUrl) URL.revokeObjectURL(S.picUrl);
   S.picUrl = URL.createObjectURL(blob);
-  Object.assign(S, { drawn: g.round, ticket: g.ticket, hash: b.hash, name: st.name && st.name !== "新しい子" ? st.name : "新しい子" });
+  Object.assign(S, { drawn: g.round, ticket: g.ticket, shownTicket: g.ticket, hash: b.hash, name: st.name && st.name !== "新しい子" ? st.name : "新しい子" });
   $("pic").src = S.picUrl;
   // 画面に内部の言葉(C0・段 0)を出さない(D7)
-  $("picCap").textContent = `${S.name}(${g.round} 回目の絵。この PC の Claude Code が描きました)`;
+  // 試験の絵(--fake-draw)は、Claude を呼んでいないので、Claude Code が描いたとは言わない(CRITux3 低 1)
+  const fake = (m.metrics || []).some((x) => x.key === "fake");
+  $("picCap").textContent = fake ? `${S.name}(${g.round} 回目の試しの絵です。Claude は呼んでいません)` : `${S.name}(${g.round} 回目の絵。この PC の Claude Code が描きました)`;
   // 描き直しで、頼んでいない所も変わった時は、その事を正直に出す(PC の決まった確かめ redo_check.py が書いた一言。N-0026)
   // (門の一言は「前の判断は受け取れませんでした」にも使うので、描き直しの一言の形の時だけ出す)
   const drift = g.round > 1 && /^頼んでいない所/.test(String(g.notice || "")) ? String(g.notice) : "";
   $("drift").textContent = drift;
   $("drift").hidden = !drift;
+  // 直しは 3 回まで(4 枚目の絵の後は「この子にする」か「別の子にする」だけ。画面と PC が互いを待たない。CRITux3 D1)
+  const over = overLimit();
+  $("noteForm").hidden = over;
+  $("limit").hidden = !over;
   S.look = b.look || null;
   const noBrows = renderBrow();
   show("c0");
@@ -284,7 +292,7 @@ async function showDrawn(st) {
 function renderBrow() {
   const slot = $("browSlot");
   slot.replaceChildren();
-  const want = wantBrow(S.look, S.id) && !S.auto;
+  const want = wantBrow(S.look, S.id) && !S.auto && !overLimit();
   if (want) slot.append(browCard({ id: S.id, onPick: (c) => decide("redo", c.note), onNo: () => { slot.hidden = true; } }));
   slot.hidden = !want;
   return want;
@@ -298,6 +306,7 @@ async function poll() {
   if (!st || st.id !== S.id) return;
   S.wordsMax = j.words_max || S.wordsMax;
   S.noteMax = j.note_max || S.noteMax;
+  S.redoMax = j.redo_max ?? S.redoMax;
   const mk = st.make || {};
   // ゆるキャラチェックの結果は、PC の様子(「絵を描いています」など)より先に知らせる。チェックと絵が 1 回の /yuru-next で
   // 続けて流れると、1 回の見回りで両方が見え、札に「絵を描いています」が「この絵から作るよ」より先に出ていた(CRITux2 低 11)
@@ -324,7 +333,8 @@ async function poll() {
     return;
   }
   const g = st.gates.C0;
-  if (S.phase === "waiting" && g.status === "waiting" && g.round > S.drawn) {
+  // 新しい絵、または同じ絵の確認が出し直された時(直しの上限を超えて、PC が「この子にする」か「別の子にする」を出し直した時)
+  if (S.phase === "waiting" && g.status === "waiting" && (g.round > S.drawn || (g.ticket && g.ticket !== S.shownTicket))) {
     S.seenAt ||= Date.now();
     // PC が名前を書き終える(make が drawn)まで少し待つ(8 秒まで)
     if (mk.status !== "drawing" || Date.now() - S.seenAt > 8000) await showDrawn(st);
@@ -392,6 +402,7 @@ async function picOnly() {
     const j = await api("/api/review/state");
     S.wordsMax = j.words_max || 60;
     S.noteMax = j.note_max || 40;
+    S.redoMax = j.redo_max ?? S.redoMax;
     $("wordsMax").textContent = String(S.wordsMax);
     $("noteMax").textContent = String(S.noteMax);
   } catch (e) {
