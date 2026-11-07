@@ -6,11 +6,13 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path';
 import { config, REPO_ROOT } from './env.mjs';
 import { toSpeechText } from '../src/conversation/speechReading.js';
+import { cacheKey, createTtsCache } from './ttsCache.mjs';
 import { ROLE_DEFAULT_VOICES, isVoiceId, normalizeVoiceChoice, personaVoice } from '../src/conversation/voiceRole.js';
 
 const LOG_DIR = config.logDir;
 const USAGE_FILE = join(LOG_DIR, 'tts_usage.json');
 export const SAMPLE_RATE = 24000; // pcm_24000
+const UPSTREAM_TIMEOUT_MS = 30000;
 
 const today = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD(ローカル日付)
 
@@ -112,8 +114,82 @@ export function refundChars(n) {
   writeUsage(u);
 }
 
+// ---- 読み上げの取り方(おぼえ書き・同じ文の同時の頼みを 1 つにまとめる) ----
+export const ttsCache = createTtsCache({ dir: join(LOG_DIR, 'tts_cache') });
+const inflight = new Map(); // おぼえ書きの名前 → 取っている最中の音 { chunks, state: 'pending'|'streaming'|'done'|'failed', status, waiters }
+
+const speechBody = (clean) => JSON.stringify({ text: clean, model_id: config.ttsModel, language_code: 'ja' });
+
+/** 取っている最中の音の変わり目を待つ(signal が止まったら、待つのをやめる) */
+function waitChange(entry, signal) {
+  return new Promise((resolve) => {
+    const done = () => {
+      entry.waiters.delete(done);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    };
+    entry.waiters.add(done);
+    signal?.addEventListener('abort', done, { once: true });
+  });
+}
+
 /**
- * text を読み上げて、PCM(16bit・24kHz・モノラル)を res に流す
+ * 声のサービスから音を取り始める(頼んだ人が切れても、最後まで取って、おぼえ書きに入れる。文字数は先に引いてある)。
+ * 失敗して 1 つも取れなかった時は、文字数を返す。
+ */
+function startSynthesis(key, clean, voiceId) {
+  const entry = { chunks: [], state: 'pending', status: 0, waiters: new Set() };
+  inflight.set(key, entry);
+  const wake = () => {
+    for (const w of [...entry.waiters]) w();
+  };
+  (async () => {
+    try {
+      const upstream = await fetch(speechUrl(voiceId), {
+        method: 'POST',
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        headers: { 'xi-api-key': config.elevenKey, 'content-type': 'application/json' },
+        body: speechBody(clean),
+      });
+      if (!upstream.ok || !upstream.body) {
+        refundChars(clean.length);
+        entry.status = upstream.status;
+        // 声のサービスの返事の文は、画面に返さない(手元の記録にだけ書く。CRITsec3 L4)
+        console.warn(`[声] 読み上げに失敗 (${upstream.status}): ${(await upstream.text()).slice(0, 200)}`);
+        entry.state = 'failed';
+        return;
+      }
+      entry.state = 'streaming';
+      wake();
+      for await (const chunk of upstream.body) {
+        entry.chunks.push(Buffer.from(chunk));
+        wake();
+      }
+      entry.state = 'done';
+      ttsCache.set(key, Buffer.concat(entry.chunks));
+    } catch (err) {
+      if (!entry.chunks.length) refundChars(clean.length);
+      console.warn(`[声] 読み上げが途中で止まりました: ${String(err?.message ?? err).slice(0, 120)}`);
+      entry.state = 'failed';
+    } finally {
+      wake();
+      inflight.delete(key);
+    }
+  })();
+  return entry;
+}
+
+const OK_HEADERS = (role, how) => ({
+  'content-type': 'application/octet-stream',
+  'x-sample-rate': String(SAMPLE_RATE),
+  'x-voice-role': role, // 話した役(試験と確かめ用。声の id は出さない)
+  'x-tts-cache': how, // hit(おぼえ書きから)・join(同じ文を取っている最中の音に相乗り)・miss(声のサービスから)
+  'cache-control': 'no-store',
+});
+
+/**
+ * text を読み上げて、PCM(16bit・24kHz・モノラル)を res に流す。
+ * 同じ声・同じ文は、おぼえ書きから返す(声のサービスに頼まない。文字数も数えない)。取っている最中の同じ文には相乗りする。
  * @param {{role?: 'male'|'female', voiceId?: string}} [voice] 話す声(voiceForRequest の結果)。無ければ女の子の既定
  */
 export async function streamSpeech(text, res, signal, voice = {}) {
@@ -129,58 +205,60 @@ export async function streamSpeech(text, res, signal, voice = {}) {
     res.writeHead(204, { 'x-tts': 'off', 'x-tts-reason': 'no-key', 'cache-control': 'no-store' }).end();
     return;
   }
-  if (!reserveChars(clean.length)) {
-    res.writeHead(429, { 'content-type': 'application/json' }).end('{"error":"今日の声は使い切りました。あしたまた声で話せるよ","reason":"cap"}');
+  const key = cacheKey(voiceId, config.ttsModel, clean);
+  const hit = ttsCache.get(key);
+  if (hit) {
+    res.writeHead(200, { ...OK_HEADERS(role, 'hit'), 'content-length': String(hit.length) }).end(hit);
     return;
   }
-  const url = speechUrl(voiceId);
-  let upstream;
-  try {
-    upstream = await fetch(url, {
-      method: 'POST',
-      signal,
-      headers: { 'xi-api-key': config.elevenKey, 'content-type': 'application/json' },
-      body: JSON.stringify({ text: clean, model_id: config.ttsModel, language_code: 'ja' }),
-    });
-  } catch (err) {
-    refundChars(clean.length);
-    throw err;
+  let entry = inflight.get(key);
+  const how = entry ? 'join' : 'miss';
+  if (!entry) {
+    if (!reserveChars(clean.length)) {
+      res.writeHead(429, { 'content-type': 'application/json' }).end('{"error":"今日の声は使い切りました。あしたまた声で話せるよ","reason":"cap"}');
+      return;
+    }
+    entry = startSynthesis(key, clean, voiceId);
   }
-  if (!upstream.ok || !upstream.body) {
-    refundChars(clean.length);
-    // 声のサービスの返事の文は、画面に返さない(手元の記録にだけ書く。CRITsec3 L4)
-    console.warn(`[声] 読み上げに失敗 (${upstream.status}): ${(await upstream.text()).slice(0, 200)}`);
-    res.writeHead(502, { 'content-type': 'application/json' }).end(JSON.stringify({ error: `読み上げに失敗 (${upstream.status})` }));
+  while (entry.state === 'pending' && !signal?.aborted) await waitChange(entry, signal);
+  if (signal?.aborted) return;
+  if (entry.state === 'failed' && !entry.chunks.length) {
+    res.writeHead(502, { 'content-type': 'application/json' }).end(JSON.stringify({ error: `読み上げに失敗 (${entry.status || '通信'})` }));
     return;
   }
-  res.writeHead(200, {
-    'content-type': 'application/octet-stream',
-    'x-sample-rate': String(SAMPLE_RATE),
-    'x-voice-role': role, // 話した役(試験と確かめ用。声の id は出さない)
-    'cache-control': 'no-store',
-  });
-  for await (const chunk of upstream.body) res.write(chunk);
+  res.writeHead(200, OK_HEADERS(role, how));
+  for (let i = 0; ; ) {
+    while (i < entry.chunks.length) res.write(entry.chunks[i++]);
+    if (entry.state === 'done' || entry.state === 'failed' || signal?.aborted) break;
+    await waitChange(entry, signal);
+  }
   res.end();
 }
 
 /**
- * 短い文を読み上げて、PCM(16bit・24kHz・モノラル)をまとめて返す。あいづちの声を前もって作るのに使う
+ * 短い文を読み上げて、PCM(16bit・24kHz・モノラル)をまとめて返す。あいづちの声や、前もっての温めに使う。
+ * おぼえ書きにあれば、声のサービスに頼まない。
  * @param {{voiceId?: string}} [o] 声(無ければ女の子の既定)
  */
 export async function synthesizePcm(text, signal, { voiceId } = {}) {
   const clean = toSpeechText(text).trim().slice(0, 300);
   if (!clean || !config.elevenKey) throw new Error('読み上げの鍵か文がありません');
+  const vid = isVoiceId(voiceId) ? voiceId : roleVoiceId('female');
+  const key = cacheKey(vid, config.ttsModel, clean);
+  const hit = ttsCache.get(key);
+  if (hit) return hit;
   if (!reserveChars(clean.length)) throw new Error('今日の読み上げの上限に達しました');
-  const url = speechUrl(isVoiceId(voiceId) ? voiceId : roleVoiceId('female'));
   try {
-    const res = await fetch(url, {
+    const res = await fetch(speechUrl(vid), {
       method: 'POST',
-      signal,
+      signal: signal ?? AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       headers: { 'xi-api-key': config.elevenKey, 'content-type': 'application/json' },
-      body: JSON.stringify({ text: clean, model_id: config.ttsModel, language_code: 'ja' }),
+      body: speechBody(clean),
     });
     if (!res.ok) throw new Error(`読み上げに失敗 (${res.status})`);
-    return Buffer.from(await res.arrayBuffer());
+    const buf = Buffer.from(await res.arrayBuffer());
+    ttsCache.set(key, buf);
+    return buf;
   } catch (err) {
     refundChars(clean.length);
     throw err;
