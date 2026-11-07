@@ -180,6 +180,7 @@ export class Dialogue {
     }
 
     const body = {
+      session: this.talk.snapshot(), // BSF: 1 回の会話の長さ(休むすすめ。すすめるかはサーバーが決める)
       history: this.history,
       text: askText,
       trigger,
@@ -190,7 +191,6 @@ export class Dialogue {
       expressionHints: this.character.expressionHints,
       motions: this.motionChoices?.(this.character),
       ...(this.interview ? { interview: true } : {}),
-      session: this.talk.snapshot(), // BSF: 休むすすめ(すすめるかはサーバーが決める)
     };
 
     try {
