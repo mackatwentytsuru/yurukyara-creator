@@ -51,7 +51,7 @@ async function fakeVoice({ failWith = 0 } = {}) {
 async function startServer(voiceBase, extraEnv = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'yc-voice-role-'));
   const port = await freePort();
-  const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', LOG_DIR: join(dir, 'logs'), MEMORY_DIR: join(dir, 'memory'), FILLER_DIR: join(dir, 'fillers') };
+  const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', LOG_DIR: join(dir, 'logs'), MEMORY_DIR: join(dir, 'memory'), FILLER_DIR: join(dir, 'fillers'), TTS_WARM: '0' };
   // 鍵と声の設定は空の値で渡す(web/.env があっても埋め戻さない)。モデルは空 = 既定(eleven_v4_turbo)
   Object.assign(env, { ANTHROPIC_API_KEY: '', ELEVENLABS_API_KEY: FAKE_VOICE_KEY, ELEVEN_API_URL: voiceBase, ELEVEN_VOICE_ID: LEGACY, ELEVEN_VOICE_MALE: '', ELEVEN_VOICE_FEMALE: '', ELEVEN_MODEL_ID: '', ELEVEN_VOICE_IDS: OWN, APP_PASSPHRASE: '' });
   Object.assign(env, extraEnv);
@@ -183,7 +183,8 @@ test('/api/tts: 読み方の表(執事 → しつじ)を当ててから声のサ
       assert.equal(res.status, 200, text);
       assert.equal(voice.asked.at(-1).text, 'しつじ見習いのノリーデス。', text);
     }
-    assert.equal(voice.asked.length, 2);
+    // 2 つ目は、1 つ目と同じ読み(しつじ)なので、おぼえ書きから返る(声のサービスへは 1 回だけ。QF3b)
+    assert.equal(voice.asked.length, 1, '同じ読みの文は声のサービスに 2 回頼まない');
     assert.ok(!voice.asked.some((a) => a.text.includes('執事')), '声のサービスには「執事」の字を渡さない');
   } finally {
     server.proc.kill();

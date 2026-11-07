@@ -11,6 +11,7 @@ import { createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memor
 import { createMemoryRoutes, forgetReplyEvents, isForgetRequest } from './memory/routes.mjs';
 import { extractFacts, selfNamesOf } from './memory/reflect.mjs';
 import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
+import { warmFirstVisit } from './ttsWarm.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
@@ -213,6 +214,7 @@ const handler = async (req, res) => {
   try {
     if (await memoryRoutes(req, res, path, url)) return;
     if (req.method === 'GET' && path === '/api/status') {
+      warmFirstVisit().catch(() => {}); // 初めての訪問の決まった文の声を、前もって作る(全部そろうまで 10 分に 1 回まで。待たない)
       return json(res, 200, {
         memory: { notice: MEMORY_NOTICE, pairing: Boolean(config.appPass) || ['127.0.0.1', '::1', 'localhost'].includes(config.host) },
         brain: config.anthropicKey ? 'haiku' : 'mock',
@@ -290,7 +292,11 @@ const server = useTls
   ? createHttpsServer({ cert: readFileSync(config.tlsCert), key: readFileSync(config.tlsKey) }, handler)
   : createHttpServer(handler);
 
-ensureFillers().then((r) => console.log(`あいづちの声: ${r.have} 種類(今回作った ${r.made} 種類、読み上げの文字数 ${r.chars} 字)`));
+ensureFillers()
+  .then((r) => console.log(`あいづちの声: ${r.have} 種類(今回作った ${r.made} 種類、読み上げの文字数 ${r.chars} 字)`))
+  .then(() => warmFirstVisit({ force: true }))
+  .then((r) => console.log(`初めての訪問の声: 作った ${r.made} 文・もうあった ${r.had} 文${r.skipped ? `(止めた理由: ${r.skipped})` : ''}`))
+  .catch(() => {});
 
 server.listen(config.port, config.host, () => {
   console.log(`会話サーバー: ${useTls ? 'https' : 'http'}://${config.host}:${config.port}${config.host === '127.0.0.1' ? '(この端末だけ)' : ''}`);
