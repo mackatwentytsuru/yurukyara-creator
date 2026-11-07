@@ -66,7 +66,7 @@ html.mk-pic .mk-where, html.mk-pic #doneMsg, html.mk-pic .mk-err { display: none
 html.mk-pic #done { height: 100%; display: block; }
 html.mk-pic .mk-fig, html.mk-pic .mk-fig img { width: 100%; height: 100%; border: 0; border-radius: 0; }
 /* 描き直しで頼んでいない所も変わった時の一言(PC の決まった確かめが書く) */
-.mk-drift { margin: 6px 0 10px; padding: 8px 10px; border-radius: 10px; background: #fff3cd; color: #5c4400; font-size: 14px; line-height: 1.5; }
+.mk-drift { margin: 0 0 4px; padding: 8px 10px; border-radius: 10px; background: #fff3cd; color: #5c4400; font-size: 14px; line-height: 1.5; }
 @media (prefers-color-scheme: dark) { .mk-drift { background: #4a3b10; color: #ffe8a3; } }
 
 /* 眉のおすすめの札(「この子にする」の上)・よく頼む直しの列(一言の欄の横)・おまかせ(本人 11/7)。押す所は 44px 以上 */
@@ -105,6 +105,9 @@ html.mk-pic .mk-fig, html.mk-pic .mk-fig img { width: 100%; height: 100%; border
   #noteForm .sg-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
 }
 
+/* 直しが止まった(4 枚目の絵の後): 一言の欄と送るは灰色にして、押せないと分かるように */
+#noteForm.mk-off { opacity: 0.5; }
+#noteForm.mk-off input, #noteForm.mk-off button { cursor: not-allowed; }
 /* 直しは 3 回まで(4 枚目の絵の後)。「この子にする」の下に 1 行で言う */
 .mk-limit { margin: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; color: var(--muted); }
 .mk-limit[hidden] { display: none; }

@@ -28,7 +28,7 @@ export async function streamChat(body, onEvent, signal) {
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok || !res.body) throw new Error(`会話のサーバーが答えません (${res.status})`);
+  if (!res.ok || !res.body) throw Object.assign(new Error(`会話のサーバーが答えません (${res.status})`), { status: res.status });
   if ((res.headers.get('content-type') ?? '').includes('application/json')) {
     dispatchJson(await res.json(), onEvent);
     return;

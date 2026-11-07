@@ -21,6 +21,8 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const SERVER_TTS_OFF = new Set([404, 405, 429, 501, 503]); // サーバーに声が無い・上限: この画面の間は聞きに行かない
 // サーバーが 204 と印(x-tts-reason)で「声なし」と返した時の理由(11-07 CRITux 25: 鍵が無い時の 503 を 204 にした)
 const SERVER_TTS_REASON = { 'no-key': '読み上げの鍵がありません' };
+/** 今日の声の上限(サーバーの 429)に当たった時、字幕の上に出す言葉。上限の数字は設定で、ここには書かない */
+export const VOICE_CAP_NOTICE = '今日の声は使い切ったよ。あしたまた声で話せるよ。いまは字幕で話すね';
 export const NO_SERVER_VOICE = '声のサーバーがありません';
 
 export class Speaker {
@@ -53,6 +55,8 @@ export class Speaker {
     this.retroVoice = voiceFor('');
     this.serverTtsOff = null; // サーバーに声が無いと分かった理由(分かったら、この画面の間は聞きに行かない)
     this.voiceKeyStatus = null; // 声の鍵で頼んだときの、最後の失敗の番号
+    this.capReached = false; // 今日の声の上限(サーバー)に当たった(字幕だけで話している理由を、画面が言うため)
+    this.deviceVoice = null; // この端末の声で読むか(true/false。null = 性格の画面の「声の出し方」に従う)
   }
 
   /**
@@ -314,6 +318,8 @@ export class Speaker {
 
   async *_fetchPcm(text, signal, onFirstByte) {
     const t0 = performance.now();
+    // 性格の画面で「この端末の声」を選んでいる時は、声の鍵・サーバーの声を使わない(_play が、この端末の声で読む)
+    if (this._deviceVoiceOn()) return;
     // 声の鍵(BYOK)があれば、声のサービスへ直接頼む(鍵は手元のサーバーに送らない)
     const key = getVoiceKey();
     if (!key && this.serverTtsOff) {
@@ -347,7 +353,9 @@ export class Speaker {
       }
       let reason = `読み上げが使えません (${res.status})`;
       try {
-        reason = (await res.json()).error ?? reason;
+        const body = await res.json();
+        reason = body.error ?? reason;
+        if (res.status === 429 && body.reason === 'cap') this.capReached = true;
       } catch {
         // そのまま
       }
@@ -429,6 +437,7 @@ export class Speaker {
    */
   _retro(text, epoch, onStart, onCrawl) {
     const info = { crawl: true };
+    const deviceVoice = this._deviceVoiceOn(); // この端末の声で読む時は「ピッ」を鳴らさない
     const { steps, totalMs } = crawlSchedule(text);
     const durMs = Math.max(totalMs, 400) + RETRO.tailMs;
     let baseMs;
@@ -437,7 +446,7 @@ export class Speaker {
       const startAt = Math.max(now + 0.03, this.nextTime);
       this.nextTime = startAt + durMs / 1000;
       baseMs = Math.max(0, (startAt - now) * 1000);
-      if (this.retro && this.analyser) {
+      if (this.retro && this.analyser && !deviceVoice) {
         for (const osc of scheduleRetro(this.ctx, this.analyser, steps, this.retroVoice, startAt)) {
           this.retroNodes.add(osc);
           osc.onended = () => this.retroNodes.delete(osc);
@@ -453,6 +462,7 @@ export class Speaker {
     // 口は、音を鳴らしても切っていても同じ予定で動かす(文字が出ている間だけ)
     this._mouthForCrawl(this.clock() + baseMs, steps, totalMs);
     this._later(() => epoch === this.epoch && onStart?.(performance.now(), info), baseMs);
+    if (deviceVoice) this._later(() => epoch === this.epoch && this._speakDevice(text), baseMs);
     for (const s of steps) this._later(() => epoch === this.epoch && onCrawl?.(s.shown), baseMs + s.atMs);
     return baseMs + durMs;
   }
@@ -465,9 +475,38 @@ export class Speaker {
     this.timers.add(id);
   }
 
+  /** この端末の声(speechSynthesis)で読むか。setDeviceVoice で決めた値が先、無ければ性格の画面の「声の出し方」(この端末の声)に従う */
+  _deviceVoiceOn() {
+    const want = this.deviceVoice ?? globalThis.__app?.personaSettings?.voice?.provider === 'browser';
+    return Boolean(want && typeof globalThis.speechSynthesis?.speak === 'function' && typeof globalThis.SpeechSynthesisUtterance === 'function');
+  }
+
+  /** 性格の画面で選んだ「この端末の声」を、ふつうの返事にも使う(true/false。null で性格の画面の値に戻す) */
+  setDeviceVoice(on) {
+    this.deviceVoice = on === null || on === undefined ? null : Boolean(on);
+  }
+
+  _speakDevice(text) {
+    try {
+      const v = globalThis.__app?.personaSettings?.voice ?? {};
+      const u = new globalThis.SpeechSynthesisUtterance(toSpeechText(text));
+      u.lang = 'ja-JP';
+      u.pitch = Number.isFinite(v.pitch) ? v.pitch : 1;
+      u.rate = Number.isFinite(v.rate) ? v.rate : 1;
+      globalThis.speechSynthesis.speak(u);
+    } catch {
+      // 読めない端末は、字幕と文字送りだけで話す
+    }
+  }
+
   /** 取得も再生も止める(割り込まれたとき・次の返事の前) */
   stop() {
     this.epoch += 1;
+    try {
+      globalThis.speechSynthesis?.cancel?.();
+    } catch {
+      // 対応していない端末
+    }
     for (const a of this.aborts) a.abort();
     this.aborts.clear();
     for (const s of this.sources) {

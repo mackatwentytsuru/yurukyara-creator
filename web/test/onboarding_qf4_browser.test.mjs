@@ -1,0 +1,233 @@
+// 第 12c 波 QF4: 初めての会話の札の、低い画面・キーボード・終わり方・読み込み直しの続きを、画面なしの Chrome で測る試験。
+// 試しの画面は初めての会話の部品だけ(舞台の WebGL は使わない)。Chrome が無い時は飛ばす(CHROME_PATH で場所を渡せる)。
+// FR_SHOTS_DIR を渡すと、そのフォルダに写真を残す(目で見る点検用)。YC_BROWSER_TESTS=1 のときだけ動く。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { join, extname } from 'node:path';
+
+const WEB = join(import.meta.dirname, '..');
+const SRC = join(WEB, 'src');
+const SHOTS = process.env.FR_SHOTS_DIR || '';
+const SLOW = process.env.YC_BROWSER_TESTS === '1' ? false : '画面なしの Chrome の試験は YC_BROWSER_TESTS=1 のときだけ';
+const BASE = 'http://127.0.0.1:9'; // 中身は route で配る。外へは出ない
+
+const PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="/__fr/src/ui/style.css"><title>QF4 の試し</title></head>
+<body><canvas id="stage"></canvas><header class="top"><div class="modes" id="modes"></div></header>
+<div id="gate" class="gate"><div class="gate-card"><h1>入口</h1><button id="startSim" type="button">カメラなしで試す</button></div></div>
+<script>
+// 見える範囲(visualViewport)のまね: キーボードが出ると高さだけが縮む(iPhone の Safari・Chrome と同じ)
+const vv = Object.assign(new EventTarget(), { height: innerHeight, width: innerWidth, offsetTop: 0, offsetLeft: 0, scale: 1 });
+Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
+window.__kb = (px) => { vv.height = innerHeight - px; vv.dispatchEvent(new Event('resize')); };
+</script>
+<script type="module">
+import { mountFirstRun } from '/__fr/src/ui/onboarding/index.js';
+import { seededRandom } from '/__fr/src/ui/persona/settings.js';
+const params = new URLSearchParams(location.search);
+const app = { character: { id: 'norrie', name: 'ノリー' }, characterId: 'norrie', persona: '',
+  stage: { state: {}, resize: () => {}, frameCharacter: () => {} }, swapCharacter: () => {} };
+addEventListener('yc:firstrun-closed', (e) => { window.__closed = e.detail; });
+window.__fr = mountFirstRun({ app, params, buttonHost: document.getElementById('modes'), random: seededRandom(5) });
+</script></body></html>`;
+
+const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+
+async function findChrome() {
+  let chromium;
+  try {
+    ({ chromium } = await import('playwright-core'));
+  } catch {
+    return null;
+  }
+  const opts = process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' };
+  try {
+    return await chromium.launch({ ...opts, headless: true });
+  } catch {
+    return null;
+  }
+}
+
+async function open(browser, { width, height, query = 'onboard=1', touch = true }) {
+  const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: touch, isMobile: touch });
+  await ctx.route(`${BASE}/__fr/**`, async (route) => {
+    const rel = new URL(route.request().url()).pathname.replace('/__fr/', '');
+    if (rel === 'index.html') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: PAGE });
+    const file = join(WEB, rel);
+    if (!file.startsWith(SRC) || !TYPES[extname(file)]) return route.fulfill({ status: 404, body: '' });
+    return route.fulfill({ contentType: TYPES[extname(file)], body: readFileSync(file, 'utf8') });
+  });
+  await ctx.route(`${BASE}/api/**`, (route) => route.fulfill({ status: 503, body: '{}' }));
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`${BASE}/__fr/index.html?${query}`);
+  await page.waitForSelector('.fr-sheet');
+  return { ctx, page, errors };
+}
+
+const shot = async (page, name) => {
+  if (!SHOTS) return;
+  mkdirSync(SHOTS, { recursive: true });
+  await page.screenshot({ path: join(SHOTS, `${name}.png`) });
+};
+const settle = (page, ms = 1500) => page.waitForTimeout(ms);
+/** 文字送りを飛ばして、選ぶ所が出るまで待つ */
+async function ready(page) {
+  await page.waitForSelector('.fr-actions > *', { timeout: 20000 });
+  await page.click('.fr-log').catch(() => {});
+  await settle(page, 400);
+}
+
+const SIZES = [
+  { name: 'p390x670', width: 390, height: 670 },
+  { name: 'p390x844', width: 390, height: 844 },
+  { name: 'l844x390', width: 844, height: 390 },
+];
+
+for (const sz of SIZES) {
+  test(`低い画面 ${sz.width}×${sz.height}: 札が画面に収まり、選ぶ所に指で届く(収まらない時は巻ける印がある)`, { skip: SLOW, timeout: 120_000 }, async (t) => {
+    const browser = await findChrome();
+    if (!browser) return t.skip('Chrome が無い');
+    try {
+      const { ctx, page, errors } = await open(browser, sz);
+      await ready(page);
+      await shot(page, `qf4_${sz.name}_step1`);
+      const r = await page.evaluate(() => {
+        const sheet = document.querySelector('.fr-sheet');
+        const log = document.querySelector('.fr-log');
+        const actions = document.querySelector('.fr-actions');
+        const s = sheet.getBoundingClientRect();
+        const sheetScroll = sheet.scrollHeight > sheet.clientHeight + 1 && ['auto', 'scroll'].includes(getComputedStyle(sheet).overflowY);
+        const actScroll = actions.scrollHeight > actions.clientHeight + 1 && ['auto', 'scroll'].includes(getComputedStyle(actions).overflowY);
+        const shadow = (e) => getComputedStyle(e).backgroundImage.includes('radial-gradient');
+        const btns = [...actions.querySelectorAll('button, label, a')].filter((b) => b.getBoundingClientRect().height > 0);
+        return {
+          vh: innerHeight, top: s.top, bottom: s.bottom, height: s.height, logH: log.getBoundingClientRect().height,
+          sheetScroll, actScroll, shadowSheet: shadow(sheet), shadowActions: shadow(actions), n: btns.length,
+          overflowY: getComputedStyle(sheet).overflowY, sheetClient: sheet.clientHeight, sheetScrollH: sheet.scrollHeight,
+        };
+      });
+      assert.ok(r.bottom <= r.vh + 1 && r.top >= -1, `札が画面に収まる: ${JSON.stringify(r)}`);
+      if (sz.height <= 500) {
+        assert.equal(r.overflowY, 'auto', '札ごと巻ける(overflow-y: auto)');
+        assert.ok(r.height <= r.vh * 0.8 + 2, `札は画面の 80% まで: ${r.height} / ${r.vh}`);
+        assert.ok(r.logH >= 55, `会話の欄は 56px 近くを残す: ${r.logH}`);
+        // 巻けば、いちばん下のボタンまで届く
+        await page.evaluate(() => { const s = document.querySelector('.fr-sheet'); s.scrollTop = s.scrollHeight; });
+        await settle(page, 200);
+        await shot(page, `qf4_${sz.name}_step1_scrolled`);
+        const last = await page.evaluate(() => {
+          const bs = [...document.querySelectorAll('.fr-actions button, .fr-actions label, .fr-actions a')].filter((b) => b.getBoundingClientRect().height > 0);
+          const b = bs.at(-1).getBoundingClientRect();
+          return { bottom: b.bottom, vh: innerHeight };
+        });
+        assert.ok(last.bottom <= last.vh + 1, `巻いた後、いちばん下のボタンが画面の中: ${JSON.stringify(last)}`);
+      } else if (sz.height <= 700) {
+        assert.ok(!r.actScroll || r.shadowActions, `選ぶ所が札の中で巻ける時は影が出る: ${JSON.stringify(r)}`);
+        const moreShown = await page.evaluate(() => !document.querySelector('.fr-more').hidden && getComputedStyle(document.querySelector('.fr-more')).display !== 'none');
+        assert.equal(moreShown, r.actScroll, `巻ける時だけ「まだ あるよ」の印が出る: 巻ける=${r.actScroll}`);
+      }
+      assert.deepEqual(errors, []);
+      await ctx.close();
+    } finally {
+      await browser.close();
+    }
+  });
+}
+
+test('キーボード(見える範囲だけが縮む): 札は見える範囲に収まり、入力欄と「これで作る」が見える', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が無い');
+  try {
+    const { ctx, page, errors } = await open(browser, { width: 390, height: 844 });
+    await ready(page);
+    await page.fill('.fr-field input[type="text"]', '赤い提灯の子');
+    await page.focus('.fr-field input[type="text"]');
+    await page.evaluate(() => window.__kb(336)); // キーボードの高さ(約 336px)
+    await settle(page, 700);
+    await shot(page, 'qf4_kb_step1');
+    const r = await page.evaluate(() => {
+      const sheet = document.querySelector('.fr-sheet');
+      const s = sheet.getBoundingClientRect();
+      const inp = document.querySelector('.fr-field input[type="text"]').getBoundingClientRect();
+      const btn = document.querySelector('.fr-field button[type="submit"]').getBoundingClientRect();
+      return { vvh: visualViewport.height, kb: sheet.classList.contains('fr-kb'), bottom: s.bottom, top: s.top, inpTop: inp.top, inpBottom: inp.bottom, btnTop: btn.top, btnBottom: btn.bottom, bottomStyle: sheet.style.bottom };
+    });
+    assert.equal(r.kb, true, 'キーボード中の印');
+    assert.equal(r.bottomStyle, '336px', '札を見える範囲の下に付ける');
+    assert.ok(r.bottom <= r.vvh + 1 && r.top >= 0, `札が見える範囲に収まる: ${JSON.stringify(r)}`);
+    assert.ok(r.inpTop >= 0 && r.inpBottom <= r.vvh + 1, `入力欄が見える: ${JSON.stringify(r)}`);
+    assert.ok(r.btnTop >= 0 && r.btnBottom <= r.vvh + 1, `「これで作る」が見える: ${JSON.stringify(r)}`);
+    await page.evaluate(() => window.__kb(0));
+    await settle(page, 300);
+    const back = await page.evaluate(() => ({ kb: document.querySelector('.fr-sheet').classList.contains('fr-kb'), bottom: document.querySelector('.fr-sheet').style.bottom }));
+    assert.deepEqual(back, { kb: false, bottom: '' }, 'キーボードが下がれば、元に戻る');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+test('おまかせで最後まで: 札は自動で閉じず、決めたことと「はじめる」を出す。押した時だけ閉じる(中 5)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が無い');
+  try {
+    const { ctx, page, errors } = await open(browser, { width: 390, height: 844 });
+    await ready(page);
+    await page.click('.fr-btn.fr-auto');
+    await page.waitForSelector('.fr-actions [data-act="begin"]', { timeout: 20000 });
+    await page.click('.fr-log').catch(() => {});
+    await settle(page, 2500); // 昔は 1.6 秒で閉じていた
+    assert.equal(await page.locator('.fr-sheet').count(), 1, '自動では閉じない');
+    const text = await page.locator('.fr-log').innerText();
+    assert.match(text, /きめたこと: ノリー・性格「/);
+    await shot(page, 'qf4_done_summary');
+    await page.click('.fr-actions [data-act="begin"]');
+    await page.waitForFunction(() => window.__closed?.reason === 'done');
+    assert.equal(await page.locator('.fr-sheet').count(), 0, '「はじめる」で閉じる');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+test('読み込み直し: 途中経過が残り、?onboard=1 が無くても続きから始まる(高 1)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が無い');
+  try {
+    const { ctx, page, errors } = await open(browser, { width: 390, height: 844 });
+    // 4 歩目まで進んだ途中経過を、この端末に残した形で作る(歩みごとの保存は台本の試験が見る)
+    await page.evaluate(() => {
+      localStorage.setItem('yc.onboarding.progress.v1', JSON.stringify({ v: 1, t: Date.now(), step: 4, from: 'words', words: 'ねこ', check: null,
+        character: { id: 'norrie', name: 'ノリー', sample: true, note: '' }, skipped: [2] }));
+    });
+    await page.goto(`${BASE}/__fr/index.html`); // ?onboard=1 なしで読み込み直す
+    await page.waitForSelector('.fr-sheet');
+    await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 20000 });
+    const text = await page.locator('.fr-log').innerText();
+    assert.match(text, /さっきの つづきからだよ/);
+    assert.doesNotMatch(text, /どんな子を生み出そうか/, '1 歩目に戻さない');
+    assert.equal(await page.locator('.fr-steps li.now').getAttribute('data-n'), '4');
+    await shot(page, 'qf4_resume_step4');
+    // 終わった後は続きを出さない
+    await page.evaluate(() => localStorage.setItem('yc.onboarded.v1', 'done'));
+    await page.goto(`${BASE}/__fr/index.html`);
+    await page.waitForTimeout(800);
+    assert.equal(await page.locator('.fr-sheet').count(), 0, '済みなら出ない');
+    // 別の端末から続けた端末(合鍵がある・7 歩はまだ)は、済みにする(低 14)
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('yc.memoryKey', 'A'.repeat(43)); });
+    await page.goto(`${BASE}/__fr/index.html`);
+    await page.waitForTimeout(800);
+    assert.equal(await page.locator('.fr-sheet').count(), 0, '別の端末から続けた端末では 7 歩を始めない');
+    assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'paired');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});

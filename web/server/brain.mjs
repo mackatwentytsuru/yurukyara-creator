@@ -313,7 +313,7 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
     }
     return;
   }
-  yield { type: 'thought', seen: seen || '', intent: '雑談', stage: 'chat', handoff: false };
+  yield { type: 'thought', seen: seen || '', intent: 'おしゃべり', stage: 'chat', handoff: false }; // 段の名前が「雑談」なので、同じ言葉を並べない
   const own = aizuchi(persona); // その子のあいづち(無ければ決まった文)
   if (own.length) {
     for (const [i, line] of own.entries()) yield { type: 'say', text: line, expression: i === 0 ? 'think' : 'happy', motion: AIZUCHI_MOTIONS[i] ?? 'none', gaze: 'person' };

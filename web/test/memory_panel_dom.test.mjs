@@ -286,3 +286,15 @@ test('引き出しを開いた時の読み直し用に resync() もある(番号
   q('mem-forget').click(); // 時計を止めて終わる
   await until(() => q('mem-code').textContent === '');
 });
+
+test('全部わすれた後に新しく覚えたら、「全部わすれました」を消す(覚えているのに残らない。QA2)。何も覚えていない間は残る', async () => {
+  const { panel, q, shown } = mount();
+  await panel.ready;
+  await adopt(panel, shown);
+  q('mem-forget').click();
+  await until(() => q('mem-status').textContent === '全部わすれました');
+  await settle();
+  assert.equal(q('mem-status').textContent, '全部わすれました', '空の間は、そのまま');
+  await adopt(panel, shown, [{ id: '9', kind: 'name', text: '名前: じろう' }]);
+  assert.equal(q('mem-status').textContent, '', '覚え直したら消える');
+});

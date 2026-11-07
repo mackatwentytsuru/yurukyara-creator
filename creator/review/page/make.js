@@ -43,7 +43,7 @@ async function api(path, { method = "GET", body = null, blob = false } = {}) {
   try {
     r = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: "no-store", credentials: "omit" });
   } catch {
-    throw new Error("PC につながりません(serve_review.py --make が動いているか確かめてください)");
+    throw new Error("パソコンに つながらないよ。パソコンの じゅんびが できているか、見てもらってね");
   }
   if (blob && r.ok) return r.blob();
   const j = await r.json().catch(() => ({}));
@@ -55,6 +55,11 @@ function show(phase) {
   S.phase = phase;
   $("mk").dataset.phase = phase;
   for (const p of ["input", "waiting", "check", "c0", "done"]) $(p).hidden = p !== phase;
+  // 画面が替わったら、前の赤い断りの文を消す(前の画面の断りが、次の画面に残っていた。低 15)。頼みの下書きも前の子の物は残さない
+  $("err").textContent = "";
+  $("err").hidden = true;
+  // 頼んでいない所も変わったという知らせは、絵の画面の 2 つの列の外(一番上)に出す(列が左の細い列に崩れていた。中 11)
+  $("drift").hidden = !(phase === "c0" && S.drift);
 }
 
 function error(msg) {
@@ -125,6 +130,8 @@ async function sendMake(body, told) {
   try {
     const r = await api("/api/review/make", { method: "POST", body });
     Object.assign(S, { id: r.id, drawn: 0, ticket: null, hash: null, check: null, checkTold: false, seenAt: 0, lastAct: null });
+    $("words").value = ""; // 送った言葉の下書きは残さない(次の子の欄に前の言葉が残っていた。低 15)
+    updateWords();
     show("waiting");
     $("activity").textContent = "";
     tell("sent", told);
@@ -142,7 +149,10 @@ function updateWords() {
   $("wordsCount").classList.toggle("over", n > S.wordsMax);
   $("wordsBtn").disabled = n === 0 || n > S.wordsMax;
 }
-$("words").addEventListener("input", updateWords);
+$("words").addEventListener("input", () => {
+  error(""); // 新しく書き始めたら、前の赤い断りの文は消す(低 15)
+  updateWords();
+});
 $("wordsForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const words = $("words").value.trim();
@@ -211,7 +221,7 @@ async function decide(decision, note) {
     await api("/api/review/decision", { method: "POST", body: { gate: "C0", decision, ticket: S.ticket, seen_hash: S.hash, note: note || null, tags: [], focus: null } });
     const auto = S.auto ? { auto: true } : {};
     if (decision === "ok") {
-      $("doneMsg").textContent = `${S.name}にきまりました。3D は、PC の Claude Code で make-character のスキルを始めると作れます(約 20 分。この画面からはまだ始まりません)。`
+      $("doneMsg").textContent = `${S.name}にきまりました。あたらしい子は、パソコンの Claude Code で つくれるよ(3D は約 20 分。この画面からは まだ はじまらないよ)。`
         + (S.auto ? "おまかせで きめました。あとから「直したい」で いつでも 直せます。" : "");
       $("donePic").src = $("pic").src; // 決めた絵は、決めた後も見せる
       show("done");
@@ -250,7 +260,10 @@ function updateNote() {
   $("noteCount").classList.toggle("over", n > S.noteMax);
   $("noteBtn").disabled = n === 0 || n > S.noteMax;
 }
-$("note").addEventListener("input", updateNote);
+$("note").addEventListener("input", () => {
+  error("");
+  updateNote();
+});
 $("noteForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const note = $("note").value.trim();
@@ -275,11 +288,17 @@ async function showDrawn(st) {
   // 描き直しで、頼んでいない所も変わった時は、その事を正直に出す(PC の決まった確かめ redo_check.py が書いた一言。N-0026)
   // (門の一言は「前の判断は受け取れませんでした」にも使うので、描き直しの一言の形の時だけ出す)
   const drift = g.round > 1 && /^頼んでいない所/.test(String(g.notice || "")) ? String(g.notice) : "";
+  S.drift = drift;
   $("drift").textContent = drift;
-  $("drift").hidden = !drift;
+  $("note").value = ""; // 前の絵への頼みの下書きは、新しい絵に持ちこさない(低 15)
+  updateNote();
   // 直しは 3 回まで(4 枚目の絵の後は「この子にする」か「別の子にする」だけ。画面と PC が互いを待たない。CRITux3 D1)
+  // 4 枚目の絵の後は、一言の欄と送るを消さずに灰色にして押せなくする(確かめる画面 /r/ と同じ。低 15)
   const over = overLimit();
-  $("noteForm").hidden = over;
+  $("noteForm").classList.toggle("mk-off", over);
+  $("note").disabled = over;
+  $("noteBtn").disabled = over || $("noteBtn").disabled;
+  for (const b of $("quick").querySelectorAll("button")) b.disabled = over;
   $("limit").hidden = !over;
   S.look = b.look || null;
   const noBrows = renderBrow();
@@ -322,7 +341,7 @@ async function poll() {
     tell("progress", { text: act.slice(0, 120) });
   }
   if (mk.status === "failed") {
-    error(mk.notice || "PC で描けませんでした。もう一度 /yuru-next と打ってください");
+    error(mk.notice || "パソコンで えがけなかったよ。もう一度 やってみてね");
     return;
   }
   if (S.phase === "waiting" && mk.status === "check_waiting" && !j.make?.choice) {
@@ -390,7 +409,7 @@ async function picOnly() {
 (async () => {
   if (PIC_ONLY && KEY) return picOnly();
   if (!KEY) {
-    error("合言葉がありません。PC の /qr の画面のリンクから開き直してください");
+    error("あいことばが ないよ。パソコンの 画面の リンクから ひらき直してね");
     show("input");
     $("wordsBtn").disabled = true;
     return;

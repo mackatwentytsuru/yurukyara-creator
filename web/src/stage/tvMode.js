@@ -21,6 +21,13 @@ export const TV_CAPTION_FRACTION = 0.06;
 /** 字幕の字の大きさの下限と上限(px)。横向きの iPhone(高さ 390px 前後)でも 24px */
 export const TV_CAPTION_MIN_PX = 24;
 export const TV_CAPTION_MAX_PX = 120;
+/**
+ * 縦長の画面(幅 < 高さ。縦持ちの iPhone・iPad)の字幕: 画面の高さの 6% では 1 行が 7 文字ほどで 3 行で切れた(QA 中 12)ので、
+ * 字の大きさは画面の幅の割合で抑え、行は 5 行まで見せる(キャラの下に空ける高さも 5 行分)。横長の画面(テレビ・PC)は今のまま
+ */
+export const TV_PORTRAIT_CAPTION_WIDTH_FRACTION = 0.08;
+export const TV_PORTRAIT_CAPTION_MIN_PX = 20;
+export const TV_PORTRAIT_ROWS = 5;
 /** 字幕の行の高さ(字の大きさの倍) */
 export const TV_CAPTION_LINE = 1.3;
 /** キャラの下に、字幕のために空けておく行の数。長い返事は字幕の箱の中で送り、3 行目はキャラの足に重なってよい */
@@ -77,20 +84,33 @@ export function tvPlan({ params, nav = {}, headset = false }) {
   return { show: true, kind: device ? 'cast' : 'toggle', device, start: wantsTv(params) };
 }
 
-/** テレビ表示の字幕の字の大きさ(px)。画面の高さの 6% を切り上げ(下限 24・上限 120) */
-export function tvCaptionPx(viewH) {
+const isPortrait = (w, h) => Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0 && w < h;
+
+/**
+ * テレビ表示の字幕の字の大きさ(px)。画面の高さの 6% を切り上げ(下限 24・上限 120)。
+ * 縦長の画面(viewW を渡した時)は、画面の幅の 8% までに抑える(下限 20)
+ */
+export function tvCaptionPx(viewH, viewW) {
   const h = Number.isFinite(viewH) && viewH > 0 ? viewH : 0;
-  return Math.min(TV_CAPTION_MAX_PX, Math.max(TV_CAPTION_MIN_PX, Math.ceil(h * TV_CAPTION_FRACTION)));
+  const base = Math.min(TV_CAPTION_MAX_PX, Math.max(TV_CAPTION_MIN_PX, Math.ceil(h * TV_CAPTION_FRACTION)));
+  if (!isPortrait(viewW, h)) return base;
+  return Math.min(base, Math.max(TV_PORTRAIT_CAPTION_MIN_PX, Math.floor(viewW * TV_PORTRAIT_CAPTION_WIDTH_FRACTION)));
+}
+
+/** 字幕の箱が見せる行の数(横長 = 3 行、縦長 = 5 行) */
+export function tvCaptionRows(viewH, viewW) {
+  return isPortrait(viewW, viewH) ? TV_PORTRAIT_ROWS : 3;
 }
 
 /**
  * テレビ表示で、キャラの下に字幕のために空ける高さ(px。下の端に残る物(カメラの注意書き)の高さは別に足す)。
- * 字幕 TV_CAPTION_ROWS 行 + 箱の上下の余白(画面の高さの 2.4%)+ 下の端からの間(画面の高さの 3%)
+ * 字幕 TV_CAPTION_ROWS 行 + 箱の上下の余白(画面の高さの 2.4%)+ 下の端からの間(画面の高さの 3%)。縦長の画面は TV_PORTRAIT_ROWS 行分
  */
-export function tvBottomReserve(viewH) {
+export function tvBottomReserve(viewH, viewW) {
   const h = Number.isFinite(viewH) && viewH > 0 ? viewH : 0;
-  const cap = tvCaptionPx(h);
-  return Math.ceil(TV_CAPTION_ROWS * TV_CAPTION_LINE * cap + Math.max(16, h * 0.024) + Math.max(10, h * 0.03));
+  const cap = tvCaptionPx(h, viewW);
+  const rows = isPortrait(viewW, h) ? TV_PORTRAIT_ROWS : TV_CAPTION_ROWS;
+  return Math.ceil(rows * TV_CAPTION_LINE * cap + Math.max(16, h * 0.024) + Math.max(10, h * 0.03));
 }
 
 /**
