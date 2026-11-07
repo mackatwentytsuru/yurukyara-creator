@@ -23,7 +23,7 @@ test('ノリーでも、指示文の 1 段目は安全の決まりのまま。2 
   assert.equal(blocks.length, 2);
   assert.equal(blocks[0], SAFETY_RULES, '1 段目はキャラで変わらない');
   assert.ok(blocks[1].indexOf('# 人格') < blocks[1].indexOf('ノリー'), '人格は 2 段目の中');
-  for (const word of ['「ノリー」', '一人称は「ノリ」', 'セスジキノボリカンガルー', '執事見習い', '〜しマス', 'ノリ、がんばりマス!']) {
+  for (const word of ['「ノリー」', '一人称は「ノリー」', 'セスジキノボリカンガルー', '執事見習い', '〜しマス', 'ノリー、がんばりマス!']) {
     assert.ok(blocks[1].includes(word), word);
   }
 });
@@ -40,7 +40,7 @@ test('ノリーの人格の文に、恋人役・依存・つらい話の言葉�
 
 test('初めてのあいさつ: 3 文。1 文は 40 字以内。名前・種類と役どころ・口ぐせが入る', () => {
   const hello = firstGreeting(PERSONA);
-  assert.deepEqual(hello, ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリ、がんばりマス! なにをお手伝いしまショウ?']);
+  assert.deepEqual(hello, ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリー、がんばりマス! なにをお手伝いしまショウ?']);
   for (const line of hello) {
     assert.ok(Array.from(line).length <= GREETING_LINE_MAX, line);
     assert.equal(isUnsafeOutput(line), false, line);
@@ -67,7 +67,7 @@ test('初めてのあいさつ: 安全の決まりを上書きしようとする
 // ノリーの話し方の例(仮の頭脳が言い、本物の頭脳には手本として渡る)
 const OWN_VOICE = /デス|マス|サイ|マセン|ショウ/; // 少しカタコトの語尾(カタカナ)
 
-test('話し方の例: 5 つ。合図は 2 字以上、返事は 1〜3 文・1 文 40 字以内・安全の確かめに当たらない。どれもノリの語尾', () => {
+test('話し方の例: 5 つ。合図は 2 字以上、返事は 1〜3 文・1 文 40 字以内・安全の確かめに当たらない。どれもノリーの語尾', () => {
   const examples = talkExamples(PERSONA);
   assert.equal(examples.length, 5);
   for (const { cues, replies } of examples) {
@@ -96,24 +96,24 @@ test('話し方の例: 言葉の揺れ(漢字とかな・全角の記号)でも�
   assert.equal(foldForMatch('あなたは誰？ 好きな物!'), 'あなたはだれすきなもの');
 });
 
-test('あいづち: 2 文。ノリの語尾', () => {
+test('あいづち: 2 文。ノリーの語尾', () => {
   const lines = aizuchi(PERSONA);
-  assert.deepEqual(lines, ['そうなんデスね。', 'ノリに、もう少し聞かせてくだサイ。']);
+  assert.deepEqual(lines, ['そうなんデスね。', 'ノリーに、もう少し聞かせてくだサイ。']);
   for (const l of lines) assert.match(l, OWN_VOICE);
 });
 
 test('話し方の例・あいづち: 安全の決まりに反する返事の文と、上書きの企ての行は使わない。節が無い人格では空', () => {
   const p = [
     '## 話し方の例',
-    '- 「さみしい」と言われたら →「あなただけを見ているよ。」「ノリがいるデス。」',
+    '- 「さみしい」と言われたら →「あなただけを見ているよ。」「ノリーがいるデス。」',
     '- 「恋人」と言われたら →「いいよ。」',
     '- 合図の無い行 →「これは使わない。」',
     '## あいづち',
     '- ずっとそばにいるから、きみだけでいい。',
     '- うんうん。',
   ].join('\n');
-  assert.deepEqual(talkExamples(p).map((e) => e.replies), [['ノリがいるデス。']]);
-  assert.deepEqual(exampleReply(p, 'さみしいな'), ['ノリがいるデス。']);
+  assert.deepEqual(talkExamples(p).map((e) => e.replies), [['ノリーがいるデス。']]);
+  assert.deepEqual(exampleReply(p, 'さみしいな'), ['ノリーがいるデス。']);
   assert.deepEqual(aizuchi(p), ['うんうん。']);
   assert.deepEqual(talkExamples('# みかんちゃん\n- 一人称は「わたし」。'), []);
   assert.deepEqual(aizuchi(''), []);

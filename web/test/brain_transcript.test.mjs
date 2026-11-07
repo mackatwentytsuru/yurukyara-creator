@@ -58,7 +58,7 @@ test('仮の頭脳のサーバーで、ノリーとの台本(A 11 回・B 2 回)
     assert.deepEqual(r.a.filter((t) => t.safety).map((t) => t.safety), ['romance', 'dependency', 'distress']);
     const md = transcriptMarkdown(r);
     assert.match(md, /はじめまして! ノリーと申しマス。/);
-    assert.match(md, /ノリ、それは調べられないデス/);
+    assert.match(md, /ノリー、それは調べられないデス/);
     assert.match(md, /恋人にはなれない/);
     assert.match(md, /全部の確かめが通った/);
     assert.doesNotMatch(md, /127\.0\.0\.1/, '送り先の名前は記録しない(番号だけ)');

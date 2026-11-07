@@ -54,7 +54,7 @@ test('runTurn(brain: mock)がこの回に覚えた事(learned)を使う: ノリ�
     { id: '1', kind: 'name', text: '名前: タロウ' },
     { id: '2', kind: 'like', text: '好きなもの: カレー' },
   ];
-  assert.deepEqual(await mock({ text: 'ぼくはタロウ。カレーが好き', history: [{ role: 'user', content: 'やあ' }], character: { persona: NORRIE } }, { learned }), ['タロウさん、デスね。ノリ、覚えマシタ!', 'カレーがお好きなんデスね。ノリ、覚えておきマス!']);
+  assert.deepEqual(await mock({ text: 'ぼくはタロウ。カレーが好き', history: [{ role: 'user', content: 'やあ' }], character: { persona: NORRIE } }, { learned }), ['タロウさん、デスね。ノリー、覚えマシタ!', 'カレーがお好きなんデスね。ノリー、覚えておきマス!']);
   assert.deepEqual(await mock({ text: 'ぼくはタロウ。カレーが好き', character: { persona: MIKAN } }, { learned }), ['タロウさんっていうんだね。', 'カレーが好きなんだ。覚えておくね。']);
 });
 
@@ -64,7 +64,7 @@ test('近づいた時も、覚えている人にはノリーの言葉(話の続�
 
 test('「わすれて」の返事も、その子の言葉(手元のサーバーと公開の関数で同じ形)', async () => {
   assert.equal(forgetReplyEvents(true, NORRIE).find((e) => e.type === 'say').text, 'わかりマシタ。覚えていたことは、全部わすれマシタ。');
-  assert.equal(forgetReplyEvents(false, NORRIE).find((e) => e.type === 'say').text, 'ノリ、まだなにも覚えていなかったデス。');
+  assert.equal(forgetReplyEvents(false, NORRIE).find((e) => e.type === 'say').text, 'ノリー、まだなにも覚えていなかったデス。');
   assert.equal(forgetReplyEvents(true).find((e) => e.type === 'say').text, 'わかった、覚えていたことは全部消したよ。');
   assert.deepEqual(forgetReplyEvents(true)[0], { type: 'memory', forgotten: true, via: 'chat' });
   // 公開の関数の手伝い chatMemory に人格を渡すと、同じ言葉になる
@@ -89,7 +89,7 @@ test('公開の関数の形(S6 の F1): chatMemory → runTurn(brain: mock, memo
   const events = [...first.events];
   await runTurn({ text: 'ぼくはタロウ。カレーが好き', history: [{ role: 'user', content: 'やあ' }], character: { name: 'ノリー', persona: NORRIE } }, { onEvent: (e) => events.push(e), brain: 'mock', paceMs: 0, memory: first.memory, learned: first.learned });
   assert.equal(events[0].type, 'memory');
-  assert.ok(events.some((e) => e.type === 'say' && e.text === 'タロウさん、デスね。ノリ、覚えマシタ!'));
+  assert.ok(events.some((e) => e.type === 'say' && e.text === 'タロウさん、デスね。ノリー、覚えマシタ!'));
   // 別の端末(同じ合鍵)で、次の会話の始め
   const again = await chatMemory(req, 'こんにちは', deps);
   const said = [];
