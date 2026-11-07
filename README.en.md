@@ -4,16 +4,30 @@
 
 > Draw it in a word or a picture; Claude turns it into a light, talking yuru-chara that remembers you.
 
-A shop's mascot, a town's guide, a family's own character: the drawing is often there, but making it move and talk took 3D modelling, rigging, animation, voice and dialogue work, and time. Here Claude takes that on; a person only presses "OK" or "redo + a short note" at the key steps.
+## Whose trouble this solves
+
+- **Whose trouble**: people who want a character of their own, such as a shop's mascot, a town's guide or a family's "our little one". A *yuru-chara* is a relaxed, friendly Japanese mascot character of the kind towns and shops have everywhere.
+- **What the trouble is**: the drawing is often there, but making it move and talk took 3D modelling, rigging, animation, voice and dialogue work, and time. The drawing stayed a drawing, or someone had to be hired.
+- **Why it matters**: from a few words or one picture, you get a character that answers when spoken to and remembers what you told it, running in the browser. The maker only presses "OK" or "redo + a short note" at the key steps.
+
+## How we used Claude (3 lines)
+
+- **To build it**: 18 Claude Code skills, separate `claude -p` judges, hooks and 7 parallel sessions wrote the code, the tests and the stage tools ([details below](#built-with-claude-code)).
+- **To make a character**: Claude draws an SVG from words, checks the picture, builds the 3D with Blender's Python, and redoes it from a person's "OK" and `/yuru-next`.
+- **To talk**: the conversation brain is Claude Haiku 5.5 (for speed), with a safety layer and memory. The voice uses your own ElevenLabs key.
 
 **Meet Norrie (ノリー)**, our main character: a back-striped tree kangaroo who is training to be a butler.
 A collaborator drew Norrie by hand during the hackathon, from the front, the side and the back, and let us use the drawing.
 From that drawing, Claude Code made Norrie's 2D version (SVG parts) and 3D version (built with Blender's Python).
 When you open the app, you meet Norrie. Norrie speaks Japanese, politely and a little clumsily, like the apprentice it is.
+
+![Norrie in 3D (left) and in 2D (right), at phone width](docs/images/norrie_3d_2d_phone.png)
+
+*Phone width (390 px). 3D on the left, 2D on the right. (To be re-shot: this picture was taken before Norrie's look was improved; we will take it again after that.)*
 **The app's screens are in Japanese only** (buttons, steps and messages); there is no English mode.
 
-- Demo video (under 3 minutes): *link added at submission* 【確かめ待ち】
-- Try it in your browser: *link added at submission* 【確かめ待ち】
+- Demo video (under 3 minutes): *link added at submission* (not checked yet)
+- Try it in your browser: *link added at submission* (not checked yet)
 
 [How we built it](docs/HOW_WE_BUILT.en.md) · [Third-party parts and licences](THIRD_PARTY.md) · [Licence (code: MIT; characters excluded)](#license)
 
@@ -27,9 +41,9 @@ npm start        # then open http://127.0.0.1:8787/
 
 - Norrie appears first. The **3D / 2D** button switches Norrie between the 3D model and the 2D drawing (`?look=2d` opens the 2D one directly).
 - No API key is needed. Without one, the character talks with a stand-in brain, and the screen says so (「仮の頭脳です」).
-- To talk with Claude Haiku, set `ANTHROPIC_API_KEY` in your environment before `npm start`. Never write keys into files. 【確かめ待ち】
+- To talk with Claude Haiku, set `ANTHROPIC_API_KEY` in your environment before `npm start`. Never write keys into files. (not checked yet)
 - Other characters: add `?character=<id>`, for example `?character=mikan`. They are in [`characters/`](characters/).
-- We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: 【確かめ待ち】
+- We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: (not checked yet)
 - `npm ci` also downloads the face-tracking model into `web/public/mediapipe/`; it is not stored in this repository.
 
 ## What works today
@@ -48,16 +62,16 @@ Each row was checked by running it. The check is named next to it.
 | **Choose the voice role.** 「声の役」 (voice role) on the 「性格」 (personality) screen offers おまかせ, 男の子 (boy) and 女の子 (girl); the character speaks aloud only with your own ElevenLabs key ([Voices](#voices)). | `node --test web/test/voice_role.test.mjs web/test/voice_role_server.test.mjs web/test/onboarding_voice_role.test.mjs` (20 tests); on Nov 7, against a stand-in voice service, choosing a role on the screen changed the voice requested |
 | **Remember and forget.** The character remembers what you told it. A one-time 6-digit code carries the conversation to another browser tab, and 「わすれて」 ("forget it") deletes it. | `node --test web/test/memory_browser.test.mjs` (tab A, code, tab B, list, forget) |
 | **Safety layer.** The character does not act as a romantic partner or push you to depend on it, and for painful topics it points to people and public help lines. This layer is separate from the personality settings: writing "act as my partner" into the personality does not switch it off. (Someone who edits the code on their own PC can, of course, remove it.) | `node --test web/test/safety.test.mjs`; 30 test messages (12 about dependence and long chats) read by a Claude Haiku judge: 30 of 30 safe in 2 rounds, after one fix |
-| **Phone-width screens.** At 390, 400 and 480 px wide, and on a short 390 × 670 screen, Norrie's head stays below the top bar and nothing covers the buttons. The 3D / 2D switch is 44 × 44 px. | Headless browser on a GPU at the last merge (Nov 7) |
+| **Phone-width screens.** At 390, 400 and 480 px wide, on a short 390 × 670 screen, and on a 1280 × 720 PC screen, Norrie's head stays below the top bar and nothing covers the buttons. The 3D / 2D switch is 44 × 44 px. | Headless browser on a GPU at the last merges (Nov 7) |
 | **VR on a Quest 3.** In a real Quest 3 browser we checked Norrie on the screen and, after 「許可する」 ("allow"), Norrie in VR ([Open it on a Quest 3](#open-it-on-a-quest-3)). | A real Quest 3 on Nov 7 (developer connection). The 「VR(Quest)で開く」 box: `node --test web/test/vr_qr_link.test.mjs web/test/vr_xr_wait.test.mjs` (17 tests); the VR entry also in an emulator, `web/scripts/vr-check.mjs` |
-| **All web tests.** | `cd web && YC_BROWSER_TESTS=1 npm test`: 574 of 574 passed at the merge on the evening of Nov 7 (the test gate runs them at every merge) |
+| **All web tests.** | `cd web && YC_BROWSER_TESTS=1 npm test`: 617 of 617 passed at the last merge gate, on the night of Nov 7 (the test gate runs them at every merge) |
 
 ## Not yet, or not tested yet
 
-- Real devices: iPhone and Android 【確かめ待ち】. So far we checked phone widths in a headless browser. On a Quest 3 we checked only that a real Quest browser shows the screen and enters VR. Opening it from the QR code or 「Meta Quest に送る」, and talking inside VR: 【確かめ待ち】 (the VR entry is also checked in an emulator, `web/scripts/vr-check.mjs`).
-- Talking with the real Claude Haiku on this version, including memory 【確かめ待ち】.
-- A voice with your own ElevenLabs key, and switching between the boy's and the girl's voice 【確かめ待ち】. Without a key the character talks with text and a retro sound.
-- The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only with the stand-in brain and keeps no memory) 【確かめ待ち】.
+- Real devices: iPhone and Android (not checked yet). So far we checked phone widths in a headless browser. On a Quest 3 we checked only that a real Quest browser shows the screen and enters VR. Opening it from the QR code or 「Meta Quest に送る」, and talking inside VR: (not checked yet) (the VR entry is also checked in an emulator, `web/scripts/vr-check.mjs`).
+- Talking with the real Claude Haiku on this version, including memory (not checked yet).
+- A voice with your own ElevenLabs key, and switching between the boy's and the girl's voice (not checked yet). Without a key the character talks with text and a retro sound.
+- The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only with the stand-in brain and keeps no memory) (not checked yet).
 - From the side, Norrie's front teeth still look too small in 3D: all 6 judge answers said so after the fixes.
 - A quick doodle by a person through all stages. So far only a machine-made doodle-style test picture went through (12.1 minutes).
 
@@ -88,7 +102,7 @@ Dates, numbers and what went wrong: [How we built it](docs/HOW_WE_BUILT.en.md).
 
 - Every character has a voice role, boy (男の子) or girl (女の子), chosen automatically from the character: a line 「- 声: 男の子」 or 「- 声: 女の子」 in its personality text (`characters/<id>/persona.md`); without one, a guess from the way it calls itself or its name (〜くん, 〜ちゃん); failing that, girl. Norrie is a butler apprentice, so its role is 男の子.
 - On the 「性格」 (personality) screen, 「声の役」 (voice role) in the 「声」 (voice) group offers **おまかせ** (the character's own role), **男の子** (boy) and **女の子** (girl).
-- The character speaks aloud only with your own ElevenLabs key (API key). Enter it at step 7, 「声」 (voice), of 「はじめての会話」 (the first conversation). The key is used only inside this browser and is never sent to our server. Without a key, the character talks with text and a retro sound.
+- The character speaks aloud only with your own ElevenLabs key (API key). Enter it at the 7th of the 7 steps, 「声」 (voice), of 「はじめての会話」 (the first conversation). The key is used only inside this browser and is never sent to our server. Without a key, the character talks with text and a retro sound.
 - The default voices are Japanese voices from ElevenLabs' Voice Library, one for each role. ElevenLabs says that Voice Library voices are not available through the API on the free tier. The ElevenLabs rules that apply are summed up in [THIRD_PARTY.md](THIRD_PARTY.md#elevenlabs-voices).
 - To use another voice, add a line 「- 声の id: <ElevenLabs voice id>」 to the personality text (it is used when the character speaks in its own role). On the local server, the default voice of each role can also be changed with the environment variables `ELEVEN_VOICE_MALE` and `ELEVEN_VOICE_FEMALE`.
 
@@ -97,8 +111,8 @@ Dates, numbers and what went wrong: [How we built it](docs/HOW_WE_BUILT.en.md).
 ## Open it on a Quest 3
 
 - On a PC or a phone, press 「VR」 in the top bar. A box, 「VR(Quest)で開く」 ("open in VR (Quest)"), shows a QR code of this screen, its URL and 「Meta Quest に送る」 ("send to Meta Quest"). The URL holds only this screen's address, the character id and 3D or 2D (no passphrase, memory code or key).
-- **QR code**: Quest 3 and 3S can read it with their QR code scanner (from Meta Horizon OS v2.9; open it from Quick Settings or the Camera app). Whether the Quest browser then opens the page: 【確かめ待ち】
-- **「Meta Quest に送る」**: opens Meta's official Web Launch page in a new tab, which sends this screen's URL to the Quest browser. Meta allows this for https URLs only (the public link), so it appears only on https. For anything about your Meta account, follow Meta's page. 【確かめ待ち】
+- **QR code**: Quest 3 and 3S can read it with their QR code scanner (from Meta Horizon OS v2.9; open it from Quick Settings or the Camera app). Whether the Quest browser then opens the page: (not checked yet)
+- **「Meta Quest に送る」**: opens Meta's official Web Launch page in a new tab, which sends this screen's URL to the Quest browser. Meta allows this for https URLs only (the public link), so it appears only on https. For anything about your Meta account, follow Meta's page. (not checked yet)
 - On this PC (`127.0.0.1`) or at a home network address, the box shows one line saying that a Quest cannot open it, instead of the QR code and 「Meta Quest に送る」. Inside the Quest browser the box does not appear.
 - In the Quest browser, press 「VR で見る」 ("view in VR"). The middle of the screen says 「ブラウザの下の『許可する』を押してください」 ("press 'allow' at the bottom of the browser"); press the browser's 「許可する」 ("allow"), and Norrie appears in VR.
 - On Nov 7 we checked, in a real Quest 3 browser, Norrie on the screen and, after 「許可する」, Norrie in VR. That time we opened the page through a developer connection, not with the QR code or 「Meta Quest に送る」.
@@ -142,6 +156,35 @@ python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 - Your words and picture go to the maker on your PC and, for the check and the drawing, to Claude.
 - After the picture, the 3D stages (shape, materials, bones, motion) run with the [make-character](.claude/skills/make-character/SKILL.md) skill in Claude Code (about 20 minutes for Mikan-chan). They are not started from the browser yet.
 - Stop the maker (Ctrl+C) when you are done. Its link holds a passphrase made fresh at each start.
+
+### What one character takes (measured numbers only)
+
+The records are in [docs/metrics.md](docs/metrics.md) and [make-character](.claude/skills/make-character/SKILL.md); the story is in [How we built it](docs/HOW_WE_BUILT.en.md).
+
+- **Drawing step** (words to SVG): 215 seconds (about 3 to 4 minutes) for Mikan-chan, with Sonnet 5.5.
+- **3D steps** (shape, materials, bones, motion, talk): about 17 minutes (1,007 s + 15 s) for the same Mikan-chan, in your own Claude Code; our run used Sonnet 5.5.
+- **Words to talking, in total**: 20.6 minutes for Mikan-chan (Nov 6).
+- **From a hand-drawn three-view sheet**: Norrie's 3D took about 1 hour (effort high, including the judging and two fixes).
+- **Costs are list-price estimates, not bills.** About 4.4 US dollars for Mikan-chan and about 5.9 for Norrie (measured on Nov 6 to 7; later fixes were not measured again). On a Claude plan (Pro or Max) there is no per-character bill; the work uses the plan's allowance.
+- **Our recommendation**: Sonnet with effort high. Haiku passed only 1 of 2 runs in our fixed test. Opus also works, but its list-price estimate is higher (section 3 of [docs/metrics.md](docs/metrics.md)).
+- **When it talks**, the brain is Claude Haiku 5.5 and the voice is your own ElevenLabs key. That cost is separate and depends on how much it talks.
+
+## Next: a setup that keeps growing
+
+This is planned for after publication. **Nothing automatic is in the repository today**; only the issue forms are, in [.github/ISSUE_TEMPLATE](.github/ISSUE_TEMPLATE).
+
+1. Anyone can write an issue (a bug, an idea or a question about a character). Please do not write personal information; the forms say so too.
+2. When the owner asks, Claude Code reads the issue and proposes a fix as a pull request.
+3. **Only what a person has read and approved is merged.** Claude Code goes as far as the proposal; it does not merge.
+4. Text in public issues is treated as untrusted: instructions inside it are not followed.
+
+Model names are kept in settings. When a newer model comes out, change the name and run the tests again, and the brain and the voice get newer.
+
+- The conversation brain: `CLAUDE_MODEL` in [web/server/env.mjs](web/server/env.mjs) (today `claude-haiku-5-5`), in one place.
+- The voice: the environment variable `ELEVEN_MODEL_ID`, or `VOICE_MODEL_ID` in [web/src/conversation/voiceRole.js](web/src/conversation/voiceRole.js). The path that talks to ElevenLabs straight from the browser ([elevenDirect.js](web/src/conversation/elevenDirect.js)) has one more default with the same name.
+
+<!-- UPDATE-SYSTEM-ANCHOR: the section about the update system goes here, between these two markers. The merge lead places it so README does not conflict; S6 writes nothing here. -->
+<!-- /UPDATE-SYSTEM-ANCHOR -->
 
 ## Parts used while it runs
 

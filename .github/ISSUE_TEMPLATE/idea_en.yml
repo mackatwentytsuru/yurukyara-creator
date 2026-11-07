@@ -1,0 +1,20 @@
+name: "Idea (English)"
+description: "Suggest a feature or a way to make it easier to use"
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please do not write or paste keys, passwords, personal names or contact details, or photos of people's faces.**
+  - type: textarea
+    id: wish
+    attributes:
+      label: What would you like to see?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why?
+      description: When it was hard for you, and who it would help (as far as you know)

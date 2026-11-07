@@ -1,0 +1,24 @@
+name: "Character question (English)"
+description: "A question about making your own character or using the characters"
+title: "[Character] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Norrie and the sample characters are not covered by the MIT License (you may look at them and try them inside this app; see LICENSE). You can make your own character from your own words or your own picture.
+        **Please do not write or paste keys, passwords, personal names or contact details, or photos of people's faces.** If you want to show a picture, use one you drew yourself that is not a person's face.
+  - type: textarea
+    id: question
+    attributes:
+      label: What do you want to know, or what is hard?
+    validations:
+      required: true
+  - type: dropdown
+    id: from
+    attributes:
+      label: What would you make it from?
+      options:
+        - Words
+        - My own picture
+        - Not decided yet

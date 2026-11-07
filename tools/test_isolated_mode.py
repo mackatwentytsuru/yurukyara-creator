@@ -14,7 +14,7 @@ import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TOOLS = ("prepush_check.py", "history_check.py", "termlist.py")
+TOOLS = ("prepush_check.py", "history_check.py", "termlist.py", "key_patterns.json")
 WORD = "ひみつ" + "の丘"  # 試験だけの語
 
 

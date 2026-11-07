@@ -1,0 +1,26 @@
+name: "不具合(日本語)"
+description: "動かない・おかしい・表示がずれる、などを知らせる"
+title: "[不具合] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        見てくださってありがとうございます。**鍵(API キー)・パスワード・個人の名前や連絡先・人の顔写真は、書かない・貼らないでください。** 画面の写真は、人が写っていないものをお願いします。
+  - type: textarea
+    id: what
+    attributes:
+      label: 何が起きましたか
+      description: 見えたこと・押したこと・思っていたこと、を短く
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: どうすると起きますか
+      description: 手順を 1 行ずつ(分かる範囲で)
+  - type: input
+    id: env
+    attributes:
+      label: 使った環境
+      description: 例「PC の Chrome」「iPhone の Safari」「Quest 3 のブラウザ」(分かる範囲で。画面の幅が分かれば書いてください)

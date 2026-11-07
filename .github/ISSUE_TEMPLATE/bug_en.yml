@@ -1,0 +1,26 @@
+name: "Bug (English)"
+description: "Something does not work, looks wrong or is misplaced"
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for looking. **Please do not write or paste keys (API keys), passwords, personal names or contact details, or photos of people's faces.** If you add a screenshot, please make sure no person is in it. The app's screens are in Japanese only.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, what you pressed and what you expected, in a few lines
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can it be reproduced?
+      description: Steps, one per line (as far as you know)
+  - type: input
+    id: env
+    attributes:
+      label: Your environment
+      description: For example "Chrome on a PC", "Safari on an iPhone", "Quest 3 browser" (and the screen width if you know it)

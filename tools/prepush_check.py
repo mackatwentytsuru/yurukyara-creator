@@ -1,4 +1,5 @@
 """Stops a push when the tracked files hold a key, a pre-period character or another file that must not go out."""
+import json
 import os
 import re
 import subprocess
@@ -7,10 +8,24 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # works with python -I (git hook) too
 import termlist
 
+
+def load_secrets(path, check):
+    """鍵の形の表を読み、この点検が見る形を 1 つの正規表現にまとめる(表が読めなければ止める)"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            rows = json.load(f)["patterns"]
+        rxs = [re.compile(("(?i)" if "i" in r.get("flags", "") else "") + r["pattern"]) for r in rows if check in r.get("checks", [check])]
+    except (OSError, ValueError, KeyError, re.error) as e:
+        print(f"push を止めました: 鍵の形の表が読めません({path}): {e}")
+        sys.exit(1)
+    return rxs
+
 # .env だけでなく .env.local・.env.production なども止める(見本の .env.example・.env.sample は上げてよい)
 BLOCKED_FILES = re.compile(r"(\.vrm|\.vrma|\.pem|\.key|\.crt|(^|/)\.env(?!\.(example|sample)$)(\.[\w-]+)?)$", re.I)
-SECRETS = re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}|sk_[a-f0-9]{30,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}")
+# 鍵の形は 3 つの点検(この点検・履歴の点検・フック)で同じ表 tools/key_patterns.json を読む
+KEY_TABLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "key_patterns.json")
 # 入れない名前はリポジトリに書かない。外のファイル(形は tools/termlist.py)から読む。無ければ、黙って通さず止める
+SECRETS = load_secrets(KEY_TABLE, "prepush")
 WORDS_FILE = os.environ.get("PREPUSH_TERMS") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "prepush_terms.local.txt")
 
 
@@ -54,7 +69,7 @@ for path in git("ls-files").splitlines():
         text = open(path, encoding="utf-8").read()
     except (UnicodeDecodeError, OSError):
         continue
-    if SECRETS.search(text):
+    if any(rx.search(text) for rx in SECRETS):
         problems.append(f"{path}: 鍵らしい文字列があります")
     hit = WORDS.search(text)
     if hit:
