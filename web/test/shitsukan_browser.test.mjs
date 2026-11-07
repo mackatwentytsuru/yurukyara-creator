@@ -357,6 +357,22 @@ test('しつかん: 既定は ぬの・押すとすぐ替わり覚える・い�
     assert.equal(furSub, 'おもいよ', 'スマホでは毛に「おもいよ」');
     const top = await ph.page.evaluate(() => [...document.querySelectorAll('#shitsukanList button')].map((b) => b.getBoundingClientRect().height));
     assert.ok(top.every((h) => h >= 44), `押す所は 44px 以上: ${top}`);
+    await ph.page.keyboard.press('Escape');
+    // 「しつかん」のボタンで、スマホの上の段の行を増やさない(390x844 と 390x670。出す・隠すで上の段の高さが同じ)
+    for (const size of [{ width: 390, height: 844 }, { width: 390, height: 670 }]) {
+      await ph.page.setViewportSize(size);
+      await sleep(500);
+      const h = await ph.page.evaluate(() => {
+        const bar = document.querySelector('.top');
+        const box = document.getElementById('shitsukan');
+        const shown = bar.getBoundingClientRect().height;
+        box.style.display = 'none';
+        const hidden = bar.getBoundingClientRect().height;
+        box.style.display = '';
+        return { shown, hidden };
+      });
+      assert.ok(h.shown - h.hidden <= 1, `${size.width}x${size.height}: しつかん で上の段が ${h.hidden} → ${h.shown}px に高くなった`);
+    }
     assert.deepEqual(ph.errors, [], `ページのエラー: ${ph.errors.join(' / ')}`);
     await ph.ctx.close();
   } finally {
