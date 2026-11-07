@@ -42,6 +42,7 @@ test('入口: .gate button の display が hidden に勝たない(ヘッドセ�
 
 test('横: 全身で、遠近で手前に出た羽が画面の横の端で切れる時は、見込みの幅を広げて置き直す', () => {
   const scene = read('src', 'scene.js');
-  assert.match(scene, /wScale \*= Math\.min\(1\.6, \(sp\.right - sp\.left \+ 2 \* edge\) \/ viewW\);/);
+  assert.match(scene, /wScale \*= Math\.min\(1\.6, Math\.max\(1\.02, spanW \/ target\)\);/);
+  assert.match(scene, /const target = wide \? viewW \* 0\.74 : viewW - 2 \* edge;/);
   assert.match(scene, /\* wScale;/);
 });

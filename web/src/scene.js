@@ -100,8 +100,11 @@ export function createStage(canvas) {
       const edge = Math.max(8, viewW * 0.05); // 羽は話す・跳ねる間に箱の外へ振れる(430×932 のちょうちんくんで、止まった箱は収まっても羽が両端で切れた)ので、片側 5% 空ける
       for (let k = 0; k < 3; k++) {
         const sp = screenSpan(box, viewW, viewH);
-        if (sp.left >= edge && sp.right <= viewW - edge) break;
-        wScale *= Math.min(1.6, (sp.right - sp.left + 2 * edge) / viewW);
+        // 横に広い子は、止まった箱が画面の幅の 74% 以内(羽が箱の外へ振れる分を残す。430×932 で、高さで決まる大きさだと箱は端に収まっても羽が両端で切れた)
+        const target = wide ? viewW * 0.74 : viewW - 2 * edge;
+        const spanW = sp.right - sp.left;
+        if (sp.left >= edge && sp.right <= viewW - edge && spanW <= target) break;
+        wScale *= Math.min(1.6, Math.max(1.02, spanW / target));
         put(topPx);
       }
     }
