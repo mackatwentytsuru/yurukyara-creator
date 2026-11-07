@@ -243,6 +243,25 @@ test('公開の関数: 本物の頭脳の回は、絵の枚数を 1 日の上限
   assert.ok(capped.data.events.some((e) => e.type === 'meta' && e.camera === 'capped' && e.cameraNotice), '外したことを知らせる');
 });
 
+test('公開の関数: 絵の数えができない時(置き場の故障)は、送らない方へ倒す(絵を外して言葉だけ)', async () => {
+  const { takeImageSlot } = await import('../api/_lib/gate.mjs');
+  const broken = { incr: async () => { throw new Error('down'); } };
+  assert.equal(await takeImageSlot({ cfg: { dailyImageCap: 100 }, store: broken }), false);
+  const ok = { incr: async () => 1 };
+  assert.equal(await takeImageSlot({ cfg: { dailyImageCap: 100 }, store: ok }), true);
+  assert.equal(await takeImageSlot({ cfg: { dailyImageCap: 0 }, store: ok }), false, '上限 0 なら送らない');
+});
+
+test('手元の上限: CLAUDE_DAILY_IMAGE_CAP=0 なら絵は送らない(数えは同じ記録)。形の違う値は既定の 100', async () => {
+  const { cameraImageCap } = await import('../server/camera.mjs');
+  assert.equal(cameraImageCap({ CLAUDE_DAILY_IMAGE_CAP: '0' }), 0);
+  assert.equal(cameraImageCap({}), 100);
+  assert.equal(cameraImageCap({ CLAUDE_DAILY_IMAGE_CAP: 'たくさん' }), 100);
+  const dir = mkdtempSync(join(tmpdir(), 'yc-camcap0-'));
+  const lim = createLimiter({ file: join(dir, 'u.json'), dailyCap: 10, perMinute: 10, imageCap: 0 });
+  assert.equal(lim.takeImage().ok, false);
+});
+
 // ---- 手元のサーバー: 絵が記録・記憶・画面の出力に残らない ----
 const freePort = () =>
   new Promise((resolve) => {
