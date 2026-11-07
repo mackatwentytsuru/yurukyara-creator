@@ -82,8 +82,13 @@ async function startMake(work, token, allow) {
 
 /** PC の側: yuru_make.py next を 1 回(待つのは 20 秒まで) */
 function pcNext(work, ...extra) {
+  return pcNextEnv(work, {}, ...extra);
+}
+
+/** pcNext と同じ。more は足す環境変数(試験の絵の描き方 YC_FAKE_REDO など) */
+function pcNextEnv(work, more, ...extra) {
   return new Promise((resolve) => {
-    const env = { ...process.env, YC_REVIEW_WORK: work };
+    const env = { ...process.env, ...more, YC_REVIEW_WORK: work };
     delete env.ANTHROPIC_API_KEY;
     const p = spawn(PY, [join(ROOT, 'creator', 'review', 'yuru_make.py'), 'next', '--wait', '20', ...extra], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let out = '';
@@ -221,10 +226,17 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直ったら、また見せるね'));
       const req = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
       assert.deepEqual([req.gate, req.decision, req.note.text], ['C0', 'redo', '帽子を青にして']);
-      const pc2 = await pcNext(work, '--fake-draw');
+      // 試験の絵は、頼んでいない体の色まで変える(drift)。PC の決まった確かめが 1 回だけ自動で描き直し、それでも違うので、
+      // 絵は出したうえで、作る画面と札に「頼んでいない所も変わりました: 体の色…」を出す(第 11 波・N-0026)
+      const pc2 = await pcNextEnv(work, { YC_FAKE_REDO: 'drift' }, '--fake-draw');
       assert.equal(pc2.did, 'redrew', JSON.stringify(pc2));
+      assert.equal(pc2.identity?.passes, 2, `決まった確かめの後に 1 回だけ描き直す ${JSON.stringify(pc2.identity)}`);
       await frame.waitForFunction(() => document.querySelector('#picCap')?.textContent.includes('2 回目'), null, { timeout: 20_000 });
       await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直してみたよ。どうかな?'));
+      const drift = await frame.$eval('#drift', (e) => ({ hidden: e.hidden, text: e.textContent }));
+      assert.ok(!drift.hidden && /^頼んでいない所も変わりました: .*体の色/.test(drift.text), `作る画面に頼んでいない変化の一言が無い ${JSON.stringify(drift)}`);
+      assert.match(await logText(page), /頼んでいない所も変わりました: .*体の色/, '札にも頼んでいない変化の一言');
+      await fits(page, frame, '3 歩目(2 回目・頼んでいない変化の一言つき)');
       await shot(page, 'make390_3_c0_r2');
 
       await frame.click('#okBtn');
