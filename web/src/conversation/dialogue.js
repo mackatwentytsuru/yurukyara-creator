@@ -3,9 +3,9 @@
 // その文が話し始める瞬間に、表情・動き・視線・字幕を合わせる。
 // 返事が来るまでの間は、うなずきでつなぐ。割り込まれたら cancel() で全部止める。
 import { streamChat } from './brainClient.js';
+import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
-import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 
