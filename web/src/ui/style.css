@@ -561,9 +561,9 @@ html.tv-mode .tv-cam {
 html.tv-mode .tv-cam.on { opacity: 0.9; border-color: #ff6b6b; color: #ffd9d9; }
 html.tv-mode .tv-cam:hover, html.tv-mode .tv-cam:focus-visible { opacity: 1; }
 html.tv-mode .tv-cam:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
-/* 縦持ちの一言(左上)は、カメラの隅のボタンの左で止める */
+/* 縦持ちの一言(左上)は、カメラの隅のボタンの左で止める。ボタンは入れている間、赤い点の分だけ広い(幅 約 60px)。重ならないよう 10px あける */
 @media (orientation: portrait) and (pointer: coarse) {
-  html.tv-mode body:has(#tvCam:not([hidden])) .tv-rotate { right: 150px; }
+  html.tv-mode body:has(#tvCam:not([hidden])) .tv-rotate { right: calc(max(10px, env(safe-area-inset-right)) + 162px); }
 }
 /* 入れる前の知らせ(入口・「テレビに映す」と同じ形の真ん中の札。子どもにも読める大きな字) */
 .cam-ask {
