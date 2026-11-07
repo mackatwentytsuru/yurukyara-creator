@@ -69,7 +69,9 @@ export function createStage(canvas) {
     const viewW = canvas.clientWidth || window.innerWidth;
     const viewH = canvas.clientHeight || window.innerHeight;
     // wScale: 遠近で手前の羽・腕が画面の横の端で切れる時に、横幅の見込みを広げる倍率(下の「横」の確かめ。L1 高: ちょうちんくんの羽が幅 390・430 で切れた)
-    let wScale = 1;
+    // 横に広い子(ちょうちんくんなど。幅が高さの 0.8 倍より大きい)は、羽が話す・跳ねる間に止まった箱の外へ振れるので、最初から 15% 広く見込む
+    const wide = view === 'full' && (halfWidth(character, box, character.object3d.getWorldPosition(new THREE.Vector3())) * 2) / Math.max(0.3, box.max.y - box.min.y) > 0.8;
+    let wScale = wide ? 1.15 : 1;
     const put = (px) => placeCamera(character, box, view, obstacles, viewH, px, wScale);
     put(0);
     let topPx = 0;
