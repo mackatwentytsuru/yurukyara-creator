@@ -225,10 +225,12 @@ test('画面の形: 入力の列にカメラのボタン(最初は隠す)・テ�
   assert.doesNotMatch(gate, /カメラの映像は端末の外に出ません/, '古い約束(外に出ない)を残さない');
   const css = read('src', 'ui', 'style.css');
   assert.match(css, /\.cam\[hidden\], \.tv-cam\[hidden\] \{ display: none !important; \}/, 'hidden が display に負けない');
-  assert.match(css, /\.chips:has\(\.chip\.rec\) \{ display: flex; \}/, '高さ 500 未満でも印の札は残す');
+  assert.match(css, /\.chips:has\(\.chip\.cam-rec\) \{ display: flex; \}/, '高さ 500 未満でも印の札は残す');
+  assert.match(css, /\.chips:has\(\.chip\.cam-rec\) \.chip:not\(\.cam-rec\) \{ display: none; \}/);
+  assert.doesNotMatch(css, /\.chip\.rec\b/, '印の札の名前は cam-rec(.rec は注意書きの 8px の点。同じ名前だと札がつぶれた)');
   assert.match(css, /html\.tv-mode \.tv-cam \{/);
   const main = read('src', 'main.js');
-  assert.match(main, /if \(app\.camera\?\.seeing\?\.\(\)\) chips\.unshift\(\['', 'カメラ オン', 'rec'\]\);/, '絵を送るカメラの間は、上の札の先頭に赤い点の札');
+  assert.match(main, /if \(app\.camera\?\.seeing\?\.\(\)\) chips\.unshift\(\['', 'カメラ オン', 'cam-rec'\]\);/, '絵を送るカメラの間は、上の札の先頭に赤い点の札');
   assert.match(main, /camera: app\.camera\?\.seeing\?\.\(\) \? app\.camera\.privacy :/, '下の注意書きも、絵を送る約束に替わる');
   assert.match(main, /setupCameraSwitch\(\); \/\/ BCV/);
 });

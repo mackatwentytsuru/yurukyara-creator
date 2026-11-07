@@ -400,7 +400,7 @@ function updateChips() {
   const noCamera = app.mode === 'sim' || !app.source;
   const camera = app.mode === 'camera' ? (info.ok ? 'オン' : '準備中') : noCamera ? 'なし' : info.label;
   // BCV: 絵を送るカメラが入っている間は、いちばん前に赤い点の札(小さな印。高さ 500 未満でもこの札だけ残す = style.css)
-  if (app.camera?.seeing?.()) chips.unshift(['', 'カメラ オン', 'rec']);
+  if (app.camera?.seeing?.()) chips.unshift(['', 'カメラ オン', 'cam-rec']);
   else chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
   chips.push(['見えている人', `${app.lastAttention.tracks.length} 人`, '']);
   if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'この PC' : 'ブラウザ', 'ok']);

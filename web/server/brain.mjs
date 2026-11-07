@@ -378,12 +378,13 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     onEvent({ type: 'meta', brain: 'mock' });
     // BCV: 仮の頭脳は絵を見ない。絵がついていたら知らせ、絵について聞かれていたら、やさしく「本物の頭脳の時だけ見られる」と答える
     if (image) {
-      onEvent({ type: 'meta', camera: 'mock', cameraNotice: CAMERA_MOCK_NOTICE }); // notice でなく cameraNotice(画面の「仮の頭脳です」の知らせを上書きしない)
       if (seeingAsked(text)) {
+        onEvent({ type: 'meta', camera: 'mock' }); // 返事そのものが「見られない」と言うので、知らせは足さない
         emit({ type: 'thought', seen: scene || '', intent: 'カメラの絵', stage: 'chat', handoff: false });
         for (const [i, line] of CAMERA_MOCK_LINES.entries()) emit({ type: 'say', text: line, expression: i === 0 ? 'sad' : 'happy', motion: i === 0 ? 'none' : 'nod', gaze: 'person' });
         return;
       }
+      onEvent({ type: 'meta', camera: 'mock', cameraNotice: CAMERA_MOCK_NOTICE }); // notice でなく cameraNotice(画面の「仮の頭脳です」の知らせを上書きしない)
     }
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
     // 安全の層と出力の確かめは、ここ(上と emit)で通すので、守りの包みの無い台本を使う(差し替えの印 guarded が消えないように)

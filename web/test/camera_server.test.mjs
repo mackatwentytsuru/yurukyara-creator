@@ -163,11 +163,12 @@ test('仮の頭脳: 絵は見ない。絵について聞かれたら、本物の
   const asked = [];
   await runTurn(sanitizeChatBody({ text: 'これなに?', image: pic }), { onEvent: (e) => asked.push(e), brain: 'mock', paceMs: 0 });
   assert.deepEqual(asked.filter((e) => e.type === 'say').map((e) => e.text), [...CAMERA_MOCK_LINES]);
-  assert.ok(asked.some((e) => e.type === 'meta' && e.camera === 'mock' && e.cameraNotice && !e.notice), '知らせは cameraNotice(「仮の頭脳です」を上書きしない)');
+  assert.ok(asked.some((e) => e.type === 'meta' && e.camera === 'mock' && !e.cameraNotice), '返事が「見られない」と言う回は、知らせを足さない(字幕の上の段を増やさない)');
   const other = [];
   await runTurn(sanitizeChatBody({ text: 'カレーが好き', image: pic }), { onEvent: (e) => other.push(e), brain: 'mock', paceMs: 0 });
   const said = other.filter((e) => e.type === 'say').map((e) => e.text);
   assert.ok(said.length > 0 && !said.includes(CAMERA_MOCK_LINES[0]), '聞かれていない回は、ふつうの返事(知らせだけ)');
+  assert.ok(other.some((e) => e.type === 'meta' && e.camera === 'mock' && e.cameraNotice && !e.notice), '知らせは cameraNotice(「仮の頭脳です」を上書きしない)');
   const plain = [];
   await runTurn(sanitizeChatBody({ text: 'これなに?' }), { onEvent: (e) => plain.push(e), brain: 'mock', paceMs: 0 });
   assert.ok(!plain.some((e) => e.camera), '絵の無い回は、カメラの知らせを出さない');
