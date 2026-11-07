@@ -93,16 +93,6 @@ export function latencyNote(entry = {}, { fakeBrain = false } = {}) {
   return brain === 'mock' || (brain !== 'haiku' && fakeBrain) ? FAKE_BRAIN_LATENCY_NOTE : '';
 }
 
-/* ---------- 字幕の流れ(点検 CRITux 12: 話し終わった後も、返事の全部を読めるように) ---------- */
-/**
- * 字幕に出す物を決める(DOM は触らない。createUi が描く)。会話の側(Dialogue)の呼び方はそのまま受ける:
- *   say(文) → caption('' か 文) → caption(文字送りの途中)… → 次の say … → caption(null, ms)(話し終わり) / caption(null)(取り消し・次の会話)
- * - 話している間: 前の文(小さく)+ 今の文。文が入れ替わっても、前の文は消えない
- * - 話し終わり(null と待つ時間): 返事の全部を残す(前は 1.2 秒で消え、最後の 1 文しか読めなかった)。次の会話が始まるまで消さない
- * - 取り消し(null だけ)・使う人の言葉・ほかの知らせ(聞き返しなど): 返事を片づけて、その文を出す
- * @returns {{say(text: string): void, caption(text: string|null|undefined, hideAfterMs?: number, kind?: string): object, readonly phase: string}}
- *   caption の返す物: { hide: true, afterMs } / { reply: true, prev, current, settled } / { text, kind }
- */
 /**
  * B3(第 12 波 b): 返事の字幕の描く物を決める(DOM は触らない)。onlyNow(テレビ表示・キーボードで低い画面の 1 行の字幕)の時は、
  * まだ話していない文(next)を出さない。描く物が何も無ければ hide(字幕の箱ごと隠す。空の箱を出さない)
@@ -115,11 +105,23 @@ export function captionView(v, { onlyNow = false } = {}) {
   return { hide: !v?.prev && !v?.current && !next, next };
 }
 
+/* ---------- 字幕の流れ(点検 CRITux 12: 話し終わった後も、返事の全部を読めるように) ---------- */
+/**
+ * 字幕に出す物を決める(DOM は触らない。createUi が描く)。会話の側(Dialogue)の呼び方はそのまま受ける:
+ *   say(文) → caption('' か 文) → caption(文字送りの途中)… → 次の say … → caption(null, ms)(話し終わり) / caption(null)(取り消し・次の会話)
+ * - 話している間: 前の文(小さく)+ 今の文。文が入れ替わっても、前の文は消えない
+ * - 話し終わり(null と待つ時間): 返事の全部を残す(前は 1.2 秒で消え、最後の 1 文しか読めなかった)。次の会話が始まるまで消さない
+ * - 取り消し(null だけ)・使う人の言葉・ほかの知らせ(聞き返しなど): 返事を片づけて、その文を出す
+ * - B3(第 12 波 b): ahead(文) = 届いたけれど、まだ話していない文。next(薄く)で先に見せ、その返事の形に ahead: true を付ける
+ * @returns {{say(text: string): void, ahead(text: string): object|null, caption(text: string|null|undefined, hideAfterMs?: number, kind?: string): object, readonly phase: string}}
+ *   caption の返す物: { hide: true, afterMs } / { reply: true, prev, current, settled, ahead?, next? } / { text, kind }
+ */
 export function createCaptionFlow() {
   let done = []; // この返事の、話し終えた文
   let full = null; // 話している文(全部)
   let ahead = []; // B3(第 12 波 b): 届いたけれど、まだ話していない文。話し始める前から薄く見せる(返事の全部が早く読める)
   let fullShown = false; // 今の文を、話す前に先に見せていたか(見せていた文は、文字送りの間も残りを薄く出したままにする)
+  let aheadUsed = false; // この返事で、文を先に見せたか(見せた返事は、話し終わりと同じ大きさの 1 つの段落で描く。字幕の箱が話し終わりより高くならない)
   let phase = 'idle'; // idle | reply | settled
   const reset = () => {
     done = [];
@@ -129,7 +131,6 @@ export function createCaptionFlow() {
     aheadUsed = false;
     phase = 'idle';
   };
-  let aheadUsed = false; // この返事で、文を先に見せたか(見せた返事は、話し終わりと同じ大きさの 1 つの段落で描く。字幕の箱が話し終わりより高くならない)
   /** 薄く見せる所: 先に見せていた今の文のまだ出ていない残りと、届いてまだ話していない文。無ければ欄を付けない */
   const withNext = (view, shown) => {
     const next = `${fullShown && full !== null ? full.slice(shown.length) : ''}${ahead.join('')}`;
