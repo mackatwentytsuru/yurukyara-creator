@@ -39,15 +39,23 @@ window.__ready = true;
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 async function findChrome() {
-  let chromium;
+  let pw;
   try {
-    ({ chromium } = await import('playwright-core'));
+    pw = await import('playwright-core');
   } catch {
     return null;
   }
+  // BSF_ENGINE=webkit と WEBKIT_PATH で、Safari と同じ描き方の WebKit でも流せる(iPhone の Safari の並びの目安)
+  if (process.env.BSF_ENGINE === 'webkit') {
+    try {
+      return await pw.webkit.launch({ headless: true, ...(process.env.WEBKIT_PATH ? { executablePath: process.env.WEBKIT_PATH } : {}) });
+    } catch {
+      return null;
+    }
+  }
   const opts = process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chrome' };
   try {
-    return await chromium.launch({ ...opts, headless: true });
+    return await pw.chromium.launch({ ...opts, headless: true });
   } catch {
     return null;
   }
