@@ -1555,9 +1555,11 @@ async function boot() {
       // UW5(UIR 11): 英語の err.message は出さない。カメラが使えなかった時は、やさしい 1 行を出して、カメラなしで自動で始める
       if (kind === 'camera') {
         status.textContent = UW5_CAMERA_FALLBACK;
+        status.scrollIntoView?.({ block: 'center' }); // 幅 390 の入口は知らせが画面の下に出る。見える所へ(UW5r 中 3)
+        ui.notice(UW5_CAMERA_FALLBACK); // 画面の上の知らせでも同じ 1 行を出す
         setTimeout(() => {
           void startSource('sim', UW5_CAMERA_FALLBACK).then(() => ui.notice(UW5_CAMERA_FALLBACK));
-        }, 900);
+        }, 1600);
         return;
       }
       status.textContent = 'うまく はじめられなかったよ。「カメラなしで試す」なら うごかせます。';
@@ -1639,6 +1641,8 @@ const UW5_LISTENING = 'きいているよ';
 const UW5_TALK = 'はなす';
 const UW5_SIMPLE = !(IS_HEADSET || ['led', 'autostart'].some((k) => params.get(k) === '1') || params.get('perf') === '1');
 let uw5Greeted = false;
+let uw5GreetWait = 0;
+let uw5GreetForce = false;
 let uw5Rested = false;
 
 /** 上の段の「かえる」「もっと」を開く('change' | 'more')・閉じる(null)。開いた段はキャラの頭の線に数える(topGuard) */
@@ -1683,6 +1687,14 @@ function uw5ShowExamples() {
 function uw5GreetOnOpen() {
   const root = document.documentElement.classList;
   if (uw5Greeted || root.contains('gate-up') || root.contains('fr-open') || !app.source || !UW5_SIMPLE) return;
+  // 初めての訪問は、はじめての会話の札があいさつをする(札の前に字幕でも話すと 2 つ同時に出て、声も重なった。UW5r 高 1)。
+  // 札が閉じて(しるしが残る)から、この関数がもう一度呼ばれて声をかける
+  if (firstRunWanted() && !uw5GreetForce) {
+    // 札が出なかった(読み込めない等)時だけ、2 秒後に自分で声をかける
+    if (!uw5GreetWait) uw5GreetWait = setTimeout(() => { uw5GreetForce = true; uw5GreetOnOpen(); }, 2000);
+    return;
+  }
+  clearTimeout(uw5GreetWait);
   uw5Greeted = true;
   uw5ShowExamples();
   if (!app.autoGreet || dialogue.busy || speaker.speaking) return;

@@ -92,3 +92,18 @@ test('しつかん: 「かえる」の中では、どの幅でも 4 つを並べ
   assert.match(css, /html\.top-simple \.top \.sk-open \{ display: none; \}/);
   assert.match(css, /html\.top-simple \.top \.sk-list \{\s*display: inline-flex;/);
 });
+
+test('UW5f: 初めての訪問は はじめての会話の札があいさつし、先に話さない。札が出ない時だけ 2 秒後に自分で話す', () => {
+  assert.match(uw5, /if \(firstRunWanted\(\) && !uw5GreetForce\) \{[\s\S]*?setTimeout\([\s\S]*?2000\)[\s\S]*?return;/);
+  assert.ok(uw5.indexOf('firstRunWanted()') < uw5.indexOf('uw5Greeted = true'), '話す前に初めての訪問かを見る');
+});
+
+test('UW5f: 声の料金は来場者の画面に出さない。あたまの なかは「用件」と秒数を出さない。覚えていることは巻ける影が出る', () => {
+  assert.doesNotMatch(readFileSync(new URL('../src/ui/persona/settings.js', import.meta.url), 'utf8').match(/elevenlabs: \{[^}]*\}/)?.[0] ?? '', /料金|鍵が要る/);
+  assert.match(css, /html\.top-simple \.thought-foot, html\.top-simple \.thought-body \.row:has\(#tIntent\) \{ display: none; \}/);
+  assert.match(css, /#memoryDrawer\[open\] > \.drawer-body \{[^}]*overflow-y: auto;[^}]*radial-gradient/);
+});
+
+test('UW5f: カメラが使えない時のやさしい 1 行は、入口の知らせを見える所へ出し、画面の上の知らせにも出す', () => {
+  assert.match(main, /status\.textContent = UW5_CAMERA_FALLBACK;[^\n]*\n[^\n]*status\.scrollIntoView\?\.\(\{ block: 'center' \}\);[^\n]*\n[^\n]*ui\.notice\(UW5_CAMERA_FALLBACK\);/);
+});
