@@ -101,7 +101,8 @@ test('画面へのつなぎ方: 入口は隠して始め、main.js が Quest の
   const html = read('index.html');
   assert.match(html, /<div class="quest-link" id="questLink" data-hide-in-ar hidden>/);
   assert.match(html, /id="questLinkBtn"[^>]*aria-expanded="false"[^>]*aria-controls="questLinkBox"[^>]*aria-label="VR\(Quest\)で開く"/);
-  assert.match(html, /<span class="ql-short" aria-hidden="true">VR<\/span>/, '上の段の幅を保つため、ボタンの言葉は QR の印と「VR」だけ(名前は aria-label と title)');
+  assert.match(html, /<span class="ql-short" aria-hidden="true">VR<\/span>/, '上の段の幅を保つため、PC のボタンの言葉は QR の印と「VR」だけ(名前は aria-label と title)');
+  assert.match(html, /<span class="ql-phone" aria-hidden="true">Quest で開く<\/span>/, 'スマホでは「Quest で開く」と書く(css の幅 640 までで切り替え)');
   assert.match(html, /id="questLinkBox" role="dialog" aria-label="VR\(Quest\)で開く" tabindex="-1" hidden><\/div>/);
   const css = read('src', 'ui', 'style.css');
   assert.match(css, /\.quest-link-btn \{[^}]*min-height: 44px; min-width: 44px;/);

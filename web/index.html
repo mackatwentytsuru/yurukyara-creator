@@ -25,7 +25,7 @@
       <div class="quest-link" id="questLink" data-hide-in-ar hidden>
         <button type="button" id="questLinkBtn" class="quest-link-btn" aria-expanded="false" aria-controls="questLinkBox" aria-label="VR(Quest)で開く" title="VR(Quest)で開く">
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M1 1h6v6H1zm2 2v2h2V3zm6-2h6v6H9zm2 2v2h2V3zM1 9h6v6H1zm2 2v2h2v-2zm7-2h2v2h-2zm3 0h2v2h-2zm-3 3h2v3h-2zm3 2h2v1h-2z"/></svg>
-          <span class="ql-short" aria-hidden="true">VR</span>
+          <span class="ql-short" aria-hidden="true">VR</span><span class="ql-phone" aria-hidden="true">Quest で開く</span>
         </button>
         <div class="quest-link-box" id="questLinkBox" role="dialog" aria-label="VR(Quest)で開く" tabindex="-1" hidden></div>
       </div>
@@ -101,15 +101,16 @@
     </div>
   </div>
 
-  <!-- 入口。閉じるまで、上の段(html.gate-up の間は隠す)は押せない。初めての訪問なら、閉じた後に「はじめての会話」(7 歩)が出る -->
+  <!-- 入口。閉じるまで、上の段(html.gate-up の間は隠す)は押せない。初めての訪問なら、閉じた後に「はじめての会話」(7 つのステップ)が出る -->
   <div id="gate" class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
     <div class="gate-card">
       <h1 id="gateTitle">ゆるキャラクリエイター</h1>
+      <p class="gate-what" id="gateWhat">言葉か絵 1 枚から、話して覚えるゆるキャラを作れます。</p>
       <p class="gate-guide" id="gateGuide">案内するのは主役の<b>ノリー</b>。協力者が手で描いた、セスジキノボリカンガルーの執事見習いです。</p>
       <p class="lead" id="gateLead">キャラがあなたの方を見て、文字で答えます。声は、声の鍵があるときだけ出ます。</p>
-      <p class="gate-first" id="gateFirst" hidden>はじめてなら、このあと「はじめての会話」(7 歩)が始まります。キャラ作りの流れを試せます。</p>
-      <button id="startCam" class="primary" type="button"><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">キャラがあなたの方を見ます</small></button>
-      <button id="startSim" class="ghost" type="button"><span class="btn-main">カメラなしで試す</span><small class="btn-sub" id="simSub">画面の上で動かした向きを見ます</small></button>
+      <p class="gate-first" id="gateFirst" hidden>はじめてなら、このあと「はじめての会話」(7 つのステップ)が始まります。キャラ作りの流れを試せます。</p>
+      <button id="startCam" class="primary" type="button" disabled><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">読み込んでいます…</small></button>
+      <button id="startSim" class="ghost" type="button" disabled><span class="btn-main">カメラなしで試す</span><small class="btn-sub" id="simSub">読み込んでいます…</small></button>
       <label class="pass" id="passField" hidden>
         <span>合言葉(あれば。無くても仮の頭脳で話せます)</span>
         <input id="passInput" type="password" autocomplete="off" maxlength="200" />

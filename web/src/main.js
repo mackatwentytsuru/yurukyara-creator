@@ -28,6 +28,7 @@ import { loadPlaceData, landmarkWorld, promptPlace, SAMPLE_PLACE } from './place
 import { createArPlacement } from './arPlacement.js';
 import { createVrStage } from './vrStage.js';
 import { createVrPanel } from './ui/vrPanel.js';
+import { micUnavailableText, micFailureText } from './stage/micNotice.js'; // 声で話せなかった時の、やさしい日本語の知らせ
 import { createAlignFlow } from './stage/alignFlow.js'; // 撮った部屋を現実に重ねる手順(場所の柱)
 // 見せ方(画面・AR・VR)の切りかえは、場所の柱が出している入口(docs/共通の決まり.md)
 import { createPresentation } from './stage/modes.js';
@@ -302,6 +303,11 @@ async function toggleMic() {
     updatePrivacy();
     return;
   }
+  const unavailable = micUnavailableText({ secure: window.isSecureContext, mediaDevices: navigator.mediaDevices });
+  if (unavailable) {
+    ui.notice(unavailable); // 押しても何も起きないように見えないよう、字幕の上に出す(P1 高)
+    return;
+  }
   try {
     speaker.unlock();
     const provider = listenProvider();
@@ -344,9 +350,10 @@ async function toggleMic() {
     updatePrivacy();
   } catch (err) {
     listener = null;
-    // マイクの許可の窓で断られた時は、英語の「Permission denied」でなく日本語で(実機の Quest で、断ると英語が出た)
-    const denied = err?.name === 'NotAllowedError' || err?.name === 'SecurityError';
-    ui.error(denied ? 'マイクを使えませんでした(ブラウザで許可されませんでした)。文字で話しかけられます' : err.message);
+    // 英語の err.message は出さない。字幕の上の知らせに、やさしい日本語で(P1 高)。VR の板にも同じ文
+    const text = micFailureText(err);
+    ui.notice(text);
+    app.vrPanel?.set({ error: text });
   }
 }
 
@@ -707,7 +714,7 @@ async function setupPresentation() {
 const TOP_BAR = '.top .chip, .top .top-row > *:not(#tvBtn)'; // 上の段(横いっぱいに数える)
 const TOP_SIDE = '#thoughtToggle, #tvBtn'; // スマホで上の段の下に並ぶ畳んだ見出しと「テレビ」(キャラの横に重なる時だけ。同じすき間)
 const TOP_PANELS = '#thought:not(.collapsed), #questLinkBox:not([hidden])'; // 開いた窓(重なる時だけ)
-const TOP_GAP_PX = 8; // 開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
+const TOP_GAP_PX = 14; // 幅 320 で耳が上の段に 6px かかった(P1 低)ので 8 → 14。開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
 const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
 
 /** キャラの頭を置いてよいいちばん上の線(px)。[left, right] はキャラの横の範囲。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
@@ -735,6 +742,27 @@ function reframe() {
  * 下の帯(よくある質問のボタン・入力欄)の高さが変わったら、全身の見せ方を取り直す(足が帯に隠れないように)。
  * テレビ表示では帯を隠すので、字幕の 2 行分(字の大きさは画面の高さの 6%)と、下の端に残る物(カメラの注意書き)の高さを空ける
  */
+/** スマホで「はじめての会話」の札(下から出る札 .fr-sheet)が開いている時の、札が覆う高さ(px)。見本の子を札の上に全身で出すために数える(P1 高。S4 と組)。出ていない・横に出る札(幅 720 以上)は 0 */
+function cardInset() {
+  const sheet = document.querySelector('.fr-sheet');
+  if (!sheet || !document.documentElement.classList.contains('fr-open')) return 0;
+  const r = sheet.getBoundingClientRect();
+  if (!(r.height > 0) || r.width < window.innerWidth - 2) return 0;
+  return Math.max(0, Math.round(window.innerHeight - r.top) + 8);
+}
+let observedSheet = null;
+const sheetObserver = new ResizeObserver(() => fitBottom());
+/** 札が出た・消えた・差し替わった時に、大きさを見る相手を付け替える */
+function watchSheet() {
+  const sheet = document.querySelector('.fr-sheet');
+  if (sheet === observedSheet) return;
+  if (observedSheet) sheetObserver.unobserve(observedSheet);
+  observedSheet = sheet;
+  if (sheet) sheetObserver.observe(sheet);
+  fitBottom();
+}
+new MutationObserver(watchSheet).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
 function fitBottom() {
   const bottomBar = document.querySelector('.bottom');
   if (!bottomBar) return;
@@ -744,7 +772,8 @@ function fitBottom() {
     document.documentElement.style.setProperty('--tv-cap', `${tvCaptionPx(window.innerHeight)}px`);
     stage.state.bottomInset = h + tvBottomReserve(window.innerHeight);
   } else {
-    stage.state.bottomInset = h + 8 + 80; // 80 は、帯の上に出る字幕と札の分(足に重ならないように)
+    // 帯の上に出る字幕と札の分(足に重ならないように)。字幕は 2 行 + 知らせで画面の高さの 14〜16% ほど(L1: 80px 固定では、字幕がキャラの足元・体に 12 場面でかかった)
+    stage.state.bottomInset = Math.max(h + 8 + Math.round(Math.min(140, Math.max(96, window.innerHeight * 0.16))), cardInset());
   }
   reframe();
 }
@@ -1214,6 +1243,7 @@ async function boot() {
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
   fillGate(); // 入口の文(声があるか・初めての訪問か・指かマウスか)は、状態を読んだ後に決める
+  $('camSub').textContent = 'キャラがあなたの方を見ます'; // index.html では「読み込んでいます…」で押せない(遅い回線で、押せそうで押せない時間を作らない。P1 中)
   buttons.forEach((b) => (b.disabled = false));
   // ?perf=1: いまの重さを測る(L0。数字は window.__perf。測りの部品は、このときだけ読む)
   if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt, tier: app.tier, firstFrameAt: () => app.firstFrameAt, loopStartAt }));

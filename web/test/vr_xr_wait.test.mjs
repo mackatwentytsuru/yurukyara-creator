@@ -207,7 +207,9 @@ test('main.js: 真ん中の知らせをつなぐ・ヘッドセットの「VR �
   assert.match(css, /\.xr-wait \{\n\s+position: fixed; left: 50%; top: 50%; transform: translate\(-50%, -50%\);/, '画面の真ん中');
   assert.match(css, /html\.is-headset \.align \{\n\s+left: 12px; transform: none;[^}]*top: calc\(max\(12px, env\(safe-area-inset-top\)\) \+ var\(--top-h, 96px\) \+ 8px\);/, 'ヘッドセットの案内は上の段の下の左(キャラの顔に重ねない)');
   assert.match(css, /\.place-mode-button:disabled \{ opacity: 0\.55;/, '頼んでいる間は押せないと分かる見た目');
-  assert.match(main, /const denied = err\?\.name === 'NotAllowedError' \|\| err\?\.name === 'SecurityError';\n\s+ui\.error\(denied \? 'マイクを使えませんでした\(ブラウザで許可されませんでした\)。文字で話しかけられます' : err\.message\);/, 'マイクを断った時は日本語で');
+  const notice = read('src', 'stage', 'micNotice.js');
+  assert.match(main, /const text = micFailureText\(err\);\n\s+ui\.notice\(text\);/, 'マイクが使えなかった時は、字幕の上の知らせに日本語で(英語の err.message を出さない)');
+  assert.match(notice, /ブラウザで許可されませんでした/, 'マイクを断った時の日本語');
 });
 
 test('ボタン: 許可を覚えていて 900ms 以内に入れる時は、真ん中の知らせを一瞬も出さない(Q3 ⑤)。時間がかかる時だけ出す', async () => {
