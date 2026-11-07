@@ -43,7 +43,7 @@ const GROUP = (ch) => (ch.startsWith('head') ? 'head' : ch.startsWith('spine') ?
 export const TALK_SCALE = 0.55;
 export const TALK_HOP_SCALE = 0.4;
 /** 根元が上へ出るいちばん大きな量(背の高さに対する割合)。画面の頭の上の余白に足す(scene.js の motionRise) */
-export const CUTE_RISE = 0.05;
+export const CUTE_RISE = 0.035;
 /** 表情からの自動の仕草は、この秒数に 1 回まで */
 export const AUTO_GAP_S = 6;
 
@@ -71,7 +71,7 @@ const G = {
       const hops = k % 2 === 0 ? 2 : 3;
       const gap = hops === 2 ? 0.42 : 0.33;
       d.rootY += dip(t, 0, 0.12, 0.01);
-      for (let i = 0; i < hops; i++) d.rootY += hop(t, 0.12 + i * gap, gap * 0.8, i === 0 ? 0.044 : 0.034);
+      for (let i = 0; i < hops; i++) d.rootY += hop(t, 0.12 + i * gap, gap * 0.8, i === 0 ? 0.033 : 0.026);
       // 腕: 変形の偶数は弾みに合わせてぱたぱた(上げた形の 3〜5 割)、奇数は小さなばんざい(6 割)
       const flap = Math.max(0, Math.sin((2 * Math.PI * (t - 0.08)) / (gap * 1.0)));
       const up = k % 2 ? 0.6 : 0.28 + 0.22 * flap;
@@ -101,7 +101,7 @@ const G = {
         d.armRaiseR += e;
         d.armSwingR += 0.32 * Math.sin(2 * Math.PI * (k % 2 ? 2.2 : 1.9) * Math.max(0, t - 0.3)) * smooth((t - 0.25) / 0.3) * e;
       }
-      d.rootY += dip(t, 0, 0.12, 0.009) + hop(t, 0.12, 0.3, 0.034) + hop(t, 0.5, 0.26, k % 2 ? 0.026 : 0.02);
+      d.rootY += dip(t, 0, 0.12, 0.009) + hop(t, 0.12, 0.3, 0.026) + hop(t, 0.5, 0.26, k % 2 ? 0.02 : 0.015);
       if (cap.armByClip) d.armSwingR += 0.22 * Math.sin(2 * Math.PI * 1.9 * Math.max(0, t - 0.35)) * smooth((t - 0.3) / 0.3) * e; // 小さい腕の子でも、ふる手が見えるように少し足す
       // 上げた腕と反対へ頭をかしげる(頭でっかちでも、ほおに腕が当たらない)。体は上げた腕の方へ少し寄る
       d.headZ += -0.14 * e - 0.04 * Math.sin(2 * Math.PI * 1.9 * t) * e;
@@ -123,7 +123,7 @@ const G = {
       d.armRaiseR += e;
       d.armSwingL += 0.12 * Math.sin(2 * Math.PI * 2.4 * t) * e;
       d.armSwingR -= 0.12 * Math.sin(2 * Math.PI * 2.4 * t) * e;
-      d.rootY += dip(t, 0, 0.14, 0.011) + hop(t, 0.14, 0.34, 0.046) + hop(t, 0.56, 0.3, 0.036);
+      d.rootY += dip(t, 0, 0.14, 0.011) + hop(t, 0.14, 0.34, 0.034) + hop(t, 0.56, 0.3, 0.027);
       d.blush += 0.3 * e;
       d.headX -= 0.08 * e;
       d.headZ += 0.03 * side * Math.sin(2 * Math.PI * 1.2 * t) * e;
@@ -167,7 +167,7 @@ const G = {
     variants: 2,
     f(t, d, side) {
       const up = t < 0.09 ? smooth(t / 0.09) : Math.exp(-(t - 0.09) / 0.45);
-      d.rootY += hop(t, 0.02, 0.26, 0.024);
+      d.rootY += hop(t, 0.02, 0.26, 0.02);
       d.spineX -= 0.12 * up;
       d.headX -= 0.08 * up;
       d.headZ += 0.04 * side * up;
@@ -299,7 +299,7 @@ const ACCENTS = {
   tiltR: { dur: 2.2, need: null, f(t, d) { const e = bump(t / 2.2, 0.3, 0.4); d.headZ -= 0.2 * e; d.spineZ -= 0.03 * e; } },
   lookAside: { dur: 2.0, need: null, f(t, d, side) { const e = bump(t / 2, 0.18, 0.3); d.gazeX += 0.35 * side * e; d.headY += 0.06 * side * e; } },
   weightShift: { dur: 2.8, need: null, f(t, d, side) { const e = bump(t / 2.8, 0.35, 0.4); d.rootX += 0.007 * side * e; d.spineZ -= 0.03 * side * e; d.headZ += 0.025 * side * e; } },
-  bounce: { dur: 0.7, need: null, f(t, d) { d.rootY += dip(t, 0, 0.1, 0.003) + hop(t, 0.1, 0.26, 0.016); d.smile += 0.2 * bump(t / 0.7, 0.2, 0.4); } },
+  bounce: { dur: 0.7, need: null, f(t, d) { d.rootY += dip(t, 0, 0.1, 0.003) + hop(t, 0.1, 0.26, 0.012); d.smile += 0.2 * bump(t / 0.7, 0.2, 0.4); } },
   earFlick: { dur: 0.6, need: 'ears', f(t, d, side) { const e = bump(t / 0.6, 0.15, 0.5); d.earL += (side > 0 ? 0.45 : 0.1) * e; d.earR += (side > 0 ? 0.1 : 0.45) * e; } },
   armSwing: { dur: 1.8, need: 'arms', f(t, d, side) { const e = bump(t / 1.8, 0.2, 0.4); const w = Math.sin((2 * Math.PI * t) / 0.9); d.armOutL += (0.1 + 0.07 * w * side) * e; d.armOutR += (0.1 - 0.07 * w * side) * e; } },
   tailFlick: { dur: 1.4, need: 'tail', f(t, d, side) { const e = bump(t / 1.4, 0.15, 0.45); d.tailY += 0.35 * side * Math.sin((2 * Math.PI * t) / 0.7) * e; d.tailX += 0.12 * e; } },
