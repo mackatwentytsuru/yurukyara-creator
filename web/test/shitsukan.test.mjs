@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   SHITSUKAN, SHITSUKAN_IDS, DEFAULT_SHITSUKAN, STORE_KEY, LOOKS, LIGHT, FUR_LOOK, TILE_M,
   normalizeShitsukan, pickShitsukan, readStored, writeStored, characterDefault, labelOf, subOf, heavyNoteWanted,
-  isFlatPaint, classifyMaterial, cylinderUv, fleeceHeight, normalFromHeight, ormFromHeight,
+  isFlatPaint, classifyMaterial, cylinderUv, smoothNormals, fleeceHeight, normalFromHeight, ormFromHeight,
 } from '../src/stage/shitsukan.js';
 
 const memory = () => {
@@ -141,6 +141,48 @@ test('円柱の UV: 世界の長さでそろい、継ぎ目は真後ろの 1 本
   for (let k = 0; k < 16; k++) if (Math.abs(uv[((k + 1) % 16) * 2] - uv[k * 2]) > 1.5) jumps++;
   assert.equal(jumps, 1);
   assert.equal(cylinderUv(new Float32Array(0)).length, 0);
+});
+
+test('円柱の UV: キャラの真ん中の軸(center)で投げると、板の真ん中の近くでも角度が急に変わらない', () => {
+  // キャラの前にある、横に曲がった板(顔のお面の形)。板の真ん中のまわりで投げると u が大きく飛ぶが、キャラの軸のまわりなら弧の長さどおり
+  const pos = [];
+  for (let k = -4; k <= 4; k++) {
+    const a = (k / 4) * 0.6; // ±34°
+    pos.push(Math.sin(a) * 0.15, 0.5, Math.cos(a) * 0.15);
+  }
+  const uv = cylinderUv(Float32Array.from(pos), TILE_M, [0, 0]);
+  const steps = [];
+  for (let k = 0; k < 8; k++) steps.push(uv[(k + 1) * 2] - uv[k * 2]);
+  const want = (0.6 / 4) * 0.15 / TILE_M; // 1 歩の弧の長さ ÷ 12 cm
+  for (const s of steps) assert.ok(Math.abs(s - want) < 1e-4, `u の歩みがそろわない: ${steps}`);
+});
+
+test('法線をならす: 丸い所はならし、向きが 40° より違う角(箱の角)は残す', () => {
+  // 箱の 1 つの角: 3 つの面の頂点が同じ位置で、向きが 90° ずつ違う → まとめない・混ぜない
+  const pos = Float32Array.from([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  const nrm = Float32Array.from([1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  const idx = [0, 3, 5, 1, 4, 3, 2, 5, 4];
+  const out = smoothNormals(pos, nrm, idx);
+  for (let i = 0; i < 3; i++) {
+    const dot = out[i * 3] * nrm[i * 3] + out[i * 3 + 1] * nrm[i * 3 + 1] + out[i * 3 + 2] * nrm[i * 3 + 2];
+    assert.ok(dot > 0.999, `角の向きが混ざった(${i}: ${dot})`);
+  }
+  // ゆるく曲がった帯(となりどうし 10° ずつ)は、ならすと段差が小さくなる
+  const p2 = [];
+  const n2 = [];
+  for (let k = 0; k < 6; k++) {
+    const a = ((k * 10) * Math.PI) / 180;
+    p2.push(k, 0, 0, k, 1, 0);
+    const n = [0, Math.sin(a), Math.cos(a)];
+    n2.push(...n, ...n);
+  }
+  const i2 = [];
+  for (let k = 0; k < 5; k++) i2.push(k * 2, k * 2 + 2, k * 2 + 1, k * 2 + 1, k * 2 + 2, k * 2 + 3);
+  const o2 = smoothNormals(Float32Array.from(p2), Float32Array.from(n2), i2, { iterations: 8 });
+  const angle = (o, k) => Math.atan2(o[k * 6 + 1], o[k * 6 + 2]);
+  // 真ん中の 2 つの間の角の差は、元の 10° より小さくなる(ならした)。長さは 1
+  assert.ok(Math.abs(angle(o2, 3) - angle(o2, 2)) < (10 * Math.PI) / 180);
+  for (let i = 0; i < o2.length; i += 3) assert.ok(Math.abs(Math.hypot(o2[i], o2[i + 1], o2[i + 2]) - 1) < 1e-5);
 });
 
 test('毛羽の絵: 同じ種なら同じ・端どうしがつながる・法線と粗さの絵は 0..255 の RGBA', () => {
