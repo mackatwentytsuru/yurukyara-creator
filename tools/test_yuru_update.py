@@ -20,7 +20,15 @@ import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TOOL = os.path.join(HERE, "yuru_update.py")
+TOOL_FILES = ("yuru_update.py", "yuru_update_core.py")   # 道具と部品(写しの tools/ に置く)
+
+
+def tool_files():
+    out = {}
+    for name in TOOL_FILES:
+        with open(os.path.join(HERE, name), "rb") as f:
+            out[f"tools/{name}"] = f.read()
+    return out
 KEY_VALUE = "dummy-value-for-update-test"
 NEWS = "docs/できるようになったこと.md"
 
@@ -108,8 +116,7 @@ class UpdateTest(unittest.TestCase):
         self.user = os.path.join(t, "user")
         os.makedirs(self.author)
         self.git(self.author, "init", "-q", "-b", "main")
-        with open(TOOL, "rb") as f:
-            self.commit(dict(V1, **{"tools/yuru_update.py": f.read()}), "1.0.0")
+        self.commit(dict(V1, **tool_files()), "1.0.0")
         self.git(t, "clone", "-q", "--bare", self.author, self.origin)
         self.git(t, "clone", "-q", self.origin, self.user)
         self.head0 = self.git(self.user, "rev-parse", "HEAD").strip()
@@ -157,7 +164,14 @@ class UpdateTest(unittest.TestCase):
         before = self.put_mine()
         old_mikan = sha(self.user, "characters/mikan/persona.md")
         self.advance()
+        self.step_check()
+        name = self.step_apply(before)
+        code, out = self.tool("status")
+        self.assertIn("版: 1.1.0", out)
+        self.assertIn(f"backups/{name}", out)
+        self.step_undo(before, old_mikan)
 
+    def step_check(self):
         code, out = self.tool("check")
         self.assertEqual(code, 0)
         self.assertIn("今の版: 1.0.0", out)
@@ -172,6 +186,7 @@ class UpdateTest(unittest.TestCase):
         code, out = self.tool("check", "--quiet", "--once-a-day")  # 今日は 2 回目なので、何も出さない
         self.assertEqual(out.strip(), "")
 
+    def step_apply(self, before):
         code, out = self.tool("apply")
         self.assertEqual(code, 0, out)
         self.assertIn("新しい版 1.1.0 になりました(前は 1.0.0)", out)
@@ -197,11 +212,9 @@ class UpdateTest(unittest.TestCase):
         self.assertNotIn("web/.env", saved)
         self.assertFalse(os.path.exists(os.path.join(self.user, "backups", name, "files", "web", ".env")))
         self.assertEqual(self.git(self.user, "status", "--porcelain", "--", "backups", ".yuru_update.json"), "")
+        return name
 
-        code, out = self.tool("status")
-        self.assertIn("版: 1.1.0", out)
-        self.assertIn(f"backups/{name}", out)
-
+    def step_undo(self, before, old_mikan):
         code, out = self.tool("undo")
         self.assertEqual(code, 0, out)
         self.assertIn("前の版 1.0.0 に戻しました", out)
@@ -289,8 +302,8 @@ class UpdateTest(unittest.TestCase):
 
     def test_not_a_git_clone(self):
         plain = os.path.join(self.tmp.name, "plain")
-        os.makedirs(os.path.join(plain, "tools"))
-        shutil.copy(TOOL, os.path.join(plain, "tools", "yuru_update.py"))
+        for rel_path, data in tool_files().items():
+            write(plain, rel_path, data)
         code, out = self.tool("check", cwd=plain)
         self.assertEqual(code, 0)
         self.assertIn("git clone で取ってきた物ではない", out)
@@ -308,6 +321,26 @@ class UpdateTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("途中", out)
         self.assertEqual(text(self.user, "VERSION").strip(), "1.0.0")
+
+    def test_small_fix_without_a_new_version(self):
+        self.commit({"characters/mikan/persona.md": "# みかん\n- 小さな直し\n"}, "fix")
+        self.git(self.author, "push", "-q", self.origin, "main")
+        code, out = self.tool("check")
+        self.assertIn("小さな直しが 1 個あります", out)
+        self.assertEqual(self.tool("check", "--quiet")[1].strip(), "")   # 版が同じなら、起動のおしらせは出さない
+        code, out = self.tool("apply")
+        self.assertEqual(code, 0, out)
+        self.assertIn("小さな直しを入れました(版は 1.0.0)", out)
+
+    def test_own_commits_stop_the_update(self):
+        self.advance()
+        write(self.user, "characters/norrie/persona.md", EDITED_NORRIE)
+        self.git(self.user, "commit", "-q", "-am", "mine")
+        code, out = self.tool("apply")
+        self.assertEqual(code, 1)
+        self.assertIn("自分で記録した変更", out)
+        self.assertEqual(text(self.user, "VERSION").strip(), "1.0.0")
+        self.assertEqual(self.backup_dirs(), [])
 
     def test_already_newest(self):
         code, out = self.tool("check")
