@@ -381,6 +381,15 @@ html.is-led .drawer { display: none !important; }
 @media (max-width: 640px) {
   .tv-btn .tv-long { display: none; }
   .tv-btn .tv-short { display: inline; }
+  /* 幅 640 まで: 上の段の行には入れない(幅 390 で「覚えていること」がある時、1 行増えてキャラが小さくなった)。
+     畳んだ「Claude の考え」の見出しと同じ行の右、見た目の切り替えの左に置く(--tv-right は main.js が切り替えの幅から入れる) */
+  .tv-btn { position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); right: var(--tv-right, 12px); }
+  body:has(#tvBtn:not([hidden])) .thought:not(.collapsed) .thought-head { padding-right: calc(var(--tv-right, 12px) + 72px); }
+}
+/* 幅 420 まで: 見出しと重ならないよう、見た目の切り替えの「見た目」の字(飾り。名前は group の aria-label)を出さない */
+@media (max-width: 420px) {
+  body:has(#tvBtn:not([hidden])) .look-switch { padding-left: 1px; }
+  body:has(#tvBtn:not([hidden])) .look-switch .look-label { display: none; }
 }
 .tv-btn[aria-expanded="true"] { border-color: var(--lav); }
 .tv-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }

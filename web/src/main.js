@@ -810,6 +810,16 @@ function closeTvCast(focusButton = false) {
   if (focusButton) $('tvBtn')?.focus({ preventScroll: true });
 }
 
+/**
+ * 幅 640 まで: 入口は、畳んだ「Claude の考え」の見出しと同じ行の右、見た目の切り替えの左(style.css)。
+ * 切り替えの幅を測って --tv-right に入れる(切り替えが無ければ右の端から 12px)
+ */
+function placeTvButton() {
+  const look = $('lookSwitch');
+  const w = look && !look.hidden ? Math.ceil(look.getBoundingClientRect().width) : 0;
+  document.documentElement.style.setProperty('--tv-right', `${12 + (w > 0 ? w + 8 : 0)}px`);
+}
+
 /** 上の段の入口と、隅の「もどる」・手順の箱の押す所を付ける。ヘッドセットの中・入口の LED・自動で始める画面・重さを測る時は出さない */
 function setupTvMode() {
   const btn = $('tvBtn');
@@ -851,6 +861,9 @@ function setupTvMode() {
     },
     set: setTvMode,
   };
+  const look = $('lookSwitch');
+  if (look) new ResizeObserver(placeTvButton).observe(look); // 切り替えが出る・隠れる・幅が変わる時に置き直す
+  placeTvButton();
   btn.hidden = false;
 }
 
