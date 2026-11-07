@@ -154,6 +154,9 @@ test('札を付けると「パソコンの つづきを はじめる?」を 1 �
   assert.ok(dlg, '窓が出る');
   assert.deepEqual(dialogs(), [dlg], 'document.body に 1 つ');
   assert.equal(dlg.modal, true, 'showModal(ほかの物の上に出る)');
+  assert.deepEqual([dlg.style.width, dlg.style.height], ['100%', '100%'], '画面いっぱいの暗い地(後ろの「はじめての案内」の文字を隠す)');
+  assert.equal(dlg.style.display, undefined, 'dialog の display は替えない(閉じた時に隠れる決まりを残す)');
+  assert.equal(dlg.find('mem-pair-wrap').style.placeItems, 'center', '中の箱を真ん中に');
   assert.equal(dlg.find('mem-pair-title').textContent, 'パソコンの つづきを はじめる?');
   assert.equal(dlg.find('mem-pair-yes').textContent, 'はじめる');
   assert.equal(dlg.find('mem-pair-no').textContent, 'やめる');
@@ -264,10 +267,11 @@ function drawnMatrix(canvas) {
   return { m, px, white: canvas.ops[0] };
 }
 
-test('PC: 番号の横に QR。中身は origin + pathname + #pair= + 番号だけで、絵は encodeQr のマスそのまま', async () => {
+test('PC: 番号の横に QR。中身は origin + pathname + #pair= + 番号だけで、絵は encodeQr のマスそのまま', async (t) => {
   reset();
   Object.assign(globalThis.location, { origin: 'https://yuru.test', pathname: '/app/', search: '?askpass=1&memory=1', hash: '', hostname: 'yuru.test' });
   const parent = new FakeEl('div');
+  t.after(() => parent.find('mem-forget').click()); // 途中で落ちても 10 分の番号の時計を止める(止めないと node の試験が 10 分終わらない)
   const panel = mountMemoryPanel(parent, { linked: null });
   await panel.ready;
   assert.equal(panel.ask, null, 'QR で開いていない時は聞かない');
@@ -318,10 +322,11 @@ test('PC: 番号の時間が切れたら QR も消える。この PC の中の�
   pairExpiresMs = 600_000;
 });
 
-test('PC: QR の部品を読めない・描けない時は、番号だけ(今までどおり)', async () => {
+test('PC: QR の部品を読めない・描けない時は、番号だけ(今までどおり)', async (t) => {
   reset();
   Object.assign(globalThis.location, { origin: 'https://yuru.test', pathname: '/', search: '', hash: '', hostname: 'yuru.test' });
   const parent = new FakeEl('div');
+  t.after(() => parent.find('mem-forget').click()); // 途中で落ちても番号の時計を止める
   const panel = mountMemoryPanel(parent, { linked: null, loadQr: () => Promise.reject(new Error('読めない')) });
   await panel.ready;
   adoptKey(KEY_A);

@@ -286,10 +286,14 @@ function askLinked(linked, { host, claimWith, panelPass, say }) {
   const yes = el('button', { type: 'button', className: 'mem-pair-yes', textContent: PAIR_TEXT.yes });
   const no = el('button', { type: 'button', className: 'mem-pair-no', textContent: PAIR_TEXT.no });
   const box = el('div', { className: 'mem-pair-box' }, title, lead, passIn, msg, yes, no);
-  dlg.append(box);
-  // 見た目(style.css は S5 の物なので、この窓の分はここで付ける。幅 390 でも PC でも、ボタンは横いっぱい・高さ 64px)
-  css(dlg, { width: 'min(92vw, 440px)', maxWidth: '92vw', padding: '0', border: '1px solid var(--line, #444)', borderRadius: '22px', background: 'var(--ink-2, #1d1a2e)', color: 'var(--text, #f4f1fb)', boxShadow: '0 16px 48px rgba(0, 0, 0, 0.5)' });
-  css(box, { display: 'grid', gap: '14px', padding: '24px 20px', fontFamily: 'var(--font, system-ui)', textAlign: 'center' });
+  const wrap = el('div', { className: 'mem-pair-wrap' }, box);
+  dlg.append(wrap);
+  // 見た目(style.css は S5 の物なので、この窓の分はここで付ける。幅 390 でも PC でも、ボタンは横いっぱい・高さ 64px)。
+  // 窓は画面いっぱいの暗い地にして、後ろの「はじめての案内」などの文字を隠す(::backdrop は style の属性では塗れない)。
+  // dialog の display は替えない(閉じた時に隠れる決まりを残す)。真ん中に置くのは中の wrap
+  css(dlg, { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', margin: '0', padding: '0', border: '0', background: 'rgba(8, 6, 18, 0.82)', color: 'var(--text, #f4f1fb)', overflow: 'auto' });
+  css(wrap, { display: 'grid', placeItems: 'center', minHeight: '100%', padding: '16px', boxSizing: 'border-box' });
+  css(box, { width: 'min(100%, 440px)', boxSizing: 'border-box', display: 'grid', gap: '14px', padding: '24px 20px', border: '1px solid var(--line, #444)', borderRadius: '22px', background: 'var(--ink-2, #1d1a2e)', boxShadow: '0 16px 48px rgba(0, 0, 0, 0.5)', fontFamily: 'var(--font, system-ui)', textAlign: 'center' });
   css(title, { margin: '0', fontSize: '26px', fontWeight: '800', lineHeight: '1.35' });
   css(lead, { margin: '0', fontSize: '17px', lineHeight: '1.6', color: 'var(--muted, #b2abc9)' });
   css(msg, { margin: '0', fontSize: '18px', lineHeight: '1.6', fontWeight: '700' });
