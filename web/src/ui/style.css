@@ -183,6 +183,7 @@ html:not(.guide-ready) .gate-guide { visibility: hidden; }
 .gate button { font: inherit; font-size: 16px; border-radius: 16px; padding: 13px 16px; cursor: pointer; border: 1px solid var(--line); color: var(--text); display: grid; gap: 2px; justify-items: center; text-align: center; }
 /* ボタンの言葉: 何をするか(大)+ どう動くか(小)。カメラのボタンはマイクを言わない・スマホではマウスと言わない(CRITux 15・24) */
 .gate .btn-sub { font-size: 12px; font-weight: 400; line-height: 1.4; opacity: 0.85; }
+.gate button[hidden] { display: none; } /* .gate button の display: grid が hidden に勝つため、ヘッドセットの入口に「カメラなしで試す」が見えていた(Q3 ③) */
 .gate .primary { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 0; font-weight: 700; }
 .gate .ghost { background: transparent; }
 .gate button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }

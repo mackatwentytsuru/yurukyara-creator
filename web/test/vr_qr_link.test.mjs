@@ -77,14 +77,14 @@ test('公開の URL: QR の文はこの画面の URL(http の試しの名前で�
 
 test('この PC・家の中のアドレスでは、QR を出さず 1 行だけ(Quest からは開けない)', () => {
   const local = ['localhost', 'app.localhost', '127.0.0.1', '[::1]', '::1', '0.0.0.0', '10.0.0.5', '172.16.0.1', '172.31.255.254', ip(192, 168, 1, 20),
-    '169.254.10.1', ip(100, 64, 0, 1), ip(100, 127, 1, 1), '[fd12:3456::1]', '[fe80::1]', `[::ffff:${ip(192, 168, 0, 2)}]`, '[::ffff:c0a8:2]', 'mypc', 'printer.local', 'nas.home.arpa', 'box.lan', 'db.internal', ''];
+    '169.254.10.1', ip(100, 64, 0, 1), ip(100, 127, 1, 1), '[fd12:3456::1]', '[fe80::1]', `[::ffff:${ip(192, 168, 0, 2)}]`, '[::ffff:c0a8:2]', 'mypc', 'printer.local', 'nas.home.arpa', 'box.lan', 'db.internal', 'a.b.ts.net', 'ts.net', ''];
   for (const host of local) {
     assert.equal(isPrivateHost(host), true, host);
     const plan = questLinkPlan({ loc: { origin: `http://${host || 'x'}`, pathname: '/', hostname: host }, character: 'norrie', look: '2d' });
     assert.deepEqual(plan, { show: true, kind: 'private', note: PRIVATE_NOTE }, host);
     assert.ok(!('target' in plan) && !('launch' in plan), `${host} で QR の文を作らない`);
   }
-  const open = ['yuru.example', 'example.com', 'a.b.ts.net', '8.8.8.8', '172.32.0.1', '192.169.0.1', '100.128.0.1', '[2001:db8::1]', 'yuru.test'];
+  const open = ['yuru.example', 'example.com', '8.8.8.8', '172.32.0.1', '192.169.0.1', '100.128.0.1', '[2001:db8::1]', 'yuru.test'];
   for (const host of open) assert.equal(isPrivateHost(host), false, host);
   assert.ok(!PRIVATE_NOTE.includes('\n') && PRIVATE_NOTE.length <= 32, `1 行の短い文(${PRIVATE_NOTE.length} 字。幅 390 の箱で 1 行)`);
 });
@@ -140,7 +140,7 @@ test('ウェブローンチ(Meta 公式): https の URL だけ・公式の例と
   assert.equal(WEB_LAUNCH, 'https://www.oculus.com/open_url/');
   // 公式の頁の例(https://www.meta.com/ を送る)と同じ文になる
   assert.equal(webLaunchUrl('https://www.meta.com/'), 'https://www.oculus.com/open_url/?url=https%3A%2F%2Fwww.meta.com%2F');
-  for (const t of ['https://yuru.example/', 'https://yuru.example/app/?character=norrie&look=2d', 'https://a.b.ts.net:8444/?look=3d']) assert.equal(sentUrl(webLaunchUrl(t)), t, t);
+  for (const t of ['https://yuru.example/', 'https://yuru.example/app/?character=norrie&look=2d']) assert.equal(sentUrl(webLaunchUrl(t)), t, t);
   for (const bad of ['http://yuru.example/', 'http://127.0.0.1:8799/', 'https://user:pw@yuru.example/', 'https://yuru.example/#yc-key=1', 'ftp://yuru.example/', 'javascript:alert(1)', '', null, undefined, 'yuru.example']) {
     assert.equal(webLaunchUrl(bad), null, String(bad));
   }
@@ -171,4 +171,13 @@ test('panel.js:「Meta Quest に送る」は決まりの launch だけを新し�
   assert.match(send, /e\.stopPropagation\(\)/, '押しても箱を閉じない');
   const css = read('src', 'ui', 'style.css');
   assert.match(css, /\.ql-send \{[^}]*min-height: 44px; min-width: 44px;/);
+});
+
+test('*.ts.net の名前では、QR も Meta へ送るリンクも出さない(機械と tailnet の名前を画面と Meta へ出さない。CRITsec3 L3)', () => {
+  for (const host of ['a.b.ts.net', '<端末名>.<tailnet>.ts.net', 'MACHINE.TS.NET']) {
+    assert.equal(isPrivateHost(host), true, host);
+    const plan = questLinkPlan({ loc: { origin: `https://${host}:8444`, pathname: '/', hostname: host }, character: 'norrie', look: '2d' });
+    assert.equal(plan.launch, undefined, host);
+    assert.equal(plan.kind, 'private', host);
+  }
 });

@@ -24,7 +24,7 @@ import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink, latencyNote } from './
 import { questLinkPlan } from './stage/questLink.js'; // 「VR(Quest)で開く」: この画面の QR に入れてよい物の決まり
 import { getDemoPass, setDemoPass } from './conversation/demoPass.js'; // 合言葉(S3。会話と記憶の通信に見出し x-demo-pass で付く)
 import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
-import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
+import { loadPlaceData, landmarkWorld, promptPlace, SAMPLE_PLACE } from './place.js';
 import { createArPlacement } from './arPlacement.js';
 import { createVrStage } from './vrStage.js';
 import { createVrPanel } from './ui/vrPanel.js';
@@ -40,6 +40,7 @@ const HFOV = Number(params.get('hfov') ?? 65); // カメラの横の画角(度)
 const APPROACH_DIST_M = 2.2; // この近さに来たら、声をかける
 const APPROACH_HOLD_S = 1.2;
 const GREET_COOLDOWN_S = 90;
+const GREET_QUIET_S = 60; // 最後の会話からこれだけの間は、こちらから声をかけない(会話の途中で名乗り直さない)
 // ヘッドセットのブラウザ。カメラは使えず、聞き取りはサーバーで行い、マイクの許可は VR に入る前に取る
 const IS_HEADSET = params.get('headset') === '1' || /OculusBrowser|Quest/i.test(navigator.userAgent);
 const VR_HELLO = 'こんにちは'; // コントローラーのトリガーで話しかける言葉(マイクが使えなくても、返事と声を確かめられる)
@@ -174,7 +175,21 @@ const resyncMemory = () => memory?.onChatEvent({ type: 'memory', forgotten: true
 
 /** 会話を 1 回送る。どの入口(文字・声・ボタン・近づいた人・VR)も、ここを通す。記憶の一覧は会話のイベントで読み直される */
 function talk(turn) {
+  // どの入口の会話でも「声かけ済み」にする(本人が話した後に、すぐ名乗り直さない。V1-3)
+  const t = performance.now() / 1000;
+  presence.greetedAt = t;
+  presence.lastTalkAt = t;
+  // 声かけの回(trigger: 'approach')は、人が話した回ではないので、前の返事・「あなた:」の行が残って後ろにつながる(Q3 ②)。話し始めの前に空にする
+  if (turn?.trigger === 'approach') ui.userSaid('');
   return dialogue.send(turn).then(updateBrainNotice);
+}
+
+/** 場所の情報を会話に渡すか。?place= が無い(試しの場所)・VR の中では渡さない(試しの目印が「スタッフの部屋」などを案内してしまうため) */
+function placeForPrompt() {
+  const real = app.place && app.place.id !== SAMPLE_PLACE.id;
+  const inVr = modes?.mode === 'vr' || stage.renderer.xr.isPresenting;
+  if (!real || inVr) return undefined;
+  return promptPlace(app.place, { character: app.character, arUnaligned: app.arUnaligned });
 }
 
 /* ---------- 会話 ---------- */
@@ -189,7 +204,8 @@ const dialogue = new Dialogue({
   getContext: () => ({
     scene: sceneText(),
     character: { name: app.character.name, persona: app.persona },
-    place: promptPlace(app.place, { character: app.character, arUnaligned: app.arUnaligned }),
+    // ?place= が無い時(試しの場所)と VR の中では、目印も案内文も送らない(「スタッフさんに聞いてみて」の元。V1)
+    place: placeForPrompt(),
   }),
   onMetric: (entry) => {
     app.metrics.push(entry);
@@ -400,7 +416,9 @@ function vrState() {
 
 /* ---------- 毎フレーム ---------- */
 let prevT = performance.now();
-let presence = { since: 0, greetedAt: -1e9, lastSeen: 0 };
+let presence = { since: 0, greetedAt: -1e9, lastSeen: 0, lastTalkAt: -1e9 };
+let vrGreetPending = false; // VR に入った時だけ 1 回、声をかける(入り直したらまた 1 回)
+let wasInVr = false;
 let chipClock = 0;
 
 function frame(rawMs) {
@@ -447,15 +465,26 @@ function frame(rawMs) {
     const dist = Math.hypot(primary.position[0], primary.position[2]);
     if (!presence.since) presence.since = nowS;
     presence.lastSeen = nowS;
+    // VR では、見ている人がいつも 2.2 m 以内にいる。入った時の 1 回だけにする(90 秒ごとの名乗り直しの元。V1-3)
+    const inVr = stage.renderer.xr.isPresenting && modes?.mode === 'vr';
+    if (inVr !== wasInVr) {
+      wasInVr = inVr;
+      vrGreetPending = inVr;
+    }
+    const nowClock = performance.now() / 1000; // talk() が書く時計(XR でも同じ基準)
     if (
       app.autoGreet &&
       dist < APPROACH_DIST_M &&
       nowS - presence.since > APPROACH_HOLD_S &&
-      nowS - presence.greetedAt > GREET_COOLDOWN_S &&
+      nowClock - presence.greetedAt > GREET_COOLDOWN_S &&
+      nowClock - presence.lastTalkAt > GREET_QUIET_S &&
+      (!inVr || vrGreetPending) &&
       !dialogue.busy &&
-      !speaker.speaking
+      !speaker.speaking &&
+      !listener?.voiceActive &&
+      !listener?.transcribing
     ) {
-      presence.greetedAt = nowS;
+      vrGreetPending = false;
       void talk({ trigger: 'approach', mode: 'text' });
     }
   } else if (nowS - presence.lastSeen > 3) {
@@ -551,7 +580,7 @@ async function onPresentationChange(mode) {
     vrPanel ??= createVrPanel({ scene: stage.scene });
     app.vrPanel = vrPanel;
     ui.setMirror((next) => vrPanel.set(next));
-    vrPanel.set({ state: vrState() });
+    vrPanel.set({ state: vrState(), user: '', reply: '', error: '' }); // 入り直した時に、前の回の中身を残さない
     vrPanel.setVisible(true);
     modes.session.session.addEventListener('select', onVrSelect);
   } else if (vrPanel) {
@@ -601,6 +630,9 @@ async function onPresentationChange(mode) {
 /** コントローラーのトリガー(手なら、つまむ): 話しかける。マイクが使えなくても、返事と声を確かめられる */
 function onVrSelect() {
   speaker.unlock();
+  // マイクが聞いている間は、トリガーで勝手に「こんにちは」を送らない(本人の声だけが会話になる。V1-10)。
+  // マイクが使えない時だけ、トリガーで「こんにちは」を送る(板に「トリガー = こんにちは」と出してある)
+  if (listener?.listening) return;
   if (!dialogue.busy && !speaker.speaking) void talk({ text: VR_HELLO, mode: 'text' });
 }
 

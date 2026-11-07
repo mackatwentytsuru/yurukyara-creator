@@ -60,7 +60,7 @@ function privateV6(h) {
 }
 
 /**
- * Quest から開けない場所か(この PC・家の中の番号・家の中だけの名前)。名前の付いた公開の場所(*.ts.net を含む)は false。
+ * Quest から開けない場所か(この PC・家の中の番号・家の中だけの名前)。名前の付いた公開の場所は false。*.ts.net(Tailscale の中だけの名前。機械と tailnet の名前が入る・Quest は tailnet に無い)は、QR にも Meta の頁にも出さない(CRITsec3 L3)。
  * @param {string} hostname location.hostname
  */
 export function isPrivateHost(hostname) {
@@ -69,7 +69,7 @@ export function isPrivateHost(hostname) {
   if (h.endsWith('.')) h = h.slice(0, -1);
   if (!h) return true;
   if (h === 'localhost' || h.endsWith('.localhost')) return true;
-  if (/(^|\.)(local|internal|lan|home\.arpa)$/.test(h)) return true;
+  if (/(^|\.)(local|internal|lan|home\.arpa|ts\.net)$/.test(h)) return true;
   const v4 = ipv4(h);
   if (v4) return privateV4(v4);
   if (h.includes(':')) return privateV6(h);
