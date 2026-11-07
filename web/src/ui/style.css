@@ -587,4 +587,10 @@ html.tv-mode .tv-cam:focus-visible { outline: 2px solid var(--lav); outline-offs
 .cam-ask button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .cam-ask-status { margin: 0; font-size: 14px; line-height: 1.5; color: var(--warn); }
 .cam-ask-status:empty { display: none; }
+/* テレビ表示の間は、知らせの窓も 3 m 先から読める大きさ(画面の高さに合わせる。テレビの字幕と同じ考え) */
+html.tv-mode .cam-ask-card { width: min(72vw, 1100px); padding: max(20px, 3vh); gap: max(12px, 1.6vh); border-radius: max(22px, 2.4vh); }
+html.tv-mode .cam-ask-card h2 { font-size: max(20px, 4.2vh); }
+html.tv-mode .cam-ask-text { font-size: max(16px, 3.2vh); }
+html.tv-mode .cam-ask-mock, html.tv-mode .cam-ask-status { font-size: max(14px, 2.4vh); }
+html.tv-mode .cam-ask button { font-size: max(16px, 3vh); min-height: max(48px, 7vh); border-radius: max(14px, 1.8vh); }
 /* ---------- BCV ここまで ---------- */
