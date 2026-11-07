@@ -64,9 +64,22 @@ const VARIABLE_FETCH = {
   'stage/loadPlace.js': ['url'], // place.js が渡す、自分のサーバーの place.json
 };
 
-// 画面のコードで、外へ直接つないでよいのは 1 か所だけ: 使う人が自分で入れた声の鍵での読み上げ(鍵を私たちのサーバーに送らないため)。
-// 送るのは読み上げる 1 文と、声とモデルの名前だけ。カメラ・追従・記憶の部品は読み込まない。
-const EXTERNAL_OK = { 'conversation/elevenDirect.js': 'https://api.elevenlabs.io/v1/text-to-speech/' };
+// 画面のコードに外の住所を書いてよいのは、次の 2 か所の 1 つずつだけ(ファイルと住所の文字まで決め打ち)。
+// - 声の鍵の読み上げ(conversation/elevenDirect.js): 使う人が自分で入れた声の鍵で、声のサービスへ直接(鍵を私たちのサーバーに送らないため)。
+//   送るのは読み上げる 1 文と、声とモデルの名前だけ。カメラ・追従・記憶の部品は読み込まない。外へ「つなぐ」のは、ここだけ。
+// - Meta 公式のウェブローンチ(stage/questLink.js。11-07 本人の答え Q-0098 = B「Quest に送る」): 使う人が押した時に開く頁の住所で、
+//   この画面の URL(場所と、害の無い ?character= と ?look= だけ。vr_qr_link の試験が見る)を Quest のブラウザへ送る公式の入口。
+//   fetch はしない(下の 2 つの試験が、文字の宛先も変数の宛先も止める)。https の決まった 1 つの住所だけで、ほかの道や ? の付いた形は通さない。
+const EXTERNAL_OK = Object.freeze({
+  'conversation/elevenDirect.js': 'https://api.elevenlabs.io/v1/text-to-speech/',
+  'stage/questLink.js': 'https://www.oculus.com/open_url/',
+});
+
+/** そのファイル(src からの道)のコードにある外の住所のうち、許していない物(コメントは数えない) */
+function forbiddenAddresses(rel, source) {
+  const found = [...source.matchAll(/\b(?:https?|wss?):\/\/[^\s'"`]*/g)].map((m) => m[0]);
+  return found.filter((url) => url !== EXTERNAL_OK[rel]);
+}
 
 test('fetch の宛先は、文字で書いた許可済みの物か、確かめ済みの変数だけ(変数の宛先に画像を忍ばせられない)', () => {
   for (const f of files) {
@@ -79,13 +92,35 @@ test('fetch の宛先は、文字で書いた許可済みの物か、確かめ�
   }
 });
 
-test('外のサーバーの住所(http:// https:// ws://)を、画面のコードに書かない(import() も含めて)。例外は声の鍵の読み上げの 1 か所だけ', () => {
+test('外のサーバーの住所(http:// https:// ws://)を、画面のコードに書かない(import() も含めて)。例外は声の鍵の読み上げと、Meta 公式のウェブローンチの 1 つずつだけ', () => {
   for (const f of files) {
     const rel = relative(SRC, f).split('\\').join('/');
-    const found = [...code(f).matchAll(/\b(?:https?|wss?):\/\/[^\s'"`]*/g)].map((m) => m[0]);
-    const ok = EXTERNAL_OK[rel];
-    for (const url of found) assert.equal(url, ok, `${rel} に外の住所があります: ${url}`);
+    assert.deepEqual(forbiddenAddresses(rel, code(f)), [], `${rel} に外の住所があります`);
   }
+});
+
+test('例外の確かめ: ウェブローンチの住所は questLink.js の決まった 1 つだけ通り、ほかの住所・ほかのファイル・形を変えた住所は落ちる', () => {
+  const launch = EXTERNAL_OK['stage/questLink.js'];
+  assert.equal(launch, 'https://www.oculus.com/open_url/', 'Meta 公式のウェブローンチの入口(developers.meta.com/horizon/documentation/web/web-launch)');
+  // 通る: questLink.js に、決まった住所を 1 つの文字で書いて、URL と URLSearchParams で組む形(S5 の作り)
+  assert.deepEqual(forbiddenAddresses('stage/questLink.js', `export const WEB_LAUNCH = '${launch}';\nconst u = new URL(WEB_LAUNCH);`), []);
+  // 落ちる: questLink.js でも、ほかの住所・http・ほかの道・? を付けた形・ws
+  for (const bad of ['https://example.com/', 'http://www.oculus.com/open_url/', 'https://www.oculus.com/open_url/x', 'https://www.oculus.com/open_url/?url=https%3A%2F%2Fexample.com', 'https://www.meta.com/', 'wss://www.oculus.com/open_url/']) {
+    assert.deepEqual(forbiddenAddresses('stage/questLink.js', `const a = '${bad}';`), [bad], `questLink.js の ${bad} は落ちる`);
+  }
+  assert.deepEqual(forbiddenAddresses('stage/questLink.js', `const a = '${launch}'; const b = 'https://example.com/';`), ['https://example.com/'], '決まった住所の横に足した住所は落ちる');
+  // 落ちる: ほかのファイルに書いたウェブローンチ(画面のどこからでも外へ出られる形にしない)
+  for (const rel of ['ui/panel.js', 'main.js', 'conversation/elevenDirect.js', 'stage/vr.js']) {
+    assert.deepEqual(forbiddenAddresses(rel, `const a = '${launch}';`), [launch], `${rel} のウェブローンチは落ちる`);
+  }
+  // 声の鍵の例外も、そのファイルの決まった 1 つだけ
+  assert.deepEqual(forbiddenAddresses('conversation/elevenDirect.js', `const a = '${EXTERNAL_OK['conversation/elevenDirect.js']}';`), []);
+  assert.deepEqual(forbiddenAddresses('stage/questLink.js', `const a = '${EXTERNAL_OK['conversation/elevenDirect.js']}';`).length, 1, '声のサービスの住所は questLink.js では落ちる');
+  // 本物の questLink.js: 外の住所は、無いか、決まった 1 つだけ(S5 の「Quest に送る」が入る前と後のどちらでも通る)
+  const real = code(join(SRC, 'stage', 'questLink.js'));
+  const inReal = [...real.matchAll(/\b(?:https?|wss?):\/\/[^\s'"`]*/g)].map((m) => m[0]);
+  assert.ok(inReal.every((u) => u === launch), `questLink.js の外の住所: ${inReal.join(' ')}`);
+  assert.ok(!/\bfetch\s*\(/.test(real), 'questLink.js は通信しない(ウェブローンチは、押した時に開く頁の住所だけ)');
 });
 
 test('声の鍵(BYOK)の読み上げ: 送るのは読み上げる文・モデル・言葉だけ。ほかの部品を読み込まず、鍵を扱うのは決まったファイルだけ', () => {
