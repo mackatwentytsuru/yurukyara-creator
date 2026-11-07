@@ -68,7 +68,12 @@ export function createStage(canvas) {
     const box = new THREE.Box3().setFromObject(character.object3d);
     const viewW = canvas.clientWidth || window.innerWidth;
     const viewH = canvas.clientHeight || window.innerHeight;
-    placeCamera(character, box, view, obstacles, viewH, 0);
+    // wScale: 遠近で手前の羽・腕が画面の横の端で切れる時に、横幅の見込みを広げる倍率(下の「横」の確かめ。L1 高: ちょうちんくんの羽が幅 390・430 で切れた)
+    // 横に広い子(ちょうちんくんなど。幅が高さの 0.8 倍より大きい)は、羽が話す・跳ねる間に止まった箱の外へ振れるので、最初から 15% 広く見込む
+    const wide = view === 'full' && (halfWidth(character, box, character.object3d.getWorldPosition(new THREE.Vector3())) * 2) / Math.max(0.3, box.max.y - box.min.y) > 0.8;
+    let wScale = wide ? 1.15 : 1;
+    const put = (px) => placeCamera(character, box, view, obstacles, viewH, px, wScale);
+    put(0);
     let topPx = 0;
     if (typeof state.topGuard === 'function' && !state.immersive) {
       // 動きで上へ出る分(跳ねる・手を振る。rig の読み込みで測った割合)も含めて、上の段の線より上に出るかを見る
@@ -79,15 +84,28 @@ export function createStage(canvas) {
       const guard = Number(state.topGuard(span.left, span.right)) || 0;
       if (guard > 0 && span.top < guard) {
         topPx = guard;
-        placeCamera(character, box, view, obstacles, viewH, topPx);
+        put(topPx);
         // 遠近: 頭がキャラの真ん中の面より前にあると、計算(真ん中の面)より上に写る。止まった形のいちばん上の点(+ 動きの分)を画面へ写し、
         // 線より上なら、その分だけ帯の上を下げて置き直す(rig だけ。点は読み込みで測る)。2 回で収まる
         for (let k = 0; k < 2; k++) {
           const t = pointsTop(character, box, viewH);
           if (!(t < guard - 0.5)) break;
           topPx += guard - t;
-          placeCamera(character, box, view, obstacles, viewH, topPx);
+          put(topPx);
         }
+      }
+    }
+    // 横: 全身で、遠近で手前に出た羽・腕の角が画面の横の端より外へ出る時は、見込みの幅を広げて置き直す(小さくなるだけなので、頭のすき間は広がる)
+    if (view === 'full' && !state.immersive && viewW > 0) {
+      const edge = Math.max(8, viewW * 0.05); // 羽は話す・跳ねる間に箱の外へ振れる(430×932 のちょうちんくんで、止まった箱は収まっても羽が両端で切れた)ので、片側 5% 空ける
+      for (let k = 0; k < 3; k++) {
+        const sp = screenSpan(box, viewW, viewH);
+        // 横に広い子は、止まった箱が画面の幅の 74% 以内(羽が箱の外へ振れる分を残す。430×932 で、高さで決まる大きさだと箱は端に収まっても羽が両端で切れた)
+        const target = wide ? viewW * 0.74 : viewW - 2 * edge;
+        const spanW = sp.right - sp.left;
+        if (sp.left >= edge && sp.right <= viewW - edge && spanW <= target) break;
+        wScale *= Math.min(1.6, Math.max(1.02, spanW / target));
+        put(topPx);
       }
     }
     state.topInset = topPx;
@@ -135,7 +153,7 @@ export function createStage(canvas) {
   }
 
   /** キャラの正面にカメラを置く。topPx は避ける上の段の下の端(px) */
-  function placeCamera(character, box, view, obstacles, viewH, topPx) {
+  function placeCamera(character, box, view, obstacles, viewH, topPx, wScale = 1) {
     const base = character.object3d.getWorldPosition(new THREE.Vector3());
     const height = Math.max(0.3, box.max.y - box.min.y);
     const floor = box.min.y - base.y; // キャラの原点から見た足元の高さ
@@ -149,7 +167,7 @@ export function createStage(canvas) {
     const visibleH = view === 'full' ? height * span.visible : height * 0.62;
     const centerY = floor + (view === 'full' ? height * span.center : height * 0.67);
     // 横が狭い画面(スマホ)でも、肩と腕が入るようにする。全身のときは、キャラの実際の幅(真ん中から遠い側の 2 倍)も入れる
-    const width = view === 'full' ? Math.max(height * 0.55, halfWidth(character, box, base) * 2 * 1.04) : height * 0.4;
+    const width = (view === 'full' ? Math.max(height * 0.55, halfWidth(character, box, base) * 2 * 1.04) : height * 0.4) * wScale;
     // 全身のときは、下の入力の帯(字幕・ボタン・入力欄)に足が隠れないよう、帯の上の範囲に全身を収める。上の段の下からにも収める
     const bottomPx = view === 'full' ? state.bottomInset ?? 0 : 0;
     const band = fitBand({ viewH, topPx, bottomPx, needH: visibleH, needW: width, aspect });

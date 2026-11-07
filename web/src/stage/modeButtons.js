@@ -12,6 +12,9 @@ const LABELS = { ar: 'AR で見る', vr: 'VR で見る', screen: '画面に戻�
 /** VR・AR を頼んで、入るか断られるまで画面の真ん中に出す文 */
 export const XR_WAIT_TEXT = 'ブラウザの下の『許可する』を押してください';
 
+/** この時間(ms)たっても入れない時だけ、知らせを出す。許可を覚えている端末は 0.4 秒ほどで入るので、その間に出すと一瞬だけ出て消える(Q3 ⑤) */
+export const XR_WAIT_DELAY_MS = 900;
+
 /** ブラウザに許可をたずねられる入り方か(WebXR の VR・AR。iPhone の殻の AR はたずねない) */
 export const asksBrowser = (modes, mode) => mode === 'vr' || (mode === 'ar' && modes?.available?.ar_kind === 'webxr');
 
@@ -28,7 +31,7 @@ export function xrErrorText(err, mode) {
   return `${what}(${message || '理由は分かりません'})`;
 }
 
-export function mountModeButtons({ modes, container, onError = () => {}, onWait = () => {}, doc = container.ownerDocument }) {
+export function mountModeButtons({ modes, container, onError = () => {}, onWait = () => {}, waitDelayMs = XR_WAIT_DELAY_MS, doc = container.ownerDocument }) {
   const buttons = {};
   let busy = null; // 頼んでいる見せ方(入るか断られるまで)。その間は、どのボタンも押せない(2 回目を頼まない)
   function refresh() {
@@ -44,14 +47,20 @@ export function mountModeButtons({ modes, container, onError = () => {}, onWait 
     const asks = asksBrowser(modes, mode);
     busy = mode;
     refresh();
-    if (asks) onWait(mode);
+    let shown = false;
+    const show = () => {
+      shown = true;
+      onWait(mode);
+    };
+    const timer = asks ? (waitDelayMs > 0 ? setTimeout(show, waitDelayMs) : (show(), null)) : null;
     try {
       await modes.enter(mode);
     } catch (e) {
       onError(new Error(xrErrorText(e, mode), { cause: e }));
     } finally {
       busy = null;
-      if (asks) onWait(null);
+      if (timer) clearTimeout(timer);
+      if (shown) onWait(null);
       refresh();
     }
   }

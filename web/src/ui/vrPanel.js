@@ -3,12 +3,12 @@ import * as THREE from 'three';
 
 const W = 1024;
 const H = 480;
-const PANEL_W_M = 1.0;
+const PANEL_W_M = 0.8; // 実機の Quest で、右に寄りすぎて左目と撮影の外にはみ出した(Q3 ④)ので 1.0 → 0.8 m
 const PADDING = 44;
 const FONT = '"Noto Sans CJK JP", "Noto Sans JP", "Hiragino Sans", Meiryo, sans-serif';
 
 export const VR_STATES = {
-  off: { label: 'マイクなし(トリガーで話しかけます)', color: '#8d86a8' },
+  off: { label: 'マイクなし(トリガー = こんにちは)', color: '#8d86a8' },
   idle: { label: 'どうぞ、話しかけてください', color: '#9fd8ff' },
   hearing: { label: '聞いています', color: '#7fe3a8' },
   transcribing: { label: '文字にしています', color: '#ffd27f' },
@@ -113,7 +113,7 @@ export function createVrPanel({ scene }) {
       toHead.copy(head).sub(charPos).setY(0);
       if (toHead.lengthSq() < 1e-4) return;
       toHead.normalize();
-      const side = Math.max(0.5, height * 0.4) + PANEL_W_M / 2; // 見ている人から見て右
+      const side = Math.max(0.35, height * 0.28) + PANEL_W_M / 2; // 見ている人から見て右(板の外の端が、見ている人から 35° ほどに収まる近さ)
       mesh.position.set(charPos.x + toHead.z * side + toHead.x * 0.1, charPos.y + THREE.MathUtils.clamp(height * 0.75, 1.05, 1.5), charPos.z - toHead.x * side + toHead.z * 0.1);
       mesh.lookAt(head);
     },

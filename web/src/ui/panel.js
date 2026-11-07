@@ -163,7 +163,8 @@ export function createUi() {
   let mirror = null; // VR の中の板へも同じ文字を渡す
 
   // 狭い画面では、最初は畳んでおく(字幕と顔を隠さないため)
-  if (window.matchMedia('(max-width: 640px)').matches) {
+  // 幅 1100 までは最初に畳む(iPad でも。開いたままだと窓の下へキャラが押されて小さく低くなった。L1 中)
+  if (window.matchMedia('(max-width: 1100px)').matches) {
     $('thought').classList.add('collapsed');
     $('thoughtToggle').setAttribute('aria-expanded', 'false');
   }

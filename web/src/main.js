@@ -24,10 +24,11 @@ import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink, latencyNote } from './
 import { questLinkPlan } from './stage/questLink.js'; // 「VR(Quest)で開く」: この画面の QR に入れてよい物の決まり
 import { getDemoPass, setDemoPass } from './conversation/demoPass.js'; // 合言葉(S3。会話と記憶の通信に見出し x-demo-pass で付く)
 import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
-import { loadPlaceData, landmarkWorld, promptPlace } from './place.js';
+import { loadPlaceData, landmarkWorld, promptPlace, SAMPLE_PLACE } from './place.js';
 import { createArPlacement } from './arPlacement.js';
 import { createVrStage } from './vrStage.js';
 import { createVrPanel } from './ui/vrPanel.js';
+import { micUnavailableText, micFailureText } from './stage/micNotice.js'; // 声で話せなかった時の、やさしい日本語の知らせ
 import { createAlignFlow } from './stage/alignFlow.js'; // 撮った部屋を現実に重ねる手順(場所の柱)
 // 見せ方(画面・AR・VR)の切りかえは、場所の柱が出している入口(docs/共通の決まり.md)
 import { createPresentation } from './stage/modes.js';
@@ -40,6 +41,7 @@ const HFOV = Number(params.get('hfov') ?? 65); // カメラの横の画角(度)
 const APPROACH_DIST_M = 2.2; // この近さに来たら、声をかける
 const APPROACH_HOLD_S = 1.2;
 const GREET_COOLDOWN_S = 90;
+const GREET_QUIET_S = 60; // 最後の会話からこれだけの間は、こちらから声をかけない(会話の途中で名乗り直さない)
 // ヘッドセットのブラウザ。カメラは使えず、聞き取りはサーバーで行い、マイクの許可は VR に入る前に取る
 const IS_HEADSET = params.get('headset') === '1' || /OculusBrowser|Quest/i.test(navigator.userAgent);
 const VR_HELLO = 'こんにちは'; // コントローラーのトリガーで話しかける言葉(マイクが使えなくても、返事と声を確かめられる)
@@ -174,7 +176,21 @@ const resyncMemory = () => memory?.onChatEvent({ type: 'memory', forgotten: true
 
 /** 会話を 1 回送る。どの入口(文字・声・ボタン・近づいた人・VR)も、ここを通す。記憶の一覧は会話のイベントで読み直される */
 function talk(turn) {
+  // どの入口の会話でも「声かけ済み」にする(本人が話した後に、すぐ名乗り直さない。V1-3)
+  const t = performance.now() / 1000;
+  presence.greetedAt = t;
+  presence.lastTalkAt = t;
+  // 声かけの回(trigger: 'approach')は、人が話した回ではないので、前の返事・「あなた:」の行が残って後ろにつながる(Q3 ②)。話し始めの前に空にする
+  if (turn?.trigger === 'approach') ui.userSaid('');
   return dialogue.send(turn).then(updateBrainNotice);
+}
+
+/** 場所の情報を会話に渡すか。?place= が無い(試しの場所)・VR の中では渡さない(試しの目印が「スタッフの部屋」などを案内してしまうため) */
+function placeForPrompt() {
+  const real = app.place && app.place.id !== SAMPLE_PLACE.id;
+  const inVr = modes?.mode === 'vr' || stage.renderer.xr.isPresenting;
+  if (!real || inVr) return undefined;
+  return promptPlace(app.place, { character: app.character, arUnaligned: app.arUnaligned });
 }
 
 /* ---------- 会話 ---------- */
@@ -189,7 +205,8 @@ const dialogue = new Dialogue({
   getContext: () => ({
     scene: sceneText(),
     character: { name: app.character.name, persona: app.persona },
-    place: promptPlace(app.place, { character: app.character, arUnaligned: app.arUnaligned }),
+    // ?place= が無い時(試しの場所)と VR の中では、目印も案内文も送らない(「スタッフさんに聞いてみて」の元。V1)
+    place: placeForPrompt(),
   }),
   onMetric: (entry) => {
     app.metrics.push(entry);
@@ -286,6 +303,11 @@ async function toggleMic() {
     updatePrivacy();
     return;
   }
+  const unavailable = micUnavailableText({ secure: window.isSecureContext, mediaDevices: navigator.mediaDevices });
+  if (unavailable) {
+    ui.notice(unavailable); // 押しても何も起きないように見えないよう、字幕の上に出す(P1 高)
+    return;
+  }
   try {
     speaker.unlock();
     const provider = listenProvider();
@@ -328,9 +350,10 @@ async function toggleMic() {
     updatePrivacy();
   } catch (err) {
     listener = null;
-    // マイクの許可の窓で断られた時は、英語の「Permission denied」でなく日本語で(実機の Quest で、断ると英語が出た)
-    const denied = err?.name === 'NotAllowedError' || err?.name === 'SecurityError';
-    ui.error(denied ? 'マイクを使えませんでした(ブラウザで許可されませんでした)。文字で話しかけられます' : err.message);
+    // 英語の err.message は出さない。字幕の上の知らせに、やさしい日本語で(P1 高)。VR の板にも同じ文
+    const text = micFailureText(err);
+    ui.notice(text);
+    app.vrPanel?.set({ error: text });
   }
 }
 
@@ -400,7 +423,9 @@ function vrState() {
 
 /* ---------- 毎フレーム ---------- */
 let prevT = performance.now();
-let presence = { since: 0, greetedAt: -1e9, lastSeen: 0 };
+let presence = { since: 0, greetedAt: -1e9, lastSeen: 0, lastTalkAt: -1e9 };
+let vrGreetPending = false; // VR に入った時だけ 1 回、声をかける(入り直したらまた 1 回)
+let wasInVr = false;
 let chipClock = 0;
 
 function frame(rawMs) {
@@ -447,15 +472,26 @@ function frame(rawMs) {
     const dist = Math.hypot(primary.position[0], primary.position[2]);
     if (!presence.since) presence.since = nowS;
     presence.lastSeen = nowS;
+    // VR では、見ている人がいつも 2.2 m 以内にいる。入った時の 1 回だけにする(90 秒ごとの名乗り直しの元。V1-3)
+    const inVr = stage.renderer.xr.isPresenting && modes?.mode === 'vr';
+    if (inVr !== wasInVr) {
+      wasInVr = inVr;
+      vrGreetPending = inVr;
+    }
+    const nowClock = performance.now() / 1000; // talk() が書く時計(XR でも同じ基準)
     if (
       app.autoGreet &&
       dist < APPROACH_DIST_M &&
       nowS - presence.since > APPROACH_HOLD_S &&
-      nowS - presence.greetedAt > GREET_COOLDOWN_S &&
+      nowClock - presence.greetedAt > GREET_COOLDOWN_S &&
+      nowClock - presence.lastTalkAt > GREET_QUIET_S &&
+      (!inVr || vrGreetPending) &&
       !dialogue.busy &&
-      !speaker.speaking
+      !speaker.speaking &&
+      !listener?.voiceActive &&
+      !listener?.transcribing
     ) {
-      presence.greetedAt = nowS;
+      vrGreetPending = false;
       void talk({ trigger: 'approach', mode: 'text' });
     }
   } else if (nowS - presence.lastSeen > 3) {
@@ -551,7 +587,7 @@ async function onPresentationChange(mode) {
     vrPanel ??= createVrPanel({ scene: stage.scene });
     app.vrPanel = vrPanel;
     ui.setMirror((next) => vrPanel.set(next));
-    vrPanel.set({ state: vrState() });
+    vrPanel.set({ state: vrState(), user: '', reply: '', error: '' }); // 入り直した時に、前の回の中身を残さない
     vrPanel.setVisible(true);
     modes.session.session.addEventListener('select', onVrSelect);
   } else if (vrPanel) {
@@ -601,6 +637,9 @@ async function onPresentationChange(mode) {
 /** コントローラーのトリガー(手なら、つまむ): 話しかける。マイクが使えなくても、返事と声を確かめられる */
 function onVrSelect() {
   speaker.unlock();
+  // マイクが聞いている間は、トリガーで勝手に「こんにちは」を送らない(本人の声だけが会話になる。V1-10)。
+  // マイクが使えない時だけ、トリガーで「こんにちは」を送る(板に「トリガー = こんにちは」と出してある)
+  if (listener?.listening) return;
   if (!dialogue.busy && !speaker.speaking) void talk({ text: VR_HELLO, mode: 'text' });
 }
 
@@ -675,7 +714,7 @@ async function setupPresentation() {
 const TOP_BAR = '.top .chip, .top .top-row > *:not(#tvBtn)'; // 上の段(横いっぱいに数える)
 const TOP_SIDE = '#thoughtToggle, #tvBtn'; // スマホで上の段の下に並ぶ畳んだ見出しと「テレビ」(キャラの横に重なる時だけ。同じすき間)
 const TOP_PANELS = '#thought:not(.collapsed), #questLinkBox:not([hidden])'; // 開いた窓(重なる時だけ)
-const TOP_GAP_PX = 8; // 開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
+const TOP_GAP_PX = 14; // 幅 320 で耳が上の段に 6px かかった(P1 低)ので 8 → 14。開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
 const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
 
 /** キャラの頭を置いてよいいちばん上の線(px)。[left, right] はキャラの横の範囲。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
@@ -703,6 +742,27 @@ function reframe() {
  * 下の帯(よくある質問のボタン・入力欄)の高さが変わったら、全身の見せ方を取り直す(足が帯に隠れないように)。
  * テレビ表示では帯を隠すので、字幕の 2 行分(字の大きさは画面の高さの 6%)と、下の端に残る物(カメラの注意書き)の高さを空ける
  */
+/** スマホで「はじめての会話」の札(下から出る札 .fr-sheet)が開いている時の、札が覆う高さ(px)。見本の子を札の上に全身で出すために数える(P1 高。S4 と組)。出ていない・横に出る札(幅 720 以上)は 0 */
+function cardInset() {
+  const sheet = document.querySelector('.fr-sheet');
+  if (!sheet || !document.documentElement.classList.contains('fr-open')) return 0;
+  const r = sheet.getBoundingClientRect();
+  if (!(r.height > 0) || r.width < window.innerWidth - 2) return 0;
+  return Math.max(0, Math.round(window.innerHeight - r.top) + 8);
+}
+let observedSheet = null;
+const sheetObserver = new ResizeObserver(() => fitBottom());
+/** 札が出た・消えた・差し替わった時に、大きさを見る相手を付け替える */
+function watchSheet() {
+  const sheet = document.querySelector('.fr-sheet');
+  if (sheet === observedSheet) return;
+  if (observedSheet) sheetObserver.unobserve(observedSheet);
+  observedSheet = sheet;
+  if (sheet) sheetObserver.observe(sheet);
+  fitBottom();
+}
+new MutationObserver(watchSheet).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
 function fitBottom() {
   const bottomBar = document.querySelector('.bottom');
   if (!bottomBar) return;
@@ -712,7 +772,8 @@ function fitBottom() {
     document.documentElement.style.setProperty('--tv-cap', `${tvCaptionPx(window.innerHeight)}px`);
     stage.state.bottomInset = h + tvBottomReserve(window.innerHeight);
   } else {
-    stage.state.bottomInset = h + 8 + 80; // 80 は、帯の上に出る字幕と札の分(足に重ならないように)
+    // 帯の上に出る字幕と札の分(足に重ならないように)。字幕は 2 行 + 知らせで画面の高さの 14〜16% ほど(L1: 80px 固定では、字幕がキャラの足元・体に 12 場面でかかった)
+    stage.state.bottomInset = Math.max(h + 8 + Math.round(Math.min(140, Math.max(96, window.innerHeight * 0.16)) + (window.innerHeight < 720 ? 14 : 0)), cardInset());
   }
   reframe();
 }
@@ -1182,6 +1243,7 @@ async function boot() {
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
   fillGate(); // 入口の文(声があるか・初めての訪問か・指かマウスか)は、状態を読んだ後に決める
+  $('camSub').textContent = 'キャラがあなたの方を見ます'; // index.html では「読み込んでいます…」で押せない(遅い回線で、押せそうで押せない時間を作らない。P1 中)
   buttons.forEach((b) => (b.disabled = false));
   // ?perf=1: いまの重さを測る(L0。数字は window.__perf。測りの部品は、このときだけ読む)
   if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt, tier: app.tier, firstFrameAt: () => app.firstFrameAt, loopStartAt }));

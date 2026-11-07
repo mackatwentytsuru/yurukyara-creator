@@ -31,21 +31,21 @@ body {
 #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
 /* 上の段は「Claude の考え」より手前(z-index 5 > 4)。スマホで考えを開いても、見た目の切り替え(3D・2D)が押せる(CRITux 21) */
-.top { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; z-index: 5; }
+.top { position: fixed; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; z-index: 5; }
 /* 入口が開いている間は、上の段と「Claude の考え」を隠す(入口の板の裏で見えるのに押せなかった。CRITux 2)。
    初めての会話(S4)が入口を消して出ている間(html.fr-open)は出す。隠すのは見た目だけなので、高さの測り(--top-h)は変わらない */
 html.gate-up:not(.fr-open) .top,
 html.gate-up:not(.fr-open) #thought { visibility: hidden; }
 .modes { display: flex; gap: 8px; pointer-events: auto; }
 .modes:empty { display: none; }
-.place-mode-button { font: inherit; font-size: 13px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.place-mode-button { font: inherit; font-size: 14px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .place-mode-button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .place-mode-button[hidden] { display: none; }
 /* ヘッドセットの 2D の画面では、次に押す物を大きく(コントローラーで狙いやすく) */
 html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background: var(--lav, #b8a6ff); color: #14121f; font-weight: 700; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
-  font-size: 12px; line-height: 1; padding: 7px 10px; border-radius: 999px;
+  font-size: 14px; line-height: 1; padding: 7px 10px; border-radius: 999px;
   background: var(--glass); border: 1px solid var(--line); color: var(--muted);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
@@ -76,7 +76,7 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
 
 /* 字幕の上: Claude が店のデータを見て答えている札(どの情報を、いつの更新として使ったか) */
 .shop-badge {
-  width: 100%; margin: 0; text-align: center; font-size: clamp(13px, 1.7vw, 20px); line-height: 1.45;
+  width: 100%; margin: 0; text-align: center; font-size: clamp(14px, 1.7vw, 20px); line-height: 1.45;
   padding: 6px 14px; border-radius: 999px; background: rgba(12, 10, 22, 0.72); border: 1px solid var(--mint); color: var(--mint);
 }
 .shop-badge[hidden] { display: none; }
@@ -84,7 +84,7 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
 /* よくある質問のボタン(押すとそのまま質問になる。聞き取れなかったときは目立たせる) */
 .choices { width: min(100%, 880px); display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .choices[hidden] { display: none; }
-.choices button { font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.choices button { font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .choices button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .choices.emphasis button { font-size: 16px; padding: 12px 16px; border-color: var(--lav); background: rgba(125, 98, 255, 0.28); }
 
@@ -116,39 +116,39 @@ html.is-headset .xr-wait { font-size: 30px; }
 
 /* Claude の考え(上の段より奥。z-index 4) */
 .thought {
-  position: fixed; z-index: 4; top: max(52px, calc(env(safe-area-inset-top) + 40px)); right: 12px; width: min(340px, calc(100vw - 24px));
+  position: fixed; z-index: 4; top: max(52px, calc(env(safe-area-inset-top) + 40px)); right: max(12px, env(safe-area-inset-right)); width: min(340px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
   border-radius: var(--radius); background: var(--glass); border: 1px solid var(--line);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); overflow: hidden;
 }
 .thought-head {
   all: unset; box-sizing: border-box; width: 100%; min-height: 44px; padding: 11px 14px; cursor: pointer;
-  font-size: 13px; font-weight: 700; letter-spacing: 0.04em; display: flex; align-items: center; gap: 8px; color: var(--lav);
+  font-size: 14px; font-weight: 700; letter-spacing: 0.04em; display: flex; align-items: center; gap: 8px; color: var(--lav);
 }
 .thought-head:focus-visible { outline: 2px solid var(--lav); outline-offset: -2px; border-radius: var(--radius); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 0 rgba(255, 143, 122, 0.6); animation: pulse 2.4s infinite; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(255, 143, 122, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 143, 122, 0); } }
 .thought-body { margin: 0; padding: 0 14px 10px; display: grid; gap: 9px; }
 .thought-body .row { display: grid; grid-template-columns: 5.4em 1fr; gap: 8px; align-items: baseline; }
-.thought-body dt { font-size: 11px; color: var(--muted); letter-spacing: 0.05em; }
-.thought-body dd { margin: 0; font-size: 13px; line-height: 1.5; word-break: break-word; }
+.thought-body dt { font-size: 14px; color: var(--muted); letter-spacing: 0.05em; }
+.thought-body dd { margin: 0; font-size: 14px; line-height: 1.5; word-break: break-word; }
 .thought.collapsed .thought-body, .thought.collapsed .thought-foot { display: none; }
-.thought-foot { padding: 8px 14px 10px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-.thought-body .src { display: inline-flex; flex-direction: column; margin: 0 8px 4px 0; padding: 3px 8px; border-radius: 10px; background: rgba(123, 224, 195, 0.14); color: var(--mint); font-size: 12px; line-height: 1.3; }
-.thought-body .src small, .thought-body .src-label { font-size: 10px; color: var(--muted); }
+.thought-foot { padding: 8px 14px 10px; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.thought-body .src { display: inline-flex; flex-direction: column; margin: 0 8px 4px 0; padding: 3px 8px; border-radius: 10px; background: rgba(123, 224, 195, 0.14); color: var(--mint); font-size: 14px; line-height: 1.3; }
+.thought-body .src small, .thought-body .src-label { font-size: 14px; color: var(--muted); }
 .thought-body .src.stale { background: rgba(255, 211, 122, 0.16); color: var(--warn); }
 .thought-body .src-label { display: block; }
-.stage-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: rgba(183, 168, 255, 0.18); color: var(--lav); margin-right: 6px; }
+.stage-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 14px; background: rgba(183, 168, 255, 0.18); color: var(--lav); margin-right: 6px; }
 .stage-tag.handoff { background: rgba(255, 211, 122, 0.2); color: var(--warn); }
 
 /* 下: 注意書きと入力 */
-.bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 12px calc(10px + var(--safe-b)); display: grid; gap: 8px; justify-items: center; }
+.bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px max(12px, env(safe-area-inset-right)) calc(10px + var(--safe-b)) max(12px, env(safe-area-inset-left)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; justify-items: center; } /* 列を minmax(0, 1fr) に: 幅 320 で入力の列が中身の幅(343px)まで広がっていた(P1) */
 .privacy {
-  margin: 0; width: min(100%, 880px); font-size: 12px; line-height: 1.4; color: var(--muted);
+  margin: 0; width: min(100%, 880px); font-size: 14px; line-height: 1.4; color: var(--muted);
   display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(12, 10, 22, 0.5);
 }
 .rec { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mint); }
 .privacy.off .rec { background: var(--muted); }
-.composer { width: min(100%, 880px); display: flex; gap: 8px; align-items: stretch; }
+.composer { width: min(100%, 880px); min-width: 0; display: flex; gap: 8px; align-items: stretch; }
 .composer input {
   flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--text); padding: 12px 14px; border-radius: 14px;
   background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -172,23 +172,25 @@ html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: n
 .gate-card { width: min(440px, 100%); padding: 28px 24px; border-radius: 26px; background: var(--ink-2); border: 1px solid var(--line); display: grid; gap: 12px; }
 .gate-card h1 { margin: 0; font-size: clamp(22px, 6.4vw, 28px); letter-spacing: 0.04em; line-height: 1.3; }
 /* 案内役(主役ノリー)と、本当にできる事(声は鍵がある時だけ)と、初めての訪問なら 7 歩が始まる事(CRITux 2・10) */
+.gate-what { margin: -4px 0 0; font-size: 15px; line-height: 1.6; color: var(--lav); }
 .gate-guide { margin: 0; font-size: 15px; line-height: 1.6; color: var(--text); }
 .gate-guide b { color: var(--mint); }
 /* 案内役の 1 行は、キャラを読んで main.js が書くまで隠す(場所は空けたまま)。?character=<id> で開いた時、遅い端末で HTML の初めの文
    「案内するのは主役のノリー…」が先に見えていた(M8b 4)。書いた所で main.js が html に guide-ready を付ける */
 html:not(.guide-ready) .gate-guide { visibility: hidden; }
 .lead { margin: 0 0 6px; color: var(--muted); line-height: 1.6; }
-.gate-first { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.6; color: var(--lav); background: rgba(183, 168, 255, 0.1); border: 1px solid rgba(183, 168, 255, 0.28); }
+.gate-first { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.6; color: var(--lav); background: rgba(183, 168, 255, 0.1); border: 1px solid rgba(183, 168, 255, 0.28); }
 .gate-first[hidden] { display: none; }
 .gate button { font: inherit; font-size: 16px; border-radius: 16px; padding: 13px 16px; cursor: pointer; border: 1px solid var(--line); color: var(--text); display: grid; gap: 2px; justify-items: center; text-align: center; }
 /* ボタンの言葉: 何をするか(大)+ どう動くか(小)。カメラのボタンはマイクを言わない・スマホではマウスと言わない(CRITux 15・24) */
-.gate .btn-sub { font-size: 12px; font-weight: 400; line-height: 1.4; opacity: 0.85; }
+.gate .btn-sub { font-size: 14px; font-weight: 400; line-height: 1.4; opacity: 0.85; }
+.gate button[hidden] { display: none; } /* .gate button の display: grid が hidden に勝つため、ヘッドセットの入口に「カメラなしで試す」が見えていた(Q3 ③) */
 .gate .primary { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 0; font-weight: 700; }
 .gate .ghost { background: transparent; }
 .gate button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .gate button:disabled { opacity: 0.5; cursor: wait; }
-.fine { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
-.status { margin: 0; min-height: 1.4em; font-size: 13px; color: var(--warn); }
+.fine { margin: 4px 0 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+.status { margin: 0; min-height: 1.4em; font-size: 14px; color: var(--warn); }
 
 /* 「Claude の考え」は、上の段(札とボタン。高さ --top-h は main.js が測る)のすぐ下に置く。
    札が 2 行になる・ボタンが増えると段が高くなり、決め打ちの位置では「覚えていること」などに重なって押せなかった(幅 390)。
@@ -197,11 +199,11 @@ html:not(.guide-ready) .gate-guide { visibility: hidden; }
   .thought { top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); }
 }
 @media (max-width: 640px) {
-  .thought { top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); right: 12px; left: 12px; width: auto; max-height: 46vh; overflow: auto; }
+  .thought { top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); width: auto; max-height: 46vh; overflow: auto; }
   /* 畳んだ時は見出しの幅だけにして、同じ行の右に見た目の切り替えを並べる(上の段を 1 行減らし、キャラを大きく見せる) */
   .thought.collapsed { right: auto; }
-  .look-switch { position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); right: 12px; }
-  .subs { width: calc(100vw - 24px); }
+  .look-switch { position: fixed; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); right: max(12px, env(safe-area-inset-right)); }
+  .subs { width: calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)); }
   .caption { font-size: clamp(18px, 5vw, 26px); }
   .caption.settled { font-size: clamp(16px, 4.4vw, 21px); }
   .mic span { display: none; }
@@ -213,6 +215,31 @@ html:not(.guide-ready) .gate-guide { visibility: hidden; }
     min-height: 96px; max-height: none;
   }
   body:has(#lookSwitch:not([hidden])) .thought:not(.collapsed) .thought-head { padding-right: 172px; }
+}
+/* 幅 340 以下(iPhone SE など): 入力の列に収める。マイクは印だけ(上で文字は隠し済み)・ボタンの横を詰める(P1 中。幅 320 で列が 343px) */
+@media (max-width: 340px) {
+  .composer { gap: 6px; }
+  .composer button { padding: 0 12px; }
+  .composer input { padding: 12px 10px; }
+  .send { min-width: 56px; }
+}
+/* 画面が低い時(横向きの iPhone・キーボードで縮んだ画面。高さ 500px 未満): 上の段は 1 行に畳み(札の列は隠す)・字幕は 2 行まで・
+   注意書きは隠す(キャラの上と下を空ける。P1 中)。縦持ちのほうがおすすめだが、このままでも使える */
+@media (max-height: 500px) {
+  .chips { display: none; }
+  .top { gap: 4px; }
+  .top-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .top-row::-webkit-scrollbar { display: none; }
+  .privacy { display: none; }
+  .caption, .caption.settled { max-height: calc(2 * 1.45em + 24px); padding: 6px 16px; overflow-y: auto; }
+  .caption { font-size: clamp(16px, 4.2vh, 24px); }
+  .caption.settled { font-size: clamp(14px, 3.8vh, 20px); }
+  .choices { display: none; }
+  .bottom { padding-top: 6px; padding-bottom: calc(6px + var(--safe-b)); }
+}
+/* タブレット(幅 641〜1180): 開いた「Claude の考え」は画面の高さの 30% まで(中は巻いて読む)。長いと、キャラが窓の下へ押されて小さく低くなった(L1 中) */
+@media (min-width: 641px) and (max-width: 1180px) {
+  .thought:not(.collapsed) { max-height: 30vh; overflow-y: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dot { animation: none; }
@@ -237,7 +264,7 @@ html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origi
   background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .look-switch[hidden] { display: none; }
-.look-label { font-size: 12px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+.look-label { font-size: 14px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
 .look-switch button {
   font: inherit; font-size: 14px; font-weight: 700; min-width: 44px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 999px;
   cursor: pointer; color: var(--muted); background: transparent; transition: background 0.2s ease, color 0.2s ease;
@@ -250,13 +277,13 @@ html.is-led .look-switch { display: none !important; }
 
 /* 仮の頭脳の知らせ(契約 K5)。字幕の上に 1 行、黄色で */
 .brain-notice {
-  width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(12px, 1.6vw, 15px); line-height: 1.4;
+  width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(14px, 1.6vw, 15px); line-height: 1.4;
   padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--warn); color: var(--warn);
 }
 .brain-notice[hidden] { display: none; }
 /* 短い知らせ(会話の側の ui.notice。鍵らしい文字を送らなかった、など)。数秒で消える */
 .ui-notice {
-  width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(12px, 1.6vw, 15px); line-height: 1.4;
+  width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(14px, 1.6vw, 15px); line-height: 1.4;
   padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--lav); color: var(--text);
 }
 .ui-notice[hidden] { display: none; }
@@ -265,7 +292,7 @@ html.is-led .look-switch { display: none !important; }
 .drawer { position: relative; pointer-events: auto; }
 .drawer[hidden] { display: none; }
 .drawer > summary {
-  list-style: none; font-size: 13px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text);
+  list-style: none; font-size: 14px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text);
   background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .drawer > summary::-webkit-details-marker { display: none; }
@@ -281,9 +308,9 @@ html.is-led .look-switch { display: none !important; }
 @media (max-width: 760px) {
   .drawer { position: static; }
 }
-.memory-panel { display: grid; gap: 8px; font-size: 13px; }
+.memory-panel { display: grid; gap: 8px; font-size: 14px; }
 .memory-panel h2 { display: none; } /* 引き出しの見出しと同じ言葉なので出さない */
-.mem-notice, .mem-status { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.mem-notice, .mem-status { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .mem-status:empty { display: none; }
 .mem-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .mem-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); word-break: break-word; }
@@ -291,11 +318,11 @@ html.is-led .look-switch { display: none !important; }
 .mem-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 /* 記憶の札の押す所も 44px 以上(指で押せる大きさ。CRITux 20・S3 の頼み) */
 .memory-panel button {
-  font: inherit; font-size: 13px; min-height: 44px; padding: 8px 12px; border-radius: 12px; cursor: pointer;
+  font: inherit; font-size: 14px; min-height: 44px; padding: 8px 12px; border-radius: 12px; cursor: pointer;
   color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
 }
 .memory-panel button:focus-visible, .memory-panel input:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
-.memory-panel .mem-item-forget { min-height: 44px; min-width: 44px; padding: 4px 10px; font-size: 12px; }
+.memory-panel .mem-item-forget { min-height: 44px; min-width: 44px; padding: 4px 10px; font-size: 14px; }
 .memory-panel .mem-forget { border-color: var(--coral); color: var(--coral); }
 .memory-panel input {
   font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border-radius: 12px; width: 9.5em;
@@ -313,9 +340,24 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
 /* ボタンの言葉は QR の印と「VR」だけ(読み上げの名前と title は「VR(Quest)で開く」。箱の 1 行目にも出す)。上の段の幅を 60px 足らずに保つ:
    長い言葉では PC(1280)で見た目の切り替えがキャラの横の範囲まで押し出され、キャラが上の段の下へ置き直されて 2 割小さくなった */
 .quest-link-btn {
-  font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px;
+  font: inherit; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px;
   border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.ql-phone { display: none; }
+/* スマホ(幅 640 まで)では「Quest で開く」と書く(本人: 「VR」だけでは何のボタンか分からない。PC は幅を保つため「VR」のまま) */
+@media (max-width: 640px) {
+  .ql-short { display: none; }
+  .ql-phone { display: inline; }
+  /* 上の段を 1 行も増やさない(L1: 字を 14px にして「Quest で開く」と書くと、幅 390 で行が 1 つ増えキャラが 16% 小さくなった)。
+     札の列は 1 行で流し(はみ出す分は横に巻く)、ボタンの横の余白と間を詰める */
+  .chips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; pointer-events: auto; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; padding: 7px 9px; white-space: nowrap; }
+  .top-row { gap: 6px; }
+  .top .place-mode-button, .top .drawer > summary { padding-left: 10px; padding-right: 10px; }
+  .top .quest-link-btn { padding: 0 10px; gap: 4px; }
+  .top .tv-btn { padding: 0 10px; }
 }
 .quest-link-btn[aria-expanded="true"] { border-color: var(--lav); }
 .quest-link-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
@@ -336,13 +378,13 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
 .quest-link-box[data-kind="private"], .quest-link-box[data-kind="none"] { grid-template-columns: minmax(0, 320px); }
 .ql-qr { display: block; width: var(--ql-size); height: var(--ql-size); border-radius: 6px; background: #fff; }
 .ql-text { display: grid; gap: 6px; min-width: 0; }
-.ql-title { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--text); }
-.ql-how, .ql-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
-.ql-url { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text); word-break: break-all; }
+.ql-title { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.4; color: var(--text); }
+.ql-how, .ql-note { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.ql-url { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text); word-break: break-all; }
 /* 「Meta Quest に送る」(Meta 公式のウェブローンチ。https の公開の URL の時だけ)。押す所は 44px 以上。箱の高さを増やしすぎないよう 1 行 */
 .ql-send {
   justify-self: start; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 14px;
-  border-radius: 999px; font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; text-decoration: none;
+  border-radius: 999px; font-size: 14px; font-weight: 700; line-height: 1.2; white-space: nowrap; text-decoration: none;
   color: #14121f; background: var(--lav); border: 1px solid var(--lav); cursor: pointer;
 }
 .ql-send:hover { filter: brightness(1.08); }
@@ -355,11 +397,22 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
     .quest-link-box { --ql-size: clamp(96px, min(44vw, calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px)), 186px); }
   }
   .ql-how { font-size: 11.5px; line-height: 1.45; }
-  .ql-url { font-size: 12px; }
+  .ql-url { font-size: 14px; }
+}
+
+/* 低い PC の画面(高さ 760 以下。Quest のブラウザの窓も同じ): 箱は 45% の高さに収める。字は 14px のまま、
+   文の列を広げて行数を減らし、余白と行の間を詰める(あふれて「送る」が箱の外に落ちない) */
+@media (min-width: 761px) and (max-height: 760px) {
+  .quest-link-box { grid-template-columns: var(--ql-size) minmax(0, 380px); gap: 10px; padding: 8px 10px; }
+  .quest-link-box[data-kind="private"], .quest-link-box[data-kind="none"] { grid-template-columns: minmax(0, 380px); }
+  .ql-text { gap: 3px; }
+  .ql-title { line-height: 1.3; }
+  .ql-how, .ql-note { line-height: 1.35; }
+  .ql-url { line-height: 1.3; }
 }
 
 /* 合言葉(公開の URL のときだけ出す。契約 K5) */
-.gate .pass { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.gate .pass { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
 .gate .pass[hidden] { display: none; }
 .gate .pass input {
   font: inherit; font-size: 16px; padding: 12px 14px; border-radius: 14px; color: var(--text);
@@ -371,7 +424,7 @@ html.is-led .drawer { display: none !important; }
 /* ---------- テレビ表示(11/7 本人「iPhone にあるものを AirPlay で、テレビにすぐパンって映せるようにしたい」。決まりは stage/tvMode.js) ----------
    上の段の入口: 見せる言葉は TV の印と「テレビ」だけ(押す所は 44px)。初めての会話(7 歩の札)の間・入口の LED・ヘッドセットでは出さない */
 .tv-btn {
-  pointer-events: auto; font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px;
+  pointer-events: auto; font: inherit; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px;
   border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
@@ -418,12 +471,12 @@ html.tv-mode .caption, html.tv-mode .caption.settled, html.tv-mode .caption.user
 }
 html.tv-mode .caption .cap-prev { display: none; }
 html.tv-mode .caption.user { font-size: calc(var(--tv-cap, 6vh) * 0.75); }
-html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { font-size: max(13px, 2.2vh); }
+html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { font-size: max(14px, 2.2vh); }
 /* 指で触る端末を縦に持っている間: 上の左に一言(よこむきにすると大きく映る)。押す所ではない */
 @media (orientation: portrait) and (pointer: coarse) {
   html.tv-mode .tv-rotate {
     display: block; position: fixed; z-index: 9; top: max(10px, env(safe-area-inset-top)); left: 12px; right: 96px; margin: 0;
-    font-size: 13px; line-height: 1.4; padding: 6px 12px; border-radius: 14px; color: var(--text); background: rgba(12, 10, 22, 0.7); border: 1px solid var(--lav);
+    font-size: 14px; line-height: 1.4; padding: 6px 12px; border-radius: 14px; color: var(--text); background: rgba(12, 10, 22, 0.7); border: 1px solid var(--lav);
   }
 }
 
@@ -450,7 +503,7 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
 .tv-cast-steps small { font-size: 14px; line-height: 1.5; color: var(--muted); }
 .tv-cast button { font: inherit; border-radius: 16px; cursor: pointer; color: var(--text); }
 .tv-enter { min-height: 64px; padding: 12px 16px; border: 0; display: grid; gap: 2px; justify-items: center; font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #7d62ff, #c15bff); }
-.tv-enter .btn-sub { font-size: 13px; font-weight: 400; opacity: 0.9; }
+.tv-enter .btn-sub { font-size: 14px; font-weight: 400; opacity: 0.9; }
 .tv-cast-close { min-height: 44px; padding: 8px 16px; font-size: 16px; background: transparent; border: 1px solid var(--line); }
 .tv-cast button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 /* 横向きの iPhone(高さ 430px まで): 手順と押す所を左右に並べ、縦に収める */
@@ -460,7 +513,7 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
   .tv-cast-card h2 { font-size: 20px; }
   .tv-cast-steps { gap: 6px; }
   .tv-cast-steps b { font-size: 16px; }
-  .tv-cast-steps small, .tv-cast-lead, .tv-cast-note { font-size: 13px; }
+  .tv-cast-steps small, .tv-cast-lead, .tv-cast-note { font-size: 14px; }
   .tv-enter { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
   .tv-cast-close { grid-column: 2; grid-row: 4; align-self: start; }
 }
