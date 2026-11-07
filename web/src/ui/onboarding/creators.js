@@ -154,6 +154,8 @@ export function cleanMakeEvent(d) {
     if (d.name !== undefined) e.name = clipText(d.name, 40) || '新しい子';
     e.round = Number.isInteger(d.round) && d.round > 0 ? d.round : 1;
   }
+  // 描き直しで頼んでいない所も変わった時の一言(PC の決まった確かめが書く。文字だけ・120 字まで)
+  if (d.ev === 'drawn' && d.drift) e.drift = plainWords(clipText(d.drift, 120));
   if (d.ev === 'decided') {
     e.decision = d.decision === 'ok' ? 'ok' : 'redo';
     if (e.decision === 'redo') e.note = clipText(d.note, 40);

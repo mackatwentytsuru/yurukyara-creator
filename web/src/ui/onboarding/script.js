@@ -679,6 +679,8 @@ export class FirstRun {
         this.character = { id: ev.id, name: ev.name, sample: false, local: true, round: ev.round, note: this.d.creator.note ?? '' };
         return this._say(
           { who: 'guide', text: ev.round > 1 ? '直してみたよ。どうかな?' : 'こんな子ができたよ。どうかな?' },
+          // 描き直しで、頼んでいない所も変わってしまった時は、隠さずに言う(N-0026)
+          ...(ev.round > 1 && ev.drift ? [{ who: 'note', text: ev.drift }] : []),
           { who: 'note', text: '下の画面で「この子にする」か「直したい(一言)」を選んでね。' },
         );
       case 'decided':
