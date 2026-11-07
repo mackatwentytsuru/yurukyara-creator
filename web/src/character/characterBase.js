@@ -154,8 +154,8 @@ export class CharacterBase {
     } else {
       this.eyeTarget.lerp(eyeWorld, smoothingAlpha(dt, EYE_TAU));
     }
-    // 首は、仕草の目線の足し分の 4 割だけ追う(残りは目が動く。考える時の上目・てれる時のよそ見で、首が回りすぎない)
-    const h = this.head.step(dt, wantYaw - 0.6 * cute.gazeX, wantPitch - 0.6 * cute.gazeY);
+    // 首は、仕草の目線の足し分の 6 割だけ追う(残りは目が動く。考える時の上目・てれる時のよそ見で、首も目も回りすぎない)
+    const h = this.head.step(dt, wantYaw - 0.4 * cute.gazeX, wantPitch - 0.4 * cute.gazeY);
     this.debug.headYaw = h.yaw;
     this.debug.headPitch = h.pitch;
     this.debug.wantYaw = wantYaw;
@@ -203,8 +203,8 @@ export class CharacterBase {
     p.add('spine', o.spineX * 0.5, o.spineY * 0.5, o.spineZ * 0.5);
     p.add('chest', o.spineX * 0.5, o.spineY * 0.5, o.spineZ * 0.5);
     // 腕: 上げる(外へ 2.25 ラジアンまで)・外へ開く・ふる。右腕は z が −、左腕は +
-    p.add('rightUpperArm', 0, 0, -(2.25 * o.armRaiseR + o.armOutR));
-    p.add('leftUpperArm', 0, 0, 2.25 * o.armRaiseL + o.armOutL);
+    p.add('rightUpperArm', 0, 0, -(2.25 * o.armRaiseR + o.armOutR) + 0.5 * o.armFwdR);
+    p.add('leftUpperArm', 0, 0, 2.25 * o.armRaiseL + o.armOutL - 0.5 * o.armFwdL);
     p.add('rightLowerArm', 0, 0, -o.armSwingR * 1.4);
     p.add('leftLowerArm', 0, 0, o.armSwingL * 1.4);
     if (o.shoulderL || o.shoulderR) {

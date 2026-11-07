@@ -182,7 +182,7 @@ test('考える時は首をかしげて上を見る。次に考える時は反�
   run(l, 2);
   l.setActivity('thinking');
   const b = run(l, 2).at(-1);
-  assert.ok(a.gazeY > 0.15 && b.gazeY > 0.15);
+  assert.ok(a.gazeY > 0.1 && b.gazeY > 0.1, `上を見る ${a.gazeY} / ${b.gazeY}`);
   assert.ok(Math.abs(a.headZ) > 0.1 && Math.sign(a.headZ) !== Math.sign(b.headZ), `${a.headZ} / ${b.headZ}`);
 });
 

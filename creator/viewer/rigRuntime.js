@@ -202,8 +202,6 @@ export class RigCharacterV2 extends CharacterBase {
         if (!m) continue;
         for (const [key, k] of Object.entries(m)) w.set(key, Math.max(w.get(key) ?? 0, v * k));
       }
-      // B5G: 仕草の笑顔(うれしい・あいさつ・てれる)は、笑う目のモーフ(eye_smile)があるキャラだけ
-      if (s.cute?.smile > 0.01) w.set('eye_smile', Math.max(w.get('eye_smile') ?? 0, s.cute.smile));
       for (const mesh of this.morphMeshes) {
         for (const [key, idx] of Object.entries(mesh.morphTargetDictionary)) mesh.morphTargetInfluences[idx] = w.get(key) ?? 0;
       }

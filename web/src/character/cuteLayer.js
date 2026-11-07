@@ -23,12 +23,12 @@ export const EMOTION_GESTURE = Object.freeze({ happy: 'happy', surprised: 'surpr
 
 /** 数字の名前。head*・spine* は回転(ラジアン。X = 下を向く、Y = +x の向きへ回る、Z = 見ている人から見て左回り)。
  *  root* は根元の動き(背の高さに対する割合。Y = 上)。armRaise* は「上げた形」の割合 0〜1。armSwing* は手をふる角度。
- *  armOut* は下ろした腕を外へ開く角度。shoulder* は肩を上げる量(背の高さに対する割合)。tail*・ear* は角度。
- *  smile は笑顔の目の強さ 0〜1。gazeX・gazeY は目線の向きの足し分(ラジアン。Y = 上)。 */
+ *  armOut* は下ろした腕を外へ開く角度。armFwd* は腕を前へ寄せる角度(もじもじ・あごに手)。shoulder* は肩を上げる量(背の高さに対する割合)。tail*・ear* は角度。
+ *  smile は笑顔の目の強さ 0〜1。blush は頬の赤み 0〜1(頬の部品がある子だけ)。gazeX・gazeY は目線の向きの足し分(ラジアン。Y = 上)。 */
 export const CHANNELS = Object.freeze([
   'headX', 'headY', 'headZ', 'spineX', 'spineY', 'spineZ', 'rootX', 'rootY', 'rootZ',
-  'armRaiseL', 'armRaiseR', 'armSwingL', 'armSwingR', 'armOutL', 'armOutR', 'shoulderL', 'shoulderR',
-  'tailX', 'tailY', 'earL', 'earR', 'smile', 'gazeX', 'gazeY',
+  'armRaiseL', 'armRaiseR', 'armSwingL', 'armSwingR', 'armOutL', 'armOutR', 'armFwdL', 'armFwdR', 'shoulderL', 'shoulderR',
+  'tailX', 'tailY', 'earL', 'earR', 'smile', 'blush', 'gazeX', 'gazeY',
 ]);
 
 // ばね(1 秒あたりの揺れの数 f と、減り方 z)。頭は体より遅く、しっぽと耳はよく揺れる
@@ -37,13 +37,13 @@ const SPRING = {
   tail: [1.6, 0.32], ear: [4.5, 0.38], smile: [3.5, 1], gaze: [5, 0.9],
 };
 const GROUP = (ch) => (ch.startsWith('head') ? 'head' : ch.startsWith('spine') ? 'spine' : ch.startsWith('root') ? 'root' : ch.startsWith('arm') ? 'arm'
-  : ch.startsWith('shoulder') ? 'shoulder' : ch.startsWith('tail') ? 'tail' : ch.startsWith('ear') ? 'ear' : ch === 'smile' ? 'smile' : 'gaze');
+  : ch.startsWith('shoulder') ? 'shoulder' : ch.startsWith('tail') ? 'tail' : ch.startsWith('ear') ? 'ear' : ch === 'smile' || ch === 'blush' ? 'smile' : 'gaze');
 
 /** 話している間の仕草の大きさ / 弾みの大きさ */
 export const TALK_SCALE = 0.55;
 export const TALK_HOP_SCALE = 0.4;
 /** 根元が上へ出るいちばん大きな量(背の高さに対する割合)。画面の頭の上の余白に足す(scene.js の motionRise) */
-export const CUTE_RISE = 0.03;
+export const CUTE_RISE = 0.05;
 /** 表情からの自動の仕草は、この秒数に 1 回まで */
 export const AUTO_GAP_S = 6;
 
@@ -70,12 +70,18 @@ const G = {
       const e = bump(t / 1.6, 0.12, 0.4);
       const hops = k % 2 === 0 ? 2 : 3;
       const gap = hops === 2 ? 0.42 : 0.33;
-      d.rootY += dip(t, 0, 0.12, 0.006);
-      for (let i = 0; i < hops; i++) d.rootY += hop(t, 0.12 + i * gap, gap * 0.8, i === 0 ? 0.024 : 0.018);
+      d.rootY += dip(t, 0, 0.12, 0.01);
+      for (let i = 0; i < hops; i++) d.rootY += hop(t, 0.12 + i * gap, gap * 0.8, i === 0 ? 0.044 : 0.034);
+      // 腕: 変形の偶数は弾みに合わせてぱたぱた(上げた形の 3〜5 割)、奇数は小さなばんざい(6 割)
+      const flap = Math.max(0, Math.sin((2 * Math.PI * (t - 0.08)) / (gap * 1.0)));
+      const up = k % 2 ? 0.6 : 0.28 + 0.22 * flap;
+      d.armRaiseL += up * e;
+      d.armRaiseR += up * e;
+      d.blush += 0.35 * e;
       const sw = Math.sin((2 * Math.PI * t) / 0.8);
-      d.spineZ += 0.085 * side * sw * e;
-      d.rootX += 0.008 * side * sw * e;
-      d.headZ += 0.1 * side * Math.sin((2 * Math.PI * (t - 0.09)) / 0.8) * e;
+      d.spineZ += 0.12 * side * sw * e;
+      d.rootX += 0.012 * side * sw * e;
+      d.headZ += 0.14 * side * Math.sin((2 * Math.PI * (t - 0.09)) / 0.8) * e;
       d.headX -= 0.04 * e;
       d.armOutL += 0.26 * e + 0.08 * Math.sin(t * 2 * Math.PI * 2.6) * e;
       d.armOutR += 0.26 * e - 0.08 * Math.sin(t * 2 * Math.PI * 2.6) * e;
@@ -95,10 +101,11 @@ const G = {
         d.armRaiseR += e;
         d.armSwingR += 0.32 * Math.sin(2 * Math.PI * (k % 2 ? 2.2 : 1.9) * Math.max(0, t - 0.3)) * smooth((t - 0.25) / 0.3) * e;
       }
-      d.rootY += dip(t, 0, 0.12, 0.005) + hop(t, 0.12, 0.3, 0.018) + (k % 2 ? hop(t, 0.5, 0.26, 0.012) : 0);
+      d.rootY += dip(t, 0, 0.12, 0.009) + hop(t, 0.12, 0.3, 0.034) + hop(t, 0.5, 0.26, k % 2 ? 0.026 : 0.02);
+      if (cap.armByClip) d.armSwingR += 0.22 * Math.sin(2 * Math.PI * 1.9 * Math.max(0, t - 0.35)) * smooth((t - 0.3) / 0.3) * e; // 小さい腕の子でも、ふる手が見えるように少し足す
       // 上げた腕と反対へ頭をかしげる(頭でっかちでも、ほおに腕が当たらない)。体は上げた腕の方へ少し寄る
-      d.headZ += -0.12 * e - 0.03 * Math.sin(2 * Math.PI * 1.9 * t) * e;
-      d.spineZ += 0.05 * e;
+      d.headZ += -0.14 * e - 0.04 * Math.sin(2 * Math.PI * 1.9 * t) * e;
+      d.spineZ += 0.07 * e + 0.02 * Math.sin(2 * Math.PI * 0.95 * t) * e;
       d.rootX -= 0.004 * e;
       d.headX -= 0.03 * e;
       d.smile += 0.65 * e;
@@ -116,7 +123,8 @@ const G = {
       d.armRaiseR += e;
       d.armSwingL += 0.12 * Math.sin(2 * Math.PI * 2.4 * t) * e;
       d.armSwingR -= 0.12 * Math.sin(2 * Math.PI * 2.4 * t) * e;
-      d.rootY += dip(t, 0, 0.14, 0.007) + hop(t, 0.14, 0.34, 0.026) + hop(t, 0.56, 0.3, 0.02);
+      d.rootY += dip(t, 0, 0.14, 0.011) + hop(t, 0.14, 0.34, 0.046) + hop(t, 0.56, 0.3, 0.036);
+      d.blush += 0.3 * e;
       d.headX -= 0.08 * e;
       d.headZ += 0.03 * side * Math.sin(2 * Math.PI * 1.2 * t) * e;
       d.smile += 0.75 * e;
@@ -131,17 +139,23 @@ const G = {
     f(t, d, side) {
       const e = bump(t / 2.8, 0.18, 0.34);
       const peek = bump(t / 2.8, 0.18, 0.5); // 目線は少し早く戻して、ちらっと見る
-      d.headX += 0.2 * e;
-      d.headY += 0.15 * side * e;
-      d.headZ += 0.13 * side * e;
-      d.gazeY -= 0.22 * e;
-      d.gazeX += 0.22 * side * peek;
-      d.spineY += 0.07 * side * e;
-      d.spineZ += 0.06 * Math.sin((2 * Math.PI * t) / 1.35) * e;
+      const look = t > 1.1 && t < 1.7 ? Math.sin((Math.PI * (t - 1.1)) / 0.6) : 0; // ちらっと見る
+      d.headX += (0.25 - 0.14 * look) * e;
+      d.headY += (0.16 - 0.1 * look) * side * e;
+      d.headZ += 0.15 * side * e;
+      d.blush += 0.9 * e;
+      d.gazeY -= 0.16 * e;
+      d.gazeX += 0.16 * side * peek;
+      d.spineY += 0.08 * side * e;
+      d.spineZ += 0.09 * Math.sin((2 * Math.PI * t) / 1.35) * e;
       d.rootX += 0.006 * Math.sin((2 * Math.PI * t) / 1.35) * e;
       d.rootY -= 0.004 * e;
-      d.armOutL -= 0.1 * e;
-      d.armOutR -= 0.1 * e;
+      const fid = Math.sin((2 * Math.PI * t) / 0.55);
+      d.armOutL -= 0.18 * e;
+      d.armOutR -= 0.18 * e;
+      d.armFwdL += (0.5 + 0.14 * fid) * e;
+      d.armFwdR += (0.5 - 0.14 * fid) * e;
+      d.spineY += 0.1 * Math.sin((2 * Math.PI * t) / 1.35 + 0.8) * e;
       d.smile += 0.35 * e;
       d.earL -= 0.12 * e;
       d.earR -= 0.12 * e;
@@ -171,12 +185,14 @@ const G = {
       const e = bump(t / 2.6, 0.22, 0.3);
       const pre = t < 0.18 ? Math.sin((Math.PI * t) / 0.18) : 0; // 反対へ少しためる
       d.headZ += side * (0.25 * e - 0.04 * pre) + 0.012 * side * Math.sin((2 * Math.PI * t) / 0.42) * e;
-      d.headX -= 0.07 * e;
-      d.gazeY += 0.22 * e;
-      d.gazeX += 0.14 * side * e;
+      d.headX -= 0.11 * e;
+      d.gazeY += 0.16 * e;
+      d.gazeX += 0.1 * side * e;
       d.spineZ += 0.035 * side * e;
       d.rootX -= 0.004 * side * e;
       d.tailY += 0.1 * side * e;
+      if (side > 0) d.armFwdR += 0.55 * e;
+      else d.armFwdL += 0.55 * e;
     },
   },
   nod: {
@@ -279,12 +295,13 @@ G.jump = G.cheer;
 
 // 待つ間の小さな仕草(4〜9 秒に 1 回。前と同じ物は選ばない)
 const ACCENTS = {
-  tiltL: { dur: 2.2, need: null, f(t, d) { const e = bump(t / 2.2, 0.3, 0.4); d.headZ += 0.13 * e; d.spineZ += 0.02 * e; } },
-  tiltR: { dur: 2.2, need: null, f(t, d) { const e = bump(t / 2.2, 0.3, 0.4); d.headZ -= 0.13 * e; d.spineZ -= 0.02 * e; } },
+  tiltL: { dur: 2.2, need: null, f(t, d) { const e = bump(t / 2.2, 0.3, 0.4); d.headZ += 0.2 * e; d.spineZ += 0.03 * e; } },
+  tiltR: { dur: 2.2, need: null, f(t, d) { const e = bump(t / 2.2, 0.3, 0.4); d.headZ -= 0.2 * e; d.spineZ -= 0.03 * e; } },
   lookAside: { dur: 2.0, need: null, f(t, d, side) { const e = bump(t / 2, 0.18, 0.3); d.gazeX += 0.35 * side * e; d.headY += 0.06 * side * e; } },
   weightShift: { dur: 2.8, need: null, f(t, d, side) { const e = bump(t / 2.8, 0.35, 0.4); d.rootX += 0.007 * side * e; d.spineZ -= 0.03 * side * e; d.headZ += 0.025 * side * e; } },
-  bounce: { dur: 0.7, need: null, f(t, d) { d.rootY += dip(t, 0, 0.1, 0.003) + hop(t, 0.1, 0.26, 0.012); d.smile += 0.2 * bump(t / 0.7, 0.2, 0.4); } },
+  bounce: { dur: 0.7, need: null, f(t, d) { d.rootY += dip(t, 0, 0.1, 0.003) + hop(t, 0.1, 0.26, 0.016); d.smile += 0.2 * bump(t / 0.7, 0.2, 0.4); } },
   earFlick: { dur: 0.6, need: 'ears', f(t, d, side) { const e = bump(t / 0.6, 0.15, 0.5); d.earL += (side > 0 ? 0.45 : 0.1) * e; d.earR += (side > 0 ? 0.1 : 0.45) * e; } },
+  armSwing: { dur: 1.8, need: 'arms', f(t, d, side) { const e = bump(t / 1.8, 0.2, 0.4); const w = Math.sin((2 * Math.PI * t) / 0.9); d.armOutL += (0.1 + 0.07 * w * side) * e; d.armOutR += (0.1 - 0.07 * w * side) * e; } },
   tailFlick: { dur: 1.4, need: 'tail', f(t, d, side) { const e = bump(t / 1.4, 0.15, 0.45); d.tailY += 0.35 * side * Math.sin((2 * Math.PI * t) / 0.7) * e; d.tailX += 0.12 * e; } },
 };
 
@@ -429,13 +446,13 @@ export class CuteLayer {
 
     // 1. 待つ間(いつも): 息・体のゆれ・首のゆらぎ。止めない
     const breath = Math.sin((2 * Math.PI * t) / 4.5);
-    d.spineX += 0.018 * breath;
+    d.spineX += 0.024 * breath;
     d.rootY += 0.0025 * Math.sin((2 * Math.PI * t) / 4.5 + 0.7);
     d.shoulderL += 0.0012 * breath;
     d.shoulderR += 0.0012 * breath;
     const sway = Math.sin((2 * Math.PI * t) / 7.3 + 1.1);
-    d.spineZ += 0.016 * sway;
-    d.rootX += 0.005 * sway;
+    d.spineZ += 0.03 * sway;
+    d.rootX += 0.008 * sway;
     d.headZ += 0.02 * Math.sin((2 * Math.PI * t) / 9.1 + 0.4) - 0.006 * sway;
     d.headY += 0.02 * Math.sin((2 * Math.PI * t) / 11.7 + 2.1);
     d.headX += 0.008 * Math.sin((2 * Math.PI * t) / 5.3 + 1.7);
@@ -447,7 +464,7 @@ export class CuteLayer {
     if (wl > 0.001) {
       // 聞く: 少し前へ寄り、話す人の方へ少し向く。耳を立てる
       const toward = clamp((Number(ctx.gazeYaw) || 0) * 0.35, -0.2, 0.2);
-      d.spineX += 0.05 * wl;
+      d.spineX += 0.06 * wl;
       d.spineY += toward * wl;
       d.headZ += 0.04 * wl * Math.sin((2 * Math.PI * t) / 6.1);
       d.earL += 0.1 * wl;
@@ -459,11 +476,13 @@ export class CuteLayer {
       const s = this.thinkSide;
       const re = Math.sin((2 * Math.PI * Math.max(0, this.activityT - 1.6)) / 3.4);
       d.headZ += s * (0.2 + 0.03 * re) * wt;
-      d.headX -= 0.06 * wt;
-      d.gazeY += 0.22 * wt;
-      d.gazeX += 0.16 * s * wt;
+      d.headX -= 0.1 * wt;
+      d.gazeY += 0.16 * wt;
+      d.gazeX += 0.1 * s * wt;
       d.spineZ += 0.028 * s * wt;
       d.rootX -= 0.003 * s * wt;
+      if (s > 0) d.armFwdR += 0.5 * wt;
+      else d.armFwdL += 0.5 * wt;
     }
     if (talk > 0.001) {
       d.spineX += 0.008 * talk * Math.sin((2 * Math.PI * t) / 2.3);
@@ -474,8 +493,8 @@ export class CuteLayer {
       this.nextNod -= h;
       if (this.nextNod <= 0 && !this.busy) {
         this.nodK += 1;
-        this.gestures.push({ name: 'nod', def: G.nod, t: 0, amp: [0.5, 0.65, 0.42][this.nodK % 3], side: this.nodK % 2 ? 1 : -1, k: this.nodK, cap: {}, fade: 1, soft: true });
-        this.nextNod = 1.7 + this.rng() * 1.6;
+        this.gestures.push({ name: 'nod', def: G.nod, t: 0, amp: [0.75, 0.95, 0.65][this.nodK % 3], side: this.nodK % 2 ? 1 : -1, k: this.nodK, cap: {}, fade: 1, soft: true });
+        this.nextNod = 1.5 + this.rng() * 1.4;
       }
     }
     // 4. 話している間の小さな頭の動き(文の調子)
@@ -512,7 +531,7 @@ export class CuteLayer {
         const name = names[Math.floor(this.rng() * names.length) % names.length];
         this.accent = { name, def: ACCENTS[name], t: 0, side: this.rng() < 0.5 ? -1 : 1 };
         this.lastAccent = name;
-        this.nextAccent = 4 + this.rng() * 5;
+        this.nextAccent = 3 + this.rng() * 4;
       }
     }
     if (this.accent) {
@@ -556,6 +575,7 @@ export class CuteLayer {
     d.armRaiseL = clamp(d.armRaiseL, 0, 1);
     d.armRaiseR = clamp(d.armRaiseR, 0, 1);
     d.smile = clamp(d.smile, 0, 1);
+    d.blush = clamp(d.blush, 0, 1);
 
     // 9. ばねで近づける(行き過ぎて少し戻る)。しっぽは根元の弾みに遅れて揺れる
     d.tailX += -this.vel.rootY * 1.2;
@@ -574,6 +594,7 @@ export class CuteLayer {
     this.out.armRaiseL = clamp(this.out.armRaiseL, 0, 1);
     this.out.armRaiseR = clamp(this.out.armRaiseR, 0, 1);
     this.out.smile = clamp(this.out.smile, 0, 1);
+    this.out.blush = clamp(this.out.blush, 0, 1);
     this.out.rootY = Math.min(this.out.rootY, CUTE_RISE);
     this.out.blink = this._blink(h);
     return this.out;

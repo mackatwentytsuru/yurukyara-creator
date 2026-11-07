@@ -281,6 +281,31 @@ export class CuteRig {
     }
     this.caps = { arms: Boolean(this.armL || this.armR), head: Boolean(this.head && this.head !== this.body), ears: Boolean(this.earL || this.earR), tail: this.tail.length > 0 };
     this.limited = { L: 0, R: 0 }; // 腕の角度を縮めたコマの数(確かめ用)
+    // 頬の部品(名前か材質の名前に cheek・blush)。てれる・うれしい時に赤みを強くする(材質を差しかえられても、その時の材質で数える)
+    this.blushMeshes = [];
+    scene.traverse((o) => {
+      if (o.isMesh && (/cheek|blush/i.test(o.name) || /cheek|blush/i.test(o.material?.name ?? ''))) this.blushMeshes.push(o);
+    });
+    this._blushBase = new WeakMap();
+  }
+
+  /** 頬の赤み(0〜1)。元の色から、少し濃く鮮やかなピンクへ寄せる */
+  _blush(b) {
+    for (const m of this.blushMeshes) {
+      const mat = m.material;
+      if (!mat?.color) continue;
+      let base = this._blushBase.get(mat);
+      if (!base) {
+        base = { c: mat.color.clone(), e: mat.emissive ? mat.emissive.clone() : null, last: 0 };
+        base.cs = base.c.clone().offsetHSL(0, 0.25, -0.12);
+        base.es = base.e ? base.e.clone().offsetHSL(0, 0.25, -0.12) : null;
+        this._blushBase.set(mat, base);
+      }
+      if (b < 0.005 && base.last < 0.005) continue;
+      mat.color.copy(base.c).lerp(base.cs, b);
+      if (base.e) mat.emissive.copy(base.e).lerp(base.es, b);
+      base.last = b;
+    }
   }
 
   /** ミキサーの前: 仕草で足した分を外して、動きだけの値へ戻す(視線の骨の回転は rigRuntime が戻す) */
@@ -326,6 +351,7 @@ export class CuteRig {
       const swing = side === 'L' ? o.armSwingL : o.armSwingR;
       const outA = side === 'L' ? o.armOutL : o.armOutR;
       const sh = side === 'L' ? o.shoulderL : o.shoulderR;
+      const fwd = side === 'L' ? o.armFwdL : o.armFwdR;
       if (raise > 0.001) {
         _q2.copy(IDENT).slerp(r.q, raise);
         arm.quaternion.premultiply(_q2);
@@ -333,12 +359,13 @@ export class CuteRig {
       }
       // 外へ開く・ふる: 体の向きの z 軸のまわり(外が +)
       const z = r.out * (outA + swing);
-      if (z) this._rot(arm, 0, 0, z);
+      if (z || fwd) this._rot(arm, -fwd, 0, z); // 前へ寄せる(もじもじ・あごに手)は、体の向きの x 軸のまわり
       if (sh) arm.position.y += sh * u;
       // 脇が持ちこたえる角度より上には上げない(動き clip の腕も)
       const hold = this.hold[side];
       if (Number.isFinite(hold) && limitAngle(arm.quaternion, hold)) this.limited[side] += 1;
     }
+    if (this.blushMeshes.length) this._blush(o.blush ?? 0);
     if (this.earL) this._rot(this.earL, -o.earL, 0, 0.3 * o.earL);
     if (this.earR) this._rot(this.earR, -o.earR, 0, -0.3 * o.earR);
     const n = this.tail.length;
