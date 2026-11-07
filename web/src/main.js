@@ -670,8 +670,10 @@ async function setupPresentation() {
 // 「VR(Quest)で開く」の QR の箱も、開いている間は数える(キャラを箱の下へ。箱の下の端は style.css が画面の 45% より上で止める)
 // 11/7 本人「頭が切れちゃってる」: PC では上の段がキャラの横に重ならず、耳が画面の上の端まで出ていた。
 // 上の段(札・ボタン・見た目の切り替え)は横の位置にかかわらず数え、下の端から画面の高さの 6% 下にキャラのいちばん上を置く(framing.js の topLimit)
-const TOP_BAR = '.top .chip, .top .top-row > *'; // 上の段(横いっぱいに数える)
-const TOP_SIDE = '#thoughtToggle'; // スマホで上の段の下に並ぶ畳んだ見出し(キャラの横に重なる時だけ。同じすき間)
+// 「テレビ」の入口(#tvBtn)は、幅 640 までは上の段の下の行(畳んだ見出しと同じ行)に置くので、横に重なる時だけ数える側へ
+// (見た目の切り替えが無い子で、その行を横いっぱいに数えてキャラを下げないように)
+const TOP_BAR = '.top .chip, .top .top-row > *:not(#tvBtn)'; // 上の段(横いっぱいに数える)
+const TOP_SIDE = '#thoughtToggle, #tvBtn'; // スマホで上の段の下に並ぶ畳んだ見出しと「テレビ」(キャラの横に重なる時だけ。同じすき間)
 const TOP_PANELS = '#thought:not(.collapsed), #questLinkBox:not([hidden])'; // 開いた窓(重なる時だけ)
 const TOP_GAP_PX = 8; // 開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
 const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
