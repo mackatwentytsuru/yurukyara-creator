@@ -62,7 +62,8 @@ export function installKeyboardInset(doc = globalThis.document, win = globalThis
     apply();
     timers = SETTLE_MS.map((ms) => setTimeout(() => { apply(); keepFocusVisible(); }, ms));
   };
-  const onFocusOut = () => {
+  const onFocusOut = (e) => {
+    if (!isEditable(e?.target)) return; // ボタンなどのフォーカスが外れただけの時は何もしない(キーボードが無い間は何も変えない)
     clear();
     timers = SETTLE_MS.map((ms) => setTimeout(() => {
       apply();

@@ -506,6 +506,7 @@ function frame(rawMs) {
     vrPanel.set({ state: vrState() });
     vrPanel.place(c.object3d, stage.state.height, stage.camera);
   }
+  syncStage(); // canvas の箱が変わっていたら(窓の resize が来ない変化も)、描く前に大きさと画角を合わせ、キャラを置き直す
   stage.render();
   if (app.firstFrameAt === null) app.firstFrameAt = performance.now();
 
@@ -737,6 +738,15 @@ stage.state.topGuard = topGuard;
 /** 今の見せ方で、キャラを置き直す(画面の大きさ・上の段・下の帯が変わった時)。AR・VR の間は端末が決めるので何もしない */
 function reframe() {
   if (app.character && !stage.state.immersive) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
+}
+
+/**
+ * canvas の箱と、描く大きさ・画角の縦横がずれていたら合わせ、下の余白(画面の高さで決まる)を取り直してキャラを置き直す。
+ * 毎フレーム(frame)と、箱が変わりうる時(canvas の ResizeObserver・回転・ページの復帰・見える範囲の変化)に呼ぶ。ずれていなければ何もしない。
+ * 11/7 本人の iPhone の Chrome: 窓の resize が来ないまま箱が変わり、古い大きさの絵が縦長の箱へ引き伸ばされて、ノリーが約 3.8 倍細長く写った
+ */
+function syncStage() {
+  if (stage.syncSize()) fitBottom();
 }
 
 /**
@@ -1170,6 +1180,12 @@ async function boot() {
   status.textContent = 'キャラを読み込んでいます…';
   installKeyboardInset();
   stage.resize();
+  // 窓の resize が来ない箱の変化にも追いつく(毎フレームの確かめに加えて、描いていない間の変化も拾う)
+  if (typeof ResizeObserver === 'function') new ResizeObserver(syncStage).observe(stage.renderer.domElement);
+  window.addEventListener('orientationchange', syncStage);
+  window.addEventListener('pageshow', syncStage);
+  document.addEventListener('visibilitychange', syncStage);
+  window.visualViewport?.addEventListener('resize', syncStage);
   window.addEventListener('resize', () => {
     stage.resize();
     if (tvActive()) fitBottom(); // テレビ表示の字幕の大きさと下の余白は、画面の高さで決まる(置き直しも中で)
