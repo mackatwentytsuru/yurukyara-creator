@@ -19,8 +19,11 @@ import { normalizeLook } from '../character/looks.js';
 /** この PC・家の中のアドレスで開いている時の 1 行(Quest からは開けない) */
 export const PRIVATE_NOTE = 'この PC・家の中のアドレスは、Quest から開けません。';
 
-/** QR の横に出す読み取り方(公式の名前で) */
-export const SCAN_HOW = 'Quest 3・3S の QR コードスキャナー(クイック設定かカメラ)で読み取ると、この画面が開きます。';
+/**
+ * QR の横に出す読み取り方(公式の名前で)。読み取った後に Quest のブラウザでこの画面が開くかは、公式に書いていなく、
+ * 本物の Quest でもまだ確かめていないので、「開きます」とは言わない(確かめたら言ってよい。README の【確かめ待ち】と同じ所)
+ */
+export const SCAN_HOW = 'Quest 3・3S の QR コードスキャナー(クイック設定かカメラ)で、この画面の URL を読み取れます。';
 
 /** QR を出せない時(URL が長い・部品を読めない) */
 export const NO_QR_NOTE = 'QR を出せません。下の URL を Quest のブラウザに入れてください。';

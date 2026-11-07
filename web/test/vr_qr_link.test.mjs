@@ -68,6 +68,7 @@ test('公開の URL: QR の文はこの画面の URL(http の試しの名前で�
   const qr = encodeQr(plan.target);
   assert.ok(qr && qr.version <= 5, `QR は小さい版(${qr?.version})`);
   assert.match(SCAN_HOW, /Quest 3・3S の QR コードスキャナー/, '公式の名前で読み取り方を出す');
+  assert.doesNotMatch(SCAN_HOW, /開きます|開けます/, '読み取った後に開くかは本物の Quest で確かめていないので、「開きます」と言わない');
 });
 
 test('この PC・家の中のアドレスでは、QR を出さず 1 行だけ(Quest からは開けない)', () => {
