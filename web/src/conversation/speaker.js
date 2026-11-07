@@ -6,9 +6,12 @@
 // - 声が使えないとき(鍵なし・上限・公開のリンク)は、レトロ RPG 風の「ピッ」と文字送りで話す(retroVoice.js)。音を切っていれば文字送りだけ
 //   このときの口は、文字送りの予定で動かす(文字が出ている間は開け閉めし、句読点の間と話し終わりで閉じる)。
 //   「ピッ」の音の大きさからは作らない: 小さい音なので、口が半分しか開かなかった(11-06 合わせ②の話す試験で 0.69 → 0.33)。
+// - 声の役(男の子・女の子): 性格の画面で選んだ値(setVoiceChoice)か、その子の人格の文から決まる役で話す(voiceRole.js)。
+//   声の鍵の道は役の声で直接、サーバーの道は話す役(voice)と、その子自身の声の id(あれば)を送る。あいづちの声も役の組を使う
 import { getVoiceKey } from './voiceKey.js';
-import { DEFAULT_VOICE_ID, describeElevenError, fetchElevenPcm } from './elevenDirect.js';
+import { describeElevenError, fetchElevenPcm } from './elevenDirect.js';
 import { RETRO, crawlSchedule, isPause, scheduleRetro, voiceFor } from './retroVoice.js';
+import { VOICE_MODEL_ID, isVoiceId, normalizeVoiceChoice, resolveVoice } from './voiceRole.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const SERVER_TTS_OFF = new Set([404, 405, 429, 501, 503]); // サーバーに声が無い・上限: この画面の間は聞きに行かない
@@ -36,9 +39,12 @@ export class Speaker {
     this._level = 0;
     this.ttsError = null; // 読み上げが使えない理由(使えるなら null)
     this.fetchLog = [];
-    this.fillers = []; // あいづちの声 { text, samples(Float32Array), ms }
+    this.fillers = []; // あいづちの声 { text, samples(Float32Array), ms }(今の役の組)
+    this.fillerSets = null; // 役ごとの組 { male, female }(サーバーが役ごとに返した時)
     this.lastFiller = -1;
-    this.voiceId = DEFAULT_VOICE_ID; // 声の鍵(BYOK)で使う声
+    this.voiceChoice = 'auto'; // 性格の画面で選んだ声('auto' | 'male' | 'female'。setVoiceChoice)
+    this.voicePersona = ''; // 役を決める人格の文(setVoiceChoice・会話の 1 回ごとに Dialogue が渡す)
+    this.ownVoiceId = null; // その子の声の id(setVoice で決め打ちした時。人格の文の「声の id」が先)
     this.retro = true; // 声が無いとき「ピッ」を鳴らすか(false なら文字送りだけ)
     this.retroVoice = voiceFor('');
     this.serverTtsOff = null; // サーバーに声が無いと分かった理由(分かったら、この画面の間は聞きに行かない)
@@ -46,12 +52,52 @@ export class Speaker {
   }
 
   /**
-   * キャラごとの声。voiceId は声の鍵(BYOK)で使う声、seed はレトロの「ピッ」の高さと音色を決める名前。
+   * キャラごとの声。voiceId はその子自身の声(形の正しい id だけ。人格の文の「声の id」が先)、seed はレトロの「ピッ」の高さと音色を決める名前。
    * @param {{voiceId?:string, seed?:string}} o
    */
   setVoice({ voiceId, seed } = {}) {
-    if (voiceId) this.voiceId = voiceId;
+    if (voiceId !== undefined) this.ownVoiceId = isVoiceId(voiceId) ? voiceId : null;
     if (seed !== undefined) this.retroVoice = voiceFor(seed);
+  }
+
+  /**
+   * 声の役を選ぶ(性格の画面の「おまかせ / 男の子 / 女の子」。S4 は voiceRole.js の applyVoiceChoice から呼ぶ)。
+   * 選んだ値は、次に呼ぶまで残る(舞台の子を替えた時は、その子の値で呼び直す)。
+   * @param {string} choice 'auto' | 'male' | 'female'(ほかの値は 'auto')
+   * @param {{persona?: string}} [o] その子の人格の文(省くと前の文のまま。空の文も受ける)
+   * @returns {{choice: string, role: 'male'|'female', voiceId: string}}
+   */
+  setVoiceChoice(choice, { persona } = {}) {
+    this.voiceChoice = normalizeVoiceChoice(choice);
+    if (typeof persona === 'string') this.voicePersona = persona;
+    return this._afterVoiceChange();
+  }
+
+  /**
+   * 会話の 1 回ごとに、今の子の人格の文を受け取る(Dialogue が渡す。おまかせの役は、いつも今の子の文から決まる)。
+   * 空の文は受けない(人格の文を読む前の回で、性格の画面が渡した文を消さないため)。
+   */
+  setVoicePersona(persona) {
+    if (typeof persona !== 'string' || !persona.trim() || persona === this.voicePersona) return;
+    this.voicePersona = persona;
+    this._afterVoiceChange();
+  }
+
+  /** 今の声 { choice, role, voiceId(声の鍵の道で使う id), ownVoiceId(その子自身の声を使う時の id。無ければ null) } */
+  currentVoice() {
+    return resolveVoice({ choice: this.voiceChoice, persona: this.voicePersona, ownVoiceId: this.ownVoiceId });
+  }
+
+  /** 声の鍵(BYOK)の道で使う声の id(初めての会話の 7 歩目が、鍵を確かめる時に読む) */
+  get voiceId() {
+    return this.currentVoice().voiceId;
+  }
+
+  /** 役が替わったら、あいづちの声もその役の組にする */
+  _afterVoiceChange() {
+    const v = this.currentVoice();
+    if (this.fillerSets) this.fillers = this.fillerSets[v.role] ?? [];
+    return { choice: v.choice, role: v.role, voiceId: v.voiceId };
   }
 
   /**
@@ -68,12 +114,14 @@ export class Speaker {
     }
   }
 
-  /** あいづちの声を、サーバーから読んでおく(前もって作られた物。無ければ何もしない) */
+  /**
+   * あいづちの声を、サーバーから読んでおく(前もって作られた物。無ければ何もしない)。
+   * サーバーが役ごとの組(roles)を返せば両方を読み、今の役の組を使う(役が替わると組も替わる)。
+   */
   async loadFillers() {
-    try {
-      const list = (await (await fetch('/api/fillers')).json()).fillers ?? [];
-      this.fillers = await Promise.all(
-        list.map(async (f) => {
+    const decode = (list) =>
+      Promise.all(
+        (Array.isArray(list) ? list : []).map(async (f) => {
           const bytes = new Uint8Array(await (await fetch(f.url)).arrayBuffer());
           const view = new DataView(bytes.buffer, 0, bytes.length - (bytes.length % 2));
           const samples = new Float32Array(view.byteLength / 2);
@@ -81,8 +129,19 @@ export class Speaker {
           return { text: f.text, samples, ms: Math.round((samples.length / 24000) * 1000) };
         }),
       );
+    try {
+      const data = await (await fetch('/api/fillers')).json();
+      if (data?.roles && typeof data.roles === 'object') {
+        const [male, female] = await Promise.all([decode(data.roles.male), decode(data.roles.female)]);
+        this.fillerSets = { male, female };
+        this.fillers = this.fillerSets[this.currentVoice().role] ?? [];
+      } else {
+        this.fillerSets = null;
+        this.fillers = await decode(data?.fillers);
+      }
     } catch (err) {
       console.warn('あいづちの声を読めませんでした:', err.message);
+      this.fillerSets = null;
       this.fillers = [];
     }
     return this.fillers.length;
@@ -237,14 +296,16 @@ export class Speaker {
       this.ttsError = this.serverTtsOff;
       return;
     }
+    // 話す役と声(性格の画面の値 → その子の人格の文 → 女の子)。サーバーへは役と、その子自身の声の id だけを送る
+    const voice = this.currentVoice();
     let res;
     try {
       res = key
-        ? await fetchElevenPcm(text, { key, voiceId: this.voiceId, signal })
+        ? await fetchElevenPcm(text, { key, voiceId: voice.voiceId, modelId: VOICE_MODEL_ID, signal })
         : await fetch('/api/tts', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({ text, voice: voice.role, ...(voice.ownVoiceId ? { voiceId: voice.ownVoiceId } : {}) }),
             signal,
           });
     } catch (err) {
