@@ -30,6 +30,27 @@ npm start        # then open http://127.0.0.1:8787/
 - We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: 【確かめ待ち】
 - `npm ci` also downloads the face-tracking model into `web/public/mediapipe/`; it is not stored in this repository.
 
+<a name="voices"></a>
+
+## Voices: おまかせ, 男の子 or 女の子
+
+- Every character has a voice role, boy (男の子) or girl (女の子), chosen automatically from the character: a line 「- 声: 男の子」 or 「- 声: 女の子」 in its personality text (`characters/<id>/persona.md`); without one, a guess from the way it calls itself or its name (〜くん, 〜ちゃん); failing that, girl. Norrie is a butler apprentice, so its role is 男の子.
+- On the 「性格」 (personality) screen, the 「声」 (voice) choice offers **おまかせ** (the character's own role), **男の子** (boy) and **女の子** (girl).
+- The character speaks aloud only with your own ElevenLabs key (API key). Enter it at step 7, 「声」 (voice), of 「はじめての会話」 (the first conversation). The key is used only inside this browser and is never sent to our server. Without a key, the character talks with text and a retro sound.
+- The default voices are Japanese voices from ElevenLabs' Voice Library, one for each role. ElevenLabs says that Voice Library voices are not available through the API on the free tier. The ElevenLabs rules that apply are summed up in [THIRD_PARTY.md](THIRD_PARTY.md#elevenlabs-voices).
+- To use another voice, add a line 「- 声の id: <ElevenLabs voice id>」 to the personality text (it is used when the character speaks in its own role). On the local server, the default voice of each role can also be changed with the environment variables `ELEVEN_VOICE_MALE` and `ELEVEN_VOICE_FEMALE`.
+
+<a name="open-it-on-a-quest-3"></a>
+
+## Open it on a Quest 3
+
+- On a PC or a phone, press 「VR」 in the top bar. A box, 「VR(Quest)で開く」 ("open in VR (Quest)"), shows a QR code of this screen, its URL and 「Meta Quest に送る」 ("send to Meta Quest"). The URL holds only this screen's address, the character id and 3D or 2D (no passphrase, memory code or key).
+- **QR code**: Quest 3 and 3S can read it with their QR code scanner (from Meta Horizon OS v2.9; open it from Quick Settings or the Camera app). Whether the Quest browser then opens the page: 【確かめ待ち】
+- **「Meta Quest に送る」**: opens Meta's official Web Launch page in a new tab, which sends this screen's URL to the Quest browser. Meta allows this for https URLs only (the public link), so it appears only on https. For anything about your Meta account, follow Meta's page. 【確かめ待ち】
+- On this PC (`127.0.0.1`) or at a home network address, the box shows one line saying that a Quest cannot open it, instead of the QR code and 「Meta Quest に送る」. Inside the Quest browser the box does not appear.
+- In the Quest browser, press 「VR で見る」 ("view in VR"). The middle of the screen says 「ブラウザの下の『許可する』を押してください」 ("press 'allow' at the bottom of the browser"); press the browser's 「許可する」 ("allow"), and Norrie appears in VR.
+- On Nov 7 we checked, in a real Quest 3 browser, Norrie on the screen and, after 「許可する」, Norrie in VR. That time we opened the page through a developer connection, not with the QR code or 「Meta Quest に送る」.
+
 <a name="make-your-own-character-on-your-pc-with-claude-code"></a>
 
 ## Make your own character on your PC with Claude Code
@@ -89,9 +110,9 @@ Each row was checked by running it. The check is named next to it.
 
 ## Not yet, or not tested yet
 
-- Real devices: iPhone, Android and Quest 【確かめ待ち】. So far we checked phone widths in a headless browser, and VR only in an emulator (`web/scripts/vr-check.mjs`).
+- Real devices: iPhone and Android 【確かめ待ち】. So far we checked phone widths in a headless browser. On a Quest 3 we checked only that a real Quest browser shows the screen and enters VR. Opening it from the QR code or 「Meta Quest に送る」, and talking inside VR: 【確かめ待ち】 (the VR entry is also checked in an emulator, `web/scripts/vr-check.mjs`).
 - Talking with the real Claude Haiku on this version, including memory 【確かめ待ち】.
-- A voice with your own ElevenLabs key 【確かめ待ち】. Without a key the character talks with text and a retro sound.
+- A voice with your own ElevenLabs key, and switching between the boy's and the girl's voice 【確かめ待ち】. Without a key the character talks with text and a retro sound.
 - The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only with the stand-in brain and keeps no memory) 【確かめ待ち】.
 - From the side, Norrie's front teeth still look too small in 3D: all 6 judge answers said so after the fixes.
 - A quick doodle by a person through all stages. So far only a machine-made doodle-style test picture went through (12.1 minutes).
@@ -120,10 +141,11 @@ Dates, numbers and what went wrong: [How we built it](docs/HOW_WE_BUILT.en.md).
 | Role | Part |
 |---|---|
 | Brain (talk) | Claude API (`claude-haiku-5-5`). Without a key: a stand-in brain that answers in the same format |
-| Voice (optional, your own key) | ElevenLabs text to speech |
+| Voice (optional, your own key) | ElevenLabs text to speech (by default, Japanese voices from the Voice Library: a boy's and a girl's) |
 | Speech to text | The browser's built-in speech recognition, or faster-whisper running on your own PC (local server only) |
 | Face tracking | MediaPipe Face Landmarker (runs on the device; video is not sent) |
 | 3D in the browser | three.js and three-vrm |
+| Sending to a Quest (optional) | Meta's Web Launch (only when you press 「Meta Quest に送る」, and only on https pages) |
 | Public link | Two functions on Vercel; counts and memory in Upstash Redis (without it: stand-in brain only, no memory) |
 
 Versions and licences of every part: [THIRD_PARTY.md](THIRD_PARTY.md).

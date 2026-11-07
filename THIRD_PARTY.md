@@ -21,10 +21,27 @@ The build carries these notices: `vite build` writes `licenses.txt` next to the 
 | Service | When | Terms |
 |---|---|---|
 | Claude API (Anthropic Messages API, `claude-haiku-5-5`) | Only when `ANTHROPIC_API_KEY` is set; otherwise a stand-in brain answers | Anthropic's Commercial Terms and Usage Policy · https://www.anthropic.com/legal |
-| ElevenLabs text to speech | Only when you add your own ElevenLabs key | ElevenLabs Terms of Service · https://elevenlabs.io/terms-of-use |
+| ElevenLabs text to speech | Only when you add your own ElevenLabs key | ElevenLabs Terms of Service · https://elevenlabs.io/terms-of-use, and the rules for the voices [below](#elevenlabs-voices) |
 | Speech recognition built into the browser | When you talk by voice in a browser that has it. Some browsers send the audio to their maker's online service | The browser's own terms |
+| Meta Web Launch (Meta's page that sends a link to a Quest's browser) | Only when you press 「Meta Quest に送る」, which appears only on https pages. Meta's page opens in a new tab with this screen's URL (only the address, the character id and 3D or 2D); no referrer is sent | Meta's own terms, on that page · how it works: https://developers.meta.com/horizon/documentation/web/web-launch/ |
 | Vercel (the public link: static pages and two functions) | Only for the public link 【確かめ待ち】 | Vercel's terms · https://vercel.com/legal/terms |
 | Upstash Redis (counts and memory for the public link) | Only when connected in Vercel 【確かめ待ち】 | Upstash's terms · https://upstash.com/trust/terms.pdf |
+
+<a name="elevenlabs-voices"></a>
+
+### ElevenLabs voices: the rules that apply (read on 2026-11-07)
+
+The app speaks aloud only with the viewer's own ElevenLabs key: either typed into the browser, where it stays in that browser and goes only to ElevenLabs with the text to be read (never to our server), or, on your own PC, given to the local server as the environment variable `ELEVENLABS_API_KEY`. The public link has no voice key of its own. The default voices are Japanese voices from the ElevenLabs Voice Library, chosen by voice id: one for the boy's role and one for the girl's role ([README, "Voices"](README.en.md#voices)).
+
+| ElevenLabs document (last updated) | What it says | What it means here |
+|---|---|---|
+| [Terms of Service](https://elevenlabs.io/terms-of-use) (2026-10-09) | On the free plan, the Services may be used only for non-commercial purposes (§1(c)(i)); paid plans may be used commercially, still under the Prohibited Use Policy (§1(c)(ii)). As between the user and ElevenLabs, the user keeps the rights in the Output (§4(c)(ii)). | Whoever adds a key uses their own ElevenLabs account, plan and terms. |
+| [Voice Library](https://elevenlabs.io/docs/eleven-creative/voices/voice-library) (documentation) | "Voice Library voices are not available via the API to free tier users." A voice's owner can stop sharing it: with a notice period (30 days to 2 years) it stays usable for that period; without one, access ends at once. Owners can also turn on live moderation, set a custom rate, or block free users. | A free-tier key cannot play the default voices. A default voice stops working if its owner stops sharing it; the character then talks with text and the retro sound until another voice id is set (a 「- 声の id:」 line in the personality text, or `ELEVEN_VOICE_MALE` / `ELEVEN_VOICE_FEMALE` on the local server). |
+| [OEM Terms](https://elevenlabs.io/oem-terms) (2025-02-28) | Bundling the Services into your own product for your own end users needs a business agreement; customers on the Free, Starter, Creator and Pro plans are "expressly prohibited" from making the Services available that way. | This is why the app never shares one account: there is no voice key on our side, and each viewer brings their own. |
+| [Prohibited Use Policy](https://elevenlabs.io/use-policy) (2026-10-09) | Accounts are for people aged 18 or over, and apps "directed at individuals under 18" are prohibited (§1). Do not impersonate a real person's voice without consent (§3). Disclose AI interaction where the law requires it or where not doing so would materially mislead, and do not remove ElevenLabs watermarks, metadata or other provenance signals (§10). No commercial use on a free plan (§12). | The voice needs the viewer's own ElevenLabs account. We clone no one's voice; we use only voices that their owners share in the Voice Library. The README and this file say that the voices are AI voices made with ElevenLabs. |
+| [Voice Library Addendum](https://elevenlabs.io/vla) (2026-03-06) | Terms for people who share their own voices in the Voice Library. | Does not apply: we share no voice. |
+
+- The demo video's voices: made through the ElevenLabs API with Voice Library voices, on the team's own account. The voice names and the plan's commercial terms: 【確かめ待ち】 (added at submission).
 
 ## 3. Runs on your own PC (not bundled)
 
@@ -76,7 +93,13 @@ These are used for the fur and cloth looks in the browser. Poly Haven and ambien
 
 - **ブラウザで動く部品**(組み立てで中に入る): three(MIT)、@pixiv/three-vrm とその仲間(MIT)、@mediapipe/tasks-vision(Apache-2.0)、顔のモデル `face_landmarker.task`(Google の配布物。使用条件はモデルカードで確かめる【確かめ待ち】。`npm ci` で取り、リポジトリには入れない)、Vite の小さな読み込みの部品(MIT)。
 - 組み立て(`vite build`)が、ページの隣に `licenses.txt`(中に入った部品ごとの名前・版・ライセンスと本文。Vite の小さな読み込みの部品も含む。Apache 2.0 は全文)を置き、部品の入った JS の頭に、その場所を示す 1 行の注を足します(2026-11-07 に `web/dist/` で確かめた。`node --test web/api/_test/build_licenses.test.mjs`)。公開のリンクでは `/licenses.txt` で読めます【確かめ待ち】。
-- **外のサービス**: Claude API(鍵がある時だけ)、ElevenLabs(自分の鍵を入れた時だけ)、ブラウザの音声認識、Vercel と Upstash(公開のリンクだけ【確かめ待ち】)。
+- **外のサービス**: Claude API(鍵がある時だけ)、ElevenLabs(自分の鍵を入れた時だけ)、ブラウザの音声認識、Meta のウェブローンチ(「Meta Quest に送る」を押した時だけ。https の頁の時だけ出る。送るのは、この画面の場所とキャラの id と 3D・2D だけ)、Vercel と Upstash(公開のリンクだけ【確かめ待ち】)。
+- **ElevenLabs の声の決まり**(2026-11-07 に読んだ。上の表に出どころのリンク): 声は、見る人が自分の鍵を入れた時だけ出ます(ブラウザに入れた鍵は、そのブラウザの中だけで使い、読み上げる文と一緒に ElevenLabs にだけ届きます。私たちのサーバーには届きません。自分の PC では、手元のサーバーの環境変数 `ELEVENLABS_API_KEY` でも使えます)。公開のリンクには、私たちの声の鍵はありません。既定の声は、声のライブラリの日本語の声(男の子の役と女の子の役)です。
+  - 利用規約: 無料の枠は商用でない使い方だけ・有料の枠は商用に使える(禁止の決まりは守る)・作った音の権利は使った人に残る。
+  - 声のライブラリ: 無料の枠の鍵では、ライブラリの声を API で使えない。声の持ち主が共有をやめると、知らせの期間(30 日〜2 年)の後か、期間が無ければすぐに使えなくなる。その時、キャラは文字とレトロな音で話す(人格の文の「- 声の id:」の行か、手元のサーバーの環境変数 `ELEVEN_VOICE_MALE`・`ELEVEN_VOICE_FEMALE` で、別の声に替えられる)。
+  - OEM の決まり: 自分の製品に組み込んで、ほかの人に使わせるには、事業の契約が要る(Free・Starter・Creator・Pro の枠では禁止)。だから、このアプリは 1 つのアカウントを分け合わず、見る人が自分の鍵を使う。
+  - 禁止の決まり: アカウントは 18 歳から・18 歳未満に向けたアプリは禁止・実在の人の声をまねない・法律が求める時や、言わないと人を大きく誤らせる時は AI だと伝える・ElevenLabs の透かしやメタデータを消さない・無料の枠で商用に使わない。このアプリは、だれの声もまねて作っていません(ライブラリで持ち主が共有している声だけ)。README とこのファイルで、声が ElevenLabs の AI の声だと書いています。
+  - デモの動画の声: チームのアカウントで、ライブラリの声を API で使って作りました。声の名前とプランの商用の扱いは【確かめ待ち】(提出の時に書く)。
 - **自分の PC で動かす物**: Node.js、faster-whisper と Whisper の small の型(MIT。手元のサーバーだけ)、Blender 5.2(GPL。道具として使うだけで、作った物は作った人の物)、Python と NumPy・Pillow・SciPy・OpenCV・segno。
 - **作る・試す時だけ使う物**: Vite、playwright-core(Apache-2.0)、iwer(MIT)。
 - **リポジトリに入れている外の素材**: Poly Haven の 2 つと ambientCG の 1 つの布の絵(どれも CC0)。
