@@ -167,9 +167,9 @@ html.is-headset .xr-wait { font-size: 30px; }
 html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
 
 /* 入口 */
-.gate { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(12, 10, 22, 0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 10; }
+.gate { position: fixed; inset: 0; display: grid; place-items: start center; padding: 20px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: rgba(12, 10, 22, 0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 10; }
 .gate.hidden { display: none; }
-.gate-card { width: min(440px, 100%); padding: 28px 24px; border-radius: 26px; background: var(--ink-2); border: 1px solid var(--line); display: grid; gap: 12px; }
+.gate-card { margin: auto; /* 余りがある時は縦の真ん中、足りない時は上から並べて、gate ごと巻ける(横向きのスマホで「カメラなしで試す」が画面の外に出ていた。QA 高 2) */ width: min(440px, 100%); padding: 28px 24px; border-radius: 26px; background: var(--ink-2); border: 1px solid var(--line); display: grid; gap: 12px; }
 .gate-card h1 { margin: 0; font-size: clamp(22px, 6.4vw, 28px); letter-spacing: 0.04em; line-height: 1.3; }
 /* 案内役(主役ノリー)と、本当にできる事(声は鍵がある時だけ)と、初めての訪問なら 7 歩が始まる事(CRITux 2・10) */
 .gate-what { margin: -4px 0 0; font-size: 15px; line-height: 1.6; color: var(--lav); }
@@ -351,9 +351,11 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
   .ql-phone { display: inline; }
   /* 上の段を 1 行も増やさない(L1: 字を 14px にして「Quest で開く」と書くと、幅 390 で行が 1 つ増えキャラが 16% 小さくなった)。
      札の列は 1 行で流し(はみ出す分は横に巻く)、ボタンの横の余白と間を詰める */
-  .chips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; pointer-events: auto; }
-  .chips::-webkit-scrollbar { display: none; }
+  /* 札は 1 行に収める。入りきらない札は、半分で切らずに丸ごと隠す(右の端で「見えている人」が半分切れて見えた。QA 低 16)。
+     優先の低い札(見えている人・あいづち)は、狭い画面では最初から出さない */
+  .chips { flex-wrap: wrap; max-height: 32px; overflow: hidden; max-width: 100%; }
   .chip { flex: none; padding: 7px 9px; white-space: nowrap; }
+  .chip[data-chip="見えている人"], .chip[data-chip="あいづち"] { display: none; }
   .top-row { gap: 6px; }
   .top .place-mode-button, .top .drawer > summary { padding-left: 10px; padding-right: 10px; }
   .top .quest-link-btn { padding: 0 10px; gap: 4px; }
@@ -398,6 +400,19 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
   }
   .ql-how { font-size: 11.5px; line-height: 1.45; }
   .ql-url { font-size: 14px; }
+}
+@media (max-width: 640px) {
+  /* 上の段のすぐ下に「Claude の考え」の見出し・テレビ・3D/2D の行(固定。44px + 間 8px)が並ぶ。箱はその行の下から開く(行に重ねない。QA 低 13)。
+     箱の下の端は今までと同じ(画面の高さの 45%)なので、行の分(52px)だけ箱を低くする */
+  .quest-link-box {
+    top: calc(100% + 58px);
+    max-height: calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 74px);
+    max-height: calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 74px);
+  }
+  .quest-link-box { --ql-size: clamp(96px, min(44vw, calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 116px)), 186px); }
+  @supports (height: 1dvh) {
+    .quest-link-box { --ql-size: clamp(96px, min(44vw, calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 116px)), 186px); }
+  }
 }
 
 /* 低い PC の画面(高さ 760 以下。Quest のブラウザの窓も同じ): 箱は 45% の高さに収める。字は 14px のまま、
@@ -467,7 +482,7 @@ html.tv-mode .privacy { width: auto; font-size: max(12px, 1.6vh); opacity: 0.8; 
 html.tv-mode .subs { width: min(92vw, 1800px); bottom: calc(var(--bottom-h, 0px) + max(10px, 3vh)); gap: max(6px, 1vh); }
 html.tv-mode .caption, html.tv-mode .caption.settled, html.tv-mode .caption.user {
   font-size: var(--tv-cap, clamp(24px, 6vh, 120px)); line-height: 1.3; padding: max(8px, 1.2vh) max(14px, 2.2vh); border-radius: max(14px, 2vh);
-  max-height: calc(var(--tv-cap, 6vh) * 1.3 * 3 + max(16px, 2.4vh) + 2px); overflow: hidden; background: rgba(12, 10, 22, 0.78);
+  max-height: calc(var(--tv-cap, 6vh) * 1.3 * var(--tv-rows, 3) + max(16px, 2.4vh) + 2px); overflow: hidden; background: rgba(12, 10, 22, 0.78);
 }
 html.tv-mode .caption .cap-prev { display: none; }
 html.tv-mode .caption.user { font-size: calc(var(--tv-cap, 6vh) * 0.75); }
@@ -528,5 +543,16 @@ html.kb-open .thought, html.kb-open .top { translate: 0 var(--kbt, 0px); }
 html.kb-open .bottom { padding-bottom: 10px; }
 html.kb-open .privacy, html.kb-open .choices { display: none; } /* 低い見える範囲(横向き)でも、入力の 1 行と最新の字幕を先に見せる */
 html.kb-open .caption, html.kb-open .caption.settled { max-height: min(calc(2 * 1.45em + 24px), 22vh); }
-html.kb-open .gate { top: var(--kbt, 0px); bottom: var(--kb, 0px); height: auto; place-items: safe center; overflow-y: auto; }
+html.kb-open .gate { top: var(--kbt, 0px); bottom: var(--kb, 0px); height: auto; }
 html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - var(--top-h, 64px) - 24px); overflow-y: auto; }
+/* 見える範囲が低い時(keyboardInset.js が付ける)。キャラを見える範囲の中に残すため、入力中は字幕を入力欄の上の 1 行にする(QA 高 2・高 3)。
+   kb-tight: 見える高さ 640px 未満(縦持ちのキーボード)= 字幕は 1 行・使う人の発言と考え中の知らせは隠す・上の段の札の列と「Claude の考え」も隠す。
+   kb-short: 見える高さ 400px 未満(横向き・低い縦持ちのキーボード)= さらに上の段・見た目の切り替え・テレビも隠す(入力の 1 行と字幕 1 行とキャラだけ残す) */
+html.kb-tight .brain-notice, html.kb-tight .shop-badge, html.kb-tight .caption.user, html.kb-tight .caption .cap-prev,
+html.kb-tight .chips, html.kb-tight #thought { display: none !important; }
+html.kb-tight .caption, html.kb-tight .caption.settled {
+  font-size: 16px; line-height: 1.45; padding: 6px 14px; border-radius: 16px; max-height: calc(1.45em + 14px); overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+html.kb-tight .caption .cap-now { display: inline; }
+html.kb-short .top, html.kb-short .look-switch, html.kb-short .tv-btn, html.kb-short .quest-link-box { display: none !important; }

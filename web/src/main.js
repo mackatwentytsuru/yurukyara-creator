@@ -5,7 +5,7 @@ import { loadFirstCharacter, loadCharacter, availableLooks, motionChoices, MAIN_
 import { writeRemembered, characterKey, lookKey, hasBothLooks } from './character/looks.js'; // 見た目(3D・2D)の切り替えの決まり・このタブで選んだ見た目を覚える
 import { topLimit, topClearance, tvTopLimit } from './stage/framing.js'; // キャラを上の段の下に収める(すき間は画面の高さの 6%。テレビ表示では画面の上の端から)
 // テレビ表示(11/7 本人「iPhone にあるものを AirPlay で、テレビにすぐパンって映せるようにしたい」): 入口の形・字幕の大きさ・画面ミラーリングの手順の決まり
-import { tvPlan, tvCaptionPx, tvBottomReserve, castSteps, castLead, castNote, TV_CLASS, TV_LABEL, CAST_LABEL } from './stage/tvMode.js';
+import { tvPlan, tvCaptionPx, tvCaptionRows, tvBottomReserve, castSteps, castLead, castNote, TV_CLASS, TV_LABEL, CAST_LABEL } from './stage/tvMode.js';
 import { pickSpec, isLoopbackPage, SPEC_NOTICE } from './character/urlSpec.js'; // ?character= ?place= は公開の URL では id だけ(CRITsec F5)
 import { shouldOpenFirstRun, FIRST_RUN_DONE_KEY } from './stage/firstVisit.js'; // 初めての訪問なら、入口の後に 7 歩を出す(CRITux 2)
 // 入力の差し替え口(tracking/sources/index.js の約束)。カメラの顔の部品(mediapipeSource.js)は重いので、ここでは読まず、
@@ -774,17 +774,56 @@ function watchSheet() {
 }
 new MutationObserver(watchSheet).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
+/** 画面のキーボードの高さ(px。keyboardInset.js が html に入れた --kb。出ていなければ 0) */
+function keyboardPx() {
+  if (!document.documentElement.classList.contains('kb-open')) return 0;
+  return Math.max(0, parseFloat(document.documentElement.style.getPropertyValue('--kb')) || 0);
+}
+
+/**
+ * 字幕の箱(.subs)の高さの、今の返事の間の最大(px)。長い返事の字幕がキャラの体にかからないよう、下の余白を字幕の高さに合わせて取る(QA 低 13)。
+ * 字幕が空になったら(次の会話の前)0 に戻す
+ */
+let subsPeak = 0;
+let subsMode = '';
+function subsHeight() {
+  const el = document.querySelector('.subs');
+  const h = el ? Math.ceil(el.getBoundingClientRect().height) : 0;
+  const text = el ? [...el.querySelectorAll('.caption')].some((c) => c.textContent.trim()) : false;
+  const mode = `${tvActive()}|${keyboardPx() > 0}`; // テレビ表示・キーボードの出入りで字幕の大きさが変わるので、前の最大は持ち越さない
+  if (mode !== subsMode) {
+    subsMode = mode;
+    subsPeak = 0;
+  }
+  subsPeak = text ? Math.max(subsPeak, h) : 0;
+  return subsPeak;
+}
+
 function fitBottom() {
   const bottomBar = document.querySelector('.bottom');
   if (!bottomBar) return;
   const h = bottomBar.offsetHeight;
   document.documentElement.style.setProperty('--bottom-h', `${h}px`);
   if (tvActive()) {
-    document.documentElement.style.setProperty('--tv-cap', `${tvCaptionPx(window.innerHeight)}px`);
-    stage.state.bottomInset = h + tvBottomReserve(window.innerHeight);
+    document.documentElement.style.setProperty('--tv-cap', `${tvCaptionPx(window.innerHeight, window.innerWidth)}px`);
+    document.documentElement.style.setProperty('--tv-rows', String(tvCaptionRows(window.innerHeight, window.innerWidth)));
+    stage.state.kbInset = 0;
+    // 字幕の箱の実際の高さ(知らせの帯を含む)も数え、字幕が足にかからないようにする(縦長の画面)
+    stage.state.bottomInset = Math.max(h + tvBottomReserve(window.innerHeight, window.innerWidth), h + subsHeight() + 10);
   } else {
     // 帯の上に出る字幕と札の分(足に重ならないように)。字幕は 2 行 + 知らせで画面の高さの 14〜16% ほど(L1: 80px 固定では、字幕がキャラの足元・体に 12 場面でかかった)
-    stage.state.bottomInset = Math.max(h + 8 + Math.round(Math.min(140, Math.max(96, window.innerHeight * 0.16)) + (window.innerHeight < 720 ? 14 : 0)), cardInset());
+    const estimate = h + 8 + Math.round(Math.min(140, Math.max(96, window.innerHeight * 0.16)) + (window.innerHeight < 720 ? 14 : 0));
+    const kb = keyboardPx();
+    stage.state.kbInset = kb;
+    if (kb > 0) {
+      // 画面のキーボードが出ている間: 見える範囲の下端(= キーボードの上)に入力欄と字幕 1 行が並ぶ。キーボードの裏も下の帯として数え、キャラを見える範囲の中に置く
+      stage.state.bottomInset = h + kb + 8 + subsHeight() + 6;
+    } else {
+      // 返事が長くて、字幕の箱が見込みより高い時は、その分だけ下の余白を広げる(体にかけない)
+      // ただし、キャラに残す高さが画面の 36% を割るほどは広げない(低い画面では、頭のすき間の決まりを先に守る)
+      const room = Math.max(0, window.innerHeight * 0.64 - topGuard(0, window.innerWidth));
+      stage.state.bottomInset = Math.max(estimate, Math.min(h + 8 + subsHeight() + 6, room), cardInset());
+    }
   }
   reframe();
 }
@@ -904,9 +943,16 @@ function setupTvMode() {
       e.preventDefault();
       closeTvCast(true);
     } else if (tvActive() && !document.fullscreenElement && !document.webkitFullscreenElement) {
-      setTvMode(false); // 全画面の間の Escape はブラウザが全画面だけを戻す(テレビ表示は「もどる」まで続ける)
+      setTvMode(false);
     }
   });
+  // 全画面の間の Escape は、ブラウザが全画面だけを戻して、Escape の知らせはページに届かない(QA 低 14: Esc を押してもテレビ表示が残った)。
+  // テレビ表示のために全画面にした後で全画面が終わったら、テレビ表示も一緒にやめる
+  const onFullscreenChange = () => {
+    if (tvFull && tvActive() && !document.fullscreenElement && !document.webkitFullscreenElement) setTvMode(false);
+  };
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
   if (!btn || !TV.show) return;
   const name = TV.kind === 'cast' ? CAST_LABEL : TV_LABEL;
   btn.setAttribute('aria-label', name);
@@ -961,7 +1007,11 @@ async function refreshLookSwitch(character = app.character) {
   if (!box || !character || LOOK_SWITCH_OFF) return;
   const check = ++lookCheck;
   const id = characterKey(character);
-  lookCache.set(lookKey(id, character.look), character);
+  const key = lookKey(id, character.look);
+  const stale = lookCache.get(key);
+  // 同じ子を読み直した(見本の子をもう一度選んだ)時、控えの古い方はもう誰も使わない。GPU の物とミキサーを捨てる(QA 高 1)
+  if (stale && stale !== character && stale !== app.character) stale.dispose?.();
+  lookCache.set(key, character);
   let looks = id ? lookKinds.get(id) : null;
   if (!looks) {
     box.hidden = true; // 調べ終わるまで、前の子の切り替えを出したままにしない
@@ -1035,6 +1085,8 @@ function swapCharacter(next) {
   }
   stage.scene.remove(prev.object3d);
   stage.scene.add(next.object3d);
+  // 舞台から外した子は、GPU の物(形・材質・絵)を捨てる(スマホのメモリを持ち続けない。QA 高 1)。控えの子として戻す時は、次の描画で作り直される
+  if (prev !== next) prev.releaseGpu?.();
   app.character = next;
   dialogue.character = next;
   document.documentElement.dataset.look = next.look ?? '3d';
@@ -1173,6 +1225,57 @@ function setupQuestLink() {
   root.hidden = false;
 }
 
+/* ---------- 戻るボタン(QA 低 14) ---------- */
+// 窓(覚えていること・Quest で開く・テレビに映す・テレビ表示)を開く時に履歴を 1 つ積み、戻るボタンはその窓を閉じる
+// (積まないと、窓を開いたまま戻るを押すと、アプリごと前の頁へ出てしまった)。窓をボタンで閉じた時は、積んだ履歴を戻す
+let panelPushed = false; // 窓のために履歴を積んでいるか
+let panelPopQuiet = 0; // 自分で戻した時の popstate を、窓の閉じ直しに使わない回数
+function anyPanelOpen() {
+  return Boolean($('memoryDrawer')?.open || ($('questLinkBox') && !$('questLinkBox').hidden) || ($('tvCast') && !$('tvCast').hidden) || tvActive());
+}
+function closeAllPanels() {
+  const drawer = $('memoryDrawer');
+  if (drawer?.open) drawer.open = false;
+  app.questLink?.close();
+  closeTvCast();
+  if (tvActive()) setTvMode(false);
+}
+function syncPanelHistory() {
+  const open = anyPanelOpen();
+  if (open && !panelPushed) {
+    try {
+      history.pushState({ ...(history.state ?? {}), ycPanel: true }, '');
+      panelPushed = true;
+    } catch {
+      // 履歴を積めない環境では何もしない(戻るは今まで通り)
+    }
+  } else if (!open && panelPushed) {
+    panelPushed = false;
+    if (history.state?.ycPanel) {
+      panelPopQuiet += 1;
+      history.back();
+    }
+  }
+}
+function installPanelHistory() {
+  window.addEventListener('popstate', () => {
+    if (panelPopQuiet > 0) {
+      panelPopQuiet -= 1;
+      return;
+    }
+    if (panelPushed) {
+      panelPushed = false; // 戻るで積んだ履歴は無くなった。窓を閉じる(閉じた後の同期で、もう戻さない)
+      closeAllPanels();
+    }
+  });
+  const watch = new MutationObserver(syncPanelHistory);
+  const opt = (el, attrs) => el && watch.observe(el, { attributes: true, attributeFilter: attrs });
+  opt($('memoryDrawer'), ['open']);
+  opt($('questLinkBox'), ['hidden']);
+  opt($('tvCast'), ['hidden']);
+  opt(document.documentElement, ['class']);
+}
+
 async function boot() {
   const status = $('gateStatus');
   const buttons = [$('startCam'), $('startSim')];
@@ -1193,6 +1296,10 @@ async function boot() {
   });
   // 下の帯(よくある質問のボタン・入力欄)の高さが変わったら、全身の見せ方を取り直す(足が帯に隠れないように。テレビ表示は字幕の分)
   new ResizeObserver(fitBottom).observe(document.querySelector('.bottom'));
+  // 字幕の箱の高さが変わったら(長い返事・画面のキーボード中の 1 行)、下の余白を取り直す(字幕がキャラの体にかからないように。QA 低 13)
+  new ResizeObserver(fitBottom).observe(document.querySelector('.subs'));
+  window.addEventListener('yc-kb', fitBottom); // 画面のキーボードが出入りした時(keyboardInset.js)
+  installPanelHistory();
   fitBottom();
   // 上の段(札・ボタン)の高さが変わったら(始めると札が 2 行になる・ボタンが増える)、「Claude の考え」をその下へ下げ(--top-h)、
   // キャラを置き直す(頭と耳が段の下に入らないように)。幅 390 で、考えの見出しが「覚えていること」に重なって押せなかった
