@@ -218,6 +218,19 @@ try {
       await page.screenshot({ path: join(OUT, `${name}_silent_note.png`) });
       await page.close();
     }
+    // 2D の見た目(板)でも、窓を開くとキャラを窓の下へ置き直し、縦横は変わらない
+    for (const [name, w, h] of [['phone670_2d', 390, 670], ['pc720_2d', 1280, 720]]) {
+      const p2 = await openPage(browser, w, h, '&look=2d');
+      const b2 = (await p2.evaluate(MEASURE)).ratio;
+      await p2.click('#ycAudioBtn');
+      await p2.waitForSelector('#ycAudio:not([hidden])');
+      if (await p2.isVisible('#ycAudioAllow')) await p2.click('#ycAudioAllow');
+      await p2.waitForTimeout(1200);
+      await p2.evaluate(FREEZE);
+      judge(`${name} マイクの窓`, await p2.evaluate(MEASURE), b2);
+      await p2.screenshot({ path: join(OUT, `${name}_audio.png`) });
+      await p2.close();
+    }
     // テレビ表示
     const tv = await openPage(browser, 1920, 1080, '&tv=1');
     const shown = await tv.evaluate(() => ['ycAudioBtn', 'ycUpdateBadge', 'ycAudio', 'ycUpdate', 'ycAudioNote'].map((id) => {
@@ -241,6 +254,36 @@ try {
     const typing = await sp.isVisible('#textInput');
     check('文字で話す道は残っている', typing);
     await sp.close();
+    // 「はなしてみてね」: 声の WAV(--speech)を偽のマイクにして、既定でないマイクを選び、PC の聞き取りで言葉が出るか
+    const speech = arg('--speech', '');
+    if (speech) {
+      const talkBrowser = await chromium.launch({ ...opts, headless: true, args: [...GPU_ARGS, ...media, `--use-file-for-fake-audio-capture=${resolve(speech)}`] });
+      try {
+        const tp = await openPage(talkBrowser, 1280, 720);
+        const sttOk = await tp.evaluate(() => Boolean(window.__app.status?.stt?.available));
+        await tp.click('#ycAudioBtn');
+        if (await tp.isVisible('#ycAudioAllow')) await tp.click('#ycAudioAllow');
+        await tp.waitForSelector('#ycMicSelect option', { state: 'attached', timeout: 15000 });
+        const other = (await tp.$$eval('#ycMicSelect option', (os) => os.map((o) => o.value))).find((v) => v !== 'default');
+        if (other) await tp.selectOption('#ycMicSelect', other);
+        await tp.click('#ycMicTest');
+        let heardText = '';
+        const until = Date.now() + 25000;
+        while (Date.now() < until) {
+          heardText = (await tp.textContent('#ycMicHeard')) ?? '';
+          if (/きこえた ことば: .*[ぁ-んァ-ン一-龥]/.test(heardText)) break;
+          await tp.waitForTimeout(500);
+        }
+        const route = await tp.textContent('.yc-au-route');
+        check('「はなしてみてね」: 既定でないマイクの声を PC の聞き取りで文字にして出す', sttOk ? /きこえた ことば: .*(こんにちは|てんき|天気)/.test(heardText) : true, `${heardText}${sttOk ? '' : '(PC の聞き取りが無いので飛ばした)'} / ${route}`);
+        await tp.screenshot({ path: join(OUT, 'pc720_audio_heard.png') });
+        await tp.close();
+      } catch (err) {
+        check('「はなしてみてね」', false, String(err?.message ?? err));
+      } finally {
+        await talkBrowser.close().catch(() => {});
+      }
+    }
     // Quest のブラウザのまね(2D の画面): 聞き取りはいつも PC。歯車の窓は開け、キャラに重ならない
     const quest = await browser.newPage({ viewport: { width: 1280, height: 720 }, userAgent: 'Mozilla/5.0 (X11; Linux x86_64; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/37.0 Chrome/130.0 Safari/537.36' });
     try {
