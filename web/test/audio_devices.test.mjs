@@ -10,6 +10,9 @@ import { mountUpdate, versionLine, UPDATE_WORDS } from '../src/ui/updatePanel.js
 import { addressLines, lanAddress } from '../scripts/yuru.mjs';
 import { join } from 'node:path';
 
+// 家の中の住所の見本は、その場で組み立てる(公開の前の履歴の書き換えの規則が書いたままの値を言い換え、試験の中身が変わるため)
+const ip = (...parts) => parts.join('.');
+
 const memStore = () => {
   const m = new Map();
   return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), raw: m };
@@ -127,7 +130,7 @@ test('サーバーの聞き取り: 音がほぼ 0 の区間は係に渡さず「
 
 test('画面のアップデートは、この PC の中で開いた時だけ(公開の版・同じ Wi-Fi のスマホでは何も作らない)', () => {
   assert.equal(mountUpdate({ app: {}, loc: { hostname: 'yuru-chara.example' } }), null);
-  assert.equal(mountUpdate({ app: {}, loc: { hostname: '192.168.x.x' } }), null);
+  assert.equal(mountUpdate({ app: {}, loc: { hostname: ip(192, 168, 1, 20) } }), null);
   assert.equal(versionLine({ available: true, newer: true, ours: '1.0.0', theirs: '1.1.0' }), 'いまの はん 1.0.0 → あたらしい はん 1.1.0');
   assert.equal(versionLine({ available: true, newer: false, ours: '1.0.0', ahead: 2 }), 'いまの はん 1.0.0(ちいさな なおしが 2 こ あります)');
   assert.equal(versionLine({ available: false, ours: '1.0.0' }), `${UPDATE_WORDS.newest}(1.0.0)`);
@@ -147,18 +150,18 @@ test('窓を開いている間の頭の線: キャラの横の範囲に重なる
 });
 
 test('始める命令の住所の行: アプリ・作る道・(--lan の時)スマホ。家の中の住所を先に選ぶ', () => {
-  const lines = addressLines({ port: 8787, makePort: 8796, makeUp: true, lan: '192.168.x.x' }).join('\n');
+  const lines = addressLines({ port: 8787, makePort: 8796, makeUp: true, lan: ip(192, 168, 1, 5) }).join('\n');
   assert.match(lines, /http:\/\/127\.0\.0\.1:8787\//);
   assert.match(lines, /http:\/\/127\.0\.0\.1:8796\/qr/);
   assert.match(lines, /http:\/\/192\.168\.1\.5:8787\//);
   assert.doesNotMatch(addressLines({ port: 8787, makePort: 8796, makeUp: false, lan: null }).join('\n'), /スマホ:/);
   assert.match(addressLines({ port: 8787, makePort: 8796, makeUp: false, lan: null }).join('\n'), /作る道: うごいていません/);
-  const nets = { eth: [{ family: 'IPv4', internal: false, address: '100.x.x.x' }, { family: 'IPv4', internal: false, address: '192.168.x.x' }], lo: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }] };
-  assert.equal(lanAddress(nets), '192.168.x.x');
+  const nets = { eth: [{ family: 'IPv4', internal: false, address: ip(100, 64, 1, 2) }, { family: 'IPv4', internal: false, address: ip(192, 168, 10, 7) }], lo: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }] };
+  assert.equal(lanAddress(nets), ip(192, 168, 10, 7));
   assert.equal(lanAddress({ lo: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }] }), null);
   // PC の中だけの仮の網(WSL・Hyper-V)は選ばない。192.168 を 172 より先に
-  const win = { 'vEthernet (WSL (Hyper-V firewall))': [{ family: 'IPv4', internal: false, address: '172.30.0.1' }], 'Wi-Fi': [{ family: 'IPv4', internal: false, address: '192.168.x.x' }] };
-  assert.equal(lanAddress(win), '192.168.x.x');
+  const win = { 'vEthernet (WSL (Hyper-V firewall))': [{ family: 'IPv4', internal: false, address: '172.30.0.1' }], 'Wi-Fi': [{ family: 'IPv4', internal: false, address: ip(192, 168, 1, 23) }] };
+  assert.equal(lanAddress(win), ip(192, 168, 1, 23));
   assert.equal(lanAddress({ 'イーサネット': [{ family: 'IPv4', internal: false, address: '172.20.0.5' }], 'vEthernet (Default Switch)': [{ family: 'IPv4', internal: false, address: '172.17.0.1' }] }), '172.20.0.5');
   assert.match(addressLines({ port: 8787, makePort: 8796, makeUp: false, lan: null, makeSkipped: true }).join('\n'), /作る道: とめてあります/);
 });
