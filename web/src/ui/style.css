@@ -517,3 +517,16 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
   .tv-enter { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
   .tv-cast-close { grid-column: 2; grid-row: 4; align-self: start; }
 }
+/* 画面のキーボード(ui/keyboardInset.js が --kb・--kbt・--vvh を入れ、出ている間だけ html.kb-open を付ける)。
+   iOS の Safari は、キーボードでページの高さを変えず見える範囲だけ縮めるので、下に貼り付いた帯は、そのままだとキーボードの下に残る。
+   translate は transform と別の指定なので、.subs の translateX(-50%) と重なっても壊れない。
+   translate は 0 でも「中の position: fixed の物の基準」を作り変える(.top の中の見た目の切り替えなどが .top の top: 12px の分だけ下がり、
+   キーボードが無いのに 390x670 で上の段の下が 196 → 208px、頭のすき間が決まりを割った。合わせ⑫a3)ので、キーボードが出ている間(html.kb-open)だけ付ける。
+   キーボードが無い間は、ここの規則は 1 つも効かない(PC・テレビ・VR・キーボードの無いスマホは何も変わらない) */
+html.kb-open .bottom, html.kb-open .subs { translate: 0 calc(var(--kb, 0px) * -1); }
+html.kb-open .thought, html.kb-open .top { translate: 0 var(--kbt, 0px); }
+html.kb-open .bottom { padding-bottom: 10px; }
+html.kb-open .privacy, html.kb-open .choices { display: none; } /* 低い見える範囲(横向き)でも、入力の 1 行と最新の字幕を先に見せる */
+html.kb-open .caption, html.kb-open .caption.settled { max-height: min(calc(2 * 1.45em + 24px), 22vh); }
+html.kb-open .gate { top: var(--kbt, 0px); bottom: var(--kb, 0px); height: auto; place-items: safe center; overflow-y: auto; }
+html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - var(--top-h, 64px) - 24px); overflow-y: auto; }

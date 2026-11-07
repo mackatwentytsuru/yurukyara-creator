@@ -66,8 +66,9 @@ export function createStage(canvas) {
     state.obstacles = obstacles;
     character.object3d.updateWorldMatrix(true, true);
     const box = new THREE.Box3().setFromObject(character.object3d);
-    const viewW = canvas.clientWidth || window.innerWidth;
-    const viewH = canvas.clientHeight || window.innerHeight;
+    syncSize(); // 置く前に、画角の縦横を今の箱にそろえる(古い縦横で置くと、頭や足の位置の計算もずれる)
+    const viewW = canvas.clientWidth || size.w || window.innerWidth;
+    const viewH = canvas.clientHeight || size.h || window.innerHeight;
     // wScale: 遠近で手前の羽・腕が画面の横の端で切れる時に、横幅の見込みを広げる倍率(下の「横」の確かめ。L1 高: ちょうちんくんの羽が幅 390・430 で切れた)
     // 横に広い子(ちょうちんくんなど。幅が高さの 0.8 倍より大きい)は、羽が話す・跳ねる間に止まった箱の外へ振れるので、最初から 15% 広く見込む
     const wide = view === 'full' && (halfWidth(character, box, character.object3d.getWorldPosition(new THREE.Vector3())) * 2) / Math.max(0.3, box.max.y - box.min.y) > 0.8;
@@ -205,14 +206,46 @@ export function createStage(canvas) {
     return half;
   }
 
+  // 描く大きさ(drawing buffer)と画角の縦横(camera.aspect)は、いつも canvas の今の CSS の箱に合わせる(three.js の「表示の大きさに合わせる」形)。
+  // 11/7 本人の iPhone の Chrome で、7 つのステップの札を開いた時にノリーが約 3.8 倍細長く写った: 窓の resize が来ないまま箱だけが変わると
+  // (Chrome のツールバー・裏のタブで読み込んだページ・隠れている間の回転・0x0 の箱で起動して窓の大きさで決めた時)、古い大きさの絵が新しい箱へ
+  // 引き伸ばされる。main.js が毎フレーム syncSize() を呼び、箱が前に合わせた大きさと違えば合わせ直す(読むのは canvas の幅と高さだけで軽い)
+  const size = { w: 0, h: 0 }; // 前に合わせた箱(CSS の px)。まだ合わせていなければ 0
+
+  /** canvas の今の箱(CSS の px)。隠れている・0x0 の時は null(窓の大きさでは決めない。本当の箱ができてから合わせる) */
+  function displayBox() {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    return w > 0 && h > 0 ? { w, h } : null;
+  }
+
+  /** 箱に合わせる。合わせた時だけ true */
   function resize() {
-    if (renderer.xr.isPresenting) return; // VR の中の大きさは端末が決める
-    const w = canvas.clientWidth || window.innerWidth;
-    const h = canvas.clientHeight || window.innerHeight;
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
+    if (renderer.xr.isPresenting) return false; // VR の中の大きさは端末が決める
+    const box = displayBox();
+    if (!box) return false;
+    size.w = box.w;
+    size.h = box.h;
+    renderer.setSize(box.w, box.h, false);
+    camera.aspect = box.w / box.h;
     // AR(殻)のあいだ、射影行列は殻が決める(上書きしない)
     if (!state.immersive) camera.updateProjectionMatrix();
+    return true;
+  }
+
+  /** 箱が、前に合わせた大きさ・描く大きさ・画角の縦横のどれかと違えば合わせ直す。合わせ直した時だけ true(呼ぶ側がキャラを置き直す) */
+  function syncSize() {
+    if (renderer.xr.isPresenting) return false;
+    const box = displayBox();
+    if (!box) return false;
+    const pr = renderer.getPixelRatio(); // 端末の段(tiers.js)が決めた倍率のまま
+    const stale =
+      box.w !== size.w ||
+      box.h !== size.h ||
+      canvas.width !== Math.floor(box.w * pr) ||
+      canvas.height !== Math.floor(box.h * pr) ||
+      (!state.immersive && Math.abs(camera.aspect - box.w / box.h) > 1e-6);
+    return stale ? resize() : false;
   }
 
   return {
@@ -222,6 +255,7 @@ export function createStage(canvas) {
     state,
     frameCharacter,
     resize,
+    syncSize,
     render: () => renderer.render(scene, camera),
   };
 }
