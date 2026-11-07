@@ -13,7 +13,8 @@
 2026-11-07 夜、本人が D を選んだ(「モデリングはもうこれで十分」)ので、characters/norrie の 3D はこの builder で作る(案 C の
 norrie.py は前の版の記録)。選んだ後の小さな直し(N4): 横・見上げから目が見える(目の軸を外へ・顔の前の輪郭の殻を薄く)、
 おじぎで足が体から離れない(体を低い点のまわりに傾ける motion.bow)・顔がきつくならない(頭の傾きを浅く)、
-上げた腕の付け根が細く離れて見えない(腕を太く・肩の端を丸く・肩のずらしを小さく)。
+上げた腕の付け根が細く離れて見えない(腕を太く・肩の端を丸く・肩のずらしを小さく)、手を上げても脇がなくならない
+(肩の丸の下の胴のくびれを、横だけ埋める)。
 使い方: blender -b -P norrie_d.py -- <出力.blend> work=<作業フォルダ> → b07_rig_groups.py(作業フォルダの rig_spec.json)
 → pk01_package.py --id norrie --name ノリー --height 1.0 --no-fur → model.glb と motions/ を characters/norrie へ
 (character.json・persona.md・2d/ はそのまま)。
@@ -99,6 +100,10 @@ def torso_blobs():
     if sh > 0:                                                                                    # 丸い肩(頭の下の横のくぼみを埋める)
         for sx in (1, -1):
             bl.append(RD.blob((sx * num("SHOULDER_X", 0.118), -0.050, num("SHOULDER_Z", 0.505)), (0.070 * sh, 0.080 * sh, 0.065 * sh), k=0.05))
+    sd = num("SIDE_BLOB", 1.0)
+    if sd > 0:   # 脇(N4。本人「手を上げた時、脇がなくなる」): 肩の丸の下(z 0.40)で胴の横が 4〜5 cm くびれ、下ろした腕で隠れていた。
+        for sx in (1, -1):   # 腕を上げると、くびれが脇のへこみに見えた。横だけを埋める(前と後ろは胸の内、ふだんは下ろした腕の陰)
+            bl.append(RD.blob((sx * num("SIDE_X", 0.125), -0.045, num("SIDE_Z", 0.405)), (num("SIDE_RX", 0.075) * sd, 0.110 * sd, 0.085 * sd), k=0.06))
     wa = num("WAIST_BLOB", 1.2)
     if wa > 0:                                                                                    # 腰の上(おなかの横)を少し広く
         bl.append(RD.blob((0.0, -0.010, num("WAIST_Z", 0.300)), (num("WAIST_RX", 0.185), 0.170, 0.140 * wa), k=0.08))
