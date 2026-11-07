@@ -367,3 +367,91 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
 }
 .gate .pass input:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 html.is-led .drawer { display: none !important; }
+
+/* ---------- テレビ表示(11/7 本人「iPhone にあるものを AirPlay で、テレビにすぐパンって映せるようにしたい」。決まりは stage/tvMode.js) ----------
+   上の段の入口: 見せる言葉は TV の印と「テレビ」だけ(押す所は 44px)。初めての会話(7 歩の札)の間・入口の LED・ヘッドセットでは出さない */
+.tv-btn {
+  pointer-events: auto; font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px;
+  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.tv-btn[hidden] { display: none; }
+/* 見せる言葉: ふだんは名前(「テレビ表示」か「テレビに映す」)、幅 640 まで(縦のスマホ)は「テレビ」だけ */
+.tv-btn .tv-short { display: none; }
+@media (max-width: 640px) {
+  .tv-btn .tv-long { display: none; }
+  .tv-btn .tv-short { display: inline; }
+}
+.tv-btn[aria-expanded="true"] { border-color: var(--lav); }
+.tv-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+html.fr-open .tv-btn, html.is-led .tv-btn, html.is-headset .tv-btn, html.is-headset .tv-cast { display: none !important; }
+
+/* テレビ表示の間(html.tv-mode。main.js が付ける・?tv=1 でも): 小さな窓(上の段・考え・よくある質問・入力・案内)を隠し、隅の「もどる」だけを残す。
+   カメラかマイクを使っている時の注意書きは、下の端に小さく残す(どちらも使っていない時の文は出さない。.mic は main.js が聞き取りの間に付ける)。
+   キャラは main.js が上のすき間(画面の高さの 6%)と字幕の分の間で大きく置く */
+.tv-exit, .tv-rotate { display: none; }
+html.tv-mode .top, html.tv-mode #thought, html.tv-mode #choices, html.tv-mode #composer, html.tv-mode #align, html.tv-mode .privacy.off:not(.mic) { display: none !important; }
+html.tv-mode .tv-exit {
+  display: inline-flex; align-items: center; justify-content: center; position: fixed; z-index: 9;
+  top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right));
+  min-height: 44px; min-width: 44px; padding: 0 14px; font: inherit; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer;
+  border-radius: 999px; background: rgba(12, 10, 22, 0.55); border: 1px solid var(--line); opacity: 0.6; transition: opacity 0.2s ease;
+}
+html.tv-mode .tv-exit:hover, html.tv-mode .tv-exit:focus-visible { opacity: 1; }
+html.tv-mode .tv-exit:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+html.tv-mode .bottom { padding: 0 12px calc(6px + var(--safe-b)); }
+html.tv-mode .privacy { width: auto; font-size: max(12px, 1.6vh); opacity: 0.8; }
+/* 字幕: 3 m 先から読める大きさ(字の高さ = 画面の高さの 6%。--tv-cap は main.js が px で入れる)。今の文だけを大きく、箱は 3 行まで(長い返事は新しい行を見せる) */
+html.tv-mode .subs { width: min(92vw, 1800px); bottom: calc(var(--bottom-h, 0px) + max(10px, 3vh)); gap: max(6px, 1vh); }
+html.tv-mode .caption, html.tv-mode .caption.settled, html.tv-mode .caption.user {
+  font-size: var(--tv-cap, clamp(24px, 6vh, 120px)); line-height: 1.3; padding: max(8px, 1.2vh) max(14px, 2.2vh); border-radius: max(14px, 2vh);
+  max-height: calc(var(--tv-cap, 6vh) * 1.3 * 3 + max(16px, 2.4vh) + 2px); overflow: hidden; background: rgba(12, 10, 22, 0.78);
+}
+html.tv-mode .caption .cap-prev { display: none; }
+html.tv-mode .caption.user { font-size: calc(var(--tv-cap, 6vh) * 0.75); }
+html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { font-size: max(13px, 2.2vh); }
+/* 指で触る端末を縦に持っている間: 上の左に一言(よこむきにすると大きく映る)。押す所ではない */
+@media (orientation: portrait) and (pointer: coarse) {
+  html.tv-mode .tv-rotate {
+    display: block; position: fixed; z-index: 9; top: max(10px, env(safe-area-inset-top)); left: 12px; right: 96px; margin: 0;
+    font-size: 13px; line-height: 1.4; padding: 6px 12px; border-radius: 14px; color: var(--text); background: rgba(12, 10, 22, 0.7); border: 1px solid var(--lav);
+  }
+}
+
+/* 「テレビに映す」(iPhone・iPad): 画面ミラーリングの 3 つの手順と、大きな「テレビ表示にする」。入口と同じ形の真ん中の札(子どもにも読める大きな字) */
+.tv-cast {
+  position: fixed; inset: 0; z-index: 11; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+  background: rgba(12, 10, 22, 0.72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); overflow: auto;
+}
+.tv-cast[hidden] { display: none; }
+.tv-cast-card {
+  width: min(460px, 100%); max-height: 100%; overflow: auto; padding: 22px 20px; border-radius: 24px; background: var(--ink-2); border: 1px solid var(--line);
+  display: grid; gap: 12px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+.tv-cast-card h2 { margin: 0; font-size: 24px; line-height: 1.3; letter-spacing: 0.04em; }
+.tv-cast-lead, .tv-cast-note { margin: 0; font-size: 15px; line-height: 1.6; color: var(--muted); }
+.tv-cast-note { white-space: pre-line; } /* 注意は 1 つずつ行を分ける(stage/tvMode.js の castNote は改行で区切る) */
+.tv-cast-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: tvstep; }
+.tv-cast-steps li { counter-increment: tvstep; display: grid; grid-template-columns: 36px 1fr; column-gap: 10px; align-items: center; }
+.tv-cast-steps li::before {
+  content: counter(tvstep); grid-row: span 2; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 18px; font-weight: 800; color: var(--ink); background: var(--mint);
+}
+.tv-cast-steps b { font-size: 18px; line-height: 1.4; }
+.tv-cast-steps small { font-size: 14px; line-height: 1.5; color: var(--muted); }
+.tv-cast button { font: inherit; border-radius: 16px; cursor: pointer; color: var(--text); }
+.tv-enter { min-height: 64px; padding: 12px 16px; border: 0; display: grid; gap: 2px; justify-items: center; font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #7d62ff, #c15bff); }
+.tv-enter .btn-sub { font-size: 13px; font-weight: 400; opacity: 0.9; }
+.tv-cast-close { min-height: 44px; padding: 8px 16px; font-size: 16px; background: transparent; border: 1px solid var(--line); }
+.tv-cast button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+/* 横向きの iPhone(高さ 430px まで): 手順と押す所を左右に並べ、縦に収める */
+@media (orientation: landscape) and (max-height: 430px) {
+  .tv-cast-card { width: min(760px, 100%); grid-template-columns: 1.3fr 1fr; column-gap: 18px; row-gap: 8px; padding: 14px 18px; }
+  .tv-cast-card h2, .tv-cast-lead, .tv-cast-steps, .tv-cast-note { grid-column: 1; }
+  .tv-cast-card h2 { font-size: 20px; }
+  .tv-cast-steps { gap: 6px; }
+  .tv-cast-steps b { font-size: 16px; }
+  .tv-cast-steps small, .tv-cast-lead, .tv-cast-note { font-size: 13px; }
+  .tv-enter { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+  .tv-cast-close { grid-column: 2; grid-row: 4; align-self: start; }
+}

@@ -102,3 +102,12 @@ export function topLimit({ bar = [], side = [], panels = [], left, right, clear 
   const open = guardBottom(panels, left, right, panelGap);
   return Math.max(line > 0 ? line + clear : 0, open);
 }
+
+/**
+ * テレビ表示の線(px)。上の段は隠すので、画面の上の端から clear(画面の高さの 6%)を空ける(上の段が無くても 0 にしない)。
+ * 隅の小さな「もどる」(corner)がキャラの横の範囲に重なる時だけ、その下の端から clear
+ * @returns {number}
+ */
+export function tvTopLimit({ corner = [], left, right, clear = 0 }) {
+  return guardBottom(corner, left, right) + Math.max(0, Number(clear) || 0);
+}
