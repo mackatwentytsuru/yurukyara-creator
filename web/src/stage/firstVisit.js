@@ -5,13 +5,13 @@
 /** 7 歩を終えた・「あとで」を押した印の名前(S4 の web/src/ui/onboarding/index.js の DONE_KEY と同じ。main.js は S4 の値を渡す) */
 export const FIRST_RUN_DONE_KEY = 'yc.onboarded.v1';
 
-/** 自分からは出さない場面: 入口の LED・自動で始める・ヘッドセット・重さを測る時 */
-const NO_AUTO = ['led', 'autostart', 'headset', 'perf'];
+/** 自分からは出さない場面: 入口の LED・自動で始める・ヘッドセット・重さを測る時・テレビ表示(?tv=1。テレビに大きく映す間は札を出さない) */
+const NO_AUTO = ['led', 'autostart', 'headset', 'perf', 'tv'];
 
 /**
  * 入口を通った直後に、初めての会話を自動で出すか。
  * 出さない: ?onboard=0(出さない)・?onboard=1(読み込んだ時にもう出ている)・?auto=0(キャラが自分から始める事をしない。確かめの道具が使う)・
- * 入口の LED・自動で始める・ヘッドセット・重さを測る時・このブラウザに印がある時。
+ * 入口の LED・自動で始める・ヘッドセット・重さを測る時・テレビ表示(?tv=1)・このブラウザに印がある時。
  * 覚える所が使えないブラウザ(内緒のウインドウなど)は、何も覚えていないので、初めてとみなす。
  * @param {{params: URLSearchParams, storage?: {getItem(k: string): string|null}|null, doneKey?: string, headset?: boolean}} o
  * @returns {boolean}

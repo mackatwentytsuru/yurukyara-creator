@@ -29,6 +29,14 @@
         </button>
         <div class="quest-link-box" id="questLinkBox" role="dialog" aria-label="VR(Quest)で開く" tabindex="-1" hidden></div>
       </div>
+      <!-- テレビ表示(本人の案 11/7): iPhone・iPad では「テレビに映す」(押すと AirPlay の画面ミラーリングの 3 つの手順)、ほかは押すとすぐテレビ表示。
+           見せる言葉は TV の印と名前(main.js が「テレビに映す」に替える)。幅 640 までは「テレビ」だけ(幅 390 で上の段を 1 行増やさない)。
+           名前は aria-label と title にも入れる。ヘッドセットの中では出さない -->
+      <button type="button" id="tvBtn" class="tv-btn" data-hide-in-ar aria-label="テレビ表示" title="テレビ表示" hidden>
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M1 2.5h14v9H1zm1.5 1.5v6h11V4zM5 13h6v1.5H5z"/></svg>
+        <span class="tv-long" id="tvBtnLabel" aria-hidden="true">テレビ表示</span>
+        <span class="tv-short" aria-hidden="true">テレビ</span>
+      </button>
       <div class="look-switch" id="lookSwitch" role="group" aria-label="見た目の切り替え(3D と 2D)" data-hide-in-ar hidden>
         <span class="look-label" aria-hidden="true">見た目</span>
         <button type="button" data-look="3d" aria-pressed="true" aria-label="3D(立体)で見る" title="3D(立体)で見る">3D</button>
@@ -77,6 +85,21 @@
       <button type="submit" class="send">送る</button>
     </form>
   </footer>
+
+  <!-- テレビ表示の間だけ出す(style.css): 隅の小さな「もどる」と、指で触る端末を縦に持っている時の一言 -->
+  <button type="button" id="tvExit" class="tv-exit" aria-label="テレビ表示をやめる" title="テレビ表示をやめる">もどる</button>
+  <p id="tvRotate" class="tv-rotate" role="note">よこむきにすると、テレビに大きくうつります</p>
+  <!-- iPhone・iPad の「テレビに映す」: 画面ミラーリングの 3 つの手順と「テレビ表示にする」。文は main.js が stage/tvMode.js から入れる(外の住所は書かない) -->
+  <div id="tvCast" class="tv-cast" role="dialog" aria-modal="true" aria-labelledby="tvCastTitle" hidden>
+    <div class="tv-cast-card">
+      <h2 id="tvCastTitle">テレビに映す</h2>
+      <p class="tv-cast-lead" id="tvCastLead"></p>
+      <ol class="tv-cast-steps" id="tvCastSteps"></ol>
+      <p class="tv-cast-note" id="tvCastNote"></p>
+      <button type="button" id="tvEnter" class="tv-enter"><span class="btn-main">テレビ表示にする</span><small class="btn-sub" id="tvEnterSub">よこむきにすると、大きくうつります</small></button>
+      <button type="button" id="tvCastClose" class="tv-cast-close">とじる</button>
+    </div>
+  </div>
 
   <!-- 入口。閉じるまで、上の段(html.gate-up の間は隠す)は押せない。初めての訪問なら、閉じた後に「はじめての会話」(7 歩)が出る -->
   <div id="gate" class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
