@@ -399,13 +399,14 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
     .quest-link-box { --ql-size: clamp(96px, min(44vw, calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px)), 186px); }
   }
   .ql-how { font-size: 11.5px; line-height: 1.45; }
-  .ql-url { font-size: 14px; }
+  .ql-url { font-size: 14px; line-height: 1.35; }
 }
 @media (max-width: 640px) {
   /* 上の段のすぐ下に「Claude の考え」の見出し・テレビ・3D/2D の行(固定。44px + 間 8px)が並ぶ。箱はその行の下から開く(行に重ねない。QA 低 13)。
      箱の下の端は今までと同じ(画面の高さの 45%)なので、行の分(52px)だけ箱を低くする */
   .quest-link-box {
     top: calc(100% + 58px);
+    padding: 8px 10px; /* 長い URL + 「Meta Quest に送る」でも箱の中が巻けない(余白を縦に 4px 詰めた。QF5 で箱が低くなって 3px 巻けた) */
     max-height: calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 74px);
     max-height: calc(45dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 74px);
   }
