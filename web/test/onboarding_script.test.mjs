@@ -3,12 +3,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FirstRun, VOICE_THANKS, NOTE_MAX, MAKE_STEPS, README_SECTION } from '../src/ui/onboarding/script.js';
-import { createSampleCreator, pickSample, SAMPLE_CHARACTERS } from '../src/ui/onboarding/creators.js';
+import { createSampleCreator, pickSample, SAMPLE_CHARACTERS, MAIN_NOTE, OTHER_NOTE } from '../src/ui/onboarding/creators.js';
 import { randomSettings, seededRandom, normalize } from '../src/ui/persona/settings.js';
 import { MAIN_CHARACTER as MAIN } from '../src/character/defaults.js';
 const MOCK = { lines: [{ text: 'こんにちは。', expression: 'happy', motion: 'wave' }, { text: '今日は、どんなお話をしようか。' }], brain: 'mock' };
 
-function harness({ creator = createSampleCreator({ main: MAIN }), voice = {}, talk = async () => MOCK, show = async () => true, seed = 7, guideUrl = null, initial = null } = {}) {
+function harness({ creator = createSampleCreator({ main: MAIN }), guide = MAIN, voice = {}, talk = async () => MOCK, show = async () => true, seed = 7, guideUrl = null, initial = null } = {}) {
   const said = [];
   const pins = [];
   const shown = [];
@@ -20,7 +20,7 @@ function harness({ creator = createSampleCreator({ main: MAIN }), voice = {}, ta
   let offered = [];
   let done = false;
   const fr = new FirstRun({
-    guide: MAIN,
+    guide,
     creator,
     persona: { get: (id) => stored.get(id) ?? null, set: (id, s) => stored.set(id, s), random: () => randomSettings(seededRandom(seed)), ...(initial ? { initial } : {}) },
     pin: (p) => pins.push(p),
@@ -377,4 +377,36 @@ test('D4: 終わる時、見本の子なら「舞台は主役に戻る」と言�
   await g.fr.act('to_voice');
   await g.fr.act('close');
   assert.ok(!g.texts('note').some((t) => t.startsWith('舞台は')), '主役のままなら言わない');
+});
+
+// ?character=<id> で開いた時は、その子が案内役(CRITux2 高 1)。見本の道の「〜で続きを試す」もその子で、説明はその子の物。
+// 見本の一覧は、案内役を入れず、主役を先頭に入れる(主役は「〜で続きを試す」に出ないため)
+test('?character=<id> の子が案内役: 名乗り・「〜で続きを試す」・見本の一覧・終わりの文', async () => {
+  const lead = { id: 'mikan', name: 'みかんちゃん' };
+  const c = createSampleCreator({ main: () => lead });
+  const mikan = SAMPLE_CHARACTERS.find((s) => s.id === 'mikan');
+  assert.deepEqual(c.main(), { id: 'mikan', name: 'みかんちゃん', sample: true, note: mikan.note, guide: true });
+  assert.deepEqual(c.list().map((x) => x.id), [MAIN.id, ...SAMPLE_CHARACTERS.filter((s) => s.id !== 'mikan').map((s) => s.id)]);
+  assert.equal(c.list()[0].note, MAIN_NOTE);
+  assert.equal(createSampleCreator({ main: { id: 'tameshi', name: 'ためし' } }).main().note, OTHER_NOTE, '一覧にない子は「Claude Code で作った子」');
+  assert.equal(createSampleCreator({ main: MAIN }).main().note, MAIN_NOTE);
+
+  const h = harness({ creator: c, guide: lead });
+  await h.fr.start();
+  assert.match(h.texts('guide')[0], /^はじめまして。みかんちゃんだよ。/);
+  assert.ok(!h.texts('guide').join('').includes('ノリ、'), '主役の口調で名乗らない');
+  await h.fr.act('words', { text: '空を飛ぶペンギンの郵便屋さん' });
+  assert.deepEqual(h.offered, ['use_guide', 'choose_sample', 'again']);
+  assert.equal(h.offeredAll[0].label, 'みかんちゃんで続きを試す');
+  await h.fr.act('use_guide');
+  assert.ok(h.texts('note').includes(`見本: みかんちゃん(${mikan.note})`), h.texts('note').join(' / '));
+  assert.ok(h.texts('guide').includes('じゃあ、みかんちゃんで続けるね。'));
+  assert.deepEqual(h.shown, ['mikan'], '舞台に出すのは案内役(もう舞台にいる子)');
+  assert.equal(h.fr.step, 4);
+  await h.fr.act('persona_ok');
+  await h.fr.act('to_retro');
+  await h.fr.act('to_voice');
+  await h.fr.act('later');
+  await h.fr.act('close');
+  assert.ok(!h.texts('note').some((t) => t.startsWith('舞台は')), '案内役の子のまま終わる時は「舞台は〜に戻ります」と言わない');
 });

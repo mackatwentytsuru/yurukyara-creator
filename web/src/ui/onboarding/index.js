@@ -1,6 +1,8 @@
 // 初めての会話(7 歩)と性格の画面を、会話の画面に付ける入口。main.js(S5)に 1 行で付ける:
 //   import('./ui/onboarding/index.js').then((m) => m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER }));
 // - 案内役(guide)の既定は主役 MAIN_CHARACTER。主役の決まりは web/src/character/defaults.js(S5)の 1 か所だけに置き、ここでは写さない
+// - ?character=<id> で開いた時は、舞台のその子が案内役(入口の「案内するのは〜」と同じ子。舞台を主役に替えない)。
+//   閉じると舞台はその子に戻り、アドレスの ?character=<id> も残す(README の ?character=mikan が初めての訪問でも効く。CRITux2 高 1)
 // - 「性格」と「はじめての会話」のボタンを buttonHost に足す(無ければ右上に浮かべる)
 // - ?onboard=1 で初めての会話を出す。auto: true なら、この端末で初めての時も出す(既定は出さない。ほかの試験を邪魔しない)
 // - 性格の設定は、キャラの id ごとに、この端末の中に覚える。会話の頭脳に渡す人格の文(app.persona)に足す
@@ -15,10 +17,10 @@
 //   1〜3 歩を本当の作る道にする(言葉か絵 → PC のゆるキャラチェック → 絵 → この子にする・直したい)。入力と絵は PC が配る
 //   作る画面(枠)の中だけで扱い、この画面は枠からの知らせだけを受ける。合言葉は # の後ろなので会話の画面のサーバーには送られない。
 //   読んだらこのタブの中だけに覚え(sessionStorage)、アドレスの欄から消す。公開の URL・*.ts.net では読まない(CRITsec F4)
-import { FirstRun } from './script.js';
+import { FirstRun, README_SECTION } from './script.js';
 import { createSheet } from './view.js';
 import { createVoice, crawl } from './voice.js';
-import { createLocalCreator, createSampleCreator, isLocalBase, pageIsLocal } from './creators.js';
+import { createLocalCreator, createSampleCreator, isLocalBase, pageIsLocal, sampleName } from './creators.js';
 import { injectStyles } from './styles.js';
 import { openPersonaPanel } from '../persona/panel.js';
 import { composePersona, fixesOwnSpeech, loadSettings, normalize, ownSettings, ownSpeechFor, personalityOf, randomSettings, saveSettings } from '../persona/settings.js';
@@ -26,6 +28,8 @@ import { MOCK_NOTICE_SHORT, styleLines } from '../persona/preview.js';
 import { streamChat } from '../../conversation/brainClient.js';
 // 主役で案内役(協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリ」と呼ぶ)。three を読まない小さな部品
 import { MAIN_CHARACTER } from '../../character/defaults.js';
+// ?character= の id の形(英小文字・数字・_ の 32 字まで。main.js と同じ決まり。three を読まない小さな部品)
+import { isSpecId } from '../../character/urlSpec.js';
 
 export const DONE_KEY = 'yc.onboarded.v1';
 export const RESUME_KEY = 'yc.onboarding.resume.v1';
@@ -34,6 +38,9 @@ export const CLOSED_EVENT = 'yc:firstrun-closed'; // 閉じた時に window へ�
 const TALK_TIMEOUT_MS = 20000;
 const STAGE_WAIT_MS = 15000; // 舞台のキャラが読み終わるのを待つ長さ(入れ替えの前)
 const GATE_HOLD_MS = 3000; // 閉じた後、入口を消しておく長さ(カメラなしの入力が始まるまで。始まれば入口は main.js が隠す)
+// PC で札(右)が開いている間、舞台の絵を札の左に収める(幅の広い見本の右の端が札に隠れていた。CRITux2 低 13)。
+// 札の左に残る幅がこれより狭い画面(縦のタブレットなど)では、舞台を狭めない
+const SIDE_MIN_STAGE_PX = 420;
 
 function storageOf(kind) {
   try {
@@ -82,11 +89,49 @@ export function readLocalMake({ loc = globalThis.location, session = null, histo
   return found;
 }
 
-/** README の作り方の節(index.html の <link rel="help">)。画面のコードには外の住所を書かない(privacy の試験)ので、頁から読む */
+/**
+ * 日本語の README(README.ja.md)の作り方の節の見出しから、GitHub が付ける節の印(# の後ろ)。
+ * 見出しの文字は script.js の README_SECTION(S6 の README.ja.md の見出しと同じ。試験 onboarding_readme_ja が見る)
+ */
+export const README_JA_FILE = 'README.ja.md';
+export const README_JA_ANCHOR = githubSlug(README_SECTION);
+
+/** GitHub の見出しの印の作り方(英字は小文字・記号を消す・空白は「-」。日本語の字はそのまま) */
+export function githubSlug(heading) {
+  return String(heading ?? '')
+    .trim()
+    .replace(/[A-Z]/g, (c) => c.toLowerCase())
+    .replace(/[^\p{L}\p{M}\p{N}\p{Pc}\- ]/gu, '')
+    .replace(/ /g, '-');
+}
+
+/**
+ * README の作り方の節(index.html の <link rel="help">)。画面のコードには外の住所を書かない(privacy の試験)ので、頁から読む。
+ * 画面は日本語だけ(Q-0092 A)なので、日本語の README の節を開く(CRITux2 低 12):
+ *   ① 頁に <link rel="help" hreflang="ja"> があれば、それ(S5 の index.html。印は S6 と合わせる)
+ *   ② 無ければ、<link rel="help"> がリポジトリの入口(GitHub の /<持ち主>/<名前>)の時、同じリポジトリの README.ja.md の節にする
+ *   ③ それも無理なら、<link rel="help"> のまま
+ */
 export function readGuideUrl(doc = globalThis.document) {
+  const https = (href) => {
+    try {
+      return href && new URL(href).protocol === 'https:' ? href : null;
+    } catch {
+      return null;
+    }
+  };
   try {
-    const href = doc?.querySelector?.('link[rel="help"][href]')?.href ?? '';
-    return href && new URL(href).protocol === 'https:' ? href : null;
+    const ja = https(doc?.querySelector?.('link[rel="help"][hreflang="ja"][href]')?.href ?? '');
+    if (ja) return ja;
+    const href = https(doc?.querySelector?.('link[rel="help"][href]')?.href ?? '');
+    if (!href) return null;
+    const u = new URL(href);
+    const repo = u.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
+    if (u.hostname !== 'github.com' || repo.length !== 2) return href;
+    u.pathname = `/${repo[0]}/${repo[1]}/blob/HEAD/${README_JA_FILE}`;
+    u.search = '';
+    u.hash = README_JA_ANCHOR;
+    return u.href;
   } catch {
     return null;
   }
@@ -128,15 +173,33 @@ export function mountFirstRun({
           () => null,
         )
       : Promise.resolve();
-  const made = creator ?? (localMake ? createLocalCreator(localMake) : createSampleCreator({ main: guide }));
+  // この回の案内役(7 歩を始める時に pickLead で決める)。見本の道の「〜で続きを試す」も、この子
+  let lead = guide;
+  const made = creator ?? (localMake ? createLocalCreator(localMake) : createSampleCreator({ main: () => lead }));
   // 舞台の子の id。入れ替えた後は app.characterId(main.js と同じ欄)が正
   const stageId = () => app?.characterId ?? app?.character?.id ?? params.get('character') ?? params.get('char') ?? null;
+  // ?character=<id> で開いた時の、その子の id(id の形の時だけ。パスは開発の確かめなので、前のまま主役が案内する)
+  const askedRaw = params.get('character') ?? params.get('char');
+  const askedId = isSpecId(askedRaw) ? askedRaw : null;
   let stopListen = null;
   let engine = null;
   let sheet = null;
   let pendingNav = null;
 
-  const guideName = () => (app?.character?.id === guide.id && app.character.name) || guide.name;
+  const guideName = () => (app?.character?.id === lead.id && app.character.name) || lead.name;
+
+  /**
+   * この回の案内役。?character=<id> で開いて、舞台(入れ替える前の子)がその子なら、その子(入口の「案内するのは〜」と同じ。
+   * 舞台を主役に替えない。CRITux2 高 1)。そうでなければ、渡された案内役(主役)
+   * @returns {{id:string, name:string}}
+   */
+  function pickLead() {
+    if (!askedId || askedId === guide.id) return guide;
+    const homeId = home?.id ?? stageId(); // 舞台が読み終わる前は ?character= の id(main.js はその子を読む。読めなければ画面が止まる)
+    if (homeId !== askedId) return guide; // 舞台に別の子が出ている
+    const c = home?.character ?? app?.character ?? null;
+    return { id: askedId, name: (c?.id === askedId && c.name) || sampleName(askedId) || askedId };
+  }
 
   /* ---------- 人格の文(キャラごとの、設定を足す前の元) ---------- */
   const rawPersonas = new Map();
@@ -285,19 +348,23 @@ export function mountFirstRun({
     return true;
   }
 
-  /** 閉じた時: 舞台を主役に戻し、アドレスから onboard=1(と主役でない ?character=)を消し、入口を出し直さない(D4) */
+  /**
+   * 閉じた時: 舞台をこの回の案内役(主役か、?character=<id> の子)に戻し、アドレスから onboard=1 を消し、入口を出し直さない(D4)。
+   * ?character= は、戻した子を指していれば残す(CRITux2 高 1)。指していない時(開発のパスで開いて主役が案内した時)だけ消す
+   */
   async function afterClose(reason) {
+    const back = lead;
     try {
-      if (app && (await whenStageReady()) && stageId() !== guide.id) await putOnStage(guide.id);
+      if (app && (await whenStageReady()) && stageId() !== back.id) await putOnStage(back.id);
     } catch (err) {
-      console.warn('舞台を主役に戻せませんでした:', err?.message ?? err);
+      console.warn('舞台を案内役に戻せませんでした:', err?.message ?? err);
     }
-    if (stageId() === guide.id || !app) root.classList.remove('fr-guest');
+    if (stageId() === back.id || !app) root.classList.remove('fr-guest');
     try {
       const url = new URL(location.href);
       url.searchParams.delete('onboard');
       const asked = url.searchParams.get('character') ?? url.searchParams.get('char');
-      if (asked && asked !== guide.id && stageId() === guide.id) {
+      if (asked && asked !== back.id && stageId() === back.id) {
         url.searchParams.delete('character');
         url.searchParams.delete('char');
       }
@@ -306,7 +373,7 @@ export function mountFirstRun({
       // 消せなくても続ける
     }
     session?.removeItem(RESUME_KEY);
-    globalThis.dispatchEvent?.(new CustomEvent(CLOSED_EVENT, { detail: { reason } }));
+    globalThis.dispatchEvent?.(new CustomEvent(CLOSED_EVENT, { detail: { reason, character: stageId() } }));
   }
 
   /** 入口(ゲート)がまだ出ていれば、カメラなしで始める(閉じた後に入口が戻ってこないように。D4)。始まれば main.js が入口を隠す */
@@ -417,20 +484,37 @@ export function mountFirstRun({
 
   /**
    * スマホでは札が画面の下の半分ほどを隠すので、舞台(app.stage)の「下の余白」を札の高さにして、キャラを札の上に収める。
-   * 閉じたら元の余白に戻す。舞台の形が違う・PC(札は右下)・AR/VR の間は何もしない。
+   * PC では札が右に立つので、舞台の絵(canvas)を札の左までにして、キャラを札の左に収める(幅の広い見本の右の端が札に
+   * 隠れていた。CRITux2 低 13。html.fr-side の幅は styles.js)。閉じたら元に戻す。舞台の形が違う・AR/VR の間は何もしない。
    */
   let savedInset = null;
+  let side = false;
   function fitStage(open) {
     const st = app?.stage;
     if (!st?.state || typeof st.frameCharacter !== 'function' || !app.character || st.state.immersive) return;
-    if (open && (window.innerWidth >= 720 || !sheet || sheet.closed)) return;
-    if (open) {
+    const wide = window.innerWidth >= 720;
+    const wantSide = Boolean(open && wide && sheet && !sheet.closed && sideRoom() >= SIDE_MIN_STAGE_PX);
+    let changed = false;
+    if (wantSide !== side) {
+      side = wantSide;
+      root.classList.toggle('fr-side', side);
+      try {
+        st.resize?.(); // canvas の大きさが変わったので、描く大きさと画角の縦横を取り直す(main.js は窓の大きさの変化でしか呼ばない)
+      } catch {
+        // 取り直せなくても、会話は続ける
+      }
+      changed = true;
+    }
+    if (open && !wide && sheet && !sheet.closed) {
       if (savedInset === null) savedInset = st.state.bottomInset ?? 0;
       st.state.bottomInset = Math.max(savedInset, sheet.element.offsetHeight + 8);
-    } else if (savedInset !== null) {
+      changed = true;
+    } else if (!open && savedInset !== null) {
       st.state.bottomInset = savedInset;
       savedInset = null;
-    } else return;
+      changed = true;
+    }
+    if (!changed) return;
     try {
       st.frameCharacter(app.character, st.state.view, st.state.obstacles);
     } catch {
@@ -438,20 +522,29 @@ export function mountFirstRun({
     }
   }
 
+  /** PC の札の左に残る幅(px)。札の左の端から 16px 空ける */
+  function sideRoom() {
+    const left = sheet?.element?.getBoundingClientRect?.().left ?? window.innerWidth;
+    return Math.round(left - 16);
+  }
+
   function startOnboarding({ resume = null } = {}) {
     if (sheet && !sheet.closed) return engine;
     let finishTimer = null;
     let sizeWatch = null;
+    lead = pickLead(); // ?character=<id> で開いた時は、その子が案内する(CRITux2 高 1)
+    const onResize = () => fitStage(true); // 窓の大きさが変わった時も、PC の舞台を札の左に収め直す
     sheet = createSheet({
       guideName: guideName(),
       voice,
       parent,
       onAct: (id, payload) => engine.act(id, payload),
       openPersona: (onSave) => openPersona({ character: engine.character, initial: engine.settings, onSave }),
-      stage: () => (app?.character ? { character: app.character, speaker: app.speaker, guideId: guide.id } : null),
+      stage: () => (app?.character ? { character: app.character, speaker: app.speaker, guideId: lead.id } : null),
       onClose: (reason) => {
         clearTimeout(finishTimer);
         sizeWatch?.disconnect();
+        globalThis.removeEventListener?.('resize', onResize);
         if (reason === 'later') local?.setItem(DONE_KEY, 'later');
         passGate(); // 入口を消したまま(fr-after)にしてから、fr-open を外す
         root.classList.remove('fr-open');
@@ -464,8 +557,9 @@ export function mountFirstRun({
       sizeWatch = new ResizeObserver(() => fitStage(true));
       sizeWatch.observe(sheet.element);
     }
+    globalThis.addEventListener?.('resize', onResize);
     engine = new FirstRun({
-      guide: { id: guide.id, name: guideName() },
+      guide: { id: lead.id, name: guideName() },
       creator: made,
       persona: personaStore,
       talk,
@@ -490,8 +584,16 @@ export function mountFirstRun({
     api.sheet = sheet;
     stopListen?.();
     stopListen = typeof made.listen === 'function' ? made.listen((ev) => engine.makeEvent(ev)) : null; // 作る画面(枠)からの知らせ
-    // 案内役(主役)が舞台にいなければ、その場で呼ぶ(舞台と案内の文がずれないように。CRITux 6)
-    if (app && !resume && !showCharacter) void whenStageReady().then((ok) => (ok && stageId() !== guide.id ? putOnStage(guide.id) : null)).catch(() => null);
+    // 案内役が舞台にいなければ、その場で呼ぶ(舞台と案内の文がずれないように。CRITux 6)。?character=<id> で開いた時は、
+    // その子が案内役なので替えない(CRITux2 高 1)。舞台が読み終わる前に札が開いた時も、読み終わったら札に合わせて置き直す
+    if (app) {
+      void whenStageReady()
+        .then(async (ok) => {
+          if (ok && !resume && !showCharacter && stageId() !== lead.id) await putOnStage(lead.id);
+          if (ok && sheet && !sheet.closed) fitStage(true);
+        })
+        .catch(() => null);
+    }
     if (resume) engine.resume(resume);
     else engine.start();
     return engine;
@@ -511,7 +613,7 @@ export function mountFirstRun({
     host.append(personaBtn, startBtn);
   }
 
-  const api = { engine: null, sheet: null, voice, byokReady, creator: made, start: startOnboarding, openPersona, applyPersona, talk, putOnStage };
+  const api = { engine: null, sheet: null, voice, byokReady, creator: made, start: startOnboarding, openPersona, applyPersona, talk, putOnStage, get lead() { return lead; } };
 
   // ---- 出すかどうか ----
   const kiosk = ['led', 'autostart', 'headset'].some((k) => params.get(k) === '1');

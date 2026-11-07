@@ -28,7 +28,9 @@ export const CSS = `
 .fr-steps li { display: grid; justify-items: center; gap: 2px; min-width: 0; color: var(--fr-muted); }
 .fr-steps li span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
   border: 1px solid var(--fr-line); background: rgba(255,255,255,0.04); }
-.fr-steps li b { font-size: 10px; font-weight: 500; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 行の高さを決めて下に 1px 空ける(幅 390 で「7 声」の「声」の下が切れて「芦」に見えた。CRITux2 低 9。行の高さが normal のままだと、
+   字の形が行の箱からはみ出し、はみ出しを隠す設定で切れる) */
+.fr-steps li b { font-size: 10px; font-weight: 500; line-height: 1.5; padding-bottom: 1px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fr-steps li.done span { background: rgba(123,224,195,0.2); border-color: var(--fr-mint); color: var(--fr-mint); }
 .fr-steps li.now span { background: linear-gradient(135deg, #7d62ff, #c15bff); border-color: transparent; color: #fff; }
 .fr-steps li.now { color: var(--fr-text); }
@@ -56,6 +58,14 @@ export const CSS = `
 .fr-sheet[data-actions^="photo pick words"] .fr-actions > .fr-wide, .fr-sheet[data-actions^="photo pick words"] .fr-actions > .fr-link { grid-column: 1 / -1; }
 .fr-sheet[data-actions^="photo pick words"] .fr-link { min-height: 44px; font-size: 14px; padding: 6px 12px; }
 .fr-link { text-decoration: none; }
+/* スマホ: 選んだ絵は小さく、「近い見本がいない」の選択肢と見本の一覧は 2 つずつ並べて、会話の欄を広く残す
+   (幅 390 で、絵と 4 つのボタンが札を埋め、「ごめんね…」が見えなかった。CRITux2 中 2) */
+@media (max-width: 719px) {
+  .fr-pin { padding: 6px 14px; gap: 8px; }
+  .fr-pin-img { width: 52px; height: 52px; border-radius: 10px; }
+  .fr-sheet[data-actions*="choose_sample"] .fr-actions, .fr-sheet[data-actions^="s_"] .fr-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fr-sheet[data-actions*="choose_sample"] .fr-link { font-size: 14px; }
+}
 .fr-actions:empty { display: none; }
 .fr-btn { position: relative; font: inherit; font-size: 16px; min-height: 48px; width: 100%; padding: 10px 14px; border-radius: 14px; cursor: pointer;
   color: var(--fr-text); background: rgba(255,255,255,0.06); border: 1px solid var(--fr-line); display: flex; align-items: center; justify-content: center;
@@ -155,6 +165,9 @@ html.fr-open .gate, html.fr-after .gate { opacity: 0 !important; pointer-events:
 html.fr-open .thought { display: none !important; }
 /* 見本の子が舞台にいる間は、見た目の切り替え(主役の 3D/2D の控え)を隠す。押すと主役に戻ってしまうため */
 html.fr-guest #lookSwitch { display: none !important; }
+/* PC で札(右)が開いている間は、舞台の絵を札の左までにする(キャラは札の左の真ん中に立つ。幅の広い見本の右の端が札に隠れていた。
+   CRITux2 低 13)。札の左の端 = 右から 16px + 札の幅 min(460px, 100% - 32px)、そこからさらに 16px 空ける。index.js の fitStage が付け外しする */
+@media (min-width: 720px) { html.fr-side #stage { width: calc(100% - 32px - min(460px, 100% - 32px)); } }
 @media (prefers-reduced-motion: reduce) { .fr-sheet *, .yp-panel * { transition: none !important; animation: none !important; } }
 `;
 

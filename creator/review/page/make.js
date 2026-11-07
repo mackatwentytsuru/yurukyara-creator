@@ -55,19 +55,59 @@ function error(msg) {
   if (msg) tell("error", { message: String(msg).slice(0, 120) });
 }
 
-/** 選んだ絵を、長い辺 1254 までの jpeg にする(撮った場所などの付いた情報は、描き直すので残らない) */
-async function encode(file) {
-  const bmp = await createImageBitmap(file);
-  const s = Math.min(1, SIDE / Math.max(bmp.width, bmp.height));
+/** 使える絵の形(画面の説明と、読めなかった時の知らせに出す。CRITux2 低 5) */
+const FORMATS = "PNG・JPEG・WebP・SVG";
+const SVG_MAX = 2 * 1024 * 1024; // SVG の文字の上限(2MB)
+const isSvg = (f) => f.type === "image/svg+xml" || /\.svg$/i.test(f.name || "");
+
+/** 白い下地に描いて、長い辺 1254 までの jpeg にする */
+function toJpeg(src, w, h) {
+  const s = Math.min(1, SIDE / Math.max(w, h));
   const c = document.createElement("canvas");
-  c.width = Math.max(1, Math.round(bmp.width * s));
-  c.height = Math.max(1, Math.round(bmp.height * s));
+  c.width = Math.max(1, Math.round(w * s));
+  c.height = Math.max(1, Math.round(h * s));
   const g = c.getContext("2d");
   g.fillStyle = "#ffffff";
   g.fillRect(0, 0, c.width, c.height);
-  g.drawImage(bmp, 0, 0, c.width, c.height);
-  bmp.close?.();
+  g.drawImage(src, 0, 0, c.width, c.height);
   return c.toDataURL("image/jpeg", 0.9);
+}
+
+/**
+ * SVG の絵(Claude が描く絵も SVG)を、この画面の中で絵にする。createImageBitmap は SVG を読めないので img で読む
+ * (img の中の SVG は台本を動かさない)。大きさが書いていない SVG は、viewBox の縦横の比で長い辺を 1254 にする
+ */
+async function svgPicture(file) {
+  if (file.size > SVG_MAX) throw new Error("big");
+  const text = await file.text();
+  const url = URL.createObjectURL(new Blob([text], { type: "image/svg+xml" }));
+  try {
+    const img = document.createElement("img");
+    img.src = url;
+    await img.decode();
+    const vb = text.match(/viewBox\s*=\s*["']\s*[-+\d.eE]+[\s,]+[-+\d.eE]+[\s,]+([\d.eE]+)[\s,]+([\d.eE]+)/);
+    let w = img.naturalWidth;
+    let h = img.naturalHeight;
+    if (vb && Number(vb[1]) > 0 && Number(vb[2]) > 0) {
+      const r = Number(vb[1]) / Number(vb[2]);
+      [w, h] = r >= 1 ? [SIDE, SIDE / r] : [SIDE * r, SIDE];
+    } else if (!(w > 0 && h > 0)) [w, h] = [SIDE, SIDE];
+    else [w, h] = [w * (SIDE / Math.max(w, h)), h * (SIDE / Math.max(w, h))]; // 小さく書いた SVG も、長い辺 1254 で描く
+    return toJpeg(img, w, h);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** 選んだ絵を、長い辺 1254 までの jpeg にする(撮った場所などの付いた情報は、描き直すので残らない) */
+async function encode(file) {
+  if (isSvg(file)) return svgPicture(file);
+  const bmp = await createImageBitmap(file);
+  try {
+    return toJpeg(bmp, bmp.width, bmp.height);
+  } finally {
+    bmp.close?.();
+  }
 }
 
 async function sendMake(body, told) {
@@ -106,12 +146,12 @@ for (const id of ["photo", "pick"]) {
     const f = $(id).files?.[0];
     $(id).value = "";
     if (!f) return;
-    if (!/^image\//.test(f.type) || f.size > 20 * 1024 * 1024) return error("画像(20MB まで)を選んでください");
+    if (!(/^image\//.test(f.type) || isSvg(f)) || f.size > 20 * 1024 * 1024) return error(`${FORMATS} の絵(20MB まで)を選んでください`);
     let picture;
     try {
       picture = await encode(f);
     } catch {
-      return error("この絵は読めませんでした。別の絵にしてください");
+      return error(`この絵は読めませんでした。${FORMATS} の絵にしてください`);
     }
     sendMake({ from: "picture", picture }, { from: "picture", kind: id });
   });
@@ -208,21 +248,23 @@ async function poll() {
   if (!st || st.id !== S.id) return;
   S.wordsMax = j.words_max || S.wordsMax;
   S.noteMax = j.note_max || S.noteMax;
+  const mk = st.make || {};
+  // ゆるキャラチェックの結果は、PC の様子(「絵を描いています」など)より先に知らせる。チェックと絵が 1 回の /yuru-next で
+  // 続けて流れると、1 回の見回りで両方が見え、札に「絵を描いています」が「この絵から作るよ」より先に出ていた(CRITux2 低 11)
+  if (mk.check && !S.checkTold) {
+    S.checkTold = true;
+    S.check = mk.check;
+    tell("checked", { class: mk.check.class, message: (mk.check.message || "").slice(0, 120), by: mk.check.by });
+  }
   const act = st.current && st.current.activity;
   if (act && act !== S.lastAct) {
     S.lastAct = act;
     $("activity").textContent = act;
     tell("progress", { text: act.slice(0, 120) });
   }
-  const mk = st.make || {};
   if (mk.status === "failed") {
     error(mk.notice || "PC で描けませんでした。もう一度 /yuru-next と打ってください");
     return;
-  }
-  if (mk.check && !S.checkTold) {
-    S.checkTold = true;
-    S.check = mk.check;
-    tell("checked", { class: mk.check.class, message: (mk.check.message || "").slice(0, 120), by: mk.check.by });
   }
   if (S.phase === "waiting" && mk.status === "check_waiting" && !j.make?.choice) {
     $("checkMsg").textContent = mk.check.message;

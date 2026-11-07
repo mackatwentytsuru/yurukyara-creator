@@ -146,6 +146,19 @@ async function shot(page, name) {
 }
 
 const logText = (page) => page.$eval('.fr-log', (e) => e.innerText);
+/** 入力欄の例(placeholder)を出すのに要る幅と、欄の中の幅(px)。同じ字の形の見えない span で測る */
+const placeholderRoom = (frame, id) =>
+  frame.evaluate((id) => {
+    const inp = document.getElementById(id);
+    const cs = getComputedStyle(inp);
+    const span = Object.assign(document.createElement('span'), { textContent: inp.placeholder });
+    Object.assign(span.style, { font: cs.font, letterSpacing: cs.letterSpacing, position: 'absolute', visibility: 'hidden', whiteSpace: 'pre' });
+    document.body.append(span);
+    const need = span.getBoundingClientRect().width;
+    span.remove();
+    const room = inp.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    return { need: Math.ceil(need), room: Math.floor(room), width: Math.round(inp.getBoundingClientRect().width), text: inp.placeholder };
+  }, id);
 async function frameOf(page) {
   await page.waitForSelector('iframe.fr-frame', { timeout: 15_000 });
   const handle = await page.$('iframe.fr-frame');
@@ -193,6 +206,10 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
       assert.match(await frame.$eval('#picCap', (e) => e.textContent), /1 回目の絵。この PC の Claude Code が描きました/);
       assert.doesNotMatch(await frame.$eval('#picCap', (e) => e.textContent), /C0|段 \d/, '内部の言葉を出さない(D7)');
+      // 作る画面は img の src(blob:)と #c0 を同じ時に出し、絵はその後に読み込まれる(ふだん 2〜8ms)。#c0 だけを待って
+      // すぐ読むと、絵の読み込みが詰まった時に naturalWidth 0 で落ちる(順の揺れ。絵を 60ms 遅らせると必ず落ちた)。
+      // PC の 3 本目と同じく、読み終わるのを待ってから同じ文で確かめる(読めなければ「描いた絵が出る」で落ちる)
+      await frame.waitForFunction(() => document.getElementById('pic').naturalWidth > 0, null, { timeout: 10_000 }).catch(() => {});
       assert.ok(await frame.$eval('#pic', (e) => e.naturalWidth > 0), '描いた絵が出る');
       await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子ができたよ。どうかな?'));
       await fits(page, frame, '3 歩目');
@@ -319,10 +336,60 @@ test('作る道(PC 1280×720): 札が下の帯を隠さず、作る画面の「�
       });
       assert.ok(inner.note <= inner.vh && inner.ok <= inner.vh, `「この子にする」「直したい」が枠の下に隠れた ${JSON.stringify(inner)}`);
       assert.equal(inner.bg, 'rgb(29, 26, 46)', '作る画面は会話の画面と同じ暗い色');
+      // 一言の欄は、例「例: 帽子を青にして」が切れない幅(欄が 70px ほどで「例: 帽」で切れていた。CRITux2 低 10)
+      const note = await placeholderRoom(frame, 'note');
+      assert.ok(note.need <= note.room, `一言の欄の例が切れる ${JSON.stringify(note)}`);
+      assert.match(await frame.$eval('#noteBtn', (e) => e.innerText.trim()), /直したい/, 'ボタンは「直したい」と読める');
       await fits(page, frame, 'PC 3 歩目');
       await shot(page, 'make1280_3_c0');
       assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
       return { sheet, inner };
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    make.proc.kill(); // 自分で起こした PID だけ
+    web.proc.kill();
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+// SVG の絵(Claude が描く絵も SVG)を、作る画面で受ける(断っていた。使える形も言わなかった。CRITux2 低 5)。
+// ゆるキャラの絵は 1 回の /yuru-next でチェックと絵が続けて流れる: 札では「ゆるキャラにぴったりの絵だね」が、PC の様子
+// (「絵を描いています」「絵ができました」)より先に出る(順が逆だった。CRITux2 低 11)
+const TEST_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240"><ellipse cx="100" cy="130" rx="80" ry="90" fill="#7cc4ff"/><circle cx="72" cy="120" r="10" fill="#222"/><circle cx="128" cy="120" r="10" fill="#222"/><path d="M80 160 Q100 178 120 160" stroke="#222" stroke-width="6" fill="none"/></svg>';
+
+test('作る道(幅 390): SVG の絵 → ゆるキャラチェック(ゆるキャラ)→ チェックの言葉が描く知らせより先 → 絵。使える絵の形を書いてある', { skip: SLOW || (!HAS_PY && 'python と Pillow が無い'), timeout: 180_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const work = mkdtempSync(join(tmpdir(), 'fr-make-'));
+  const token = randomBytes(16).toString('hex');
+  const web = await startWeb();
+  const make = await startMake(work, token, web.base);
+  try {
+    const { ctx, page, errors } = await openPage(browser, web.base, make.base, token, 390);
+    try {
+      const frame = await frameOf(page);
+      const formats = await frame.$eval('#formats', (e) => ({ text: e.textContent, shown: e.offsetParent !== null }));
+      assert.ok(formats.shown && /PNG/.test(formats.text) && /JPEG/.test(formats.text) && /SVG/.test(formats.text), `使える絵の形: ${JSON.stringify(formats)}`);
+      await frame.setInputFiles('#pick', { name: 'drawing.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(TEST_SVG) });
+      await frame.waitForSelector('#waiting:not([hidden])', { timeout: 15_000 });
+      assert.equal(await frame.$eval('#err', (e) => e.hidden), true, `SVG を断った: ${await frame.$eval('#err', (e) => e.textContent)}`);
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('(絵を渡した)'));
+      const pc1 = await pcNext(work, '--fake-check', 'yuru', '--fake-draw');
+      assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
+      const orig = readFileSync(join(work, pc1.id, 'review', 'original.png'));
+      assert.ok(orig.subarray(0, 4).toString('latin1') === '\x89PNG', 'SVG はこの画面の中で絵にして、PC の作業場所にだけ届く(png に描き直して)');
+      await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子ができたよ。どうかな?'), null, { timeout: 15_000 });
+      const log = await logText(page);
+      const check = log.indexOf('ゆるキャラにぴったりの絵だね。');
+      const drawing = Math.min(...['絵を描いています', '絵ができました'].map((w) => log.indexOf(w)).filter((i) => i >= 0));
+      assert.ok(check >= 0, `チェックの言葉が無い: ${log}`);
+      assert.ok(Number.isFinite(drawing) && check < drawing, `チェックの言葉が、描く知らせより後に出た: ${log}`);
+      await shot(page, 'make390_svg_c0');
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
     }

@@ -14,6 +14,8 @@ const el = (tag, props = {}, ...children) => {
 };
 const PICTURE_MAX = 20 * 1024 * 1024;
 const initial = (name) => [...String(name || '?')][0];
+/** 会話の欄を巻いた時、今のまとまりの最初の行の上に残すすき間(px) */
+const LATEST_GAP = 8;
 
 /**
  * @param {object} o
@@ -56,8 +58,32 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
   closeBtn.addEventListener('click', () => close('later'));
   log.addEventListener('click', () => skip?.abort()); // 押すと、文字送りを飛ばす
 
+  // 今のまとまり(台本が 1 回に言う文。present 1 回分)の最初の行。会話の欄は最後の文を見せるが、この行が上へ流れて
+  // 見えなくなる所までは巻かない(スマホの狭い欄で、「ごめんね…」が上へ流れ、手順の文の切れ端だけが見えていた。CRITux2 中 2)。
+  // 印は class fr-latest(試験と練習の道具が「最初の行が見えているか」を見る)
+  let latest = null;
+  let fresh = true;
+  /** 会話の欄に行を足す。新しいまとまりの最初の行なら、印を付け替える */
+  function add(node) {
+    log.append(node);
+    if (fresh) {
+      latest?.classList.remove('fr-latest');
+      latest = node;
+      node.classList.add('fr-latest');
+      fresh = false;
+    }
+    return node;
+  }
+
+  /** 最後の文を見せる。ただし、今のまとまりの最初の行より先(下)へは巻かない */
   const scroll = () => {
-    log.scrollTop = log.scrollHeight;
+    const end = log.scrollHeight - log.clientHeight;
+    if (!latest?.isConnected) {
+      log.scrollTop = end;
+      return;
+    }
+    const start = latest.getBoundingClientRect().top - log.getBoundingClientRect().top + log.scrollTop - LATEST_GAP;
+    log.scrollTop = Math.max(0, Math.min(end, start));
   };
 
   function setStep(n, { skipped = [] } = {}) {
@@ -73,9 +99,17 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     const text = el('p', { className: 'fr-text' });
     const bubble = el('div', { className: 'fr-bubble' }, who === 'user' ? null : el('b', { className: 'fr-name', textContent: name }), text);
     const r = el('div', { className: `fr-line ${who}` }, who === 'user' ? null : el('span', { className: 'fr-who', ariaHidden: 'true', textContent: initial(name) }), bubble);
-    log.append(r);
+    add(r);
     scroll();
     return { r, text, bubble };
+  }
+
+  /** 注の行(1 つのまとまりの外で出す時は、それだけで新しいまとまり) */
+  function note(text, { alone = false } = {}) {
+    if (alone) fresh = true;
+    add(el('p', { className: 'fr-note', textContent: text }));
+    live.textContent = text;
+    scroll();
   }
 
   /** 舞台のキャラの口を、文字送りの間だけ動かす(声が無いときの口。読み上げの部品の fakeUntil を使う) */
@@ -87,9 +121,7 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
   async function showLine(line, ctx) {
     stats.lines += 1;
     if (line.who === 'note') {
-      log.append(el('p', { className: 'fr-note', textContent: line.text }));
-      live.textContent = line.text;
-      scroll();
+      note(line.text);
       return;
     }
     if (line.who === 'user') {
@@ -171,8 +203,9 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     scroll();
   }
 
-  /** 台本の present: 文を順に出し、全部出し終わったら解決する */
+  /** 台本の present: 文を順に出し、全部出し終わったら解決する。1 回分の文が 1 つのまとまり(最初の行に印) */
   async function present(lines, ctx) {
+    fresh = true;
     for (const line of lines) {
       if (closed) return;
       await showLine(line, ctx);
@@ -203,8 +236,7 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
       const f = input.files?.[0];
       if (!f) return;
       if (!/^image\//.test(f.type) || f.size > PICTURE_MAX) {
-        log.append(el('p', { className: 'fr-note', textContent: '画像(20MB まで)を選んでね。' }));
-        scroll();
+        note('画像(20MB まで)を選んでね。', { alone: true });
         return;
       }
       const url = URL.createObjectURL(f); // この端末の中だけの、絵の仮の住所(外には送らない)

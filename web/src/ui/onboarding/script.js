@@ -26,10 +26,13 @@ export const NOTE_MAX = 40; // 直してほしい一言(K3 と同じ 40 字)
 export const SAY_MAX = 200;
 export const SNAPSHOT_VERSION = 1;
 export const FRAME_WAIT_MS = 10000; // 作る画面(枠)から「開いた」の知らせが来るのを待つ長さ
-/** 作り方の節の名前(S6 が README に書く節。英語の README の見出しと同じ文字) */
-export const README_SECTION = 'Make your own character on your PC with Claude Code';
+/**
+ * 作り方の節の名前。画面は日本語だけ(Q-0092 A)なので、日本語の README(S6 の README.ja.md)の見出しと同じ文字。
+ * 画面のリンク(index.js の readGuideUrl)は、この見出しから GitHub の節の印を作る。見出しが変わると試験 onboarding_readme_ja が落ちる
+ */
+export const README_SECTION = '自分の PC で、Claude Code と自分のキャラを作る';
 /** PC で新しい子を作る手順の短いまとめ(くわしくは README の節)。画面のコードに外の住所は書かない(privacy の試験) */
-export const MAKE_STEPS = `PC での作り方: ① python creator/review/serve_review.py --make --web <会話の画面の元> を動かす ② PC のブラウザでその /qr の画面を開き、「この PC の初めての会話」のリンクから言葉か絵を入れる ③ Claude Code で /yuru-next と打つ(描くのに数分)。くわしくは README の「${README_SECTION}」。`;
+export const MAKE_STEPS = `PC での作り方: ① python creator/review/serve_review.py --make --web <会話の画面の元> を動かす ② PC のブラウザでその /qr の画面を開き、「この PC の初めての会話」のリンクから言葉か絵を入れる ③ Claude Code で /yuru-next と打つ(描くのに数分)。くわしくは日本語の README(README.ja.md)の「${README_SECTION}」。`;
 
 const chars = (s) => [...String(s ?? '')].length;
 const clip = (s, n) => [...String(s ?? '').trim()].slice(0, n).join('');

@@ -24,6 +24,10 @@ input[type="text"] { font: inherit; font-size: 16px; min-height: 48px; width: 10
 .mk-big { margin: 0; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
 .mk-hint, .mk-act { margin: 0; font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
 .mk-act:empty { display: none; }
+/* 使える絵の形(SVG を断っていた時に、使える形を言わなかった。CRITux2 低 5) */
+.mk-formats { font-size: 13px; }
+/* 「直したい」のボタンの名前: ふだんは長い名前。横に並べる狭い所(下)では短い名前 */
+.mk-short { display: none; }
 .mk-fig { margin: 0; display: grid; gap: 4px; justify-items: center; }
 .mk-fig img { width: min(200px, 56vw); aspect-ratio: 1; object-fit: contain; border-radius: 14px; background: #fff; border: 1px solid var(--line); }
 .mk-fig figcaption { font-size: 13px; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
@@ -41,12 +45,17 @@ input[type="text"] { font: inherit; font-size: 16px; min-height: 48px; width: 10
   .mk-fig img { width: min(140px, 40vw); }
   main { gap: 8px; padding-top: 8px; }
 }
-/* 横に広くて背の低い枠(PC の札。1280×720 で枠の高さ 260px ほど): 一言の欄と送るを 1 行にして、巻かずに「直したい」まで見せる */
+/* 横に広くて背の低い枠(PC の札。1280×720 で枠の高さ 260px ほど): 一言の欄と送るを 1 行にして、巻かずに「直したい」まで見せる。
+   一言の欄は例「例: 帽子を青にして」が切れない幅(150px 以上)を残す: 絵の列を 124px に、ボタンは短い名前「直したい」に
+   (欄が 70px ほどで「例: 帽」で切れていた。CRITux2 低 10)。1 歩目の言葉の欄も 1 行にして、使える絵の形まで巻かずに見せる */
 @media (min-width: 380px) and (max-height: 420px) {
-  #noteForm { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; }
-  #noteForm .mk-label { grid-column: 1 / -1; font-size: 13px; }
-  #noteForm .mk-count { display: none; }
-  #noteForm .mk-btn { width: auto; }
+  #c0:not([hidden]) { grid-template-columns: minmax(0, 124px) minmax(0, 1fr); }
+  #noteForm, #wordsForm { grid-template-columns: minmax(150px, 1fr) auto; column-gap: 8px; }
+  #noteForm .mk-label, #wordsForm .mk-label { grid-column: 1 / -1; font-size: 13px; }
+  #noteForm .mk-count, #wordsForm .mk-count { display: none; }
+  #noteForm .mk-btn, #wordsForm .mk-btn { width: auto; padding-inline: 12px; }
+  #noteForm .mk-long { display: none; }
+  #noteForm .mk-short { display: inline; }
   #c0 { row-gap: 8px; }
   #c0 .mk-fig figcaption { font-size: 12px; }
 }

@@ -9,6 +9,8 @@
 // 'sample': Claude Code で作ってある子を、言葉に当たる時だけ出す(当たらなければ出さない)。絵はこの端末の外に送らない。
 // 'local' : 言葉か絵 1 枚を、手元の PC の確認画面のサーバー(creator/review/serve_review.py --make)へ渡す。
 //           PC で /yuru-next を打つと、ゆるキャラチェック → 段 0 の絵 → C0 に出る。OK・やり直し+一言は K3 の request.json。
+// 主役の決まりは web/src/character/defaults.js(S5)の 1 か所だけ。ここでは写さずに読む
+import { MAIN_CHARACTER } from '../../character/defaults.js';
 
 /** 見本の子(characters/<id>/ にある物)。words は Claude が絵を描いた元の言葉(記録のある物だけ書く) */
 export const SAMPLE_CHARACTERS = [
@@ -39,16 +41,27 @@ export function pickSample(words, samples = SAMPLE_CHARACTERS) {
 
 /** 主役(案内役)の見本としての説明。主役も、協力者が手で描いた絵から Claude Code で作った子 */
 export const MAIN_NOTE = '協力者が手で描いた絵から、Claude Code で作った子';
+/** 主役でも見本の一覧でもない子(?character=<id> で呼んだ、このリポジトリの子)の説明 */
+export const OTHER_NOTE = 'Claude Code で作った子';
+
+/** 見本の一覧にある子の名前(無ければ null)。?character=<id> で開いた時、舞台が読み終わる前の案内役の名前に使う */
+export function sampleName(id, samples = SAMPLE_CHARACTERS) {
+  return samples.find((s) => s.id === id)?.name ?? null;
+}
 
 /**
  * 見本の道。この画面では新しく描かない。言葉が見本の子に本当に当たる時だけ、その子を出す。
  * 当たらない言葉と絵(この画面では Claude が絵を見ない)は make が null を返し、台本が正直に「近い見本がいない」と言う。
  * 選べる見本の一覧(list)は、使う人が自分で選ぶ時だけ使う(だまって選ばない)。
  * @param {object} [o]
- * @param {{id:string, name:string}} [o.main] 主役(案内役)。「主役で続ける」に使う
+ * @param {{id:string, name:string}|(() => {id:string, name:string}|null)} [o.main] この回の案内役(既定は主役。?character=<id> で
+ *   開いた時はその子)。「〜で続きを試す」に使う。関数なら、使う時に読む(案内役は 7 歩を始める時に決まる)
  * @param {object[]} [o.samples]
  */
 export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS } = {}) {
+  const lead = () => (typeof main === 'function' ? main() : main);
+  /** 案内役の説明: 見本の一覧の子ならその説明、主役なら主役の説明、ほかは「Claude Code で作った子」 */
+  const leadNote = (g) => samples.find((s) => s.id === g.id)?.note ?? (g.id === MAIN_CHARACTER.id ? MAIN_NOTE : OTHER_NOTE);
   return {
     mode: 'sample',
     async check() {
@@ -61,13 +74,20 @@ export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS }
       const s = pickSample(input?.words ?? '', samples);
       return s ? { id: s.id, name: s.name, sample: true, note: s.note } : null;
     },
-    /** 使う人が自分で選ぶ見本の一覧(主役は「主役で続ける」で別に出すので入れない) */
+    /**
+     * 使う人が自分で選ぶ見本の一覧。案内役は「〜で続きを試す」で別に出すので入れない。
+     * 案内役が主役でない時(?character=<id> で開いた時)は、主役も選べるように先頭に入れる
+     */
     list() {
-      return samples.map((s) => ({ id: s.id, name: s.name, sample: true, note: s.note }));
+      const g = lead();
+      const others = samples.filter((s) => s.id !== g?.id).map((s) => ({ id: s.id, name: s.name, sample: true, note: s.note }));
+      if (!g?.id || g.id === MAIN_CHARACTER.id) return others;
+      return [{ id: MAIN_CHARACTER.id, name: MAIN_CHARACTER.name, sample: true, note: MAIN_NOTE }, ...others];
     },
-    /** 主役(案内役)を、見本の子として出す時の形 */
+    /** 案内役を、見本の子として出す時の形 */
     main() {
-      return main?.id ? { id: main.id, name: main.name, sample: true, note: MAIN_NOTE, guide: true } : null;
+      const g = lead();
+      return g?.id ? { id: g.id, name: g.name, sample: true, note: leadNote(g), guide: true } : null;
     },
   };
 }
