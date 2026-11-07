@@ -54,7 +54,7 @@ export function progressText(step, { skipped = [], local = false } = {}) {
   const rest = STEPS.filter((s) => s.n >= Math.max(1, step) && !skipped.includes(s.n));
   const left = rest.filter((s) => s.n > step).length;
   const sec = rest.reduce((t, s) => t + STEP_SEC[s.n] + (local && s.n === 3 ? DRAW_SEC : 0), 0);
-  return { left, main: left ? `あと ${left} つで できあがり` : 'これで さいご!', time: `あと ${Math.max(1, Math.round(sec / 60))} 分くらい` };
+  return { left, main: left ? `あと ${left} ステップで できあがり` : 'これで さいご!', time: `あと ${Math.max(1, Math.round(sec / 60))} 分くらい` };
 }
 
 /**
@@ -341,6 +341,7 @@ export class FirstRun {
       return this._offerStart();
     }
     this.input = { from: 'picture', kind, url: p.url, name: clip(p.name, 40) };
+    const noun = kind === 'photo' ? '写真' : '絵'; // 撮った写真を「絵」と呼ばない
     // 選んだ絵は、札の上に出したままにする(会話の欄が流れても見える。司令塔の決め D3)。絵はこの端末の中だけ
     this.d.pin?.({ img: p.url, caption: kind === 'photo' ? '撮った写真' : '選んだ絵' });
     await this._say({ who: 'user', text: kind === 'photo' ? '(写真を撮った)' : '(絵を選んだ)', img: p.url });
@@ -348,7 +349,8 @@ export class FirstRun {
     if (this.d.creator.mode === 'sample') {
       await this._say(
         { who: 'guide', text: '絵の確かめ(ゆるキャラチェック)は、手元の PC で Claude がするんだ。この画面では、かわりに教えてね。' },
-        { who: 'guide', text: 'この絵は、どれに近い?' },
+        { who: 'guide', text: `この${noun}は、どれに近い?` },
+        { who: 'note', text: `この画面は、作ってある見本の子を出すだけで、${noun}は見ません。${noun}から新しい子を作るのは、手元の PC の Claude Code です。` },
       );
       return this._offer([
         { id: 'kind_yuru', label: 'ゆるキャラ・マスコット', primary: true },
@@ -356,7 +358,7 @@ export class FirstRun {
         { id: 'kind_complex', label: '景色・こまかい絵' },
       ]);
     }
-    await this._say({ who: 'guide', text: '絵を見てみるね。ちょっと待ってて。' });
+    await this._say({ who: 'guide', text: `${noun}を見てみるね。ちょっと待ってて。` });
     const result = await this.d.creator.check(this.input);
     return this._afterCheck(result);
   }
@@ -364,10 +366,12 @@ export class FirstRun {
   async _afterCheck(result) {
     this.check = { class: result?.class ?? 'complex', by: result?.by ?? 'claude', message: result?.message ?? '' };
     const sample = this.d.creator.mode === 'sample';
+    const noun = this.input?.kind === 'photo' ? '写真' : '絵';
     if (this.check.class === 'yuru') {
       if (sample) {
         // この画面では絵から作れない。「この絵から作るよ」とは言わず、正直に言う(_meet → 見本の道は絵に null → _noMatch)
-        await this._say({ who: 'guide', text: 'ゆるキャラにぴったりの絵だね。' });
+        // 絵は見ていない(この画面は見本を出すだけ)ので、ほめない。選んでくれた事だけ受け取る
+        await this._say({ who: 'guide', text: 'ゆるキャラなんだね。教えてくれてありがとう。' });
         return this._meet();
       }
       await this._say({ who: 'guide', text: 'ゆるキャラにぴったりの絵だね。この絵から作るよ。' });
@@ -385,13 +389,13 @@ export class FirstRun {
       );
       return this._offer([
         { id: 'yurufy', label: 'ゆるキャラにしてみる', primary: true },
-        { id: 'other', label: '別の絵にする' },
+        { id: 'other', label: `別の${noun}にする` },
       ]);
     }
     await this._say({ who: 'guide', text: 'いろんな物が描いてあるね。主役を 1 つ選んで、描き直してみる?' });
     return this._offer([
       { id: 'redraw', label: '主役を描き直してもらう', primary: true },
-      { id: 'other', label: '別の絵にする' },
+      { id: 'other', label: `別の${noun}にする` },
     ]);
   }
 
@@ -462,7 +466,7 @@ export class FirstRun {
       ...(main ? [{ id: 'use_guide', label: `${this.guideName}で続きを試す`, primary: true }] : []),
       { id: 'choose_sample', label: '見本の子から選ぶ', primary: !main },
       ...this._readmeAction(),
-      { id: 'again', label: picture ? '別の絵にする' : '言葉を変える' },
+      { id: 'again', label: picture ? `別の${this.input?.kind === 'photo' ? '写真' : '絵'}にする` : '言葉を変える' },
     ]);
   }
 
@@ -516,7 +520,7 @@ export class FirstRun {
     if (c?.sample || typeof this.d.creator.review !== 'function') {
       // 行き止まりにしない: ここで変えられる物(性格と話し方)と、形や色を直せる道(PC の Claude Code)を言う(D2)
       await this._say(
-        { who: 'guide', text: '見本の子の形や色は、この画面では直せないんだ。でも、性格と話し方は、次の歩みで変えられるよ。' },
+        { who: 'guide', text: '見本の子の形や色は、この画面では直せないんだ。でも、性格と話し方は、次のステップで変えられるよ。' },
         { who: 'note', text: '手元の PC の Claude Code で作った子なら、スマホの確かめる画面から「耳を大きく」のような一言で、形や色を直せます。' },
       );
       return this._offer([
@@ -707,7 +711,7 @@ export class FirstRun {
     const away = Boolean(c?.id) && c.id !== this.guide.id; // 舞台は案内役(主役)に戻る(D4)
     await this._say(
       { who: 'guide', text: '準備ができたよ。いっぱい話してあげてね。' },
-      away && c.local ? { who: 'note', text: `${c.name}の形(3D)は、PC の Claude Code が作っています。できるまでは、舞台は${this.guideName}のままです。` } : null,
+      away && c.local ? { who: 'note', text: `${c.name}の 3D は、まだ作っていません。PC の Claude Code で make-character のスキルを始めると作れます。それまでは、舞台は${this.guideName}のままです。` } : null,
       away && !c.local ? { who: 'note', text: `舞台は${this.guideName}に戻ります。${c.name}には、また「はじめての会話」から会えます。` } : null,
     );
     this.d.offer([]);
@@ -774,10 +778,10 @@ export class FirstRun {
         {
           const name = this.character?.name ?? 'この子';
           // 描いた絵は札の上に出したまま(枠を小さくして絵だけ見せる)。3D ができるまでは案内役が代わりに舞台に立つ(D5)
-          this.d.pin?.({ frame: this.d.creator.picUrl ?? null, caption: `${name}(PC の Claude Code が描いた絵。3D はこれから)` });
+          this.d.pin?.({ frame: this.d.creator.picUrl ?? null, caption: `${name}(PC の Claude Code が描いた絵。3D はまだ)` });
           await this._say(
             { who: 'guide', text: `${name}にけってい! OK を PC に伝えたよ。` },
-            { who: 'note', text: `形・色・骨・動き(3D)は、PC の Claude Code がこれから作ります(数十分かかります)。3D ができるまでは、${this.guideName}がかわりに舞台に立って、${name}の言葉を話します。${name}の姿は、上の絵です。` },
+            { who: 'note', text: `3D は、PC の Claude Code で make-character のスキルを始めると作れます(約 20 分。この画面からはまだ始まりません)。それまでは、${this.guideName}がかわりに舞台に立って、${name}の言葉を話します。${name}の姿は、上の絵です。` },
           );
         }
         // 作る画面で「おまかせ(ぜんぶ じどう)」を選んだ時は、性格から後もおすすめで決めて終わる

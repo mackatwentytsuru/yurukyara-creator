@@ -91,13 +91,16 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   const energyOut = el('output', { textContent: `${s.energy} ${ENERGY_LABELS[s.energy]}` });
   energyIn.addEventListener('input', () => update({ ...s, energy: Number(energyIn.value) }));
   const length = segmented('返事の長さ', LENGTH_ORDER.map((k) => [k, LENGTHS[k]]), s.length, (k) => update({ ...s, length: k }));
-  const voices = segmented('声の出し方', VOICE_ORDER.map((k) => [k, VOICES[k]]), s.voice.provider, (k) => update({ ...s, voice: { ...s.voice, provider: k } }), { className: 'yp-voices', withHint: true });
+  let roleResult = null;
+  const showRoleNote = (k) => { roleNote.textContent = voiceRoleNote(roleResult, k, s.voice.provider); };
+  const voices = segmented('声の出し方', VOICE_ORDER.map((k) => [k, VOICES[k]]), s.voice.provider, (k) => { update({ ...s, voice: { ...s.voice, provider: k } }); showRoleNote(s.voice.role); }, { className: 'yp-voices', withHint: true });
   const pitch = segmented('声の高さ', Object.entries(PITCHES), pitchKey(s), (k) => update({ ...s, voice: { ...s.voice, pitch: PITCHES[k].value } }));
   const rate = segmented('話す速さ', Object.entries(RATES), rateKey(s), (k) => update({ ...s, voice: { ...s.voice, rate: RATES[k].value } }));
   // 声の役(おまかせ = この子の役。11/7 第 11 波): 選ぶと、すぐ舞台の読み上げに渡す(試しの返事もその声)
   const role = segmented('声の役', VOICE_ROLE_ORDER.map((k) => [k, VOICE_ROLES[k]]), s.voice.role, (k) => {
     update({ ...s, voice: { ...s.voice, role: k } });
-    roleNote.textContent = voiceRoleNote(onVoiceRole?.(k) ?? null, k);
+    roleResult = onVoiceRole?.(k) ?? null;
+    showRoleNote(k);
   }, { className: 'yp-seg yp-roles' });
   const roleNote = el('p', { className: 'yp-note yp-role-note', ariaLive: 'polite' });
   const startRole = s.voice.role;
@@ -112,7 +115,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   // くじびき: 性格を くじで選び直す(画面は閉じない)。上の「おまかせ(ぜんぶ じどう)」と同じ名前にしない(押した後が違うので。11/7 S4w11d)
   const randomBtn = el('button', { type: 'button', className: 'yp-random', textContent: 'くじびき', title: '性格を くじで えらびなおします(この画面は とじません)' });
   const saveBtn = el('button', { type: 'button', className: 'yp-save', textContent: 'これにする' });
-  const cancelBtn = el('button', { type: 'button', className: 'yp-cancel', textContent: 'もどす' });
+  const cancelBtn = el('button', { type: 'button', className: 'yp-cancel', textContent: 'もどす(閉じる)' });
   // おまかせ(ぜんぶ じどう): この子のおすすめの性格と、声の役「おまかせ」で決めて、すぐ閉じる(本人 11/7。あとから変えられる)
   const autoBtn = el('button', { type: 'button', className: 'yp-auto', textContent: 'おまかせ(ぜんぶ じどう)' });
   const autoNote = el('p', { className: 'yp-note yp-auto-note', textContent: 'えらぶ所は 5 つ(性格・口調・元気さ・長さ・声)。ぜんぶ えらばなくても だいじょうぶ。おまかせなら 1 回で おわります(あとから いつでも かえられます)。' });
@@ -134,7 +137,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
       voices.box,
       el('div', { className: 'yp-sub' }, el('span', { textContent: '高さ' }), pitch.box),
       el('div', { className: 'yp-sub' }, el('span', { textContent: '速さ' }), rate.box),
-      el('div', { className: 'yp-sub yp-role' }, el('span', { textContent: '役' }), role.box),
+      el('div', { className: 'yp-sub yp-role' }, el('span', { textContent: '声の役' }), role.box),
       roleNote,
     ),
     el('details', {}, el('summary', { textContent: 'Claude に渡す文を見る' }), block),
@@ -217,7 +220,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   });
 
   sync();
-  roleNote.textContent = voiceRoleNote(onVoiceRole?.(s.voice.role) ?? null, s.voice.role);
+  roleResult = onVoiceRole?.(s.voice.role) ?? null;
+  showRoleNote(s.voice.role);
   parent.append(back);
   if (brain() === 'mock') runPreview();
   else note.textContent = '本物の頭脳です。「返事を試す」を押すと Claude に聞きます(1 回分の利用になります)。';

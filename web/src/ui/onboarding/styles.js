@@ -8,7 +8,7 @@ export const CSS = `
   font-family: var(--font, "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", Meiryo, system-ui, sans-serif); color: var(--fr-text); }
 .fr-sheet *, .yp-panel * { box-sizing: border-box; }
 .fr-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
-  max-height: min(80vh, max(58vh, 440px), 760px); width: 100%; background: rgba(23, 20, 38, 0.94);
+  max-height: min(80vh, max(58vh, 440px), 760px); width: 100%; background: #171426; /* 不透明(WebKit で後ろの文字が透けた。P1) */
   border: 1px solid var(--fr-line); border-bottom: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,0.45);
   padding-bottom: env(safe-area-inset-bottom, 0px); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 /* スマホ: 札は画面の 58%(最低 440px)まで。上の段と札の間に、案内役(主役)の顔が見えるように(CRITux 16。1 歩目は 72% を覆っていた) */
@@ -109,8 +109,9 @@ export const CSS = `
   .fr-pin-img { width: 88px; height: 88px; }
   .fr-pin-frame, .fr-pin-frame .fr-frame { width: 120px; height: 120px; }
   /* 作る画面の枠は、札の高さの中に収める(1280×720 でも「直したい」まで見えるように。作る画面は横に並べる。CRITux 22) */
-  .fr-sheet[data-actions="frame"] .fr-log { min-height: 64px; }
-  .fr-actions .fr-frame { height: clamp(220px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 250px), 400px); }
+  .fr-sheet[data-actions="frame"] .fr-log { min-height: 56px; }
+  .fr-sheet[data-actions="frame"] .fr-head { padding-bottom: 6px; }
+  .fr-actions .fr-frame { height: clamp(220px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 232px), 420px); }
   .fr-actions { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
   .fr-actions > .fr-field, .fr-actions > form, .fr-actions > .fr-wide { grid-column: 1 / -1; }
   .fr-steps li b { font-size: 11px; }
@@ -132,6 +133,55 @@ export const CSS = `
     max-height: min(760px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 24px)); }
   @supports (height: 1dvh) { .fr-sheet, .fr-sheet[data-step], .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] {
     max-height: min(760px, calc(100dvh - var(--top-h, 64px) - var(--bottom-h, 0px) - 24px)); } }
+}
+
+/* PC の背の低い窓(高さ 800px まで。1280×720 など)で作る画面の枠を出している間: 7 つの丸の下の名前を畳み、会話の欄を 1 行ぶんにして、
+   枠(眉の札・この子にする・直したい・よく頼む直し・別の子に・おまかせ)を巻かずに見せる(第 12 波。眉の札の下で、よく頼む直しとおまかせが隠れていた) */
+@media (min-width: 720px) and (max-height: 800px) {
+  .fr-sheet[data-actions="frame"], .fr-sheet[data-actions="frame"][data-step] {
+    max-height: min(760px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 24px)); }
+  .fr-sheet[data-actions="frame"] .fr-steps li b { display: none; }
+  .fr-sheet[data-actions="frame"] .fr-log { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
+  .fr-actions .fr-frame { height: clamp(220px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 158px), 440px); }
+}
+/* スマホ・iPad の縦(幅 911px まで。PC の右の札を置く余地が無い幅): 札は画面の下いっぱいで、高さは画面の 45% まで(第 12 波。
+   7 つのステップの札が見本の子を隠した: 390×664 で 98%・iPhone 15 で 75%・iPad 縦で 68%)。収まらない分は、会話の欄を最小 72px まで縮め、
+   選ぶ所が札の中で巻けるようにする(選ぶ所を消さない)。7 つのステップは丸だけを並べ、今のステップだけ名前を文字で出す(名前 10px をやめる)。
+   選ぶ所は 2 列。作る画面の枠(data-actions="frame")は PC 用なので、この形にしない */
+@media (max-width: 911px) {
+  .fr-sheet:not([data-actions="frame"]), .fr-sheet[data-step]:not([data-actions="frame"]) {
+    left: 0; right: 0; bottom: 0; width: 100%; border-radius: 22px 22px 0 0; border-bottom: 0;
+    max-height: 45vh; display: flex; flex-direction: column; overflow: hidden; }
+  @supports (height: 1dvh) { .fr-sheet:not([data-actions="frame"]), .fr-sheet[data-step]:not([data-actions="frame"]) { max-height: 45dvh; } }
+  .fr-sheet:not([data-actions="frame"]) .fr-head, .fr-sheet:not([data-actions="frame"]) .fr-pin { flex: none; }
+  .fr-sheet:not([data-actions="frame"]) .fr-head { padding: 6px 12px 4px; gap: 4px; }
+  .fr-sheet:not([data-actions="frame"]) .fr-title h2 { font-size: 15px; }
+  .fr-sheet:not([data-actions="frame"]) .fr-steps { display: flex; align-items: center; gap: 4px; }
+  .fr-sheet:not([data-actions="frame"]) .fr-steps li { display: flex; flex: none; align-items: center; gap: 6px; }
+  .fr-sheet:not([data-actions="frame"]) .fr-steps li span { width: 22px; height: 22px; font-size: 12px; }
+  .fr-sheet:not([data-actions="frame"]) .fr-steps li.now { flex: 1 1 auto; min-width: 0; }
+  .fr-sheet:not([data-actions="frame"]) .fr-steps li.now b { font-size: 14px; font-weight: 700; line-height: 1.4; }
+  .fr-sheet:not([data-actions="frame"]) .fr-steps li:not(.now) b { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fr-sheet:not([data-actions="frame"]) .fr-log { flex: 1 1 auto; min-height: 72px; padding: 8px 12px; gap: 8px; }
+  .fr-sheet:not([data-actions="frame"]) .fr-actions { flex: 0 0.001 auto; overflow-y: auto; overscroll-behavior: contain; min-height: 56px; padding: 6px 12px 8px; gap: 6px;
+    grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fr-sheet:where(:not([data-actions="frame"])) .fr-actions > .fr-wide, .fr-sheet:where(:not([data-actions="frame"])) .fr-actions > form { grid-column: 1 / -1; }
+  /* 言葉の欄の名前と「0 / 60」は、札を低くするため見た目だけ隠す(入力欄の名前は aria-label に残る。字数をこえた時だけ「N / 60」を出す) */
+  .fr-sheet:not([data-actions="frame"]) .fr-field-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fr-sheet:not([data-actions="frame"]) .fr-count:not(.over) { display: none; }
+  .fr-sheet:not([data-actions="frame"]) .fr-btn { min-height: 44px; padding: 6px 10px; }
+  .fr-sheet:not([data-actions="frame"]) .fr-pin { padding: 4px 12px; }
+  /* 選んだ絵を札の上に出している間は、丸の段を畳む(絵の欄の分、会話の欄を残す。進み具合は「あと N ステップ」で分かる) */
+  .fr-sheet[data-pin]:not([data-actions="frame"]) .fr-steps { display: none; }
+  .fr-sheet:not([data-actions="frame"]) .fr-pin-img { width: 44px; height: 44px; }
+  /* 札が開いている間は、後ろの知らせ(仮の頭脳です・カメラの説明)を隠す。札と重なって見えていた(WebKit) */
+  html.fr-open #brainNotice, html.fr-open #privacy { visibility: hidden; }
+}
+/* 背の低いスマホ(高さ 700px まで。Safari の帯があると 664px): 7 つの丸の段を畳み(進み具合は上の「あと N ステップ」で分かる)、
+   最初の一言(3 行)が入る欄の高さを守る。札は 45% のまま、選ぶ所が巻ける */
+@media (max-width: 911px) and (max-height: 700px) {
+  .fr-sheet:not([data-actions="frame"]) .fr-steps { display: none; }
+  .fr-sheet:not([data-actions="frame"]) .fr-log { min-height: 130px; }
 }
 
 /* 性格の画面 */
@@ -166,7 +216,7 @@ export const CSS = `
 .yp-ending[hidden] { display: none; }
 .yp-energy-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 0; }
 .yp-energy-head output { font-size: 14px; font-weight: 500; color: var(--fr-lav); }
-.yp-energy input { display: block; width: 100%; min-height: 36px; margin: 0; accent-color: #9b7dff; }
+.yp-energy input { display: block; width: 100%; min-height: 44px; margin: 0; accent-color: #9b7dff; }
 .yp-voices { display: grid; gap: 6px; }
 .yp-voices .yp-choice { min-height: 48px; }
 .yp-sub { display: grid; grid-template-columns: 4.5em minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; color: var(--fr-muted); }

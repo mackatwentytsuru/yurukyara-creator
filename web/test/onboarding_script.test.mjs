@@ -318,7 +318,7 @@ test('D2: 見本の「直したい」は行き止まりにしない(ここで変
   await h.fr.start();
   await h.fr.act('words', { text: '赤い提灯の子' });
   await h.fr.act('fix');
-  assert.ok(h.texts('guide').some((t) => t.includes('性格と話し方は、次の歩みで変えられる')));
+  assert.ok(h.texts('guide').some((t) => t.includes('性格と話し方は、次のステップで変えられる')));
   assert.ok(h.texts('note').some((t) => t.includes('手元の PC の Claude Code で作った子なら')));
   assert.deepEqual(h.offered, ['keep', 'readme', 'again']);
   assert.equal(h.offeredAll[0].label, 'この子で性格を決める');
@@ -338,9 +338,12 @@ test('D3: 選んだ絵は札に出したまま。やり直すと消す', async (
   assert.deepEqual(h.pins.at(-1), { img: 'blob:p1', caption: '撮った写真' });
   await h.fr.act('kind_yuru');
   assert.equal(h.fr.character, null);
-  assert.ok(h.texts('guide').includes('ゆるキャラにぴったりの絵だね。'));
+  assert.ok(!h.texts('guide').some((t) => t.includes('ぴったりの絵')), '絵を見ていないので、ほめない(P1)');
+  assert.ok(h.texts('guide').includes('ゆるキャラなんだね。教えてくれてありがとう。'));
   assert.ok(!h.texts('guide').some((t) => t.includes('この絵から作るよ')), '見本の道では「この絵から作るよ」と言わない');
-  assert.equal(h.offeredAll.find((a) => a.id === 'again').label, '別の絵にする');
+  assert.ok(h.texts('note').some((t) => t.includes('写真は見ません')), '見る前に、見ないと正直に言う(撮った写真を絵と呼ばない)');
+  assert.ok(h.texts('guide').includes('この写真は、どれに近い?'));
+  assert.equal(h.offeredAll.find((a) => a.id === 'again').label, '別の写真にする');
   await h.fr.act('again');
   assert.equal(h.pins.at(-1), null);
   assert.equal(h.fr.step, 1);
