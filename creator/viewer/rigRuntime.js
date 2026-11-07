@@ -276,7 +276,9 @@ export async function loadRigCharacter(url, options = {}) {
   c.topPoints = topPoints.length ? topPoints : null; // 止まった形のいちばん上の点(キャラの座標)
   // B5G: 仕草の層の弾み(根元が上へ CUTE_RISE まで)と、首をかしげた時に耳が上へ出る分も、頭の上の余白に入れる
   if (Number.isFinite(c.motionRise)) {
-    c.cuteRise = CUTE_RISE + cuteTiltRise(topPoints, c.cuteRig.head, gltf.scene);
+    // 弾みと首かしげが重なるのは、うれしい(弾み 3.3% + かしげ 0.14 ラジアン ≒ 耳の上がりの半分)くらいまで。和でなく、この形で見込む(余白を取りすぎると、キャラが小さく遠くに写る)
+    const tilt = cuteTiltRise(topPoints, c.cuteRig.head, gltf.scene);
+    c.cuteRise = Math.max(CUTE_RISE + 0.5 * tilt, tilt);
     c.motionRise += c.cuteRise;
   }
   c.motionRiseMs = Math.round(performance.now() - t0); // 測るのにかかった時間(確かめ用)
