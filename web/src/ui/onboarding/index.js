@@ -90,10 +90,12 @@ export function readLocalMake({ loc = globalThis.location, session = null, histo
 }
 
 /**
- * 日本語の README(README.ja.md)の作り方の節の見出しから、GitHub が付ける節の印(# の後ろ)。
- * 見出しの文字は script.js の README_SECTION(S6 の README.ja.md の見出しと同じ。試験 onboarding_readme_ja が見る)
+ * 日本語の README の作り方の節の見出しから、GitHub が付ける節の印(# の後ろ)。
+ * 日本語の README は、第 9 波から README.md(S6。英語は README.en.md。前は README.ja.md)。
+ * 見出しの文字は script.js の README_SECTION(S6 の README.md の見出しと同じ。試験 onboarding_readme_ja が見る)。
+ * 名前の README_JA_FILE・README_JA_ANCHOR は前のまま(S6 の節の印の点検の道具が読む)
  */
-export const README_JA_FILE = 'README.ja.md';
+export const README_JA_FILE = 'README.md';
 export const README_JA_ANCHOR = githubSlug(README_SECTION);
 
 /** GitHub の見出しの印の作り方(英字は小文字・記号を消す・空白は「-」。日本語の字はそのまま) */
@@ -109,7 +111,7 @@ export function githubSlug(heading) {
  * README の作り方の節(index.html の <link rel="help">)。画面のコードには外の住所を書かない(privacy の試験)ので、頁から読む。
  * 画面は日本語だけ(Q-0092 A)なので、日本語の README の節を開く(CRITux2 低 12):
  *   ① 頁に <link rel="help" hreflang="ja"> があれば、それ(S5 の index.html。印は S6 と合わせる)
- *   ② 無ければ、<link rel="help"> がリポジトリの入口(GitHub の /<持ち主>/<名前>)の時、同じリポジトリの README.ja.md の節にする
+ *   ② 無ければ、<link rel="help"> がリポジトリの入口(GitHub の /<持ち主>/<名前>)の時、同じリポジトリの README.md(日本語)の節にする
  *   ③ それも無理なら、<link rel="help"> のまま
  */
 export function readGuideUrl(doc = globalThis.document) {
