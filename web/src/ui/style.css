@@ -201,7 +201,7 @@ html.tv-mode .ai-notice { font-size: max(12px, 1.6vh); opacity: 0.85; }
 html.kb-open .ai-notice { display: none; }
 html.fr-open .ai-notice {
   position: fixed; z-index: 31; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left));
-  max-width: calc(100vw - 196px); padding: 5px 10px; border-radius: 999px; background: rgba(12, 10, 22, 0.62); text-align: left;
+  max-width: calc(100vw - 180px); padding: 5px 10px; border-radius: 999px; background: rgba(12, 10, 22, 0.62); text-align: left; font-size: 12px; letter-spacing: 0;
 }
 .gate-ai { margin: -2px 0 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
 /* 入口の札が画面より高い時(はじめての訪問の 1 行も出る低い画面)は、札を巻いて読める(上も下も切らない) */
