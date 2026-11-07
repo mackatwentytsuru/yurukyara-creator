@@ -75,8 +75,13 @@ const shot = async (page, name) => {
 };
 const settle = (page, ms = 1500) => page.waitForTimeout(ms);
 /** 文字送りを飛ばして、選ぶ所が出るまで待つ */
-async function ready(page) {
+async function ready(page, { role = true } = {}) {
   await page.waitForSelector('.fr-actions > *', { timeout: 20000 });
+  // 1 つ目のステップは「この子は、どこで だれと?」(B4 12b)。役目を選んで、ことばの欄のある見え方にする
+  if (role && (await page.$('.fr-actions [data-act="role_home"]'))) {
+    await page.click('.fr-actions [data-act="role_home"]');
+    await page.waitForSelector('.fr-actions [data-act="words"]', { timeout: 20000 });
+  }
   await page.click('.fr-log').catch(() => {});
   await settle(page, 400);
 }
@@ -192,7 +197,8 @@ test('おまかせで最後まで: 札は自動で閉じず、決めたことと
     await settle(page, 2500); // 昔は 1.6 秒で閉じていた
     assert.equal(await page.locator('.fr-sheet').count(), 1, '自動では閉じない');
     const text = await page.locator('.fr-log').innerText();
-    assert.match(text, /きめたこと: ノリー・性格「/);
+    assert.match(text, /おまかせで えらんだのは、.+!/, 'おまかせは別の子を本当に出す(UIR 4)');
+    assert.match(text, /は、.+ 話す 子に したよ。/);
     await shot(page, 'qf4_done_summary');
     await page.click('.fr-actions [data-act="begin"]');
     await page.waitForFunction(() => window.__closed?.reason === 'done');

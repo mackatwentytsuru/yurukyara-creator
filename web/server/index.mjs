@@ -16,6 +16,7 @@ import { warmFirstVisit } from './ttsWarm.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
 import { createLimiter } from './limits.mjs';
+import { createDrawer } from './draw.mjs'; // B4(12b): ブラウザから描く。既定は切ってある(YC_BROWSER_DRAW=1 の時だけ)
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
 import { CAMERA_CAP_NOTICE, IMAGE_LIMITS, cameraImageCap } from './camera.mjs'; // BCV: カメラの絵(大きさの決まり・1 日の枚数)
@@ -50,6 +51,8 @@ const memory = createMemoryStore({ backend: fileBackend(config.memoryDir), peppe
 const memoryLimiter = createLimiter({ file: join(LOG_DIR, 'memory_usage.json'), dailyCap: 2000, perMinute: 10 });
 
 const stt = createStt();
+// B4(12b): ブラウザから描く係(切ってある時は /api/draw が 404、/api/status の draw.on が false)
+const drawer = createDrawer({ config, root: REPO_ROOT, usageFile: join(LOG_DIR, 'draw_usage.json') });
 const sttLimiter = createLimiter({ file: join(LOG_DIR, 'stt_usage.json'), dailyCap: 3000, perMinute: 40 });
 stt.check().then((ok) => console.log(`聞き取り(サーバー): ${ok ? 'faster-whisper' : 'なし(pip install faster-whisper で使えます)'}`));
 
@@ -254,6 +257,7 @@ const handler = async (req, res) => {
         tts: ttsStatus(),
         stt: stt.status(),
         claude: claudeLimiter.status(),
+        draw: drawer.status(), // B4(12b)
         latency: latencySummary(),
       });
     }
@@ -271,6 +275,12 @@ const handler = async (req, res) => {
       return json(res, 404, { error: '見つかりません' });
     }
     if (req.method === 'POST' && path === '/api/chat') return await handleChat(req, res);
+    // B4(12b): ブラウザから描く(既定は切ってある)。絵は base64 で 6MB まで
+    if (req.method === 'POST' && path === '/api/draw') {
+      if (!drawer.status().on) return json(res, 404, { error: 'この設定では、ブラウザから描けません' });
+      const r = await drawer.draw(await readBody(req, 6 * 1024 * 1024), req.socket.remoteAddress ?? 'unknown');
+      return json(res, r.status, r.json);
+    }
     if (req.method === 'POST' && path === '/api/tts') {
       const body = await readBody(req);
       const ac = new AbortController();

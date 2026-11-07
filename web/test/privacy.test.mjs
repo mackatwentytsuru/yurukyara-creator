@@ -73,8 +73,9 @@ test('カメラの追従(tracking/)は、通信をいっさいしない', () => 
 test('通信先は、自分のサーバー(/api/…)と、キャラ・場所のデータだけ', () => {
   // gaze/now は、入口の LED のページが床のカメラの「向きの数字」を読むだけの GET(本文を送らない)
   // memory・memory/new・pair・claim は、端末をまたぐ記憶(合鍵はヘッダーで送り、URL に入れない)
+  // draw は、ブラウザから描く設定(サーバーの YC_BROWSER_DRAW=1。既定は切ってある)の時だけ使う(B4 12b)
   // update・update/… は、この PC の中で開いた画面のアップデート(BUX。手元のサーバーが localhost からだけ受ける。送るのはキャラの id と押したボタンだけ)
-  const allowed = [/^\/api\/(chat|tts|stt|stt\/warm|metrics|status|fillers|gaze\/now|memory|memory\/new|memory\/pair|memory\/claim|update|update\/(check|apply|undo|progress|offer))$/, /^\/mediapipe\//];
+  const allowed = [/^\/api\/(chat|tts|stt|stt\/warm|metrics|status|fillers|gaze\/now|memory|memory\/new|memory\/pair|memory\/claim|draw|update|update\/(check|apply|undo|progress|offer))$/, /^\/mediapipe\//];
   for (const f of files) {
     for (const m of code(f).matchAll(/fetch\(\s*(['"`])([^'"`]*)\1/g)) {
       const url = m[2];

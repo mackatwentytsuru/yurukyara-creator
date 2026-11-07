@@ -8,6 +8,7 @@
 // v1 で覚えた設定は読まない(覚える場所の名前を替えた)。次に開いた時、v2 のおまかせで選び直す
 import { VOICE_ROLES, normalizeVoiceRole } from './voiceChoice.js';
 
+import { DEFAULT_ROLE, PLACE_MAX, ROLE_LABELS, normalizeRole, placeLine } from '../onboarding/roles.js';
 export const SETTINGS_VERSION = 2;
 export const STORE_PREFIX = 'yc.persona.v2.'; // + キャラの id(この端末の中だけ)
 
@@ -147,7 +148,7 @@ export function cleanEnding(raw) {
 }
 
 export function defaults() {
-  return { v: SETTINGS_VERSION, preset: 'calm', tone: 'friendly', ending: '', energy: PRESETS.calm.energy, length: 'normal', voice: { provider: 'none', pitch: 1.0, rate: 1.0, role: 'auto' } };
+  return { v: SETTINGS_VERSION, preset: 'calm', tone: 'friendly', ending: '', energy: PRESETS.calm.energy, length: 'normal', voice: { provider: 'none', pitch: 1.0, rate: 1.0, role: 'auto' }, role: DEFAULT_ROLE };
 }
 
 /** 足りない欄を埋め、知らない値を直した、新しい設定を返す(元は変えない) */
@@ -175,8 +176,12 @@ export function normalize(input) {
       rate: nearest(RATES, v.rate, 'mid'),
       role: normalizeVoiceRole(v.role), // 声の役(おまかせ = その子の役)。知らない値は おまかせ
     },
+    // 役目(この子は、どこで だれと。B4 12b)。知らない値は おうち。お店・駅は置く場所の名前と案内することを残す(30 字まで)
+    role: normalizeRole(s.role),
+    ...(placeLine(s.place) ? { place: { name: clipPlace(s.place?.name), about: clipPlace(s.place?.about) } } : {}),
   };
 }
+const clipPlace = (v) => [...String(v ?? '').trim()].slice(0, PLACE_MAX).join('');
 
 /**
  * おまかせ(初めの性格)。rnd は 0〜1 を返す関数。声の出し方は選ばない(鍵が要るので、使う人が決める)。
@@ -288,6 +293,9 @@ export function personaBlock(settings) {
     `- 口調: ${tone}`,
     `- 元気さ: 5 段階の ${s.energy}(${ENERGY_LABELS[s.energy]})。1 はとても静か、5 はとても元気。`,
     `- 返事の長さ: ${LENGTHS[s.length].text}。`,
+    // 役目の行(会話の側 B3 がこの 1 行を読む。言葉は roles.js の ROLE_LABELS)。置く場所はお店・駅などで書いた時だけ
+    `- 役目: ${ROLE_LABELS[s.role]}`,
+    ...(s.place ? [`- 置く場所: ${placeLine(s.place)}`] : []),
   ].join('\n');
 }
 

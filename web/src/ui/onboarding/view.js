@@ -26,6 +26,8 @@ const PREFETCH_MAX = 4; // 1 回の台本で前もって声を取る吹き出し
 export const BUBBLE_CHARS = 34;
 /** すぐに押せる札は、この段数まで(越える時は 2 段のまま横に巻く) */
 export const CHIP_ROWS = 2;
+/** 絵つきの札(見本の子・形・しつかん)の時の段の数 */
+export const CARD_ROWS = 3;
 const KB_MIN = 80; // これより小さい見える範囲の差は、アドレスバーの出入り
 
 /**
@@ -87,7 +89,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     steps.append(li);
     return li;
   });
-  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで', ariaLabel: 'あとで(はじめての会話をとじる)' });
+  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで', ariaLabel: 'あとで(あたらしい子を つくるを とじる)' });
   const leftMain = el('b');
   const leftTime = el('span');
   const left = el('p', { className: 'fr-left', ariaLive: 'polite' }, leftMain, leftTime);
@@ -103,8 +105,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   const actions = el('div', { className: 'fr-actions' }, chips, fieldRow);
   const sheet = el(
     'section',
-    { className: 'fr-sheet', role: 'dialog', ariaLabel: 'はじめての会話' },
-    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, pinBox, el('h2', { textContent: 'はじめての会話' }), left, closeBtn), bar, steps),
+    { className: 'fr-sheet', role: 'dialog', ariaLabel: 'あたらしい子を つくる' },
+    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, pinBox, el('h2', { textContent: 'あたらしい子を つくる' }), left, closeBtn), bar, steps),
     log,
     live,
     actions,
@@ -120,7 +122,9 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     if (closed) return;
     chips.classList.remove('fr-chips-scroll');
     const tops = new Set([...chips.children].filter((c) => c.offsetParent !== null).map((c) => Math.round(c.offsetTop)));
-    if (tops.size > CHIP_ROWS) chips.classList.add('fr-chips-scroll');
+    // 見本の子の絵つきの札は、折り返して全部見せる(UIR 10。3 段まで)。ほかは 2 段まで(越えたら、2 段のまま横に巻く)
+    const rows = chips.querySelector('.fr-card') || chips.querySelector('[data-act="role_auto"]') ? CARD_ROWS : CHIP_ROWS; // 役目の札(5 つ)も折り返して全部見せる(B4 直し)
+    if (tops.size > rows) chips.classList.add('fr-chips-scroll');
   }
   globalThis.addEventListener?.('resize', fitChips);
 
@@ -271,8 +275,15 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
       const parts = splitBubbles(line.text);
       for (let i = 0; i < parts.length; i++) {
         if (i) await pause(BUBBLE_GAP_MS);
-        const { text } = row('note', guideName);
+        const { bubble, text } = row('note', guideName);
         text.textContent = parts[i];
+        // 見本の子の小さな絵(data: の SVG だけ。B4 12b・UIR 10)
+        if (i === parts.length - 1 && line.img && /^data:image\/svg\+xml/.test(line.img)) {
+          const img = el('img', { className: 'fr-pic fr-pic-small', alt: '見本の子の絵' });
+          img.src = line.img;
+          img.addEventListener('load', scroll, { once: true });
+          bubble.append(img);
+        }
       }
       live.textContent = line.text;
       scroll();
@@ -282,7 +293,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
       const { bubble, text } = row('user', '');
       text.textContent = line.text;
       if (line.img) {
-        const img = el('img', { className: 'fr-pic', alt: '選んだ絵' });
+        const img = el('img', { className: `fr-pic${/^data:image\/svg\+xml/.test(line.img) ? ' fr-pic-small' : ''}`, alt: line.who === 'user' ? '選んだ絵' : '見本の子の絵' });
         img.src = line.img;
         img.addEventListener('load', scroll, { once: true });
         bubble.append(img);
@@ -415,7 +426,13 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   }
 
   function chipButton(a) {
-    const b = el('button', { type: 'button', className: `fr-btn fr-chip${a.primary ? ' primary' : ''}${a.id === 'again' ? ' fr-again' : ''}`, textContent: a.label, ariaLabel: a.aria ?? a.label });
+    const b = el('button', { type: 'button', className: `fr-btn fr-chip${a.primary ? ' primary' : ''}${a.id === 'again' ? ' fr-again' : ''}${a.img ? ' fr-card' : ''}`, textContent: a.label, ariaLabel: a.aria ?? a.label });
+    // 小さな絵つきの札(見本の子の顔・ゆるキャラの形・しつかんの見本。B4 12b)。絵は data: の URL だけ(外の住所は使わない)
+    if (a.img && /^data:image\/svg\+xml/.test(a.img)) {
+      const pic = el('img', { className: 'fr-card-img', alt: '' });
+      pic.src = a.img;
+      b.prepend(pic);
+    }
     b.dataset.act = a.id;
     b.addEventListener('click', () => {
       voice.unlock();
@@ -444,7 +461,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
       }
       const url = URL.createObjectURL(f); // この端末の中だけの、絵の仮の住所(外には送らない)
       urls.add(url);
-      onAct(a.id, { url, name: f.name });
+      onAct(a.id, { url, name: f.name, file: f }); // file はブラウザから描く設定の時だけ、作る道が使う(切ってある時は使わない)
     });
     return label;
   }
@@ -551,7 +568,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
    * 出さない時: 選びが無い・最後の「はじめる」だけ・手元の PC の作る画面(枠の中に、作る画面のおまかせがある)
    */
   function autoChip(list) {
-    if (!onAuto || !list.length || list.every((a) => a.id === 'close' || a.id === 'begin') || list.some((a) => a.kind === 'frame')) return null;
+    // noAuto: その歩みに、自分の「おまかせ」の札がある(役目・ゆるキャラの形。おまかせが 2 つ並ばないように)
+    if (!onAuto || !list.length || list.every((a) => a.id === 'close' || a.id === 'begin') || list.some((a) => a.kind === 'frame' || a.noAuto)) return null;
     const b = el('button', { type: 'button', className: 'fr-btn fr-chip fr-auto', textContent: OMAKASE_CHIP });
     b.dataset.act = 'omakase';
     b.setAttribute('aria-label', `${OMAKASE_LABEL}。のこりを ぜんぶ おすすめで きめて、さいごまで すすみます`);

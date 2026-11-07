@@ -1467,7 +1467,7 @@ async function boot() {
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
   fillGate(); // 入口の文(声があるか・初めての訪問か・指かマウスか)は、状態を読んだ後に決める
-  $('camSub').textContent = 'キャラがあなたの方を見ます'; // index.html では「読み込んでいます…」で押せない(遅い回線で、押せそうで押せない時間を作らない。P1 中)
+  $('camSub').textContent = 'キャラがあなたの方を見ます。顔は保存しません'; // B4(12b): カメラの札に「顔は保存しません」(UIR 22) // index.html では「読み込んでいます…」で押せない(遅い回線で、押せそうで押せない時間を作らない。P1 中)
   buttons.forEach((b) => (b.disabled = false));
   // ?perf=1: いまの重さを測る(L0。数字は window.__perf。測りの部品は、このときだけ読む)
   if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt, tier: app.tier, firstFrameAt: () => app.firstFrameAt, loopStartAt }));

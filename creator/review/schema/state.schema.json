@@ -42,7 +42,12 @@
             "message": { "type": "string", "maxLength": 120 }, "by": { "enum": ["claude", "pixels"] } } },
         "choice": { "enum": [null, "yurufy", "redraw"] },
         "notice": { "type": ["string", "null"], "maxLength": 120 },
-        "updated_at": { "type": "string" }
+        "updated_at": { "type": "string" },
+        "twod": { "enum": [null, "ready", "failed"], "description": "「この子にする」の後に組む動く 2D(characters/<id>/2d)。B4 12b" },
+        "convert": { "type": ["object", "null"], "required": ["status", "round"], "additionalProperties": false,
+          "description": "3D 用のゆるキャラ変換の絵の進み(Claude の側が書く)。B4 12b",
+          "properties": { "status": { "enum": ["queued", "drawing", "drawn", "ok", "failed"] }, "round": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "shape": { "enum": ["atama", "maru"] }, "material": { "enum": ["fabric", "fur", "vinyl"] } } }
       } }
   },
   "$defs": {

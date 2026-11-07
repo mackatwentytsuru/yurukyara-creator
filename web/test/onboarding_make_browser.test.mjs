@@ -19,6 +19,8 @@ const SRC = join(WEB, 'src');
 const SHOTS = process.env.FR_SHOTS_DIR || '';
 const PY = process.env.PYTHON || 'python';
 const SLOW = process.env.YC_BROWSER_TESTS === '1' ? false : '画面なしの Chrome の試験は YC_BROWSER_TESTS=1 のときだけ(編集ごとの試験を 30 秒未満にするため。合わせの門で流す)';
+/** 画面のエラー(試験の作業場所に置いた 2D の子の character.json は、会話の画面のサーバーから読めず 404。書き込みの間の 429 は作る画面が送り直す。この 2 つだけ除く) */
+const realErrors = (errors) => errors.filter((e) => !/Failed to load resource: the server responded with a status of (404|429)/.test(e)); // 429 は作る画面が 1 回だけ送り直す
 const HAS_PY = !SLOW && spawnSync(PY, ['-c', 'import PIL'], { windowsHide: true }).status === 0;
 const PICTURE = join(ROOT, 'creator', 'samples', 'mikan_元の絵.png');
 
@@ -165,6 +167,9 @@ const placeholderRoom = (frame, id) =>
     return { need: Math.ceil(need), room: Math.floor(room), width: Math.round(inp.getBoundingClientRect().width), text: inp.placeholder };
   }, id);
 async function frameOf(page) {
+  // 1 つ目のステップは「この子は、どこで だれと?」(B4 12b)。役目を選ぶと作る画面の枠が出る
+  const role = await page.waitForSelector('.fr-actions [data-act="role_home"], iframe.fr-frame', { timeout: 15_000 });
+  if ((await role.getAttribute('data-act')) === 'role_home') await role.click();
   await page.waitForSelector('iframe.fr-frame', { timeout: 15_000 });
   const handle = await page.$('iframe.fr-frame');
   const frame = await handle.contentFrame();
@@ -246,10 +251,10 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       await shot(page, 'make390_3_c0_r2');
 
       await frame.click('#okBtn');
-      await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
+      await page.waitForSelector('.fr-actions [data-act="keep"]', { timeout: 15_000 });
       assert.equal(await page.$('.fr-actions iframe.fr-frame'), null, '決めたら作る画面の枠を閉じる');
-      assert.match(await logText(page), /けってい! パソコンに つたえたよ/);
-      assert.match(await logText(page), /それまでは、ノリーが かわりに 舞台に立って/, '主役が代わりに立つと言う(D5)');
+      assert.match(await logText(page), /けってい!/);
+      assert.match(await logText(page), /うごく 2D に して 舞台に 出すよ/, 'この子にするの直後に 2D(B4 12b)');
       assert.doesNotMatch(await logText(page), /段 \d|C0/, '札に内部の言葉(段 0・C0)を出さない(D7)');
       // 描いた絵は、札の上の小さな枠(絵だけ)に出したまま。話している間も見える(D5)
       const pic = await page.waitForSelector('.fr-pin iframe.fr-frame', { timeout: 10_000 });
@@ -257,13 +262,46 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       const picFrame = await pic.contentFrame();
       await picFrame.waitForFunction(() => (document.getElementById('donePic')?.naturalWidth ?? 0) > 0, null, { timeout: 15_000 });
       assert.equal(await picFrame.$eval('#okBtn', (e) => e.offsetParent === null), true, '絵だけの枠にボタンを出さない');
-      assert.match(await page.$eval('.fr-pin-cap', (e) => e.textContent), /パソコンの Claude Code が描いた絵。3D はまだ/);
+      assert.match(await page.$eval('.fr-pin-cap', (e) => e.textContent), /パソコンの Claude Code が描いた絵/);
       const box = await page.$eval('.fr-pin', (e) => e.getBoundingClientRect().height);
       assert.ok(box > 0 && box < 140, `絵の欄は小さく ${box}`);
       await shot(page, 'make390_4_persona');
       const pc3 = await pcNext(work, '--fake-draw');
       assert.equal(pc3.did, 'claimed_ok', JSON.stringify(pc3));
-      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      assert.equal(pc3.twod?.ok, true, '受け取りと同時に動く 2D を組む');
+      // 2D ができた知らせ(絵だけの枠から)→ 3D にもする?(B4 12b)
+      await page.waitForSelector('.fr-actions [data-act="want3d"]', { timeout: 20_000 });
+      assert.match(await logText(page), /3D にもする\?/);
+      // 札の大きさは fits(枠)と 44px の試験(onboarding_browser)が見る
+      await shot(page, 'make390_5_ask3d');
+      await page.click('.fr-actions [data-act="want3d"]');
+      await page.waitForSelector('.fr-actions [data-act="cs_atama"]');
+      assert.match(await logText(page), /もとの えと まったく おなじには ならないよ/);
+      const shapeCards = await page.$$eval('.fr-actions .fr-card', (els) => els.map((e) => ({ act: e.dataset.act, h: e.getBoundingClientRect().height, img: Boolean(e.querySelector('img')) })));
+      assert.deepEqual(shapeCards.map((c) => c.act), ['cs_atama', 'cs_maru'], '形は見本の絵つきの札');
+      assert.ok(shapeCards.every((c) => c.img && c.h >= 44));
+      await shot(page, 'make390_6_shape');
+      await page.click('.fr-actions [data-act="cs_atama"]');
+      await page.waitForSelector('.fr-actions [data-act="cm_fabric"]');
+      await shot(page, 'make390_7_material');
+      await page.click('.fr-actions [data-act="cm_vinyl"]');
+      const conv = await page.waitForSelector('.fr-actions iframe.fr-frame', { timeout: 10_000 });
+      assert.match(await conv.getAttribute('src'), /&view=convert&cid=[a-z0-9_]+&shape=atama&mat=vinyl$/);
+      const cframe = await conv.contentFrame();
+      await cframe.waitForSelector('#convert:not([hidden])', { timeout: 10_000 });
+      const pc4 = await pcNext(work, '--fake-draw');
+      assert.equal(pc4.did, 'converted_drawn', JSON.stringify(pc4));
+      await cframe.waitForSelector('#convOk:not([hidden])', { timeout: 20_000 });
+      await cframe.waitForFunction(() => (document.getElementById('convPic')?.naturalWidth ?? 0) > 0, null, { timeout: 10_000 });
+      await fits(page, cframe, '変換の絵');
+      await shot(page, 'make390_8_convert');
+      await cframe.click('#convOk');
+      await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
+      assert.match(await logText(page), /この かたちで 3D に するね/);
+      const pc5 = await pcNext(work, '--fake-draw');
+      assert.equal(pc5.did, 'handoff', JSON.stringify(pc5));
+      await shot(page, 'make390_9_persona');
+      assert.deepEqual(realErrors(errors), [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
     }
@@ -305,7 +343,7 @@ test('作る道(幅 400): 絵 → ゆるキャラチェック(人の絵)→ ゆ�
       const orig = readFileSync(join(work, pc1.id, 'review', 'original.png'));
       assert.ok(orig.length > 0 && orig.subarray(0, 4).toString('latin1') === '\x89PNG', '絵は PC の作業場所にだけ届く(png に描き直して)');
       await shot(page, 'make400_3_c0');
-      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      assert.deepEqual(realErrors(errors), [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
     }
@@ -360,7 +398,7 @@ test('作る道(PC 1280×720): 札が下の帯を隠さず、作る画面の「�
       assert.match(await frame.$eval('#noteBtn', (e) => e.innerText.trim()), /直したい/, 'ボタンは「直したい」と読める');
       await fits(page, frame, 'PC 3 歩目');
       await shot(page, 'make1280_3_c0');
-      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      assert.deepEqual(realErrors(errors), [], `画面のエラー: ${errors.join(' / ')}`);
       return { sheet, inner };
     } finally {
       await ctx.close();
@@ -413,7 +451,7 @@ test('作る道(幅 390): SVG の絵 → ゆるキャラチェック(ゆるキ�
       assert.ok(check >= 0, `チェックの言葉が無い: ${log}`);
       assert.ok(Number.isFinite(drawing) && check < drawing, `チェックの言葉が、描く知らせより後に出た: ${log}`);
       await shot(page, 'make390_svg_c0');
-      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      assert.deepEqual(realErrors(errors), [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
     }
@@ -483,9 +521,12 @@ test('作る道(幅 390): 直しは 3 回まで。4 枚目の絵の後は「直�
       await fits(page, frame, '4 枚目の絵(直しの上限)');
       await shot(page, 'make390_3_c0_limit');
       await frame.click('#okBtn');
-      await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
+      await page.waitForSelector('.fr-actions [data-act="keep"]', { timeout: 15_000 }); // 2D を待つ間も、先に性格へ進める(B4 12b)
       assert.equal((await pcNext(work, '--fake-draw')).did, 'claimed_ok');
-      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      await page.waitForSelector('.fr-actions [data-act="want3d"]', { timeout: 20_000 });
+      await page.click('.fr-actions [data-act="no3d"]');
+      await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
+      assert.deepEqual(realErrors(errors), [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
     }
@@ -553,7 +594,7 @@ for (const [w, h] of [[390, 844], [390, 670], [1280, 720]]) {
         await frame.waitForFunction(() => document.querySelector('#picCap')?.textContent.includes('2 回目'), null, { timeout: 20_000 });
         assert.equal(await frame.$eval('#browSlot', (e) => e.hidden), true, '眉のある絵には札を出さない');
         await shot(page, `brow${w}x${h}_2_after`);
-        assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+        assert.deepEqual(realErrors(errors), [], `画面のエラー: ${errors.join(' / ')}`);
       } finally {
         await ctx.close();
       }
@@ -593,7 +634,7 @@ test('眉のおすすめ(幅 390): 「足さない」で札が消え、この子
       await frame.waitForFunction(() => document.querySelector('#picCap')?.textContent.includes('2 回目'), null, { timeout: 20_000 });
       assert.equal(await frame.$eval('#browSlot', (e) => e.hidden), true, 'この子には、もう出さない');
       assert.equal(pc1.id, pc2.id);
-      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      assert.deepEqual(realErrors(errors), [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
     }
@@ -631,14 +672,16 @@ test('おまかせ(ぜんぶ じどう、幅 390): 1 回押すと、言葉・眉
       assert.deepEqual([req.decision, req.note.text], ['redo', BROW_NORMAL]);
       const pc2 = await pcNextEnv(work, { YC_FAKE_REDO: 'brows' }, '--fake-draw');
       assert.equal(pc2.did, 'redrew', JSON.stringify(pc2));
-      // 眉のある絵 → おまかせは「この子にする」→ 会話の札も性格から後をおすすめで決めて、最後まで
+      // 眉のある絵 → おまかせは「この子にする」→ パソコンが 2D を組む → 会話の札も性格から後をおすすめで決めて、最後まで
+      await page.waitForFunction(() => document.querySelector('.fr-log')?.innerText.includes('うごく 2D に して'), null, { timeout: 25_000 });
+      const ok = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
+      assert.equal(ok.decision, 'ok');
+      assert.equal((await pcNext(work, '--fake-draw')).did, 'claimed_ok');
       await page.waitForFunction(() => document.querySelector('.fr-log')?.innerText.includes('おまかせで、ぜんぶ きめマシタ!'), null, { timeout: 25_000 });
       await page.waitForFunction(() => document.querySelector('.fr-log')?.innerText.includes('ぜんぶ、あとから かえられるよ。'), null, { timeout: 10_000 });
       const log = await logText(page);
-      assert.match(log, /きめたこと: .*文字と おと[\s\S]*あとから かえられるよ/);
-      assert.match(log, /けってい! パソコンに つたえたよ/);
-      const ok = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
-      assert.equal(ok.decision, 'ok');
+      assert.match(log, /は、.+ 話す 子に したよ。[\s\S]*あとから かえられるよ/);
+      assert.match(log, /3D は あとから えらべるよ/, 'おまかせは 2D のまま(3D は聞かない)');
       // QF4 中 5: 終わっても札を自動で閉じない。決めたことと「はじめる」を出し、押した時だけ閉じる
       await page.waitForSelector('.fr-actions [data-act="begin"]', { timeout: 10_000 });
       await page.waitForTimeout(2500);
@@ -646,7 +689,7 @@ test('おまかせ(ぜんぶ じどう、幅 390): 1 回押すと、言葉・眉
       assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done', '初めての会話は終わり');
       await page.click('.fr-actions [data-act="begin"]');
       await page.waitForFunction(() => !document.querySelector('.fr-sheet'), null, { timeout: 10_000 });
-      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      assert.deepEqual(realErrors(errors), [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
     }

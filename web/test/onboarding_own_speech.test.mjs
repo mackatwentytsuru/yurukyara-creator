@@ -140,13 +140,13 @@ test('初めての会話: 主役の絵の入口で、おまかせ・もう一度
     });
     await fr.start();
     await fr.act('pick', { url: 'blob:test', name: 'e.png' });
-    await fr.act('kind_yuru');
-    assert.equal(fr.character, null, '絵の入口は、だまって主役を出さない(D1)');
-    await fr.act('use_guide'); // 使う人が「ノリーで続きを試す」を選ぶ
-    assert.equal(fr.character.id, MAIN.id, '選んだ時だけ主役');
+    await fr.act('col_brown'); // ちゃいろで たてに ながい絵 → いちばん近いのは主役(UIR 2)
+    await fr.act('shp_tall');
+    assert.equal(fr.character.id, MAIN.id, '色と形が近い時は主役');
+    await fr.act('keep');
     assert.equal(fr.step, 4);
     assert.equal(fr.settings.tone, 'own', `種 ${seed}: おまかせ`);
-    assert.ok(said.some((l) => l.who === 'note' && l.text.includes('この子らしい 話し方')), '4 歩目のまとめに出る');
+    assert.ok(said.some((l) => l.who === 'note' && l.text.includes('この子らしく')), '4 歩目のまとめに出る');
     for (let i = 0; i < 4; i++) {
       await fr.act('persona_roll');
       assert.equal(fr.settings.tone, 'own', `種 ${seed}: もう一度ひく ${i + 1}`);

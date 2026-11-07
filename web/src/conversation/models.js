@@ -10,6 +10,9 @@ export const MODEL_DEFAULTS = Object.freeze({
   voice: 'eleven_v4_turbo', // ノリーの声の候補(11-07)を作ったのと同じモデル
 });
 
+/** ブラウザから描く道(B4。切ってある)が絵を頼むモデルの既定。環境変数 YC_DRAW_MODEL で替わる */
+export const DRAW_MODEL_DEFAULT = 'claude-sonnet-5-5';
+
 /** 既定を替える環境変数の名前(サーバーと台本だけが読む) */
 export const MODEL_ENV = Object.freeze({ brain: 'CLAUDE_MODEL', voice: 'ELEVEN_MODEL_ID' });
 
