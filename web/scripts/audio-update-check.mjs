@@ -10,6 +10,7 @@
 // 会話サーバーは鍵なし(仮の頭脳)で、この台本が起こして止める(自分の PID だけ)。CPU の描画(SwiftShader)なら止める。
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +22,16 @@ const arg = (n, d) => {
   const i = argv.indexOf(n);
   return i >= 0 && i + 1 < argv.length ? argv[i + 1] : d;
 };
-const PORT = Number(arg('--port', 8942));
+// 番号は、空いている番号を自分で探す(決め打ちの番号は、ほかの流れのサーバーが使っていることがある。11/8 01:4x、8942 番を別のサーバーが
+// 使っていて、この台本のサーバーが起きられないまま、別の版の画面を測った)
+const freePort = () => new Promise((done) => {
+  const s = createNetServer();
+  s.listen(0, '127.0.0.1', () => {
+    const { port } = s.address();
+    s.close(() => done(port));
+  });
+});
+const PORT = Number(arg('--port', 0)) || (await freePort());
 const OUT = resolve(arg('--out', mkdtempSync(join(tmpdir(), 'yc-audio-update-check-'))));
 const CHAR = arg('--character', 'norrie');
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -59,10 +69,13 @@ async function startServer(port = PORT, host = '127.0.0.1') {
   delete env.ANTHROPIC_API_KEY; // 本物の頭脳・声を呼ばない
   delete env.ELEVENLABS_API_KEY;
   delete env.APP_PASSPHRASE;
-  servers.push(spawn(process.execPath, [join(WEB, 'server', 'index.mjs')], { env, stdio: 'ignore', windowsHide: true }));
+  const child = spawn(process.execPath, [join(WEB, 'server', 'index.mjs')], { env, stdio: 'ignore', windowsHide: true });
+  servers.push(child);
   for (let i = 0; i < 150; i++) {
+    if (child.exitCode !== null) throw new Error(`この台本の会話サーバーが止まりました(番号 ${port} がほかで使われているかも)`);
     try {
-      if ((await fetch(`http://127.0.0.1:${port}/api/status`)).ok) return;
+      // 答えたのが自分のサーバーか: アップデートの受け口(この線にだけある)が答える
+      if ((await fetch(`http://127.0.0.1:${port}/api/status`)).ok && (await fetch(`http://127.0.0.1:${port}/api/update/progress`)).ok) return;
     } catch {
       // まだ
     }
@@ -114,6 +127,8 @@ const MEASURE = () => {
     .map((e) => e.getBoundingClientRect()).filter((b) => b.width > 0).map((b) => Math.min(b.width, b.height));
   return {
     box,
+    // 引き伸ばしの本当の目安: 描く大きさと画角の縦横が、canvas の箱の縦横と同じか(stage_size_browser の試験と同じ 1%)
+    stretch: { buffer: (cv.width / cv.height) / (r.width / r.height), camera: st.camera.aspect / (r.width / r.height) },
     ratio: box ? (box.right - box.left) / (box.bottom - box.top) : 0,
     covers: { sheet: rect('.yc-sheet:not([hidden])'), top: rect('.top .top-row > *, .top .chip'), note: rect('.yc-note:not([hidden])') },
     smallFonts: small,
@@ -122,11 +137,14 @@ const MEASURE = () => {
 };
 const overlap = (a, b) => (a && b ? Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)) : 0);
 
+const pageErrors = [];
 async function openPage(browser, w, h, extra = '') {
   const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+  page.on('pageerror', (e) => pageErrors.push(`${w}x${h}${extra}: ${String(e?.message ?? e).slice(0, 200)}`));
   await page.addInitScript(() => localStorage.setItem('yc.onboarded.v1', 'done')); // 7 つのステップは、この確かめでは出さない
   await page.goto(`${BASE}/?character=${CHAR}${extra}`);
   await page.waitForSelector('#startSim:not([disabled])', { timeout: 60000 });
+  await page.waitForSelector('#ycAudioBtn', { state: 'attached', timeout: 10000 }).catch(() => pageErrors.push(`${w}x${h}${extra}: 歯車が無い`));
   await page.click('#startSim');
   await page.waitForTimeout(2500);
   await page.evaluate(FREEZE);
@@ -141,7 +159,8 @@ function judge(label, m, base) {
   check(`${label}: 窓がキャラに重ならない`, hit(m.covers.sheet) === 0, `重なり ${Math.round(hit(m.covers.sheet))}px²`);
   check(`${label}: 上の段がキャラに重ならない`, hit(m.covers.top) === 0, `重なり ${Math.round(hit(m.covers.top))}px²`);
   check(`${label}: 知らせがキャラに重ならない`, hit(m.covers.note) === 0, `重なり ${Math.round(hit(m.covers.note))}px²`);
-  check(`${label}: キャラの縦横が PC の 3% 以内`, base && Math.abs(m.ratio / base - 1) <= SHAPE_TOL, `${m.ratio.toFixed(4)} / PC ${base?.toFixed(4)}`);
+  check(`${label}: 引き伸ばしなし(描く大きさと画角の縦横が箱の 1% 以内)`, Math.abs(m.stretch.buffer - 1) <= 0.01 && Math.abs(m.stretch.camera - 1) <= 0.01, `${m.stretch.buffer.toFixed(4)}・${m.stretch.camera.toFixed(4)}`);
+  check(`${label}: キャラの縦横が PC の 3% 以内`, base && Math.abs(m.ratio / base - 1) <= SHAPE_TOL, `${m.ratio.toFixed(4)} / PC ${base?.toFixed(4)}(${((m.ratio / base - 1) * 100).toFixed(1)}%)`);
   check(`${label}: 字は 14px 以上`, m.smallFonts.length === 0, m.smallFonts.join(','));
   if (m.minTap !== null) check(`${label}: 押す所は 40px 以上`, m.minTap >= 40, `${m.minTap.toFixed(0)}px`);
 }
@@ -342,9 +361,10 @@ try {
     await browser.close().catch(() => {});
     await silentBrowser.close().catch(() => {});
   }
+  check('頁の中のエラーが無い', pageErrors.length === 0, pageErrors.slice(0, 5).join(' / '));
   ok = results.every((r) => r.ok);
 } catch (err) {
-  check('止まらずに最後まで流れた', false, String(err?.message ?? err));
+  check('止まらずに最後まで流れた', false, `${String(err?.message ?? err).split('\n')[0]}${pageErrors.length ? ` / 頁のエラー: ${pageErrors.slice(0, 3).join(' / ')}` : ''}`);
 } finally {
   stopServer();
   writeFileSync(join(OUT, 'result.json'), `${JSON.stringify({ ok, port: PORT, character: CHAR, checks: results }, null, 2)}\n`);

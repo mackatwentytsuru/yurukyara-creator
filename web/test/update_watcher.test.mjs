@@ -98,6 +98,20 @@ test('起こし直した新しい版がすぐ止まったら、1 回だけ前の
   }
 });
 
+test('前の版に戻した印は、その後の新しい回へ持ち越さない(戻した直後の 1 回の起こしだけ)', async () => {
+  const t = await setup([`exit:${RESTART_CODE}`, 'crash:1', `exit:${RESTART_CODE}`, 'stay']);
+  const w = runWatcher({ port: t.port, commands: t.commands, web: t.dir, log: t.log, fastFailMs: 5000, readyMs: 8000 });
+  try {
+    assert.ok(await until(() => t.starts().length === 4), '4 回起こした');
+    assert.deepEqual(t.starts().map((s) => s.fellBack), ['', '', '1', ''], '戻した直後だけ印がある');
+    assert.equal(t.calls.undo, 1);
+  } finally {
+    w.stop();
+    await w.done;
+    rmSync(t.dir, { recursive: true, force: true });
+  }
+});
+
 test('新しくした後でない、ふだんの止まり方では起こし直さず、その番号で終わる', async () => {
   const t = await setup(['exit:2']);
   const w = runWatcher({ port: t.port, commands: t.commands, web: t.dir, log: t.log });

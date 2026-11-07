@@ -9,6 +9,7 @@
 //   作る写しはリポジトリの外(--out。既定は一時フォルダ)。使う人の物には触らない。自分で起こしたプロセスだけを番号で止める。
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +22,15 @@ const arg = (name, dflt) => {
   return i >= 0 && i + 1 < argv.length ? argv[i + 1] : dflt;
 };
 const OUT = resolve(arg('--out', mkdtempSync(join(tmpdir(), 'yc-update-e2e-'))));
-const PORT = Number(arg('--port', 8940));
+// 番号は、空いている番号を自分で探す(決め打ちの番号は、ほかの流れのサーバーが使っていることがある)
+const freePort = () => new Promise((done) => {
+  const s = createNetServer();
+  s.listen(0, '127.0.0.1', () => {
+    const { port } = s.address();
+    s.close(() => done(port));
+  });
+});
+const PORT = Number(arg('--port', 0)) || (await freePort());
 const BROWSER = argv.includes('--browser');
 const BASE = `http://127.0.0.1:${PORT}`;
 const LOCAL = { 'content-type': 'application/json', 'x-yc-local': '1' };
@@ -118,6 +127,7 @@ async function getJson(path, init) {
 async function waitStatus(ms = 120000) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
+    if (watcher && watcher.exitCode !== null) return false; // 見張り役が止まった(番号がほかで使われている時など)
     try {
       if ((await fetch(`${BASE}/api/status`, { signal: AbortSignal.timeout(3000) })).ok) return true;
     } catch {

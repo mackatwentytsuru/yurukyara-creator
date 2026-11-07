@@ -134,7 +134,8 @@ export function runWatcher({ port = Number(process.env.PORT ?? 8787), host = pro
   const probe = `http://${host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host}:${port}`;
   let child = null;
   let stopping = false;
-  let fellBack = false;
+  let fellBack = false; // 次に起こすサーバーへ「前の版に戻した」と渡すか(戻した直後の 1 回の起こしだけ)
+  let triedFallback = false; // この新しくする回で、もう前の版に戻したか(戻すのは 1 回だけ)
   const stop = () => {
     stopping = true;
     if (child) killTree(child.pid);
@@ -174,6 +175,7 @@ export function runWatcher({ port = Number(process.env.PORT ?? 8787), host = pro
       return false;
     }
     fellBack = true;
+    triedFallback = true;
     return prepare(true);
   }
 
@@ -190,12 +192,14 @@ export function runWatcher({ port = Number(process.env.PORT ?? 8787), host = pro
       if (code === RESTART_CODE) {
         log('アプリを起こし直します…');
         afterUpdate = true;
+        fellBack = false; // 新しい回: 前の回の「戻した」は持ち越さない(11/8 の通しの確かめで、後の成功にも「戻した」と出た)
+        triedFallback = false;
         if (!(await prepare(true))) {
-          if (fellBack || !(await fallBack())) return 1;
+          if (!(await fallBack())) return 1;
         }
         continue;
       }
-      if (afterUpdate && early && !fellBack) {
+      if (afterUpdate && early && !triedFallback) {
         if (!(await fallBack())) return 1;
         continue;
       }
