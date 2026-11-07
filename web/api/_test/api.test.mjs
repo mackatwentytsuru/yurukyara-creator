@@ -46,8 +46,11 @@ const memCall = (d, path, { method = 'GET', key, pass, ip = '203.0.113.5', body 
   if (pass !== undefined) headers[PASS_HEADER] = pass;
   if (body !== undefined) headers['content-type'] = 'application/json';
   const r = new Request(`${BASE}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  return handleMemoryRoute(r, { cfg: d.cfg, store: d.store, loadHandler });
+  return handleMemoryRoute(r, { cfg: d.cfg, store: d.store, loadHandler, ...(d.now ? { now: d.now } : {}) });
 };
+// 数えの枠(1 分・10 分)の切れ目で数が割れないように、時計を止める試験で使う時刻(10 分の枠の途中・1 分の途中)
+const FIXED_T = 1_800_000_000_000 + 330_000;
+const fixedClock = () => FIXED_T;
 
 test('合言葉が合えば本物の頭脳で、まとめて 1 回で返す', async () => {
   const { calls, d } = deps();
@@ -113,16 +116,47 @@ test('合言葉の間違いは接続元ごとに数え、多すぎたら、し�
   assert.equal(calls.length, 2);
 });
 
-test('合言葉の間違いは全体でも数える。多すぎたら、だれのも比べない。時間がたてば戻る', async () => {
+test('合言葉の間違いは全体でも数える。多い間(強め)も正しい合言葉は通し、間違えた接続元だけを 1 回で止める。時間がたてば戻る(CRITsec2 N1)', async () => {
   let t = 1_000_000;
   const store = createMemoryStore({ now: () => t });
   const cfg = readConfig(env());
   const limits = { ...WRONG_PASS_LIMITS, total: 3 };
   const check = (pass, ip) => checkPassphrase(req({ text: 'x' }, { pass, ip }), { cfg, store, now: () => t, limits });
   for (let i = 0; i < 3; i++) assert.equal((await check('wrong', `192.0.2.${i}`)).reason, 'passphrase');
-  assert.deepEqual(await check(PASS, '192.0.2.99'), { ok: false, reason: 'passphrase-wait' });
-  t += limits.totalWaitSeconds * 1000 + 1;
-  assert.deepEqual(await check(PASS, '192.0.2.99'), { ok: true, reason: '' });
+  assert.deepEqual(await check(PASS, '192.0.2.99'), { ok: true, reason: '' }, '全体の間違いが多くても、正しい合言葉は止めない');
+  assert.deepEqual(await check('wrong-again', '192.0.2.50'), { ok: false, reason: 'passphrase' });
+  assert.deepEqual(await check(PASS, '192.0.2.50'), { ok: false, reason: 'passphrase-wait' }, '強めの間は、1 回間違えた接続元をすぐ止める(当たり外れを返さない)');
+  assert.deepEqual(await check(PASS, '192.0.2.51'), { ok: true, reason: '' }, 'ほかの接続元の正しい合言葉は通る');
+  t += Math.max(limits.totalWaitSeconds, limits.clientWaitSeconds, limits.windowSeconds * 2) * 1000 + 1;
+  assert.deepEqual(await check(PASS, '192.0.2.50'), { ok: true, reason: '' }, '止めた接続元も、時間がたてば戻る');
+  assert.deepEqual(await check('wrong', '192.0.2.60'), { ok: false, reason: 'passphrase' });
+  assert.deepEqual(await check(PASS, '192.0.2.60'), { ok: true, reason: '' }, '強めが終われば、1 回の間違いでは止めない');
+});
+
+test('20 か所から 5 回ずつ間違えても、審査の人の正しい合言葉は会話・番号づくり・受け取りで通る。間違えた接続元は止めたまま(CRITsec2 N1)', async () => {
+  const { calls, d } = deps({ env: { DEMO_PER_MINUTE: '100', DEMO_DAILY_CAP: '1000' }, d: { now: fixedClock } });
+  const reasons = new Set();
+  for (let ip = 0; ip < 20; ip++) {
+    for (let i = 0; i < WRONG_PASS_LIMITS.perClient; i++) reasons.add((await read(await handleChat(req({ text: 'やあ' }, { pass: `guess-${ip}-${i}`, ip: `203.0.113.${100 + ip}` }), d))).data.reason);
+  }
+  assert.deepEqual([...reasons], ['passphrase']);
+  const judge = await read(await handleChat(req({ text: 'こんにちは' }, { pass: PASS, ip: '198.51.100.70' }), d));
+  assert.equal(judge.data.brain, 'real', '審査の人は本物の頭脳で話せる');
+  const key = (await (await memCall(d, '/api/memory/new', { method: 'POST', ip: '198.51.100.71' })).json()).key;
+  await memCall(d, '/api/memory/reflect', { method: 'POST', key, ip: '198.51.100.71', body: { text: 'ぼくはタロウです' } });
+  const pair = await memCall(d, '/api/memory/pair', { method: 'POST', key, pass: PASS, ip: '198.51.100.71' });
+  assert.equal(pair.status, 200, '番号づくりも止まらない');
+  const { code } = await pair.json();
+  const claim = await memCall(d, '/api/memory/claim', { method: 'POST', pass: PASS, ip: '198.51.100.72', body: { code } });
+  assert.equal(claim.status, 200, '番号の受け取りも止まらない');
+  assert.equal((await claim.json()).key, key);
+  const attacker = await read(await handleChat(req({ text: 'やあ' }, { pass: PASS, ip: '203.0.113.100' }), d));
+  assert.equal(attacker.data.reason, 'passphrase-wait', '間違えた接続元は、正しい合言葉でも比べない(接続元ごとの止めは残す)');
+  const once = await read(await handleChat(req({ text: 'やあ' }, { pass: 'one-more-guess', ip: '198.51.100.73' }), d));
+  assert.equal(once.data.reason, 'passphrase');
+  const after = await read(await handleChat(req({ text: 'やあ' }, { pass: PASS, ip: '198.51.100.73' }), d));
+  assert.equal(after.data.reason, 'passphrase-wait', '全体が多い間は、1 回間違えた接続元をすぐ止める');
+  assert.equal(calls.length, 1, '本物の頭脳は審査の人の 1 回だけ');
 });
 
 test('1 分の上限を超えたら仮の頭脳。接続元が違えば別に数える', async () => {
@@ -273,6 +307,96 @@ test('番号づくりの合言葉も当て試しの守りを通す(間違いを�
   assert.equal(ok.status, 200);
 });
 
+test('番号の受け取りも、会話と同じ合言葉の数えを通る(間違いを数え、止めた接続元は会話も受け取りも比べない。CRITsec2 N2)', async () => {
+  const { d } = deps({ env: { DEMO_PER_MINUTE: '100', DEMO_DAILY_CAP: '100' }, d: { now: fixedClock } });
+  for (let i = 0; i < WRONG_PASS_LIMITS.perClient; i++) {
+    const r = await memCall(d, '/api/memory/claim', { method: 'POST', pass: `wrong-${i}`, ip: '198.51.100.80', body: { code: '123456' } });
+    assert.equal(r.status, 403);
+    const data = await r.json();
+    assert.equal(data.reason, 'no_pass');
+    assert.match(data.error, /受け取れません/);
+  }
+  const locked = await memCall(d, '/api/memory/claim', { method: 'POST', pass: PASS, ip: '198.51.100.80', body: { code: '123456' } });
+  assert.equal(locked.status, 429, '止めた接続元は、正しい合言葉でも当たり外れを返さない');
+  const lockedData = await locked.json();
+  assert.equal(lockedData.reason, 'wait');
+  assert.match(lockedData.error, /受け取れません/);
+  const chat = await read(await handleChat(req({ text: 'やあ' }, { pass: PASS, ip: '198.51.100.80' }), d));
+  assert.equal(chat.data.reason, 'passphrase-wait', '受け取りの間違いで、同じ接続元の会話も止まる(同じ数え)');
+  assert.equal((await memCall(d, '/api/memory/claim', { method: 'POST', ip: '198.51.100.81', body: { code: '123456' } })).status, 403, '合言葉なしは比べずに断る');
+});
+
+test('受け取りの間違いも全体で数える: 20 か所 × 5 回の後は強め(1 回間違えた接続元をすぐ止める)。正しい合言葉の受け取りは通る(CRITsec2 N2)', async () => {
+  const { d } = deps({ env: { DEMO_PER_MINUTE: '100', DEMO_DAILY_CAP: '100' }, d: { now: fixedClock } });
+  const key = (await (await memCall(d, '/api/memory/new', { method: 'POST', ip: '198.51.100.90' })).json()).key;
+  await memCall(d, '/api/memory/reflect', { method: 'POST', key, ip: '198.51.100.90', body: { text: 'ぼくはタロウです' } });
+  const { code } = await (await memCall(d, '/api/memory/pair', { method: 'POST', key, pass: PASS, ip: '198.51.100.90' })).json();
+  const statuses = new Set();
+  for (let ip = 0; ip < 20; ip++) {
+    for (let i = 0; i < WRONG_PASS_LIMITS.perClient; i++) statuses.add((await memCall(d, '/api/memory/claim', { method: 'POST', pass: `g-${ip}-${i}`, ip: `203.0.113.${150 + ip}`, body: { code } })).status);
+  }
+  assert.deepEqual([...statuses], [403]);
+  assert.equal((await read(await handleChat(req({ text: 'やあ' }, { pass: 'a-guess', ip: '198.51.100.91' }), d))).data.reason, 'passphrase');
+  assert.equal((await read(await handleChat(req({ text: 'やあ' }, { pass: PASS, ip: '198.51.100.91' }), d))).data.reason, 'passphrase-wait', '受け取りの間違いで全体が強めになっている');
+  const ok = await memCall(d, '/api/memory/claim', { method: 'POST', pass: PASS, ip: '198.51.100.92', body: { code } });
+  assert.equal(ok.status, 200, '正しい合言葉なら、強めの間も受け取れる(番号が当たっていれば)');
+  assert.equal((await ok.json()).key, key);
+});
+
+/** 置き場の呼び出しを順に覚える(合言葉と上限を、記憶の置き場より先に見ているかを見るため) */
+function spyStore(inner = createMemoryStore()) {
+  const ops = [];
+  const wrap = (op) => async (k, ...rest) => {
+    ops.push(`${op} ${k}`);
+    return inner[op](k, ...rest);
+  };
+  return { ops, store: { kind: 'spy', get: wrap('get'), set: wrap('set'), del: wrap('del'), incr: wrap('incr') } };
+}
+
+test('公開の /api/chat は、合言葉と回数の上限を見てから記憶の置き場を使う(CRITsec2 N3)', async () => {
+  const fake = 'A'.repeat(43); // 形だけ合う合鍵
+  for (const [pass, first] of [['wrong', 'pw:'], [PASS, 'rl:']]) {
+    const { ops, store } = spyStore();
+    const { d } = deps({ env: { DEMO_PER_MINUTE: '100', DEMO_DAILY_CAP: '100' }, d: { store, now: fixedClock } });
+    await handleChat(req({ text: 'ぼくはタロウ。カレーが好き' }, { pass, key: fake, ip: '198.51.100.100' }), d);
+    const at = (prefix) => ops.findIndex((o) => o.split(' ')[1].startsWith(prefix));
+    assert.equal(at('pw:'), 0, '最初に合言葉の止めを見る');
+    assert.ok(at(first) >= 0 && at(first) < at('rlm:'), `${first} の数え(合言葉・回数)は記憶の数えより先`);
+    assert.ok(at('rlm:') >= 0 && at('rlm:') < at('ycm:'), '記憶の置き場(ycm:)は、接続元ごとの数え(rlm:)の後');
+  }
+});
+
+test('記憶の置き場は接続元ごとの 1 分の上限で止まる。超えた回は記憶なしで話し続け、/api/memory と同じ数え(CRITsec2 N3)', async () => {
+  const { ops, store } = spyStore();
+  const { d } = deps({ env: { DEMO_PER_MINUTE: '10' }, d: { store, now: fixedClock } }); // 記憶の上限は 1 分に 10 × 3 = 30 回
+  const fake = 'B'.repeat(43);
+  const used = [];
+  for (let i = 0; i < 40; i++) {
+    const before = ops.length;
+    const r = await handleChat(req({ text: 'わすれて' }, { key: fake, ip: '198.51.100.110' }), d);
+    assert.equal(r.status, 200, '会話は止めない');
+    used.push(ops.slice(before).filter((o) => o.split(' ')[1].startsWith('ycm:')).length);
+  }
+  assert.ok(used.slice(0, 30).every((n) => n > 0), '上限までは記憶を使う');
+  assert.deepEqual(used.slice(30), Array(10).fill(0), '上限を超えた回は、記憶の置き場を使わない');
+  assert.equal((await memCall({ ...d, store }, '/api/memory', { key: fake, ip: '198.51.100.110' })).status, 429, '/api/memory と同じ数え');
+  const other = await read(await handleChat(req({ text: 'わすれて' }, { key: fake, ip: '198.51.100.111' }), d));
+  assert.equal(other.data.brain, 'none', 'ほかの接続元は使える');
+});
+
+test('公開の「わすれて」は、その子の人格の言い方で答える(手元のサーバーと同じ。CRITsec2 F1 の残り)', async () => {
+  const { d } = deps({ env: { DEMO_PER_MINUTE: '100' } });
+  const norrie = { name: 'ノリー', persona: NORRIE_PERSONA };
+  const taught = await read(await handleChat(req({ text: 'わたしはハナコ。おすしが好き', character: norrie }, { ip: '198.51.100.120' }), d));
+  const key = taught.data.events[0].key;
+  assert.match(key, /^[A-Za-z0-9_-]{43}$/);
+  const forget = await read(await handleChat(req({ text: 'わすれて', character: norrie }, { key, ip: '198.51.100.120' }), d));
+  assert.equal(forget.data.brain, 'none');
+  assert.deepEqual(said(forget.data), ['わかりマシタ。覚えていたことは、全部わすれマシタ。']);
+  const again = await read(await handleChat(req({ text: 'わすれて', character: norrie }, { key, ip: '198.51.100.120' }), d));
+  assert.deepEqual(said(again.data), ['ノリ、まだなにも覚えていなかったデス。']);
+});
+
 test('形の悪い本文・大きすぎる本文・POST 以外は断る', async () => {
   const { d } = deps();
   assert.equal((await handleChat(req(null, { raw: '{' }), d)).status, 400);
@@ -303,6 +427,12 @@ test('Vercel の関数の入口(chat.mjs)が、記憶と仮の頭脳につなが
     for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
     Object.assign(process.env, saved);
   }
+});
+
+test('公開の入口(chat.mjs)は、公開の決まりの本文の点検をはっきり渡す(環境変数 VERCEL の有り無しに頼らない。CRITsec F7 の残り)', () => {
+  const src = readFileSync(new URL('../chat.mjs', import.meta.url), 'utf8');
+  assert.match(src, /sanitize:\s*sanitizePublicChatBody\b/);
+  assert.doesNotMatch(src, /sanitize:\s*sanitizeChatBody\b/);
 });
 
 test('置き場: メモリは期限で消え、Upstash の形の命令を送る(鍵は見出しだけ)', async () => {
