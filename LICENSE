@@ -1,0 +1,75 @@
+This repository has two parts with different terms:
+
+  1. The code: the MIT License below.
+  2. The characters: NOT covered by the MIT License. All rights reserved;
+     they are not licensed for reuse. See "Not covered" after the licence text.
+
+Third-party parts keep their own licences: see THIRD_PARTY.md.
+
+===============================================================================
+
+MIT License
+
+Copyright (c) 2026 Yuki Tsuruoka
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+===============================================================================
+
+Not covered by the MIT License: the characters (all rights reserved)
+
+"The Software" in the MIT License above does not include the items below.
+All rights in them are reserved by their right holders, and they are not
+licensed for reuse. You may look at them, and use them unchanged inside this
+app to try it out. You may not copy, modify, redistribute or otherwise reuse
+them, in whole or in part, outside that.
+
+  1. Everything in the characters/ folder: the models, motions, 2D parts,
+     pictures, character.json files and personality texts of Norrie (ノリー)
+     and of the other sample characters.
+  2. Everything in the creator/samples/ folder: the sample characters'
+     pictures, settings and comparison pictures.
+  3. Files made for one particular character, which reproduce it:
+     creator/builders/<id>.py, creator/specs/<id>_*, creator/draw/gen_<id>.py
+     and creator/d2/from_drawing/<id>_*.py, where <id> is one of norrie,
+     yokoso, robo, f_led, d_lantern, mikan, kumomaru and pokotake.
+  4. The characters themselves (their looks, names and personalities),
+     wherever they appear in this repository, for example in tests, skills,
+     documents and pictures.
+  5. Norrie's design. A collaborator drew Norrie by hand (front, side and
+     back) during the hackathon and let us use the drawing for this work.
+     The drawing itself is not stored in this repository.
+
+To make a character of your own, use the code with your own words or your own
+picture (README.en.md, "Make your own character on your PC with Claude Code").
+
+===============================================================================
+
+日本語の要約
+
+- コード: MIT ライセンス(上の英語の本文)。
+- キャラ: MIT ライセンスに含みません。権利はすべて権利を持つ人に残り、再利用を
+  許可しません。見ることと、このアプリの中でそのまま試すことだけができます。
+  含まない物: characters/ の全部・creator/samples/ の全部・1 体のキャラのために
+  作った作り方のファイル(上の 3)・キャラそのもの(見た目・名前・性格)・
+  ノリーの絵(協力者がハッカソンの期間中に手で描き、この作品に使うことを許して
+  くれた物。絵そのものは、このリポジトリに入れていません)。
+- 自分のキャラは、コードを使って、自分の言葉か自分の絵から作ってください
+  (README.md の「自分の PC で、Claude Code と自分のキャラを作る」)。
+- 使っている部品は、それぞれのライセンスのままです(THIRD_PARTY.md)。

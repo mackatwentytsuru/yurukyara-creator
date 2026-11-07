@@ -12,7 +12,7 @@
 - デモの動画(3 分未満): *提出の時にリンクを入れる* 【確かめ待ち】
 - ブラウザで試す: *提出の時にリンクを入れる* 【確かめ待ち】
 
-[どう作ったか(docs/HOW_WE_BUILT.md)](docs/HOW_WE_BUILT.md) · [使っている部品とライセンス(THIRD_PARTY.md)](THIRD_PARTY.md)
+[どう作ったか(docs/HOW_WE_BUILT.md)](docs/HOW_WE_BUILT.md) · [使っている部品とライセンス(THIRD_PARTY.md)](THIRD_PARTY.md) · [ライセンス(コードは MIT・キャラは除く)](#ライセンス)
 
 ## 3 行で試す
 
@@ -28,6 +28,27 @@ npm start        # http://127.0.0.1:8787/ を開く
 - ほかのキャラは `?character=<id>` で選びます(例 `?character=mikan`)。[`characters/`](characters/) にあります。
 - この 3 行は、新しく取ってきた写しで、Windows の Node.js 22 で流して確かめました。Mac と Linux は【確かめ待ち】。
 - `npm ci` は顔の追従のモデルも `web/public/mediapipe/` に取ります(このリポジトリには入れていません)。
+
+<a name="voices"></a>
+
+## 声(おまかせ・男の子・女の子)
+
+- キャラごとに、声の役(男の子か女の子)があります。役はキャラから自動で決まります: 人格の文(`characters/<id>/persona.md`)の「- 声: 男の子」か「- 声: 女の子」の行、無ければ一人称や呼び名(〜くん・〜ちゃん)からの見当、それも無ければ女の子です。ノリーは執事見習いなので、男の子です。
+- 「性格」の画面の「声」の中の「声の役」で、**おまかせ・男の子・女の子** を選べます。おまかせは、そのキャラの役のままです。
+- 声が出るのは、自分の ElevenLabs の鍵(API キー)を入れた時だけです。鍵は「はじめての会話」の 7 歩目「声」で入れます。鍵はこの端末のブラウザの中だけで使い、私たちのサーバーには送りません。鍵が無いと、文字とレトロな音で話します。
+- 既定の声は、ElevenLabs の声のライブラリにある日本語の声(男の子の声と女の子の声)です。ElevenLabs の説明では、無料の枠の鍵では、ライブラリの声を API で使えません。ElevenLabs の決まりの要点は [THIRD_PARTY.md](THIRD_PARTY.md#elevenlabs-voices) にあります。
+- 声を替えるには、人格の文に「- 声の id: <ElevenLabs の声の id>」の行を足します(その子の役で話す時に使います)。手元のサーバーでは、役ごとの既定の声を環境変数 `ELEVEN_VOICE_MALE`・`ELEVEN_VOICE_FEMALE` でも替えられます。
+
+<a name="open-it-on-a-quest-3"></a>
+
+## Quest 3 で開く
+
+- PC かスマホの画面で、上の段の「VR」を押すと、「VR(Quest)で開く」の箱が出ます。箱には、この画面の QR と URL と、「Meta Quest に送る」があります。URL に入るのは、この画面の場所と、キャラの id と 3D・2D だけです(合言葉・記憶の番号・鍵は入りません)。
+- **QR**: Quest 3・3S の QR コードスキャナー(Meta Horizon OS v2.9 から。クイック設定かカメラのアプリで開きます)で読み取れます。読み取った後に Quest のブラウザで開くかは【確かめ待ち】。
+- **「Meta Quest に送る」**: 新しいタブで Meta の公式のウェブローンチ(Web Launch)のページが開き、この画面の URL を Quest のブラウザへ送ります。Meta の決まりで、送れるのは https の URL(公開のリンク)だけなので、https の時だけ出ます。Meta のアカウントのことは、Meta のページの案内に従ってください。【確かめ待ち】
+- この PC(`127.0.0.1`)や家の中のアドレスでは、QR と「Meta Quest に送る」のかわりに「Quest から開けません」の 1 行が出ます。Quest のブラウザの中では、この箱は出ません。
+- Quest のブラウザで開いたら、「VR で見る」を押します。画面の真ん中に「ブラウザの下の『許可する』を押してください」と出るので、ブラウザの下の「許可する」を押すと、VR の中にノリーが出ます。
+- 11/7 に本物の Quest 3 のブラウザで、画面のノリーと、「許可する」を押した後の VR の中のノリーを確かめました。この時は開発用のつなぎ方で開き、QR と「Meta Quest に送る」は使っていません。
 
 <a name="make-your-own-character-on-your-pc-with-claude-code"></a>
 
@@ -86,9 +107,9 @@ python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 
 ## まだの事・まだ確かめていない事
 
-- 本物の端末: iPhone・Android・Quest【確かめ待ち】。今までは、画面なしのブラウザでスマホの幅を、VR はまねる道具(`web/scripts/vr-check.mjs`)の中だけで確かめました。
+- 本物の端末: iPhone・Android【確かめ待ち】。今までは、画面なしのブラウザでスマホの幅を確かめました。Quest 3 は、本物のブラウザで画面と VR に入ることを確かめました。QR と「Meta Quest に送る」から開くことと、VR の中で話すことは【確かめ待ち】(VR の入口は、まねる道具 `web/scripts/vr-check.mjs` でも確かめています)。
 - この版で、本物の Claude Haiku と話すこと(記憶を含む)【確かめ待ち】。
-- 自分の ElevenLabs の鍵での声【確かめ待ち】。鍵が無ければ、文字とレトロな音で話します。
+- 自分の ElevenLabs の鍵での声と、男の子・女の子の声の切り替え【確かめ待ち】。鍵が無ければ、文字とレトロな音で話します。
 - 公開のリンク(Vercel の小さな関数 2 つと Upstash の Redis。Redis が無いと、公開のリンクは仮の頭脳だけで話し、記憶もしない)【確かめ待ち】。
 - 3D のノリーを横から見ると、前歯がまだ小さく見えます(直した後も、判定役の答え 6 つがすべてそう言いました)。
 - 人がさっと描いた落書きで全部の段を通すこと。今までは、機械で描いた落書き風の試しの絵だけが通りました(12.1 分)。
@@ -117,10 +138,11 @@ python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 | 役目 | 部品 |
 |---|---|
 | 頭脳(会話) | Claude API(`claude-haiku-5-5`)。鍵が無い時は、同じ形で返す仮の頭脳 |
-| 声(任意。自分の鍵) | ElevenLabs の読み上げ |
+| 声(任意。自分の鍵) | ElevenLabs の読み上げ(既定は、声のライブラリの日本語の声。男の子・女の子) |
 | 聞き取り | ブラウザに入っている音声認識か、自分の PC の中で動かす faster-whisper(手元のサーバーだけ) |
 | 顔の追従 | MediaPipe Face Landmarker(端末の中だけで動き、映像は送りません) |
 | ブラウザの 3D | three.js と three-vrm |
+| Quest へ送る(任意) | Meta のウェブローンチ(「Meta Quest に送る」を押した時だけ。https の頁の時だけ) |
 | 公開のリンク | Vercel の関数 2 つ。数と記憶は Upstash の Redis(無いと仮の頭脳だけ・記憶なし) |
 
 部品ごとの版とライセンス: [THIRD_PARTY.md](THIRD_PARTY.md)。
@@ -130,10 +152,19 @@ python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 | フォルダ | 中身 |
 |---|---|
 | `creator/` | 言葉か絵からキャラを作る道具(描く・確かめる・Blender で組む・確かめる画面) |
-| `characters/` | キャラ(`character.json`・モデル・動き・2D の部品・人格)。再利用は許していません([characters/README.md](characters/README.md)) |
+| `characters/` | キャラ(`character.json`・モデル・動き・2D の部品・人格)。MIT ライセンスに含まず、再利用は許していません([characters/README.md](characters/README.md)) |
 | `web/` | ブラウザで話す本体と小さなサーバー。`web/api/` は公開の関数 2 つ |
 | `.claude/` | 作るのに使った Claude Code のスキル・作業役・フック |
 | `tools/` | 公開の前の点検・数字の表・フックの試験 |
 | `docs/` | どう作ったか・数字・最初のコミットの表・描画の重さ |
 
 ゆるキャラに絞る前の作業は、`before-pivot` の線に残しています。
+
+<a name="license"></a>
+
+## ライセンス
+
+- **コード**: MIT ライセンス([LICENSE](LICENSE))。
+- **キャラ**(ノリーと見本のキャラ): MIT ライセンスに含みません。再利用を許可しません。見ることと、このアプリの中でそのまま試すことだけができます。含まない物の一覧は、[LICENSE](LICENSE) の「Not covered」と [characters/README.md](characters/README.md) にあります。
+- ノリーの絵は、協力者が手で描き、この作品に使うことを許してくれた物です。絵そのものは、このリポジトリに入れていません。
+- 使っている部品は、それぞれのライセンスのままです。声(ElevenLabs)の決まりも含めて [THIRD_PARTY.md](THIRD_PARTY.md) にあります。
