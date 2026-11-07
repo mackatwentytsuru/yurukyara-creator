@@ -1,10 +1,13 @@
 // 性格の設定(画面で選ぶ物)と、Claude に渡す人格の文。DOM を使わない純粋な関数だけ(node の試験で確かめる)。
 // 最初の設計の決め: 初めの性格はランダム。性格・口調・元気さ・返事の長さ・声を画面から変えられる。
 // 安全の決まりは別の層(web/server/safety.mjs)。ここで作る文は、安全の決まりより下に置かれる(prompt.mjs)。
+// 声の役(voice.role: おまかせ・男の子・女の子。11/7 第 11 波)は、ほかの選びと同じ所に覚える。役の決まりは S3(voiceChoice.js)
 // 人格の文で話し方が決まっている子(主役ノリーなど)は、おまかせで口調を「この子の話し方」(own)にし、語尾も口調も足さない。
 
 // v2(11/7): 口調に own を足した。v1 のおまかせは、話し方の決まった主役にも語尾を付けていた(「ノリーと申しマスぽよ」)。
 // v1 で覚えた設定は読まない(覚える場所の名前を替えた)。次に開いた時、v2 のおまかせで選び直す
+import { VOICE_ROLES, normalizeVoiceRole } from './voiceChoice.js';
+
 export const SETTINGS_VERSION = 2;
 export const STORE_PREFIX = 'yc.persona.v2.'; // + キャラの id(この端末の中だけ)
 
@@ -144,7 +147,7 @@ export function cleanEnding(raw) {
 }
 
 export function defaults() {
-  return { v: SETTINGS_VERSION, preset: 'calm', tone: 'friendly', ending: '', energy: PRESETS.calm.energy, length: 'normal', voice: { provider: 'none', pitch: 1.0, rate: 1.0 } };
+  return { v: SETTINGS_VERSION, preset: 'calm', tone: 'friendly', ending: '', energy: PRESETS.calm.energy, length: 'normal', voice: { provider: 'none', pitch: 1.0, rate: 1.0, role: 'auto' } };
 }
 
 /** 足りない欄を埋め、知らない値を直した、新しい設定を返す(元は変えない) */
@@ -170,6 +173,7 @@ export function normalize(input) {
       provider: VOICES[v.provider] ? v.provider : 'none',
       pitch: nearest(PITCHES, v.pitch, 'mid'),
       rate: nearest(RATES, v.rate, 'mid'),
+      role: normalizeVoiceRole(v.role), // 声の役(おまかせ = その子の役)。知らない値は おまかせ
     },
   };
 }
@@ -261,7 +265,8 @@ const labelOf = (table, value) => Object.values(table).find((x) => x.value === v
 export function summary(settings) {
   const s = normalize(settings);
   const tone = s.tone === 'ending' ? `語尾「${s.ending}」` : TONES[s.tone].label;
-  return `${PRESETS[s.preset].label}・${tone}・元気さ ${s.energy}・${LENGTHS[s.length].label}・${VOICES[s.voice.provider].label}`;
+  const role = s.voice.role === 'auto' ? '' : `(${VOICE_ROLES[s.voice.role].label})`;
+  return `${PRESETS[s.preset].label}・${tone}・元気さ ${s.energy}・${LENGTHS[s.length].label}・${VOICES[s.voice.provider].label}${role}`;
 }
 
 /** Claude に渡す人格の文(設定の部分)。固定の文と、確かめた語尾だけで作る */

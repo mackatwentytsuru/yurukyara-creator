@@ -360,7 +360,8 @@ def _copy_in(src, bdir, stem):
     return name
 
 
-def publish(cid, gate, right, left=None, png=None, views=None, sheet=None, overlay=None, metrics=()):
+def publish(cid, gate, right, left=None, png=None, views=None, sheet=None, overlay=None, metrics=(), notice=None):
+    """門のある段の絵をスマホに出す。notice は画面に出す一言(描き直しで頼んでいない所も変わった時など。120 字まで)。"""
     if gate not in GATES:
         raise ReviewError("bad_gate", "門は C0・C2・C3・C5 のどれかです", 400)
     st = load_state(cid)
@@ -411,7 +412,7 @@ def publish(cid, gate, right, left=None, png=None, views=None, sheet=None, overl
     validate(man, schema("bundle"))
     write_json(bdir / "manifest.json", man)
     g.update({"status": "waiting", "round": rnd, "ticket": "tk_" + secrets.token_urlsafe(12), "bundle": rel,
-              "bundle_hash": bundle_hash(man), "decided": None, "notice": None})
+              "bundle_hash": bundle_hash(man), "decided": None, "notice": (plain_words(notice)[:120] or None) if notice else None})
     for n in GATES[gate]:
         st["stages"][n]["status"] = "waiting"
     st["current"] = {"stage": GATES[gate][-1], "activity": f"{GATE_LABEL[gate]}の確認を出しました。スマホで見てください", "since": now_iso()}
@@ -804,7 +805,7 @@ def main(argv=None):
     a = sub.add_parser("activity"); a.add_argument("id"); a.add_argument("text")
     a = sub.add_parser("publish"); a.add_argument("id"); a.add_argument("gate", choices=list(GATES))
     a.add_argument("--right", required=True); a.add_argument("--left"); a.add_argument("--png"); a.add_argument("--views")
-    a.add_argument("--sheet"); a.add_argument("--overlay"); a.add_argument("--metric", action="append", default=[])
+    a.add_argument("--sheet"); a.add_argument("--overlay"); a.add_argument("--metric", action="append", default=[]); a.add_argument("--notice")
     for c in ("claim", "show", "unlock"):
         a = sub.add_parser(c); a.add_argument("id")
         if c == "show":
@@ -822,7 +823,7 @@ def main(argv=None):
         elif args.cmd == "activity":
             set_activity(args.id, args.text)
         elif args.cmd == "publish":
-            man = publish(args.id, args.gate, args.right, args.left, args.png, args.views, args.sheet, args.overlay, args.metric)
+            man = publish(args.id, args.gate, args.right, args.left, args.png, args.views, args.sheet, args.overlay, args.metric, args.notice)
             print(f"{args.gate} の {man['round']} 回目を出しました。スマホで見てもらいます"); print(show(args.id))
         elif args.cmd == "claim":
             code, o = claim(args.id); out(o); return code

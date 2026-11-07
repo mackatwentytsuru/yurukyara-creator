@@ -236,8 +236,13 @@ async function showDrawn(st) {
   $("pic").src = S.picUrl;
   // 画面に内部の言葉(C0・段 0)を出さない(D7)
   $("picCap").textContent = `${S.name}(${g.round} 回目の絵。この PC の Claude Code が描きました)`;
+  // 描き直しで、頼んでいない所も変わった時は、その事を正直に出す(PC の決まった確かめ redo_check.py が書いた一言。N-0026)
+  // (門の一言は「前の判断は受け取れませんでした」にも使うので、描き直しの一言の形の時だけ出す)
+  const drift = g.round > 1 && /^頼んでいない所/.test(String(g.notice || "")) ? String(g.notice) : "";
+  $("drift").textContent = drift;
+  $("drift").hidden = !drift;
   show("c0");
-  tell("drawn", { id: S.id, name: S.name, round: g.round });
+  tell("drawn", { id: S.id, name: S.name, round: g.round, ...(drift ? { drift: drift.slice(0, 120) } : {}) });
 }
 
 // ---------- 様子を見る ----------

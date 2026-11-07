@@ -6,6 +6,7 @@ import {
   ENERGY_LABELS, LENGTH_ORDER, LENGTHS, PITCHES, PRESET_ORDER, PRESETS, RATES, TONE_ORDER, TONES, VOICE_ORDER, VOICES,
   applyPreset, cleanEnding, normalize, personaBlock, pitchKey, rateKey,
 } from './settings.js';
+import { VOICE_ROLE_ORDER, VOICE_ROLES, voiceRoleNote } from './voiceChoice.js';
 
 const el = (tag, props = {}, ...children) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -46,8 +47,10 @@ function segmented(label, entries, current, onPick, { className = 'yp-seg', with
  * @param {()=>void} [o.onCancel]
  * @param {HTMLElement} [o.parent]
  * @param {boolean} [o.lockTone] 人格の文で話し方が決まっている子(主役ノリーなど)。口調は「この子の話し方」から動かさない(D6)
+ * @param {(role:string)=>({choice:string, role:string|null, own:string|null}|null)} [o.onVoiceRole] 声の役(おまかせ・男の子・女の子)を
+ *   選んだ時に、舞台の読み上げへ渡す(試しの返事もその声で話す)。返り値は今の役(声の下の一言に出す)。「もどす」では元の役で呼び直す
  */
-export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body, lockTone = false }) {
+export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body, lockTone = false, onVoiceRole = null }) {
   injectStyles(parent.ownerDocument);
   // 話し方の決まった子は、口調をいつも own にする(覚えた設定・おまかせ・古い保存でも。「これにする」で主役の話し方を上書きしない)
   const fix = (v) => (lockTone ? normalize({ ...normalize(v), tone: 'own', ending: '' }) : normalize(v));
@@ -91,6 +94,13 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   const voices = segmented('声の出し方', VOICE_ORDER.map((k) => [k, VOICES[k]]), s.voice.provider, (k) => update({ ...s, voice: { ...s.voice, provider: k } }), { className: 'yp-voices', withHint: true });
   const pitch = segmented('声の高さ', Object.entries(PITCHES), pitchKey(s), (k) => update({ ...s, voice: { ...s.voice, pitch: PITCHES[k].value } }));
   const rate = segmented('話す速さ', Object.entries(RATES), rateKey(s), (k) => update({ ...s, voice: { ...s.voice, rate: RATES[k].value } }));
+  // 声の役(おまかせ = この子の役。11/7 第 11 波): 選ぶと、すぐ舞台の読み上げに渡す(試しの返事もその声)
+  const role = segmented('声の役', VOICE_ROLE_ORDER.map((k) => [k, VOICE_ROLES[k]]), s.voice.role, (k) => {
+    update({ ...s, voice: { ...s.voice, role: k } });
+    roleNote.textContent = voiceRoleNote(onVoiceRole?.(k) ?? null, k);
+  }, { className: 'yp-seg yp-roles' });
+  const roleNote = el('p', { className: 'yp-note yp-role-note', ariaLive: 'polite' });
+  const startRole = s.voice.role;
 
   const tryIn = el('input', { type: 'text', className: 'yp-try-in', maxLength: 60, value: 'はじめまして!', ariaLabel: '試しに話しかける言葉' });
   const tryBtn = el('button', { type: 'button', className: 'yp-try-btn', textContent: '返事を試す' });
@@ -119,6 +129,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
       voices.box,
       el('div', { className: 'yp-sub' }, el('span', { textContent: '高さ' }), pitch.box),
       el('div', { className: 'yp-sub' }, el('span', { textContent: '速さ' }), rate.box),
+      el('div', { className: 'yp-sub yp-role' }, el('span', { textContent: '役' }), role.box),
+      roleNote,
     ),
     el('details', {}, el('summary', { textContent: 'Claude に渡す文を見る' }), block),
     el('div', { className: 'yp-foot' }, randomBtn, cancelBtn, saveBtn),
@@ -136,6 +148,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
     voices.sync(s.voice.provider);
     pitch.sync(pitchKey(s));
     rate.sync(rateKey(s));
+    role.sync(s.voice.role);
     block.textContent = personaBlock(s);
     panel.dataset.preset = s.preset;
   }
@@ -184,6 +197,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   });
   cancelBtn.addEventListener('click', () => {
     close();
+    if (s.voice.role !== startRole) onVoiceRole?.(startRole); // 選んだ声の役を、開いた時の役に戻す
     onCancel();
   });
   back.addEventListener('click', (e) => {
@@ -191,6 +205,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   });
 
   sync();
+  roleNote.textContent = voiceRoleNote(onVoiceRole?.(s.voice.role) ?? null, s.voice.role);
   parent.append(back);
   if (brain() === 'mock') runPreview();
   else note.textContent = '本物の頭脳です。「返事を試す」を押すと Claude に聞きます(1 回分の利用になります)。';

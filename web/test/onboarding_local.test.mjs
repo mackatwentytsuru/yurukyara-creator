@@ -106,6 +106,12 @@ test('枠の住所に合言葉は # の後ろだけ。知らせは作る画面�
   assert.equal(win.count, 0);
   assert.deepEqual(cleanMakeEvent({ src: 'yc-make', ev: 'decided', decision: 'redo', note: 'い'.repeat(60), round: 1 }), { ev: 'decided', decision: 'redo', note: 'い'.repeat(40), round: 1 });
   assert.equal(cleanMakeEvent({ src: 'yc-make', ev: 'checked', class: 'robot' }), null);
+  // 描き直しで頼んでいない所も変わった時の一言(第 11 波): drawn の知らせだけが運び、文字だけ・120 字まで・内部の言葉はふつうの言葉に
+  const drift = cleanMakeEvent({ src: 'yc-make', ev: 'drawn', id: 'yc1107_1600_ab12', name: 'みかんちゃん', round: 2, drift: `頼んでいない所も変わりました: 体の色(だいだい→黄)。C0 ${'あ'.repeat(200)}` });
+  assert.equal(drift.drift.length, 120);
+  assert.match(drift.drift, /^頼んでいない所も変わりました: 体の色\(だいだい→黄\)。絵の確認あ/);
+  assert.equal(cleanMakeEvent({ src: 'yc-make', ev: 'decided', decision: 'redo', note: 'x', round: 1, drift: 'y' }).drift, undefined, 'drawn のほかは運ばない');
+  assert.equal(cleanMakeEvent({ src: 'yc-make', ev: 'drawn', id: 'yc1107_1600_ab12', round: 2 }).drift, undefined);
 });
 
 function harness({ frameWaitMs } = {}) {

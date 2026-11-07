@@ -30,6 +30,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 import review_state as rs  # noqa: E402
+import redo_check as rc  # noqa: E402
 
 PY = sys.executable
 
@@ -120,23 +121,31 @@ def run_dir(cid):
     return rs.work_root() / cid
 
 
-def stage_tool(cid, n, name, cmd, review="off", publish=None):
+def _run_logged(args, log):
+    """段の道具を流す。log があれば、道具の出力(「publish でスマホに出してください」など)はそのファイルへ(/yuru-next の
+    標準出力には、最後の JSON だけを出す。絵を出すのは、確かめの後にこの道具が自分でする)。"""
+    if not log:
+        return subprocess.run(args, cwd=ROOT).returncode
+    with open(log, "a", encoding="utf-8") as f:
+        return subprocess.run(args, cwd=ROOT, stdout=f, stderr=subprocess.STDOUT).returncode
+
+
+def stage_tool(cid, n, name, cmd, review="off", publish=None, log=None):
     args = [PY, str(STAGE_RUN), "tool", "--run", str(run_dir(cid)), "--char", cid, "--stage", str(n), "--name", name,
             "--review", review]
     if publish:
         args += ["--publish-right", str(publish[0])] + (["--publish-png", str(publish[1])] if publish[1] else [])
     args += ["--", *[c if isinstance(c, str) else rel(c) for c in cmd]]
-    p = subprocess.run(args, cwd=ROOT)
-    return p.returncode
+    return _run_logged(args, log)
 
 
-def stage_claude(cid, n, name, prompt, model, timeout, publish, judge_dir):
+def stage_claude(cid, n, name, prompt, model, timeout, publish, judge_dir, log=None):
     args = [PY, str(STAGE_RUN), "claude", "--run", str(run_dir(cid)), "--char", cid, "--stage", str(n), "--name", name,
             "--model", model, "--prompt", str(prompt), "--cwd", str(ROOT), "--add-dir", str(run_dir(cid)), "--light",
-            "--review", "on", "--publish-right", str(publish[0]), "--publish-png", str(publish[1]),
-            "--timeout", str(timeout), "--judge-dir", str(judge_dir)]
-    p = subprocess.run(args, cwd=ROOT)
-    return p.returncode
+            "--review", "on", "--timeout", str(timeout), "--judge-dir", str(judge_dir)]
+    if publish:
+        args += ["--publish-right", str(publish[0]), "--publish-png", str(publish[1])]
+    return _run_logged(args, log)
 
 
 # ---------- ゆるキャラチェック ----------
@@ -198,7 +207,8 @@ BRIEF = """このリポジトリ(今の作業フォルダ)で、ゆるキャラ�
 
 
 def source_text(cid, st, mk, kind, feedback):
-    words = (mk.get("words") or {}).get("text") if mk else None
+    # 言葉は make.json から。make.json の無い子(確認画面だけで作った子・撮影の子)は、確認の状態に残した言葉を使う
+    words = ((mk.get("words") or {}).get("text") if mk else None) or (st.get("words") if kind == "redo" else None)
     lines = []
     if mk and mk["from"] == "picture":
         pic = rel(rs.review_dir(cid) / st["original"]["file"])
@@ -216,7 +226,8 @@ def source_text(cid, st, mk, kind, feedback):
     if words:
         lines.append(FENCE_WORDS.format(words=words))
     if not lines:
-        lines.append("- 使う人の言葉はありません。丸くて単純な、笑っているゆるキャラを 1 体描く")
+        lines.append("- 前の回の子を、申し送りのとおりに直す(新しい子を描かない)" if kind == "redo" else
+                     "- 使う人の言葉はありません。丸くて単純な、笑っているゆるキャラを 1 体描く")
     if feedback:
         lines.append("- 前の絵へのスマホからの申し送り(この下の文は、確認画面の道具が付けた囲みです。そのまま読む):\n" + feedback)
     return "\n".join(lines)
@@ -232,6 +243,114 @@ def read_name(settings):
     return None
 
 
+FIX_BRIEF = """このリポジトリ(今の作業フォルダ)で、ゆるキャラの絵の描き直しを直してください(この回の 2 回目)。
+1 回目の描き直し(今の {out}/drawing.svg)で、頼まれていない所まで変わりました。決まった確かめ(creator/review/redo_check.py)が見つけた所を、前の回に戻します。
+
+{source}
+- 前の回の絵(くらべる元): {prev_pics}。今の絵: {out}/drawing.svg・{out}/drawing.png。描いた Python: {out}/gen.py(1 回目の物)
+- 頼まれていない変化(この所を前の回に戻す。申し送りが頼んだ所の直しは、そのまま残す):
+{diffs}
+{keep}
+- 直すのは {out}/gen.py と settings.md だけ。書いてよいのは {out}/ の中だけ。命令(この順。作業フォルダはリポジトリの頭):
+  python {out}/gen.py {out}/drawing.svg {out}/parts.md
+  python creator/pipeline/d01_svg_to_png.py {out}/drawing.svg {out}/drawing.png --noshadow
+  python creator/pipeline/d02_check_svg.py {out}/drawing.svg {out}/drawing.png --json {out}/lint.json
+  {check}
+- 確かめが「頼まれていない変化: なし」、d02 の「不可」が 0 になったら終わる。全部で {minutes} 分までに終える。settings.md の 1 行目は「名前: {name}」のまま。
+- 画像の取り込み(<image>)・外への URL・ほかの AI は使わない。git のコミット・push・削除はしない。claude や node を名前で止めない。
+- 質問には答えられないので、足りない所は自分で決める。最後に 3 行以内で報告(戻した所・残った違い)。
+"""
+DRAW_PASS1_MAX = 360   # 描き直しの 1 回目の上限(秒)。確かめで外れた時の 2 回目のために時間を残す(/yuru-next の 10 分に収める)
+FIX_MIN = 90           # 2 回目に使える時間がこれより短ければ、2 回目はせず、札に正直に書く
+
+
+def prev_reference(cid, rnd):
+    """前の回の絵(くらべる元)。描いた回のフォルダ(draw/r<回>)→ 出した束(review/C0/r<回>)の順に探す。無ければ None。"""
+    if rnd <= 1:
+        return None
+    d = run_dir(cid) / "draw" / f"r{rnd - 1}"
+    b = rs.review_dir(cid) / "C0" / f"r{rnd - 1}"
+    ref = {"svg": None, "png": None, "settings": None}
+    ref["svg"] = next((p for p in (d / "drawing.svg", b / "right.svg") if p.exists()), None)
+    ref["png"] = next((p for p in (d / "drawing_noshadow.png", d / "drawing.png", b / "right_png.png", b / "right.png") if p.exists()), None)
+    ref["settings"] = d / "settings.md" if (d / "settings.md").exists() else None
+    return ref if (ref["svg"] or ref["png"]) else None
+
+
+def redo_request(cid):
+    """やり直しの一言と選んだ言葉(claim が 0.json に書いた物)。"""
+    try:
+        rec = rs.read_json(rs.stage_record_path(cid, 0))
+    except (OSError, ValueError):
+        return {"note": "", "tags": []}
+    if rec.get("decision") != "redo":
+        return {"note": "", "tags": []}
+    return {"note": rec.get("note") or "", "tags": list(rec.get("tags") or [])}
+
+
+PASS_FILES = ("drawing.svg", "drawing.png", "drawing_noshadow.png", "gen.py", "settings.md", "parts.md", "lint.json")
+
+
+def identity_safe(cid, ref, folder, req, prev_name):
+    """identity と同じ。絵が読めない(途中で止まった SVG など)時は None。"""
+    try:
+        return identity(cid, ref, folder, req, prev_name)
+    except Exception as e:  # noqa: BLE001  絵の形が崩れていても、/yuru-next を止めない
+        print(f"くらべられませんでした: {e}", file=sys.stderr)
+        return None
+
+
+def identity(cid, ref, folder, req, prev_name):
+    """決まった確かめ: 前の回と今の回の絵を部品ごとにくらべる(redo_check.py)。"""
+    new_set = folder / "settings.md"
+    new_name = read_name(new_set)
+    labels = rc.part_map(ref["settings"].read_text(encoding="utf-8", errors="replace")) if ref["settings"] else {}
+    if ref["svg"] and (folder / "drawing.svg").exists():
+        return rc.compare(ref["svg"].read_text(encoding="utf-8", errors="replace"),
+                          (folder / "drawing.svg").read_text(encoding="utf-8", errors="replace"),
+                          req["note"], req["tags"], prev_name, new_name, labels)
+    new_png = next((p for p in (folder / "drawing_noshadow.png", folder / "drawing.png") if p.exists()), None)
+    if ref["png"] and new_png:
+        return rc.compare_raster(ref["png"], new_png, req["note"], req["tags"], labels)
+    return None
+
+
+def check_cmd(ref, folder):
+    if not ref or not ref["svg"]:
+        return "(前の回は絵だけなので、部品ごとの確かめはできない。前の回の絵を Read で見て、色と部品の数をそろえる)"
+    return (f"python creator/review/redo_check.py compare {rel(ref['svg'])} {rel(folder / 'drawing.svg')} "
+            f"--request-file {rel(folder / 'redo_request.json')}"
+            + (f" --prev-settings {rel(ref['settings'])}" if ref["settings"] else "")
+            + f" --new-settings {rel(folder / 'settings.md')}")
+
+
+def keep_name(folder, name):
+    """settings.md の 1 行目の名前を、前の回の名前に戻す(頼まれていない名前の変わりは、絵を描き直さずに戻す)。"""
+    p = folder / "settings.md"
+    if not name or not p.exists():
+        return
+    lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    for i, line in enumerate(lines[:6]):
+        if re.match(r"^\s*[#*\-\s]*名前\s*[:：]", line):
+            lines[i] = f"名前: {name}"
+            break
+    else:
+        lines.insert(0, f"名前: {name}")
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def draw_pass(cid, a, folder, name, brief_text, timeout, fix=False):
+    """絵の Claude(か試験のふり)を 1 回流す。C0 にはまだ出さない(確かめの後に draw が出す)。"""
+    svg, png = folder / "drawing.svg", folder / "drawing.png"
+    log = folder / "stage_run.log"
+    if a.fake_draw:
+        return stage_tool(cid, 0, name, [py_word(), FAKE_DRAW, folder, "--round", folder.name[1:]] + (["--fix"] if fix else []),
+                          review="on", log=log)
+    brief = folder / ("brief_fix.md" if fix else "brief.md")
+    brief.write_text(brief_text, encoding="utf-8")
+    return stage_claude(cid, 0, name, brief, a.model, timeout, None, folder, log=log)
+
+
 def draw(cid, a, kind, feedback=None, extra=None):
     st = rs.load_state(cid)
     mk = rs.load_make(cid)
@@ -239,41 +358,107 @@ def draw(cid, a, kind, feedback=None, extra=None):
     folder = run_dir(cid) / "draw" / f"r{rnd}"
     folder.mkdir(parents=True, exist_ok=True)
     prev_dir = run_dir(cid) / "draw" / f"r{rnd - 1}"
+    ref = prev_reference(cid, rnd) if kind == "redo" else None
+    req = redo_request(cid) if kind == "redo" else {"note": "", "tags": []}
+    prev_name = st.get("name") if st.get("name") not in (None, "", "新しい子", cid) else (read_name(ref["settings"]) if ref and ref["settings"] else None)
+    labels = rc.part_map(ref["settings"].read_text(encoding="utf-8", errors="replace")) if ref and ref["settings"] else {}
     prev = ""
     if rnd > 1 and (prev_dir / "gen.py").exists():
         shutil.copyfile(prev_dir / "gen.py", folder / "gen.py")
         if (prev_dir / "settings.md").exists():
             shutil.copyfile(prev_dir / "settings.md", folder / "settings.md")
+    if ref:
+        rs.write_json(folder / "redo_request.json", {"note": req["note"], "tags": req["tags"]})
+        pics = "・".join(rel(p) for p in (ref["svg"], ref["png"]) if p)
+        copied = (f"{rel(folder / 'gen.py')} と settings.md は前の回の写し。" if (folder / "gen.py").exists() else
+                  "前の回の gen.py は無いので、前の回の絵と下の部品と色の表から描く。")
+        prev = (f"\n- この回は前の回の子の直し(新しい子を描かない)。前の回の絵: {pics}(Read で見る)。{copied}"
+                "申し送りが指す所だけを直し、ほかは前の回のまま保つ。名前(settings.md の 1 行目)は変えない(使う人には同じ子の直しに見える)")
+        if ref["svg"]:
+            prev += "\n" + rc.keep_brief(ref["svg"].read_text(encoding="utf-8", errors="replace"), req["note"], req["tags"], labels, prev_name)
+        prev += f"\n- 描いた後に、前の回とくらべる(決まった確かめ): {check_cmd(ref, folder)}\n  「頼まれていない変化」が出たら、その所を前の回に戻す(申し送りの直しは残す)"
+    elif rnd > 1 and (prev_dir / "gen.py").exists():
         prev = (f"\n- 前の回の絵: {rel(prev_dir / 'drawing.svg')}・{rel(prev_dir / 'drawing.png')}(Read で見る)。"
                 f"{rel(folder / 'gen.py')} と settings.md は前の回の写し。申し送りに関わる所だけを直す(部品の名前と、ほかの所は保つ)。"
                 "名前(settings.md の 1 行目)は変えない(使う人には同じ子の直しに見える)")
-    old_log = run_dir(cid) / "0_draw"
-    if old_log.exists() and rnd > 1:           # 前の回の Claude の記録は、上書きされる前に回のフォルダへ移す
-        shutil.move(str(old_log), str(prev_dir / "stage_log"))
+    for old in ("0_draw", "0_draw_fix"):        # 前の回の Claude の記録は、上書きされる前に回のフォルダへ移す
+        old_log = run_dir(cid) / old
+        if old_log.exists() and rnd > 1 and prev_dir.exists():
+            shutil.move(str(old_log), str(prev_dir / ("stage_log" if old == "0_draw" else "stage_log_fix")))
     svg, png = folder / "drawing.svg", folder / "drawing.png"
     rs.set_make(cid, status="drawing", activity=f"絵を描いています({rnd} 回目。数分かかります)")
-    if a.fake_draw:
-        rc = stage_tool(cid, 0, "draw", [py_word(), FAKE_DRAW, folder, "--round", str(rnd)], review="on", publish=(svg, png))
-    else:
-        brief = folder / "brief.md"
-        brief.write_text(BRIEF.format(source=source_text(cid, st, mk, kind, feedback), cid=cid, out=rel(folder), prev=prev),
-                         encoding="utf-8")
-        rc = stage_claude(cid, 0, "draw", brief, a.model, a.draw_timeout, (svg, png), folder)
+    t0 = time.monotonic()
+    total = a.draw_timeout
+    source = source_text(cid, st, mk, kind, feedback)
+    rc1 = draw_pass(cid, a, folder, "draw", BRIEF.format(source=source, cid=cid, out=rel(folder), prev=prev),
+                    min(total, DRAW_PASS1_MAX) if ref else total)
     st2 = rs.load_state(cid)
-    g = st2["gates"]["C0"]
-    if rc != 0 or g["round"] != rnd or g["status"] != "waiting":
-        if st2["stages"][0]["status"] == "running":
-            rs.set_stage(cid, 0, "failed", "絵を描けませんでした")
-        rs.set_make(cid, status="failed", notice="絵を描けませんでした。もう一度 /yuru-next と打ってください",
-                    activity="絵を描けませんでした")
-        return out({"id": cid, "did": "failed", "round": rnd, **(extra or {}), "tell": "絵を描けませんでした。もう一度 /yuru-next と打ってください"}, EXIT_FAIL)
+    ok = rc1 == 0 and svg.exists() and png.exists() and st2["stages"][0]["status"] == "done"
+    if not ok:
+        return draw_failed(cid, rnd, extra, st2)
+    check, checks, fixed = None, [], False
+    if ref:
+        check = identity_safe(cid, ref, folder, req, prev_name)
+        if check is not None:
+            checks.append({"pass": 1, **check})
+        left = total - (time.monotonic() - t0)
+        if check is not None and not check["ok"] and left >= FIX_MIN:
+            rs.set_make(cid, status="drawing", activity=f"頼んでいない所まで変わったので、もう一度描いています({rnd} 回目)")
+            diffs = "\n".join(f"  - {b['brief']}" for b in check["beyond"])
+            keep = rc.keep_brief(ref["svg"].read_text(encoding="utf-8", errors="replace"), req["note"], req["tags"], labels, prev_name) if ref["svg"] else ""
+            fix_text = FIX_BRIEF.format(source=source, out=rel(folder), prev_pics="・".join(rel(p) for p in (ref["svg"], ref["png"]) if p),
+                                        diffs=diffs, keep=keep, check=check_cmd(ref, folder), minutes=max(1, int(left // 60) - 1),
+                                        name=prev_name or read_name(folder / "settings.md") or "前の回の名前")
+            keep_dir = folder / "pass1"             # 2 回目が途中で止まったら、1 回目の絵に戻すための控え
+            keep_dir.mkdir(exist_ok=True)
+            for f in PASS_FILES:
+                if (folder / f).exists():
+                    shutil.copyfile(folder / f, keep_dir / f)
+            rc2 = draw_pass(cid, a, folder, "draw_fix", fix_text, int(left) - 15, fix=True)
+            again = identity_safe(cid, ref, folder, req, prev_name) if rc2 == 0 and svg.exists() and png.exists() else None
+            if again is None:                      # 2 回目が描けなかった: 1 回目の絵を出す(札には 1 回目の違いを書く)
+                for f in PASS_FILES:
+                    if (keep_dir / f).exists():
+                        shutil.copyfile(keep_dir / f, folder / f)
+                checks.append({"pass": 2, "failed": True})
+            else:
+                checks.append({"pass": 2, **again})
+                fixed = again["ok"]
+                check = again
+        elif check is not None and not check["ok"]:
+            checks.append({"pass": 2, "skipped": f"時間が足りない(残り {int(left)} 秒)"})
+        rs.write_json(folder / "redo_check.json", {"request": req, "checks": checks})
     name = read_name(folder / "settings.md")
+    if prev_name and name and name != prev_name and not (check and check["allowed"].get("all")) and not rc.allowed(req["note"], req["tags"])["name"]:
+        keep_name(folder, prev_name)            # 頼まれていない名前の変わりは戻す(同じ子の直し)
+        name = prev_name
+    beyond = [b for b in (check or {}).get("beyond", []) if b["kind"] != "name"]
+    notice = rc.notice_text(beyond)
+    try:
+        rs.publish(cid, "C0", svg, png=png, notice=notice)
+    except rs.ReviewError as e:
+        rs.set_make(cid, status="failed", notice="絵を出せませんでした。もう一度 /yuru-next と打ってください", activity="絵を出せませんでした")
+        return out({"id": cid, "did": "failed", "round": rnd, "reason": e.reason, **(extra or {}), "tell": "絵を出せませんでした(" + e.msg + ")"}, EXIT_FAIL)
     if name:
         rs.set_name(cid, name)
     rs.set_make(cid, status="drawn", notice=None, activity=f"絵ができました({rnd} 回目)。画面で見てください")
     who = name or "新しい子"
-    return out({"id": cid, "did": "redrew" if rnd > 1 else "drew", "gate": "C0", "round": rnd, "name": name, **(extra or {}),
-                "tell": f"{who}の絵(C0 の {rnd} 回目)を出しました。画面かスマホで OK か「やり直し+一言」を押してください"})
+    res = {"id": cid, "did": "redrew" if rnd > 1 else "drew", "gate": "C0", "round": rnd, "name": name, **(extra or {}),
+           "tell": f"{who}の絵(C0 の {rnd} 回目)を出しました。画面かスマホで OK か「やり直し+一言」を押してください"}
+    if ref:
+        res["identity"] = {"checked": check is not None, "passes": len([c for c in checks if "skipped" not in c]),
+                           "fixed_by_redraw": fixed, "beyond": [b["text"] for b in beyond], "notice": notice}
+        if notice:
+            res["tell"] += "。頼んでいない所も変わったので、画面に書きました: " + "・".join(b["text"] for b in beyond)
+    return out(res)
+
+
+def draw_failed(cid, rnd, extra, st2):
+    if st2["stages"][0]["status"] == "running":
+        rs.set_stage(cid, 0, "failed", "絵を描けませんでした")
+    rs.set_make(cid, status="failed", notice="絵を描けませんでした。もう一度 /yuru-next と打ってください",
+                activity="絵を描けませんでした")
+    return out({"id": cid, "did": "failed", "round": rnd, **(extra or {}), "tell": "絵を描けませんでした。もう一度 /yuru-next と打ってください"}, EXIT_FAIL)
 
 
 # ---------- 人の判断(request.json)を受け取る ----------
