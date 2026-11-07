@@ -21,8 +21,9 @@
     </form>
     <div class="mk-two">
       <label class="mk-btn" data-act="photo"><input type="file" id="photo" accept="image/*" capture="environment">写真を撮る</label>
-      <label class="mk-btn" data-act="pick"><input type="file" id="pick" accept="image/*">絵を選ぶ</label>
+      <label class="mk-btn" data-act="pick"><input type="file" id="pick" accept="image/*,.svg">絵を選ぶ</label>
     </div>
+    <p class="mk-hint mk-formats" id="formats">使える絵: PNG・JPEG・WebP・SVG(20MB まで)</p>
   </section>
 
   <section id="waiting" class="mk-part" hidden>
@@ -44,7 +45,7 @@
       <label class="mk-label" for="note">直したい所を一言(<span id="noteMax">40</span> 字まで。人の感想として渡します)</label>
       <input id="note" type="text" maxlength="80" placeholder="例: 帽子を青にして" enterkeyhint="send" autocomplete="off">
       <p class="mk-count" id="noteCount">0 / 40</p>
-      <button type="submit" class="mk-btn" id="noteBtn" disabled>直したい(一言を送る)</button>
+      <button type="submit" class="mk-btn" id="noteBtn" disabled><span class="mk-long">直したい(一言を送る)</span><span class="mk-short">直したい</span></button>
     </form>
     <button type="button" class="mk-btn ghost" id="againBtn">やり直す(別の子にする)</button>
   </section>
