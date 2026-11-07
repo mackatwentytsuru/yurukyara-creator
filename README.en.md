@@ -35,7 +35,7 @@ npm start        # then open http://127.0.0.1:8787/
 ## Voices: おまかせ, 男の子 or 女の子
 
 - Every character has a voice role, boy (男の子) or girl (女の子), chosen automatically from the character: a line 「- 声: 男の子」 or 「- 声: 女の子」 in its personality text (`characters/<id>/persona.md`); without one, a guess from the way it calls itself or its name (〜くん, 〜ちゃん); failing that, girl. Norrie is a butler apprentice, so its role is 男の子.
-- On the 「性格」 (personality) screen, the 「声」 (voice) choice offers **おまかせ** (the character's own role), **男の子** (boy) and **女の子** (girl).
+- On the 「性格」 (personality) screen, 「声の役」 (voice role) in the 「声」 (voice) group offers **おまかせ** (the character's own role), **男の子** (boy) and **女の子** (girl).
 - The character speaks aloud only with your own ElevenLabs key (API key). Enter it at step 7, 「声」 (voice), of 「はじめての会話」 (the first conversation). The key is used only inside this browser and is never sent to our server. Without a key, the character talks with text and a retro sound.
 - The default voices are Japanese voices from ElevenLabs' Voice Library, one for each role. ElevenLabs says that Voice Library voices are not available through the API on the free tier. The ElevenLabs rules that apply are summed up in [THIRD_PARTY.md](THIRD_PARTY.md#elevenlabs-voices).
 - To use another voice, add a line 「- 声の id: <ElevenLabs voice id>」 to the personality text (it is used when the character speaks in its own role). On the local server, the default voice of each role can also be changed with the environment variables `ELEVEN_VOICE_MALE` and `ELEVEN_VOICE_FEMALE`.
