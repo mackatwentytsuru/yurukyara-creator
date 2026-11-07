@@ -1302,8 +1302,14 @@ function setupQuestLink() {
     button: $('questLinkBtn'),
     box: $('questLinkBox'),
     plan: questLinkState,
+    holdOpenFor: (t) => Boolean(t?.closest?.('#memoryDrawer')), // 「覚えていること」は、押し終わりで札が開き、その時に箱を閉じる(押し始めで閉じると上の段が動く)
     onToggle: (open) => {
       if (open && drawer?.open) drawer.open = false; // 「覚えていること」の札とは同時に開かない(重ねない)
+      // 箱を開いている間は、上の段の入口のほかの物(おうちの人への一文・札・テレビ・あたまの なか)をしまい、上の段の高さを抑える
+      // (「もっと」の段が何行にもなると、箱の高さの上限「画面の 45% − 上の段」が縮んで送るボタンが切れた)。閉じると戻る。
+      // 箱を開いても「もっと」は閉じない(入口が残るので、Escape で閉じた後もフォーカスを入口へ戻せる)
+      document.documentElement.classList.toggle('quest-open', open);
+      reframe(); // 開く・閉じるで上の段の高さが変わる分も、キャラを置き直す(閉じた後に元の位置へ戻す)
     },
   });
   drawer?.addEventListener('toggle', () => {
@@ -1747,7 +1753,19 @@ function uw5VoiceRest(ttsOk, s) {
   $('modes')?.addEventListener('click', (e) => e.target.closest('button') && setTimeout(() => uw5SetTop(null), 0));
   // Escape でも段を閉じる(ほかの窓が開いている時は、その窓が先に閉じる)
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && /\btop-(more|change)\b/.test(document.documentElement.className) && !openSheets().length && !app.shitsukan?.box?.isOpen?.()) uw5SetTop(null);
+    // いちばん上の層だけを閉じる: Quest の箱(箱の Escape が先に閉じて入口へ戻す)→ 覚えていること → 上の段(開いたボタンへ戻す)
+    if (e.key !== 'Escape' || e.defaultPrevented || app.questLink?.isOpen) return;
+    const root = document.documentElement.classList;
+    if (!(root.contains('top-more') || root.contains('top-change')) || openSheets().length || app.shitsukan?.box?.isOpen?.()) return;
+    const drawer = $('memoryDrawer');
+    if (drawer?.open) {
+      drawer.open = false;
+      drawer.querySelector('summary')?.focus({ preventScroll: true });
+      return;
+    }
+    const opener = $(root.contains('top-more') ? 'moreBtn' : 'changeBtn');
+    uw5SetTop(null);
+    opener?.focus({ preventScroll: true });
   });
   const mic = $('micBtn');
   if (mic) new MutationObserver(uw5SyncTalkLabels).observe(mic, { attributes: true, attributeFilter: ['aria-pressed'] });

@@ -107,3 +107,12 @@ test('UW5f: 声の料金は来場者の画面に出さない。あたまの な�
 test('UW5f: カメラが使えない時のやさしい 1 行は、入口の知らせを見える所へ出し、画面の上の知らせにも出す', () => {
   assert.match(main, /status\.textContent = UW5_CAMERA_FALLBACK;[^\n]*\n[^\n]*status\.scrollIntoView\?\.\(\{ block: 'center' \}\);[^\n]*\n[^\n]*ui\.notice\(UW5_CAMERA_FALLBACK\);/);
 });
+
+test('UW5(V6): Quest の箱を開いても「もっと」は閉じない。箱を開く間は上の段のほかの物をしまう。Escape は一番上の層だけを閉じて入口へ戻す', () => {
+  assert.match(main, /classList\.toggle\('quest-open', open\);\s*reframe\(\);/);
+  assert.match(css, /html\.top-simple\.quest-open \.top \.grown-up, html\.top-simple\.quest-open \.top \.chips, html\.top-simple\.quest-open #thought,\s*html\.top-simple\.quest-open #tvBtn \{ display: none !important; \}/);
+  assert.match(css, /html\.top-simple\.quest-open \.quest-link-box \{\s*top: calc\(100% \+ 6px\);/);
+  assert.match(main, /e\.key !== 'Escape' \|\| e\.defaultPrevented \|\| app\.questLink\?\.isOpen\) return;/);
+  assert.match(main, /opener\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(main, /holdOpenFor: \(t\) => Boolean\(t\?\.closest\?\.\('#memoryDrawer'\)\)/);
+});
