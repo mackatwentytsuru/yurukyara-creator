@@ -530,3 +530,88 @@ html.kb-open .privacy, html.kb-open .choices { display: none; } /* 低い見え�
 html.kb-open .caption, html.kb-open .caption.settled { max-height: min(calc(2 * 1.45em + 24px), 22vh); }
 html.kb-open .gate { top: var(--kbt, 0px); bottom: var(--kb, 0px); height: auto; place-items: safe center; overflow-y: auto; }
 html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - var(--top-h, 64px) - 24px); overflow-y: auto; }
+
+/* ---- BUX(第 12 波 b): 「マイクと スピーカー」の窓・画面のアップデートの印と窓。ほかの規則は変えない ----
+   窓(.yc-sheet)は下の帯(.bottom)の中、入力の列の上に入る。幅 1100 未満は帯の一部になり、帯の高さが増えるので、main.js の fitBottom が
+   キャラを窓の上へ置き直す(キャラに重ならない・形は変えない)。幅 1100 以上は右に浮かせる(キャラは真ん中なので重ならない)。字は 14px 以上 */
+.yc-update-badge {
+  pointer-events: auto; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 999px;
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--warn); border: 1px solid rgba(255, 255, 255, 0.4); cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.yc-update-badge[hidden] { display: none; }
+.yc-update-badge:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.yc-update-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); flex: none; }
+.yc-update-short { display: none; }
+@media (max-width: 640px) {
+  .yc-update-long { display: none; }
+  .yc-update-short { display: inline; }
+  .yc-update-badge { padding: 0 12px; }
+}
+.yc-audio-btn {
+  flex: none; width: 44px; min-height: 44px; padding: 0 !important; display: grid; place-items: center;
+  background: var(--glass) !important; border: 1px solid var(--line) !important; color: var(--text);
+}
+.yc-audio-btn[aria-expanded="true"] { border-color: var(--lav) !important; color: var(--lav); }
+.yc-sheet {
+  width: min(100%, 560px); max-height: min(44vh, 430px); max-height: min(44dvh, 430px); overflow: auto; overscroll-behavior: contain;
+  padding: 12px 14px 14px; border-radius: var(--radius); background: rgba(29, 26, 46, 0.94); border: 1px solid var(--line);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  display: grid; gap: 10px; font-size: 15px; line-height: 1.55; color: var(--text);
+}
+.yc-sheet[hidden] { display: none; }
+.yc-sheet:focus { outline: none; }
+@media (min-width: 1100px) {
+  .yc-sheet {
+    position: fixed; z-index: 6; right: max(12px, env(safe-area-inset-right)); width: 380px;
+    top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px);
+    max-height: calc(100vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - var(--bottom-h, 120px) - 24px);
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - var(--bottom-h, 120px) - 24px);
+  }
+}
+.yc-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.yc-sheet-head h2 { margin: 0; font-size: 17px; letter-spacing: 0.04em; }
+.yc-sheet-close, .yc-btn, .yc-link-btn {
+  font: inherit; font-size: 14px; min-height: 44px; padding: 8px 14px; border-radius: 14px; cursor: pointer; color: var(--text);
+  background: transparent; border: 1px solid var(--line);
+}
+.yc-sheet-close:focus-visible, .yc-btn:focus-visible, .yc-link-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.yc-btn:disabled { opacity: 0.55; cursor: wait; }
+.yc-btn[hidden], .yc-link-btn[hidden] { display: none; }
+.yc-btn-main { border: 0; font-weight: 700; background: linear-gradient(135deg, #7d62ff, #c15bff); }
+.yc-btn-small { min-height: 40px; padding: 6px 12px; justify-self: start; }
+.yc-link-btn { justify-self: start; border-style: dashed; color: var(--muted); }
+.yc-sheet p, .yc-sheet ul, .yc-sheet ol, .yc-sheet h3 { margin: 0; }
+.yc-sheet h3 { font-size: 15px; color: var(--muted); font-weight: 700; }
+.yc-sheet [hidden] { display: none !important; }
+.yc-field { display: grid; gap: 4px; }
+.yc-field > span { font-size: 14px; color: var(--muted); }
+.yc-select {
+  font: inherit; font-size: 15px; min-height: 44px; width: 100%; min-width: 0; padding: 0 10px; border-radius: 12px;
+  color: var(--text); background: var(--ink); border: 1px solid var(--line);
+}
+.yc-select:focus-visible { outline: 2px solid var(--lav); outline-offset: 1px; }
+.yc-meter-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.yc-meter-label { font-size: 14px; color: var(--muted); }
+.yc-meter { height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.yc-meter-bar { display: block; height: 100%; width: 100%; transform: scaleX(0); transform-origin: left center; background: linear-gradient(90deg, var(--mint), var(--lav)); transition: transform 0.06s linear; }
+.yc-au-actions, .yc-up-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.yc-au-route, .yc-au-foot, .yc-au-lead, .yc-up-keep { font-size: 14px; color: var(--muted); }
+.yc-au-heard { min-height: 1.55em; font-size: 15px; }
+.yc-au-msg, .yc-up-msg { font-size: 14px; color: var(--warn); }
+.yc-up-version { font-size: 16px; font-weight: 700; }
+.yc-up-news { padding-left: 1.2em; display: grid; gap: 2px; }
+.yc-up-steps { padding-left: 1.4em; display: grid; gap: 2px; font-size: 15px; }
+.yc-up-steps li::marker { color: var(--mint); font-weight: 700; }
+.yc-up-details summary { cursor: pointer; font-size: 14px; color: var(--muted); min-height: 32px; }
+.yc-up-raw { margin: 6px 0 0; max-height: 9em; overflow: auto; white-space: pre-wrap; word-break: break-all; font: inherit; font-size: 14px; color: var(--muted); }
+.yc-up-offer-list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.yc-up-offer { display: grid; gap: 4px; padding: 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+.yc-up-offer > span { font-size: 14px; color: var(--muted); }
+.yc-up-asked { font-size: 14px; color: var(--mint); }
+.yc-note { display: inline-flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.yc-note[hidden] { display: none; }
+.yc-note-action { font: inherit; font-size: 14px; min-height: 36px; padding: 4px 12px; border-radius: 999px; cursor: pointer; color: var(--ink); background: var(--lav); border: 0; pointer-events: auto; }
+.yc-note-action[hidden] { display: none; }
+html.tv-mode .yc-update-badge, html.tv-mode .yc-sheet, html.tv-mode .yc-note { display: none !important; }
+/* ---- BUX ここまで ---- */

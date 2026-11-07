@@ -1341,6 +1341,14 @@ async function boot() {
 }
 
 boot();
+// ---- BUX(第 12 波 b): 「マイクと スピーカー」の窓(声で話すの横の歯車)と、画面のアップデート(この PC の中で開いた時だけ、上の段に小さな印)。
+// 中身は ui/audioPanel.js・ui/updatePanel.js。ここではつなぐだけ(ほかの所は変えない) ----
+import { mountAudioPicker } from './ui/audioPanel.js';
+import { mountUpdate, startUpdateCheck } from './ui/updatePanel.js';
+const ycUpdate = mountUpdate({ app });
+startUpdateCheck(ycUpdate, app);
+mountAudioPicker({ app, update: ycUpdate });
+// ---- BUX ここまで ----
 // 初めての会話(7 歩)と性格の画面(S4)。#modes に「性格」「はじめての会話」を出す。?onboard=1 で初めての会話を出す。案内役は主役ノリー。
 // 初めての訪問なら、入口を閉じた後に main.js が出す(gateClosed)。印の名前は S4 の DONE_KEY を使う
 firstRunReady = import('./ui/onboarding/index.js')

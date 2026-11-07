@@ -23,6 +23,8 @@ import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import yuru_update as YU  # noqa: E402  画面向けの一言の文字(APP_RESTART_HINT など)を読むだけ
 TOOL_FILES = ("yuru_update.py", "yuru_update_core.py", "yuru_update_hook.mjs")   # 道具・部品・起動役(写しの tools/ に置く)
 NODE = shutil.which("node")
 
@@ -586,6 +588,74 @@ class UpdateTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("もう、いちばん新しい版です", out)
         self.assertEqual(self.backup_dirs(), [])
+
+    # ---- 画面(アプリの手元のサーバー)向けの JSON(第 12 波 b・BUX) ----
+
+    def tool_json(self, *args, env=None):
+        p = subprocess.run([sys.executable, os.path.join(self.user, "tools", "yuru_update.py"), *args], cwd=self.user,
+                           env=dict(self.env, **(env or {})), capture_output=True, timeout=180)
+        lines = [ln for ln in p.stdout.decode("utf-8", "replace").splitlines() if ln.strip()]
+        self.assertEqual(p.returncode, 0, p.stderr.decode("utf-8", "replace"))
+        self.assertEqual(len(lines), 1, f"1 行の JSON のはず: {lines}")
+        return json.loads(lines[0])
+
+    def test_json_check_status_apply_undo_for_the_app(self):
+        self.put_mine()
+        self.advance()
+        c = self.tool_json("check", "--json")
+        self.assertTrue(c["update"] and c["newer"] and c["fetched"] and c["clone"] and c["upstream"])
+        self.assertEqual((c["ours"], c["theirs"], c["ahead"]), ("1.0.0", "1.1.0", 1))
+        self.assertEqual(c["news"], [{"version": "1.1.0", "title": "1.1.0(2026-11-20)", "lines": ["新しい手のふり方ができる"]}])
+        self.assertNotIn(KEY_VALUE, json.dumps(c, ensure_ascii=False))
+        s = self.tool_json("status", "--json")
+        self.assertEqual((s["version"], s["can_undo"], s["backup"]), ("1.0.0", False, None))
+        # 画面の「アップデートする」から流した時は、終わりの一言が「アプリが じぶんで ひらきなおします」になる
+        p = subprocess.run([sys.executable, os.path.join(self.user, "tools", "yuru_update.py"), "apply"], cwd=self.user,
+                           env=dict(self.env, YURU_UPDATE_FROM_APP="1"), capture_output=True, timeout=180)
+        out = p.stdout.decode("utf-8", "replace")
+        self.assertEqual(p.returncode, 0, out)
+        self.assertIn(YU.APP_RESTART_HINT, out)
+        self.assertIn(YU.APP_UNDO_HINT, out)
+        self.assertNotIn(YU.RESTART_HINT, out)
+        s = self.tool_json("status", "--json")
+        self.assertEqual((s["version"], s["can_undo"], s["undo_to"]), ("1.1.0", True, "1.0.0"))
+        self.assertEqual(s["backup"]["status"], "applied")
+        # 今日もう見たので、--once-a-day は取り先に行かず、手元の物でくらべる(もう新しい)
+        c = self.tool_json("check", "--json", "--once-a-day")
+        self.assertEqual((c["fetched"], c["update"], c["ahead"], c["ours"]), (False, False, 0, "1.1.0"))
+        code, out = self.tool("undo")
+        self.assertEqual(code, 0, out)
+        s = self.tool_json("status", "--json")
+        self.assertEqual((s["version"], s["can_undo"], s["backup"]["status"]), ("1.0.0", False, "undone"))
+
+    def test_json_once_a_day_skips_the_network_but_still_sees_what_was_fetched(self):
+        c = self.tool_json("check", "--json")
+        self.assertEqual((c["fetched"], c["update"]), (True, False))
+        self.advance()
+        c = self.tool_json("check", "--json", "--once-a-day")   # 今日はもう見た: 取り先に行かないので、まだ知らない
+        self.assertEqual((c["fetched"], c["update"]), (False, False))
+        c = self.tool_json("check", "--json")                   # 「アップデートを かくにん」: 1 日 1 回の決まりを飛ばす
+        self.assertEqual((c["fetched"], c["update"], c["theirs"]), (True, True, "1.1.0"))
+        c = self.tool_json("check", "--json", "--once-a-day")   # 取ってある物でくらべるので、印は出たまま
+        self.assertEqual((c["fetched"], c["update"]), (False, True))
+
+    def test_json_offline_and_not_a_clone_show_nothing(self):
+        os.rename(self.origin, self.origin + ".gone")   # 取り先に届かない(消さずに名前を替える。Windows の git の物は読むだけの印つき)
+        c = self.tool_json("check", "--json")
+        self.assertEqual((c["offline"], c["update"], c["news"]), (True, False, []))
+        plain = os.path.join(self.tmp.name, "plain")
+        shutil.copytree(os.path.join(self.user, "tools"), os.path.join(plain, "tools"))
+        p = subprocess.run([sys.executable, os.path.join(plain, "tools", "yuru_update.py"), "check", "--json"], cwd=plain,
+                           env=self.env, capture_output=True, timeout=60)
+        c = json.loads(p.stdout.decode("utf-8"))
+        self.assertEqual((c["clone"], c["update"]), (False, False))
+
+    def test_json_own_commits_do_not_offer_the_update(self):
+        self.advance()
+        write(self.user, "characters/norrie/persona.md", EDITED_NORRIE)
+        self.git(self.user, "commit", "-q", "-am", "mine")
+        c = self.tool_json("check", "--json")
+        self.assertEqual((c["own_commits"], c["update"], c["ahead"]), (True, False, 1))
 
 
 if __name__ == "__main__":

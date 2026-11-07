@@ -15,6 +15,7 @@ import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
+import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = config.logDir;
@@ -206,12 +207,28 @@ async function handleChat(req, res) {
 
 const memoryRoutes = createMemoryRoutes({ store: memory, config, limiter: memoryLimiter, readBody });
 
+// ---- BUX(第 12 波 b): 画面のアップデートの受け口(この PC の中からだけ。update.mjs)。見張り役(scripts/yuru-run.mjs)の下なら、
+// 新しくし終えた後に決まった番号で閉じ、見張り役が組み立て直して起こし直す。YURU_UPDATE_UI=0 で受け口ごと無くす ----
+const updateRoutes = createUpdateRoutes({
+  repoRoot: REPO_ROOT,
+  python: findUpdatePython(),
+  watched: process.env.YURU_WATCHER === '1',
+  enabled: process.env.YURU_UPDATE_UI !== '0',
+  fellBack: process.env.YURU_UPDATE_FELL_BACK === '1',
+  restart: () => {
+    server.close();
+    setTimeout(() => process.exit(RESTART_CODE), 200);
+  },
+});
+// ---- BUX ここまで ----
+
 const useTls = Boolean(config.tlsCert && config.tlsKey);
 const handler = async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const path = decodeURIComponent(url.pathname);
   try {
     if (await memoryRoutes(req, res, path, url)) return;
+    if (await updateRoutes(req, res, path)) return; // BUX: 画面のアップデート(この PC の中からだけ)
     if (req.method === 'GET' && path === '/api/status') {
       return json(res, 200, {
         memory: { notice: MEMORY_NOTICE, pairing: Boolean(config.appPass) || ['127.0.0.1', '::1', 'localhost'].includes(config.host) },
