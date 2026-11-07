@@ -19,6 +19,10 @@ const sentUrl = (launch) => {
 };
 
 const WEB = join(import.meta.dirname, '..');
+
+// 家の中の住所の見本は、その場で組み立てる(公開の前の履歴の書き換えの規則が、書いたままの 192.168.… と 100.64〜127.… を
+// 伏せ字に言い換え、試験の中身が変わって落ちるため。S6 の頼み 11/7)
+const ip = (...parts) => parts.join('.');
 const read = (...p) => readFileSync(join(WEB, ...p), 'utf8').replace(/\r\n/g, '\n');
 const loc = (href) => {
   const u = new URL(href);
@@ -72,8 +76,8 @@ test('公開の URL: QR の文はこの画面の URL(http の試しの名前で�
 });
 
 test('この PC・家の中のアドレスでは、QR を出さず 1 行だけ(Quest からは開けない)', () => {
-  const local = ['localhost', 'app.localhost', '127.0.0.1', '[::1]', '::1', '0.0.0.0', '10.0.0.5', '172.16.0.1', '172.31.255.254', '192.168.x.x',
-    '169.254.10.1', '100.x.x.x', '100.x.x.x', '[fd12:3456::1]', '[fe80::1]', '[::ffff:192.168.x.x]', '[::ffff:c0a8:2]', 'mypc', 'printer.local', 'nas.home.arpa', 'box.lan', 'db.internal', ''];
+  const local = ['localhost', 'app.localhost', '127.0.0.1', '[::1]', '::1', '0.0.0.0', '10.0.0.5', '172.16.0.1', '172.31.255.254', ip(192, 168, 1, 20),
+    '169.254.10.1', ip(100, 64, 0, 1), ip(100, 127, 1, 1), '[fd12:3456::1]', '[fe80::1]', `[::ffff:${ip(192, 168, 0, 2)}]`, '[::ffff:c0a8:2]', 'mypc', 'printer.local', 'nas.home.arpa', 'box.lan', 'db.internal', ''];
   for (const host of local) {
     assert.equal(isPrivateHost(host), true, host);
     const plan = questLinkPlan({ loc: { origin: `http://${host || 'x'}`, pathname: '/', hostname: host }, character: 'norrie', look: '2d' });
@@ -148,7 +152,7 @@ test('Quest の中・この PC・家の中のアドレス・http では「Meta Q
   const https = loc('https://yuru.example/');
   assert.equal(questLinkPlan({ loc: https, headset: true }).launch, undefined, 'ヘッドセットのブラウザ');
   assert.equal(questLinkPlan({ loc: https, immersiveVr: true }).launch, undefined, 'immersive-vr が使えるブラウザ');
-  for (const href of ['https://localhost:8444/', 'https://192.168.x.x/', 'https://mypc/', 'http://127.0.0.1:8799/', 'http://yuru.test/']) {
+  for (const href of ['https://localhost:8444/', `https://${ip(192, 168, 1, 20)}/`, 'https://mypc/', 'http://127.0.0.1:8799/', 'http://yuru.test/']) {
     assert.equal(questLinkPlan({ loc: loc(href), character: 'norrie' }).launch, undefined, href);
   }
   assert.equal(typeof questLinkPlan({ loc: https }).launch, 'string', 'https の公開の URL では出す');

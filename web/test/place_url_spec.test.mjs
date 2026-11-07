@@ -8,6 +8,11 @@ import { SPEC_ID_RE, isSpecId, isLoopbackPage, pickSpec, SPEC_NOTICE } from '../
 
 const SRC = join(import.meta.dirname, '..', 'src');
 
+// 家の中の住所と Tailscale の名前の見本は、その場で組み立てる(公開の前の履歴の書き換えの規則が、書いたままの 192.168.… ・100.64〜127.… ・
+// <名前>.tail<16 進>.ts.net を伏せ字に言い換え、試験の中身が変わって落ちるため。S6 の頼み 11/7)
+const ip = (...parts) => parts.join('.');
+const tsName = (...parts) => [...parts, 'ts', 'net'].join('.');
+
 test('id の形は 英小文字・数字・_ の 1〜32 字だけ', () => {
   assert.equal(String(SPEC_ID_RE), String(/^[a-z0-9_]{1,32}$/));
   for (const ok of ['norrie', 'yokoso', 'd_lantern', 'f_led', '_test', 'a', 'x'.repeat(32), 'test_room']) assert.equal(isSpecId(ok), true, ok);
@@ -28,7 +33,7 @@ test('公開の URL(この PC の外): id は読む・外の URL とパスは読
 
 test('この PC の中(localhost・127.0.0.1・[::1])で開いた時だけ、パスと URL も読む(開発の確かめ。前と同じ)', () => {
   for (const hostname of ['localhost', '127.0.0.1', '[::1]', '::1', 'app.localhost', 'LOCALHOST']) assert.equal(isLoopbackPage({ hostname }), true, hostname);
-  for (const hostname of ['yurukyara.example.app', 'judge.test', '192.168.x.x', '<端末名>.<tailnet>.ts.net', 'localhost.evil.example', '127.0.0.1.evil.example', '']) {
+  for (const hostname of ['yurukyara.example.app', 'judge.test', ip(192, 168, 1, 20), tsName('anyone', 'tail0000'), 'localhost.evil.example', '127.0.0.1.evil.example', '']) {
     assert.equal(isLoopbackPage({ hostname }), false, hostname);
   }
   assert.deepEqual(pickSpec('/characters/_test/model.vrm', { allowPath: true }), { spec: '/characters/_test/model.vrm', rejected: false });
