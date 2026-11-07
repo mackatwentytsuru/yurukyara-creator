@@ -178,6 +178,49 @@ export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS }
   };
 }
 
+/* ---------- ブラウザから描く(サーバーの設定 YC_BROWSER_DRAW=1 の時だけ。既定は切ってある。B4 12b) ---------- */
+
+/**
+ * 見本の道に「サーバーが Claude に描いてもらう」を足した作る道。切ってある時・描けなかった時は、見本の道(いちばん近い子)のまま。
+ * 描けた子は、サーバーが動く 2D(characters/<id>/2d)にしてあるので、その場で舞台に出せる。
+ * @param {object} o
+ * @param {object} o.sample 見本の道(createSampleCreator)
+ * @param {() => boolean} o.enabled いま描けるか(/api/status の draw.on)
+ */
+export function createDrawCreator({ sample, enabled }) {
+  const on = () => Boolean(enabled?.());
+  return {
+    ...sample,
+    mode: 'sample',
+    get canDraw() {
+      return on();
+    },
+    async make(input, o = {}) {
+      if (!on()) return sample.make(input, o);
+      try {
+        const body = input?.from === 'picture' && input.file ? { picture: await pictureBody(input.file) } : { words: String(input?.words ?? '') };
+        o.onProgress?.('Claude が 描いているよ。少し まってね(1 分くらい)');
+        const r = await fetch('/api/draw', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && /^[a-z0-9_]{1,32}$/.test(String(j.id ?? ''))) return { id: j.id, name: String(j.name ?? 'あたらしい子').slice(0, 20), sample: false, drawn: true, twod: true, note: 'Claude が描いた子' };
+        const fallback = await sample.make(input?.from === 'picture' ? { ...input, colors: input.colors ?? [], shape: input.shape ?? 'any' } : input, o);
+        return fallback ? { ...fallback, drawFailed: String(j.error ?? '描けなかったよ').slice(0, 60) } : null;
+      } catch {
+        const fallback = await sample.make(input, o);
+        return fallback ? { ...fallback, drawFailed: '描けなかったよ' } : null;
+      }
+    },
+  };
+}
+
+/** 選んだ絵を、サーバーへ送る形(base64)にする。絵はこの時だけ、この PC のサーバーを通って Claude に送られる */
+async function pictureBody(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return { type: file.type, data: btoa(bin) };
+}
+
 /* ---------- 手元の PC の作る道('local') ---------- */
 
 export const LOCAL_HINT = 'PC の Claude Code で /yuru-next と打つと、描き始めます(描くのに数分かかります)。';

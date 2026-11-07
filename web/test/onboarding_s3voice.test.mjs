@@ -138,6 +138,8 @@ test('画面なしの Chrome(幅 390): 鍵なしはレトロ音と文字送り�
     await page.waitForFunction(() => window.__fr, null, { timeout: 30_000 });
     await page.evaluate(() => window.__fr.byokReady);
     const act = (id) => page.waitForSelector(`.fr-actions [data-act="${id}"]`, { timeout: 30_000 });
+    await act('role_home');
+    await page.click('.fr-actions [data-act="role_home"]');
     await act('words');
     await page.fill('.fr-actions [data-act="words"] input', '赤い提灯の子');
     await page.click('.fr-actions [data-act="words"] button[type="submit"]');

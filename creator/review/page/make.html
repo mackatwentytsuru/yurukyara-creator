@@ -29,7 +29,7 @@
 
   <section id="waiting" class="mk-part" hidden>
     <p class="mk-big">PC の Claude Code に渡しました。</p>
-    <p class="mk-hint">PC の Claude Code で <b>/yuru-next</b> と打つと進みます。</p>
+    <p class="mk-hint" id="waitHint">PC の Claude Code で <b>/yuru-next</b> と打つと進みます。</p>
     <p class="mk-act" id="activity" aria-live="polite"></p>
   </section>
 
@@ -56,6 +56,15 @@
     </form>
     <button type="button" class="mk-btn ghost" id="againBtn" aria-label="やり直す(別の子にする)"><span class="mk-long">やり直す(別の子にする)</span><span class="mk-short">別の子に</span></button>
     <button type="button" class="mk-btn auto" id="autoPick" aria-label="おまかせ(おすすめで きめる)">おまかせ(おすすめで きめる)</button>
+  </section>
+
+  <!-- B4(12b): 3D 用のゆるキャラ変換の絵(会話の札で形と しつかんを選んだ後に、この枠が頼んで、描けたら見せる) -->
+  <section id="convert" class="mk-part" hidden>
+    <p class="mk-hint">3D は、ゆるキャラの かたちに ととのえて つくるよ(もとの えと まったく おなじには ならないよ)</p>
+    <p class="mk-act" id="convAct" aria-live="polite"></p>
+    <figure class="mk-fig" id="convFig" hidden><img id="convPic" alt="ゆるキャラの かたちの 絵"></figure>
+    <button type="button" class="mk-btn primary" id="convOk" hidden>この かたちで 3D に する</button>
+    <button type="button" class="mk-btn" id="convAgain" hidden>ちがう かたちに する</button>
   </section>
 
   <section id="done" class="mk-part" hidden>

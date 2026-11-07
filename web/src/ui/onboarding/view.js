@@ -271,8 +271,15 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
       const parts = splitBubbles(line.text);
       for (let i = 0; i < parts.length; i++) {
         if (i) await pause(BUBBLE_GAP_MS);
-        const { text } = row('note', guideName);
+        const { bubble, text } = row('note', guideName);
         text.textContent = parts[i];
+        // 見本の子の小さな絵(data: の SVG だけ。B4 12b・UIR 10)
+        if (i === parts.length - 1 && line.img && /^data:image\/svg\+xml/.test(line.img)) {
+          const img = el('img', { className: 'fr-pic fr-pic-small', alt: '見本の子の絵' });
+          img.src = line.img;
+          img.addEventListener('load', scroll, { once: true });
+          bubble.append(img);
+        }
       }
       live.textContent = line.text;
       scroll();
@@ -450,7 +457,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
       }
       const url = URL.createObjectURL(f); // この端末の中だけの、絵の仮の住所(外には送らない)
       urls.add(url);
-      onAct(a.id, { url, name: f.name });
+      onAct(a.id, { url, name: f.name, file: f }); // file はブラウザから描く設定の時だけ、作る道が使う(切ってある時は使わない)
     });
     return label;
   }

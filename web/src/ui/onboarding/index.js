@@ -20,7 +20,7 @@
 import { FirstRun, README_SECTION } from './script.js';
 import { createSheet } from './view.js';
 import { createVoice, crawl } from './voice.js';
-import { createLocalCreator, createSampleCreator, isLocalBase, pageIsLocal, sampleName } from './creators.js';
+import { createDrawCreator, createLocalCreator, createSampleCreator, isLocalBase, pageIsLocal, sampleName } from './creators.js';
 import { injectStyles } from './styles.js';
 import { openPersonaPanel } from '../persona/panel.js';
 import { composePersona, fixesOwnSpeech, loadSettings, normalize, ownSettings, ownSpeechFor, personalityOf, randomSettings, saveSettings } from '../persona/settings.js';
@@ -228,7 +228,8 @@ export function mountFirstRun({
       : Promise.resolve();
   // この回の案内役(7 歩を始める時に pickLead で決める)。見本の道の「〜で続きを試す」も、この子
   let lead = guide;
-  const made = creator ?? (localMake ? createLocalCreator(localMake) : createSampleCreator({ main: () => lead }));
+  // B4(12b): サーバーが「ブラウザから描く」設定の時(/api/status の draw.on。既定は切ってある)だけ、見本の道に描く道を足す
+  const made = creator ?? (localMake ? createLocalCreator(localMake) : createDrawCreator({ sample: createSampleCreator({ main: () => lead }), enabled: () => Boolean(app?.status?.draw?.on) }));
   // 舞台の子の id。入れ替えた後は app.characterId(main.js と同じ欄)が正
   const stageId = () => app?.characterId ?? app?.character?.id ?? params.get('character') ?? params.get('char') ?? null;
   // ?character=<id> で開いた時の、その子の id(id の形の時だけ。パスは開発の確かめなので、前のまま主役が案内する)

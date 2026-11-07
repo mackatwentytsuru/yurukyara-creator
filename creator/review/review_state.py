@@ -744,7 +744,7 @@ def make_new(body, client="other"):
         rec["place"] = place
     validate(rec, schema("make"))
     write_json(d / "make.json", rec)
-    set_make(cid, status="queued", from_=src, activity="PC の Claude Code が受け取るのを待っています(/yuru-next)")
+    set_make(cid, status="queued", from_=src, activity="パソコンの Claude Code が受け取るのを待っています")  # 画面にコマンドを出さない(B4 12b)
     log(cid, "make", make_id=rec["make_id"], src=src, chars=len(words))
     return rec
 

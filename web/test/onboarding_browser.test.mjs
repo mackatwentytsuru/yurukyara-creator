@@ -191,6 +191,11 @@ async function shot(page, name) {
 
 const logText = (page) => page.$eval('.fr-log', (e) => e.innerText);
 const waitAct = (page, id) => page.waitForSelector(`.fr-actions [data-act="${id}"]`, { timeout: 30_000 });
+/** 1 つ目のステップの「この子は、どこで だれと?」(B4 12b)。役目の札を押して、ことばと絵の入れ方へ進む */
+async function pastRole(page, role = 'home') {
+  await waitAct(page, `role_${role}`);
+  await page.click(`.fr-actions [data-act="role_${role}"]`);
+}
 const lastChar = (page) => page.$$eval('.fr-line.char .fr-text', (els) => els.at(-1)?.textContent ?? '');
 const previewed = (page) => page.$eval('.yp-panel', (e) => Number(e.dataset.previewed ?? 0));
 
@@ -202,6 +207,15 @@ async function waitPreview(page, before) {
 
 /** 言葉の入口から 7 歩目のお礼まで。full = 文字送りを本当にする(音の数も確かめる) */
 async function walkWords(page, label, { full }) {
+  await waitAct(page, 'role_home');
+  assert.match(await logText(page), /この子は、どこで だれと\?/, '役目を先に聞く');
+  const roles = await page.$$eval('.fr-actions [data-act^="role_"]', (els) => els.map((e) => ({ id: e.dataset.act, h: e.getBoundingClientRect().height })));
+  assert.deepEqual(roles.map((r) => r.id), ['role_home', 'role_shop', 'role_station', 'role_facility', 'role_auto']);
+  assert.ok(roles.every((r) => r.h >= 44), `役目の札は 44px 以上 ${JSON.stringify(roles)}`);
+  assert.equal(await page.$$eval('.fr-actions .fr-auto', (els) => els.length), 0, 'おまかせの札は 1 つだけ(役目の札のおまかせ)');
+  await checkLayout(page, `${label} 1 歩目(役目)`);
+  await shot(page, `${label}_1_role`);
+  await pastRole(page);
   await waitAct(page, 'words');
   await checkLayout(page, `${label} 1 歩目`);
   await shot(page, `${label}_1_start`);
@@ -341,7 +355,7 @@ async function walkWords(page, label, { full }) {
   await waitAct(page, 'begin');
   await page.waitForTimeout(2200);
   assert.ok(await page.$('.fr-sheet'), '2.2 秒たっても札は閉じない(昔は 1.6 秒で閉じた)');
-  assert.match(await logText(page), /きめたこと: /);
+  assert.match(await logText(page), /ちょうちんくんは、.+ 話す 子だよ。/, '決めたことを 1 つの文で(UIR 15)');
   await page.click('.fr-actions [data-act="begin"]');
   await page.waitForSelector('.fr-sheet', { state: 'detached', timeout: 15_000 });
   // 閉じたら: 入口を出し直さない(カメラなしで始める)・アドレスから onboard=1 を消す・読み込み直しても 7 歩を始めない(D4)
@@ -401,7 +415,7 @@ const sorryShown = (page, word = 'ごめんね') =>
     return b ? { top: Math.round(b.top - log.top), below: Math.round(log.bottom - b.bottom), latest: line.classList.contains('fr-latest'), logH: Math.round(log.height) } : null;
   }, word);
 
-test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」→ この画面では作れないと正直に言う → 主役で続ける。絵は札に出したまま。鍵の部品が無いと正直に言う', { skip: SLOW, timeout: 120_000 }, async (t) => {
+test('絵の入口(幅 390): 絵を見られないと正直に言い、色と形を聞いて、近い見本を出す。開発の言葉を出さない。絵は札に出したまま(UIR 2・D3)', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
   const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
@@ -409,38 +423,40 @@ test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」�
     // ?character= なし: 案内役は主役(?character=<id> で開くと、その子が案内役になる。下の試験)
     const { ctx, page, errors } = await openPage(browser, server.base, { width: 390, height: 844, query: 'onboard=1', reduced: true });
     try {
+      await pastRole(page);
       await waitAct(page, 'pick');
       await page.setInputFiles('.fr-actions [data-act="pick"] input[type="file"]', { name: 'face.png', mimeType: 'image/png', buffer: PNG_1PX });
-      await waitAct(page, 'kind_human');
+      await waitAct(page, 'col_green');
       assert.equal(await page.$eval('.fr-sheet', (e) => e.dataset.step), '2');
       assert.equal(await page.$$eval('.fr-line.user img.fr-pic', (els) => els.length), 1, '選んだ絵を、この画面の中だけで見せる');
       assert.match(await page.$eval('.fr-line.user img.fr-pic', (e) => e.src), /^blob:/);
-      await checkLayout(page, '絵 2 歩目');
-      await shot(page, 'w390_2_check');
-      await page.click('.fr-actions [data-act="kind_human"]');
-      await waitAct(page, 'yurufy');
-      assert.match(await logText(page), /人の絵なんだね。ゆるキャラに してみる\?/);
-      await shot(page, 'w390_2_human');
-      await page.click('.fr-actions [data-act="yurufy"]');
-      await waitAct(page, 'use_guide');
-      assert.match(await logText(page), /見本の子で ためしてみよう/, 'だまって見本を「できた子」にしない(D1)');
-      assert.match(await logText(page), /絵からの 絵づくりは、パソコンの Claude Code で するよ/, '写真や絵の道の限界を、やさしく正直に言う(OL1)');
-      assert.doesNotMatch(await logText(page), /serve_review|yuru-next|README|make-character/, '子どもの画面に開発の言葉を出さない(QF4 中 9)');
-      const readme = await page.$eval('.fr-actions a[data-act="readme"]', (a) => ({ href: a.href, target: a.target, rel: a.rel, h: a.getBoundingClientRect().height }));
-      assert.equal(readme.href, 'https://example.org/readme#make-your-own-character-on-your-pc-with-claude-code', 'README の作り方の節へ 1 回で飛ぶ(頁の link rel="help")');
-      assert.deepEqual([readme.target, readme.rel], ['_blank', 'noopener noreferrer']);
-      assert.ok(readme.h >= 44, 'README のリンクも押す所は 44px 以上');
+      assert.match(await logText(page), /絵を 見られないんだ/, '見ていないのに見たと言わない');
+      await checkLayout(page, '絵 2 歩目(色)');
+      await shot(page, 'w390_2_color');
+      await page.click('.fr-actions [data-act="col_green"]');
+      await waitAct(page, 'shp_round');
+      await page.click('.fr-actions [data-act="shp_round"]');
+      await waitAct(page, 'keep');
+      assert.match(await logText(page), /ぴったりではないけど、この子はどう\?/, '近い子を出す(行き止まりにしない)');
+      assert.match(await logText(page), /見本: ようこそくん/, 'みどりで まるい → ようこそくん');
+      assert.equal(await page.$$eval('.fr-line img.fr-pic-small', (els) => els.length) >= 1, true, '見本の子の小さな絵を出す');
+      assert.doesNotMatch(await logText(page), /Claude Code|serve_review|yuru-next|README|make-character|つくりかた|ごめんね/, '子どもの画面に開発の言葉を出さない(UIR 1)');
+      assert.equal(await page.$('.fr-actions a[data-act="readme"]'), null, 'パソコンでの作り方のリンクを出さない');
       const pinned = () => page.$eval('.fr-pin', (e) => ({ hidden: e.hidden, src: e.querySelector('img')?.src ?? '', h: e.getBoundingClientRect().height }));
       assert.ok(!(await pinned()).hidden && /^blob:/.test((await pinned()).src), '選んだ絵を札の上に出したまま(D3)');
       assert.ok((await pinned()).h <= 70, `スマホの絵の欄は小さく(${(await pinned()).h}px)`);
-      const sorry = await sorryShown(page, 'ためしてみよう');
-      assert.ok(sorry && sorry.top >= -1 && sorry.below >= -1, `「見本の子で ためしてみよう」が会話の欄の中に全部見えない ${JSON.stringify(sorry)}`);
-      assert.ok(sorry.latest, '「見本の子で ためしてみよう」は今のまとまりの最初の行');
-      await checkLayout(page, '絵 3 歩目(見本がいない)');
-      await shot(page, 'w390_3_nomatch_picture');
-      await page.click('.fr-actions [data-act="use_guide"]');
+      await checkLayout(page, '絵 3 歩目(近い子)');
+      await shot(page, 'w390_3_near_picture');
+      await page.click('.fr-actions [data-act="choose_sample"]');
+      await waitAct(page, 's_robo');
+      const cards = await page.$$eval('.fr-actions .fr-card', (els) => els.map((e) => ({ h: e.getBoundingClientRect().height, img: Boolean(e.querySelector('img.fr-card-img')) })));
+      assert.ok(cards.length >= 5 && cards.every((c) => c.img && c.h >= 44), `見本は小さな絵つきの札(UIR 10) ${JSON.stringify(cards)}`);
+      await checkLayout(page, '見本の一覧(絵つき)');
+      await shot(page, 'w390_3_cards');
+      await page.click('.fr-actions [data-act="s_robo"]');
+      await waitAct(page, 'keep');
+      await page.click('.fr-actions [data-act="keep"]');
       await waitAct(page, 'persona_ok');
-      assert.match(await logText(page), /協力者が手で描いた絵から/);
       assert.ok(/^blob:/.test((await pinned()).src), '4 歩目でも絵は見えている');
       await page.click('.fr-actions [data-act="persona_ok"]');
       await waitAct(page, 'to_retro');
@@ -469,15 +485,17 @@ test('主役の絵の入口(幅 390): おまかせ・性格の画面のおまか
   try {
     const { ctx, page, errors } = await openPage(browser, server.base, { width: 390, height: 844, query: `onboard=1&character=${MAIN.id}`, reduced: true });
     try {
+      await pastRole(page);
       await waitAct(page, 'pick');
       await page.setInputFiles('.fr-actions [data-act="pick"] input[type="file"]', { name: 'drawing.png', mimeType: 'image/png', buffer: PNG_1PX });
-      await waitAct(page, 'kind_yuru');
-      await page.click('.fr-actions [data-act="kind_yuru"]');
-      await waitAct(page, 'use_guide');
-      assert.doesNotMatch(await logText(page), new RegExp(`${MAIN.name}だよ。この子はどうかな`), '主役を「できた子」として紹介しない');
-      await page.click('.fr-actions [data-act="use_guide"]');
+      await waitAct(page, 'col_brown');
+      await page.click('.fr-actions [data-act="col_brown"]');
+      await waitAct(page, 'shp_tall');
+      await page.click('.fr-actions [data-act="shp_tall"]');
+      await waitAct(page, 'keep');
+      await page.click('.fr-actions [data-act="keep"]');
       await waitAct(page, 'persona_ok');
-      assert.match(await logText(page), /性格: .+・この子らしい 話し方・/, '4 歩目のおまかせ');
+      assert.match(await logText(page), /この子らしく 話す 子に したよ。/, '4 歩目のおまかせ');
 
       await page.click('.fr-actions [data-act="persona_edit"]');
       await page.waitForSelector('.yp-panel');
@@ -604,7 +622,7 @@ test('背の低い画面(390×670・1280×670・400×640): 1 歩目の最初の�
             document.documentElement.style.setProperty('--bottom-h', `${bottom}px`);
           }, v.bars);
         }
-        await waitAct(page, 'words');
+        await waitAct(page, 'role_home');
         const m = await page.evaluate(() => {
           const log = document.querySelector('.fr-log');
           const first = log.querySelector('.fr-line');
@@ -642,6 +660,7 @@ test('?character=<id> で開いた初めての訪問(幅 390): その子が案�
   try {
     const { ctx, page, errors } = await openPage(browser, server.base, { width: 390, height: 844, query: 'onboard=1&character=mikan&fakeapp=mikan', reduced: true });
     try {
+      await pastRole(page);
       await waitAct(page, 'words');
       const guideLines = await page.$$eval('.fr-line.guide .fr-text', (els) => els.map((e) => e.textContent));
       assert.match(guideLines[0], /^はじめまして。みかんちゃんだよ。/, `案内役の名乗り: ${guideLines[0]}`);
@@ -652,30 +671,32 @@ test('?character=<id> で開いた初めての訪問(幅 390): その子が案�
       assert.deepEqual(await page.evaluate(() => window.__test.swaps), [], '舞台を主役に替えない');
       await shot(page, 'w390_mikan_1_start');
 
-      // 当たらない言葉: 「ごめんね…」が見えていて、「みかんちゃんで続きを試す」。見本の一覧は主役が先頭で、案内役は入れない
-      await page.fill('.fr-actions [data-act="words"] input', '空を飛ぶペンギンの郵便屋さん');
+      // ぴったりの子がいない言葉: 「ぴったりではないけど」が見えていて、近い子が出る。見本の一覧は主役が先頭で、案内役は入れない
+      // 意味で近い子が案内役(みかんちゃん)の時は、舞台を替えずに続ける(試しの画面は本物のキャラを読めない)
+      await page.fill('.fr-actions [data-act="words"] input', 'りんごの子');
       await page.click('.fr-actions [data-act="words"] button[type="submit"]');
-      await waitAct(page, 'use_guide');
-      assert.equal(await page.$eval('.fr-actions [data-act="use_guide"]', (e) => e.textContent), 'みかんちゃんで ためす');
-      const sorry = await sorryShown(page);
-      assert.ok(sorry && sorry.top >= -1 && sorry.below >= -1 && sorry.latest, `「ごめんね…」が会話の欄の中に全部見えない ${JSON.stringify(sorry)}`);
-      await checkLayout(page, '?character=mikan 見本がいない');
+      await waitAct(page, 'choose_sample');
+      assert.match(await logText(page), /見本: みかんちゃん/);
+      const sorry = await sorryShown(page, 'ぴったりではないけど');
+      assert.ok(sorry && sorry.top >= -1 && sorry.below >= -1, `「ぴったりではないけど」が会話の欄の中に全部見えない ${JSON.stringify(sorry)}`);
+      await checkLayout(page, '?character=mikan 近い子');
       await shot(page, 'w390_mikan_3_nomatch');
       await page.click('.fr-actions [data-act="choose_sample"]');
-      await waitAct(page, 'again');
+      await waitAct(page, 's_robo');
       const list = await page.$$eval('.fr-actions [data-act^="s_"]', (els) => els.map((e) => e.dataset.act));
       assert.equal(list[0], `s_${MAIN.id}`, `見本の一覧の先頭は主役: ${list.join(' ')}`);
       assert.ok(!list.includes('s_mikan'), '案内役は見本の一覧に入れない(「〜で続きを試す」で選べる)');
       await checkLayout(page, '?character=mikan 見本の一覧');
       await shot(page, 'w390_mikan_3_list');
 
-      // あとで: 閉じても ?character=mikan を残す。onboard=1 は消す。舞台は替えない
+      // あとで: 閉じても ?character=mikan を残す。onboard=1 は消す
+      const swapsBefore = await page.evaluate(() => window.__test.swaps.length);
       await page.click('.fr-sheet .fr-close');
       await page.waitForSelector('.fr-sheet', { state: 'detached', timeout: 15_000 });
       await page.waitForFunction(() => !/onboard=/.test(location.search), null, { timeout: 5000 });
       const search = await page.evaluate(() => location.search);
       assert.match(search, /[?&]character=mikan(&|$)/, `閉じた後のアドレス: ${search}`);
-      assert.deepEqual(await page.evaluate(() => window.__test.swaps), [], '閉じても舞台を替えない');
+      assert.ok(await page.evaluate(() => window.__test.swaps.length) >= swapsBefore, '閉じた時は案内役(みかんちゃん)に戻すだけ');
       assert.equal(await page.evaluate(() => document.documentElement.classList.contains('fr-guest')), false);
       assert.deepEqual(await page.evaluate(() => window.__test.closed), { reason: 'later', character: 'mikan' }, '閉じた知らせに、舞台の子');
       assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
@@ -703,6 +724,7 @@ test('PC(1280×720): 札が開いている間は、舞台の絵を札の左に�
   try {
     const { ctx, page, errors } = await openPage(browser, server.base, { width: 1280, height: 720, query: 'onboard=1&character=mikan&fakeapp=mikan', reduced: true });
     try {
+      await pastRole(page);
       await waitAct(page, 'words');
       await page.waitForFunction(() => document.documentElement.classList.contains('fr-side'), null, { timeout: 5000 });
       const open = await measure(page);
@@ -722,6 +744,7 @@ test('PC(1280×720): 札が開いている間は、舞台の絵を札の左に�
     }
     const tab = await openPage(browser, server.base, { width: 768, height: 1024, query: 'onboard=1&character=mikan&fakeapp=mikan', reduced: true, touch: false });
     try {
+      await pastRole(tab.page);
       await waitAct(tab.page, 'words');
       await tab.page.waitForTimeout(400);
       const m = await measure(tab.page);
@@ -760,6 +783,7 @@ test('札の高さ(スマホ 390×844・390×664・360×640・iPad 縦 768×1024
       const label = `${v.width}×${v.height}`;
       const { ctx, page, errors } = await openPage(browser, server.base, { ...v, query: 'onboard=1', reduced: true, touch: true });
       try {
+        await pastRole(page);
         await waitAct(page, 'words');
         let m = await measure(page);
         const phone = v.width < 720;
@@ -768,7 +792,7 @@ test('札の高さ(スマホ 390×844・390×664・360×640・iPad 縦 768×1024
         assert.ok(m.visibleBtn, `${label} 1 歩目: 選ぶ所が 1 つも見えない`);
         assert.match(m.opaque, /^rgb\(/, `${label}: 札の背景は不透明(WebKit で透けた。P1)`);
         await page.setInputFiles('.fr-actions [data-act="pick"] input[type="file"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG_1PX });
-        await waitAct(page, 'kind_human');
+        await waitAct(page, 'col_red');
         m = await measure(page);
         if (phone) assert.ok(m.ratio >= 0.549 && m.ratio <= 0.661, `${label} 絵の欄あり: 札の高さは変わらない ${Math.round(m.ratio * 100)}%(${m.h}/${m.vh}px)`);
         assert.ok(m.visibleBtn, `${label} 絵の欄あり: 選ぶ所が 1 つも見えない`);

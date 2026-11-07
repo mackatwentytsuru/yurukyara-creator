@@ -95,12 +95,18 @@ export function progressText(step, { skipped = [], local = false } = {}) {
   return { left, main: left ? `あと ${left} つ` : 'これで さいご!', time: `${Math.max(1, Math.round(sec / 60))} 分くらい` };
 }
 
+/** 役目を聞く一言(1 つ目のステップの 2 文目。B4 12b) */
+export const ROLE_ASK = 'この子は、どこで だれと?';
+/** 役目を選んだ後に聞く一言 */
+export const WHAT_ASK = 'どんな子を生み出そうか?';
+
 /**
  * 1 歩目で案内役が最初に言う 2 文。案内役が主役(nori)のときは主役の口調で名乗る。主役を替えたら、この 1 文も替える。
+ * 2 文目は、役目を聞く一言(B4 12b から。前は「どんな子を生み出そうか?」)。
  * サーバーの声の前もっての温め(S3 の ttsWarm)は、この関数の文を温める(文が食い違うと、最初の声が温め無しの +0.3〜0.5 秒になる)
  */
 export function guideFirstLines(guideName, nori) {
-  return [nori ? `はじめまして! ${guideName}デス。いっしょに ゆるキャラを 生み出しマス!` : `はじめまして。${guideName}だよ。いっしょに ゆるキャラを 生み出そう。`, 'どんな子を生み出そうか?'];
+  return [nori ? `はじめまして! ${guideName}デス。いっしょに ゆるキャラを 生み出しマス!` : `はじめまして。${guideName}だよ。いっしょに ゆるキャラを 生み出そう。`, ROLE_ASK];
 }
 
 /**
@@ -285,16 +291,16 @@ export class FirstRun {
   async start() {
     this._go(1);
     // 案内役が主役のときは、主役(ノリー)の口調で名乗る。主役を替えたら、この 1 文も替える。
-    // 先に「どこで だれと」を聞く(本人の案: 何役かを、まず聞く。B4 12b)。2 つ目の文(どんな子を…)は、役目を選んだ後に言う
-    const [hello] = guideFirstLines(this.guideName, this.nori);
-    await this._say({ who: 'guide', text: hello });
-    return this._askRole();
+    // 先に「どこで だれと」を聞く(本人の案: 何役かを、まず聞く。B4 12b)。名乗りと役目の問いは 1 回で言う
+    // (2 文目の声を、1 文目を話している間に前もって取るため)。どんな子を…は、役目を選んだ後に言う
+    await this._say(...guideFirstLines(this.guideName, this.nori).map((text) => ({ who: 'guide', text })));
+    this._offerRole();
   }
 
-  /** 役目を聞く。既定は おうち(いちばん左・目立つ札) */
+  /** 役目を聞き直す */
   async _askRole() {
     this._go(1);
-    await this._say({ who: 'guide', text: 'この子は、どこで だれと?' });
+    await this._say({ who: 'guide', text: ROLE_ASK });
     this._offerRole();
   }
 
@@ -342,7 +348,7 @@ export class FirstRun {
   async _askWhat() {
     const sample = this.d.creator.mode === 'sample';
     await this._say(
-      { who: 'guide', text: guideFirstLines(this.guideName, this.nori)[1] },
+      { who: 'guide', text: WHAT_ASK },
       sample ? { who: 'note', text: 'ここでは、にた 見本の子を 出して ためせるよ。' } : null,
       this.local ? { who: 'note', text: '下の 作る画面に、ことばか 絵を 入れてね。' } : null,
       this.local ? { who: 'note', text: 'パソコンの Claude Code が 描くよ。ことばと絵は Claude(Anthropic)に 送られるよ。' } : null,
@@ -502,12 +508,20 @@ export class FirstRun {
       await this._say({ who: 'note', text: '絵が えらばれていないよ。' });
       return this._offerStart();
     }
-    this.input = { from: 'picture', kind, url: p.url, name: clip(p.name, 40) };
+    this.input = { from: 'picture', kind, url: p.url, name: clip(p.name, 40), ...(p.file ? { file: p.file } : {}) };
     const noun = kind === 'photo' ? '写真' : '絵'; // 撮った写真を「絵」と呼ばない
     // 選んだ絵は、札の上に出したままにする(会話の欄が流れても見える。司令塔の決め D3)。絵はこの端末の中だけ
     this.d.pin?.({ img: p.url, caption: kind === 'photo' ? '撮った写真' : '選んだ絵' });
     await this._say({ who: 'user', text: kind === 'photo' ? '(写真を撮った)' : '(絵を選んだ)', img: p.url });
     this._go(2);
+    if (this.d.creator.mode === 'sample' && this.d.creator.canDraw && this.input.file) {
+      // ブラウザから描ける設定(サーバーの YC_BROWSER_DRAW=1): 絵を Claude に見せて描いてもらう。どこへ送るかを先に言う
+      await this._say(
+        { who: 'guide', text: `${noun}を ありがとう!` },
+        { who: 'note', text: `${noun}は、この サーバーから Claude(Anthropic)に 送って、ゆるキャラの 絵に するよ。` },
+      );
+      return this._meet();
+    }
     if (this.d.creator.mode === 'sample') {
       // 見本の道: この画面は絵を見られない(どこにも送らない)。正直に言い、色と形を聞いて、いちばん近い見本を出す(UIR 2)
       await this._say(
@@ -590,9 +604,15 @@ export class FirstRun {
   /* ---------- 3: できた子 ---------- */
   async _meet() {
     this._go(3);
-    const made = await this.d.creator.make(this.input ?? { from: 'words', words: '' });
-    if (!made) return this._noMatch(); // 見本の道で、言葉が見本に当たらない・絵(この画面では作れない)
+    const made = await this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) });
+    if (!made) return this._noMatch(); // 見本の一覧が空の時だけ
     this.character = made;
+    if (made.drawn) {
+      // ブラウザから描けた子: もう動く 2D になっている。その場で舞台に出す(B4 12b)
+      await this._say({ who: 'guide', text: 'こんな子が できたよ! うごく 2D で 舞台に 出すね。' });
+      return this._show();
+    }
+    if (made.drawFailed) await this._say({ who: 'note', text: `${made.drawFailed}。にた 見本の子を 出すね。` });
     if (made.sample) {
       // いつも いちばん近い子を出す。ぴったりの時だけ「近い子が いたよ」、ほかは「ぴったりではないけど」(UIR 1・2)
       await this._say(
@@ -676,7 +696,7 @@ export class FirstRun {
   async _meetAsk() {
     this._go(3);
     const c = this.character;
-    await this._say({ who: 'guide', text: c?.sample ? `${c.name}だよ。この子は どうかな?` : 'こんな子が できたよ。どうかな?' });
+    await this._say({ who: 'guide', text: c?.sample ? `${c.name}だよ。この子は どうかな?` : c?.drawn ? 'この子で いい?' : 'こんな子が できたよ。どうかな?' });
     this._offer([
       { id: 'keep', label: 'この子にする', primary: true },
       ...(c?.sample ? [{ id: 'choose_sample', label: 'ほかの子を 見る' }] : [{ id: 'fix', label: 'なおしたい ところ', kind: 'text', max: NOTE_MAX, placeholder: '例: 耳を もっと 大きく', submit: '送る' }]),
