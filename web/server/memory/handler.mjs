@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto';
 import { createKvMemory } from './kv.mjs';
 import { MemoryError, samePass } from './store.mjs';
-import { extractFacts } from './reflect.mjs';
+import { extractFacts, selfNamesOf } from './reflect.mjs';
 import { forgetReplyEvents, isForgetRequest } from './routes.mjs';
 import { redactSecrets } from '../../src/conversation/secrets.js';
 
@@ -151,7 +151,7 @@ export async function chatMemory(request, rawText, { store, cfg = {}, now = Date
     const memory = await mem.recall(key);
     let learned = [];
     try {
-      learned = await mem.add(key, extractFacts(text));
+      learned = await mem.add(key, extractFacts(text, { selfNames: selfNamesOf({ persona }) }));
     } catch {
       learned = []; // 合鍵の記憶が無い(消えた・7 日たった)ときは、覚えずに話す
     }

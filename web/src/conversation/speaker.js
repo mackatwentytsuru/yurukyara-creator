@@ -178,6 +178,12 @@ export class Speaker {
 
   /** ユーザーのタップの中で呼ぶ。iPhone の Safari は、これが無いと音が出ない */
   unlock() {
+    // iPhone の消音スイッチ(サイレントモード)が入っていても、音を出す(iOS 17 から。Web Audio だけの音は、消音スイッチで消えるため)
+    try {
+      if (globalThis.navigator?.audioSession) globalThis.navigator.audioSession.type = 'playback';
+    } catch {
+      // 対応していない・許されない端末は、そのまま
+    }
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AC({ latencyHint: 'interactive' });
@@ -252,7 +258,7 @@ export class Speaker {
     });
     return done
       .catch((err) => {
-        if (epoch === this.epoch) console.warn('読み上げでエラー:', err.message);
+        if (epoch === this.epoch && err?.name !== 'AbortError') console.warn('読み上げでエラー:', err.message);
       })
       .finally(() => {
         this.pending = Math.max(0, this.pending - 1);

@@ -15,6 +15,8 @@ function walk(dir) {
   });
 }
 const files = walk(SRC).filter((p) => p.endsWith('.js'));
+const cssFiles = walk(SRC).filter((p) => p.endsWith('.css'));
+const INDEX_HTML = join(SRC, '..', 'index.html');
 const read = (p) => readFileSync(p, 'utf8');
 // コメントは数えない(「送信しない」と書いた説明文で引っかからないように)
 const code = (p) => read(p).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '');
@@ -75,11 +77,30 @@ const EXTERNAL_OK = Object.freeze({
   'stage/questLink.js': 'https://www.oculus.com/open_url/',
 });
 
+/**
+ * 文字の見かけを変えて住所を隠す形をほどく(CRITsec3 L2): 逃がし文字(\/ \uXXXX \u{…} \xXX)と、つないだ文字('ht' + 'tps://…')。
+ * 声の鍵・Meta の例外の住所は、そのままの形で書いてあるので、ほどいた後も同じ(例外の比べ方は変わらない)
+ */
+export function unmask(source) {
+  return String(source)
+    .replace(/\\u\{([0-9a-fA-F]{1,6})\}/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\\//g, '/')
+    .replace(/(['"`])\s*\+\s*(['"`])/g, '');
+}
+
+// 外の住所の形: http:// https:// ws:// wss://、と、文字や括弧・= の直後から始まる //名前(この頁と同じ https で外へ行く住所)
+const EXTERNAL_ADDRESS = /\b(?:https?|wss?):\/\/[^\s'"`<>]*|(?<=['"`(=])\/\/[A-Za-z0-9][^\s'"`<>)]*/g;
+
 /** そのファイル(src からの道)のコードにある外の住所のうち、許していない物(コメントは数えない) */
 function forbiddenAddresses(rel, source) {
-  const found = [...source.matchAll(/\b(?:https?|wss?):\/\/[^\s'"`]*/g)].map((m) => m[0]);
-  return found.filter((url) => url !== EXTERNAL_OK[rel]);
+  return [...unmask(source).matchAll(EXTERNAL_ADDRESS)].map((m) => m[0]).filter((url) => url !== EXTERNAL_OK[rel]);
 }
+
+// index.html の外の住所は、help のリンク(GitHub の README の 1 つ)だけ。CSS には 1 つも無い
+const HTML_EXTERNAL_OK = /^https:\/\/github\.com\/[\w.-]+\/yurukyara-creator\/blob\/HEAD\/README\.md#[^\s'"]*$/;
+const htmlAddresses = (html) => [...unmask(html).replace(/<!--[\s\S]*?-->/g, '').matchAll(EXTERNAL_ADDRESS)].map((m) => m[0]);
 
 test('fetch の宛先は、文字で書いた許可済みの物か、確かめ済みの変数だけ(変数の宛先に画像を忍ばせられない)', () => {
   for (const f of files) {
@@ -97,6 +118,43 @@ test('外のサーバーの住所(http:// https:// ws://)を、画面のコー�
     const rel = relative(SRC, f).split('\\').join('/');
     assert.deepEqual(forbiddenAddresses(rel, code(f)), [], `${rel} に外の住所があります`);
   }
+});
+
+test('index.html と CSS にも、外の住所が無い(例外は index.html の help のリンク 1 つ = GitHub の README だけ)', () => {
+  const found = htmlAddresses(read(INDEX_HTML));
+  assert.equal(found.length, 1, 'index.html の外の住所は help のリンクの 1 つだけ');
+  assert.ok(HTML_EXTERNAL_OK.test(found[0]), `index.html に想定していない外の住所があります: ${found[0]}`);
+  assert.ok(cssFiles.length >= 1);
+  for (const f of cssFiles) assert.deepEqual(htmlAddresses(read(f).replace(/\/\*[\s\S]*?\*\//g, '')), [], `${relative(SRC, f)} に外の住所があります(url()・@import)`);
+});
+
+test('見張りの確かめ(CRITsec3 L2): 逃がし文字・つないだ文字・//名前に隠した外の住所も落ちる。ふつうの書き方は通る', () => {
+  const evil = 'https://evil.example/collect';
+  const bad = [
+    `const a = '${evil}';`, // 前からの形
+    "const a = '//evil.example/x';", // この頁と同じ https で外へ行く
+    'const a = "//evil.example/x";',
+    "const a = 'https:\\/\\/evil.example/x';", // 逃がした /
+    "const a = '\\u0068ttps://evil.example/x';", // \uXXXX
+    "const a = '\\x68ttps://evil.example/x';", // \xXX
+    "const a = '\\u{68}ttps://evil.example/x';", // \u{…}
+    "const a = 'ht' + 'tps://evil.example/x';", // つないだ文字
+    'const a = "ht" + `tps://evil.example/x`;',
+    "const a = 'wss://evil.example/x';",
+    "location.href = '//evil.example';",
+    "img.src = ('//evil.example/p.gif');",
+  ];
+  for (const src of bad) assert.equal(forbiddenAddresses('ui/panel.js', src).length, 1, `落ちるはず: ${src}`);
+  // 通る: 外の住所の無い、ふつうの書き方(正規表現の //・道だけの文字・割り算・つなぐだけの文字は数えない)
+  const ok = ["const re = /^https?:\\/\\//;", "const a = '/api/chat';", 'const u = `${base}/x//y`;', 'const half = a / b;', "const n = 'a' + 'b';"];
+  for (const src of ok) assert.deepEqual(forbiddenAddresses('ui/panel.js', src), [], `通るはず: ${src}`);
+  // index.html と CSS: help のリンクだけ通り、ほかの href・src・//名前・url()・@import は落ちる
+  const help = 'https://github.com/someone/yurukyara-creator/blob/HEAD/README.md#x';
+  assert.deepEqual(htmlAddresses(`<link rel="help" href="${help}">`).filter((u) => !HTML_EXTERNAL_OK.test(u)), []);
+  for (const html of ['<script src="https://evil.example/x.js"></script>', '<img src="//evil.example/x.png">', '<link href="https://github.com/other/repo">']) {
+    assert.equal(htmlAddresses(html).filter((u) => !HTML_EXTERNAL_OK.test(u)).length, 1, `落ちるはず: ${html}`);
+  }
+  assert.equal(htmlAddresses('body { background: url(https://evil.example/x.png); } @import "//evil.example/a.css";').length, 2, 'CSS の url()・@import も見える');
 });
 
 test('例外の確かめ: ウェブローンチの住所は questLink.js の決まった 1 つだけ通り、ほかの住所・ほかのファイル・形を変えた住所は落ちる', () => {
