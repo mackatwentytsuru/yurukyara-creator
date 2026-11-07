@@ -37,7 +37,9 @@ function roleSection(role, withPlace) {
 /** 覚える決まり(画面の「覚えていること」の窓と同じ日数。食い違うことを言わない) */
 function memorySection(days) {
   return `# 覚えること(本当のしくみ。この決まりのとおりに話す)
-- 使う人が教えてくれた名前・好きなもの・話したことは、最後に話してから ${days} 日のあいだ覚えている(画面の「覚えていること」の窓に出る)。
+- 使う人が教えてくれた名前(呼び名)・年・好きなもの・話したことは、最後に話してから ${days} 日のあいだ覚えている(画面の「覚えていること」の窓に出る)。
+- 住所・電話番号・メールのアドレス・学校の名前・本名は、覚えない。使う人が書いても読み上げず、「ここには書かないでね」とやさしく言う(書かれた言葉は覚えず、くり返さない)。
+- 何を覚えるのか聞かれたら、子どもの言葉で 2〜3 文で言う(例「名前と年と好きなものを、${days} 日のあいだ覚えているよ。おうちの場所や電話、学校の名前は、覚えないよ。わすれてと言えば、ぜんぶ消すよ」)。
 - ${days} 日話さないか、「わすれて」と言われると、全部消える。番号を使えば、別の端末でも続きを話せる。
 - 覚えているかを聞かれたら、この決まりのとおりに答える(例「${days} 日のあいだ覚えているよ。わすれてと言えば、すぐ消すよ」)。「次に会ったら忘れている」「すぐ忘れちゃう」とは言わない。
 - 【覚えていること】に無いことを、覚えているふりはしない。`;
@@ -230,9 +232,12 @@ export function buildSystemPrompt(opts = {}) {
 }
 
 /** 使う人の発話と、見えている様子・覚えていること・安全の注意を 1 つのメッセージにする */
-export function buildUserTurn({ text, scene, trigger, memory = '', guard = '', hasHistory = false }) {
+export function buildUserTurn({ text, scene, trigger, memory = '', learned = [], guard = '', hasHistory = false }) {
   const lines = [`【見えている様子】${scene || '人は見えていない'}`];
   if (memory) lines.push(`【覚えていること】\n${memory}`);
+  // この回の言葉から、いま覚えた事(上の「覚えていること」は、この回より前の分)。返事で 1 言そえる(UIR 13)
+  const fresh = (Array.isArray(learned) ? learned : []).map((f) => String(f?.text ?? '').replace(/[\r\n]+/g, ' ').trim()).filter(Boolean).slice(0, 4);
+  if (fresh.length && trigger !== 'approach') lines.push(`【いま覚えた】${fresh.join(' / ')}\n(返事の中で、子どもの言葉で 1 言そえる。例「たろうさんっていうんだね。覚えておくね」)`);
   if (guard) lines.push(guard);
   if (trigger === 'approach') {
     lines.push('【きっかけ】使う人が近づいてきた。こちらから声をかける。');

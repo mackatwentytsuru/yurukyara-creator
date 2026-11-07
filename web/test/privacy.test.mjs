@@ -210,7 +210,12 @@ test('例外の確かめ: ウェブローンチの住所は questLink.js の決�
 
 test('声の鍵(BYOK)の読み上げ: 送るのは読み上げる文・モデル・言葉だけ。ほかの部品を読み込まず、鍵を扱うのは決まったファイルだけ', () => {
   const direct = code(join(SRC, 'conversation', 'elevenDirect.js'));
-  assert.ok(!/\bimport\b/.test(direct), 'elevenDirect.js は、ほかの部品を読み込まない');
+  // 読み込んでよいのは、定数だけの models.js(声のモデルの名前の 1 か所。通信も DOM も無い)だけ
+  const imports = [...direct.matchAll(/\bimport\b[^;]*?from\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+  assert.deepEqual(imports, ['./models.js'], 'elevenDirect.js が読み込むのは ./models.js だけ');
+  assert.equal((direct.match(/\bimport\b/g) ?? []).length, 1, 'import は 1 つだけ(動的な import も無い)');
+  const models = code(join(SRC, 'conversation', 'models.js'));
+  assert.ok(!/\b(?:fetch|XMLHttpRequest|WebSocket|document|window|import)\b/.test(models), 'models.js は通信も DOM も使わない');
   const body = direct.match(/body: JSON\.stringify\(\{([^}]*)\}\)/);
   assert.ok(body, '送る本文が 1 か所に書かれている');
   const keys = [...body[1].matchAll(/(\w+):/g)].map((m) => m[1]).sort();

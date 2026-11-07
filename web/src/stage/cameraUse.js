@@ -6,7 +6,7 @@
 // - 絵の 1 枚: 使う人が選んだカメラ(入口で人が押した・知らせで「カメラを つかう」)が動いていて、声か文字で話しかけた回だけ(近づいた合図は除く)。
 //   顔の追従と同じ <video> から取る(cameraFrame.js)。自動で始める画面(入口の LED など)は押す人がいないので、顔の追従だけ(絵は送らない)
 // - サーバーの知らせ(cameraNotice): 「本物の頭脳の時だけ見られる」は入れている間に 1 回だけ、「今日の絵の上限」は毎回
-import { cameraSwitchPlan, mountCameraSwitch, CAMERA_PRIVACY, CAMERA_PRIVACY_BACK } from './cameraSwitch.js';
+import { cameraSwitchPlan, mountCameraSwitch, CAMERA_PRIVACY, CAMERA_PRIVACY_BACK, CAMERA_PRIVACY_BACK_MOCK, CAMERA_PRIVACY_MOCK } from './cameraSwitch.js';
 import { takeFrame } from '../conversation/cameraFrame.js';
 import { SimSource } from '../tracking/sources/simSource.js';
 
@@ -37,7 +37,9 @@ export function createCameraUse({ app, ui, dialogue, $, params, headset, touch, 
     facing: 'user', // 'user' = まえのカメラ / 'environment' = うしろのカメラ
     /** 下の注意書きの文(うしろのカメラは顔の向きを調べない) */
     get privacy() {
-      return use.facing === 'environment' ? CAMERA_PRIVACY_BACK : CAMERA_PRIVACY;
+      const mock = isMock?.() === true; // 仮の頭脳では絵を送らないので、「Claude に送る」と言わない(UW3)
+      if (use.facing === 'environment') return mock ? CAMERA_PRIVACY_BACK_MOCK : CAMERA_PRIVACY_BACK;
+      return mock ? CAMERA_PRIVACY_MOCK : CAMERA_PRIVACY;
     },
     /** 絵を送るカメラが入っているか(使う人が選んだ・顔の追従のカメラが動いている) */
     seeing: () => use.consent && app.mode === 'camera' && app.source?.kind === 'mediapipe',

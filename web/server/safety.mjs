@@ -343,9 +343,42 @@ export function sanitizeBlock(value) {
 // 本名・住所・学校・電話番号・メールの入った言葉は、記憶に残さない(11-08 子どもの決まり。memory/reflect.mjs が使う)
 const PERSONAL = /(本名|ほんみょう|住所|じゅうしょ|電話番号|でんわばんごう|めーる|小学校|しょうがっこう|中学校|ちゅうがっこう|高校|こうこう|幼稚園|ようちえん|保育園|ほいくえん|丁目|ちょうめ|番地|ばんち|〒|[0-9０-９]{2,4}[-ー‐－][0-9０-９]{2,4}[-ー‐－][0-9０-９]{3,4}|0[0-9]{9,10}|[\w.+-]+@[\w-]+\.[\w.]+)/;
 
-/** 個人のこと(本名・住所・学校・電話番号・メール)が入った言葉か */
+/** 個人のこと(本名・住所・学校・電話番号・メール)が入った言葉か。覚えない・ことばを残さないための広い網 */
 export function looksPersonal(text) {
-  return PERSONAL.test(fold(text));
+  return PERSONAL.test(fold(text)) || personalWarn(text) !== null;
+}
+
+// ---- 個人のことを書いた時の「書かないでね」(UW3 11-08。UIR 19) ----
+// 子どもが住所・電話・メール・学校の名前・本名を打った時に、やさしく止めるための狭い網(決まった返事を出す回だけ)。
+// 「小学校でサッカーした」のような、ふつうの話では出さない(学校は「名前 + 小学校」の形だけ)。
+const W_PHONE = /([0-9]{2,4}[-ー‐－][0-9]{2,4}[-ー‐－][0-9]{3,4}|(?<![0-9])0[0-9]{9,10}(?![0-9])|電話番号|でんわばんごう|(けいたい|携帯)(の)?(ばんごう|番号)|(わたし|ぼく|おれ|うち)(の)?(でんわ|電話)(は|ばんごう|番号))/u;
+const W_EMAIL = /([\w.+-]+@[\w-]+\.[\w.]+|(めーる|メール)(あどれす|アドレス)|めあど|メアド)/u;
+const W_ADDRESS = /(住所|じゅうしょ|丁目|ちょうめ|番地|ばんち|〒|[都道府県][\p{Script=Han}ぁ-んァ-ヶ]{1,6}[市区町村]|[\p{Script=Han}ぁ-ん]{2,6}[市区町村](に|で)(住|すん)|(わたし|ぼく|おれ|うち)の(家|いえ|おうち)は[\p{Script=Han}ぁ-んァ-ヶー0-9]{2,12}(にあ|です|だよ))/u;
+const SCHOOL_WORD = '(?:小学校|中学校|高校|高等学校|幼稚園|保育園|しょうがっこう|ちゅうがっこう|こうこう|ようちえん|ほいくえん)';
+// 学校の名前の前に来ても名前ではない言葉
+const NOT_SCHOOL_NAME = new Set(['この', 'その', 'あの', 'どの', 'うちの', 'ぼくの', 'わたしの', '私の', '僕の', 'みんなの', 'となりの', '近くの', 'ちかくの', '前の', 'まえの', '今の', 'いまの', '行く', 'いく', '同じ', 'おなじ', '新しい', 'あたらしい', '大きい', 'おおきい', 'ふつうの', '普通の', 'ほかの', '他の', 'べつの', '別の', '友だちの', 'ともだちの', '友達の', 'どこの', '何の', 'なんの']);
+const W_SCHOOL_NAME = new RegExp(`([\\p{Script=Han}ぁ-んァ-ヶー]{1,10})${SCHOOL_WORD}`, 'gu');
+const W_SCHOOL_ASK = /(学校|がっこう)の?(名前|なまえ)/u;
+const W_NAME = /(本名|ほんみょう|フルネーム|ふるねーむ|名字|みょうじ|苗字)/u;
+
+/**
+ * 使う人の言葉に、書いてほしくない個人のことがあれば、その種類(なければ null)。
+ * @param {string} text
+ * @returns {'phone'|'email'|'address'|'school'|'name'|null}
+ */
+export function personalWarn(text) {
+  const s = String(text ?? '').normalize('NFKC');
+  if (!s) return null;
+  if (W_PHONE.test(s)) return 'phone';
+  if (W_EMAIL.test(s)) return 'email';
+  if (W_ADDRESS.test(s)) return 'address';
+  if (W_SCHOOL_ASK.test(s)) return 'school';
+  for (const m of s.matchAll(W_SCHOOL_NAME)) {
+    const name = m[1].replace(/^.*[はを]/u, ''); // 前の言葉は切って、名前だけを見る
+    if (name && !NOT_SCHOOL_NAME.has(name) && Array.from(name).length >= 2) return 'school';
+  }
+  if (W_NAME.test(s)) return 'name';
+  return null;
 }
 
 // ---- 長い会話・夜おそく(1 回の会話で 1 回だけ、休むことをすすめる) ----

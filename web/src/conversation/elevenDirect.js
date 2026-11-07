@@ -3,13 +3,14 @@
 // - 声のサービスは、ブラウザからの直接の呼び出しを受け付けている(2026-11-06 に、鍵なしの事前確認で access-control-allow-origin: * を確かめた)
 // - 返るのは手元のサーバーの /api/tts と同じ PCM(16bit・24kHz・モノラル)なので、再生の道はそのまま使える
 // これは画面のコードで唯一の外への通信先(privacy.test.mjs が、この 1 か所だけを許している)。
+import { MODEL_DEFAULTS } from './models.js';
 
 export const ELEVEN_TTS = 'https://api.elevenlabs.io/v1/text-to-speech/';
 export const DEFAULT_VOICE_ID = 'fUjY9K2nAIwlALOwSiwc'; // 手元のサーバーの女の子の役の既定と同じ声(役ごとの声は voiceRole.js。speaker.js が voiceId で渡す)
-// 控えのモデル。名前の正本は models.js の MODEL_DEFAULTS.voice(この部品はほかの部品を読み込まない決まりなので、文字で持つ。
-// speaker.js はいつも modelId を渡す。同じ値かは test/model_names.test.mjs が見る)。
-// 前の既定 eleven_flash_v2_5 は最初の音が少し早い(2026-11-02 に測った: 約 290ms、v4 turbo は 290〜520ms)
-export const DEFAULT_MODEL_ID = 'eleven_v4_turbo';
+// 声のモデルの名前は models.js の 1 か所(MODEL_DEFAULTS.voice)。ここはその値を読むだけで、名前の文字は持たない(UW3 11-08)。
+// models.js は DOM も通信も使わない定数だけの部品なので、これを読み込んでも「外への通信先はこの 1 か所だけ」の確かめは変わらない
+// (privacy.test.mjs は、このファイルの import が ./models.js だけなのを見る)。
+export const DEFAULT_MODEL_ID = MODEL_DEFAULTS.voice;
 export const SAMPLE_RATE = 24000;
 const MAX_TEXT = 300;
 

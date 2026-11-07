@@ -145,8 +145,8 @@ export function createKvMemory({ store, pepper = '', now = Date.now }) {
       for (const f of facts) {
         const text = String(f.text ?? '').trim().slice(0, ITEM_TEXT_MAX);
         if (!text) continue;
-        const kind = ['name', 'like', 'topic', 'note'].includes(f.kind) ? f.kind : 'note';
-        if (kind === 'name' || kind === 'topic') rec.items = rec.items.filter((it) => it.kind !== kind);
+        const kind = ['name', 'age', 'like', 'topic', 'note'].includes(f.kind) ? f.kind : 'note';
+        if (kind === 'name' || kind === 'age' || kind === 'topic') rec.items = rec.items.filter((it) => it.kind !== kind);
         if (rec.items.some((it) => it.kind === kind && it.text === text)) continue;
         const item = { id: randomBytes(6).toString('base64url'), kind, text, at: t };
         rec.items.push(item);

@@ -5,10 +5,11 @@ import { gestureBudget, gestureForIntent, resolveMotion } from '../src/conversat
 import { config } from './env.mjs';
 import { buildSystemBlocks, buildUserTurn, MOTIONS, safeChoices } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
-import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, turnGuard, SAFETY_VERSION } from './safety.mjs';
+import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, personalWarn, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { mentionsRest, restGuard, restLine, restNeed } from './safety.mjs'; // BSF 11-08: 長い会話・夜おそくの「休もうか」(1 回の会話で 1 回)
 import { summarize } from './memory/reflect.mjs';
 import { aizuchi, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
+import { aiAnswer, asksIfAI, asksMemory, MEMORY_FIRST_NOTE, MEMORY_PLAIN_LINES, PERSONAL_HISTORY_MASK, personalLines, standinReply } from './talk_lines.mjs'; // UW3: 仮の頭脳の言い回し(AI・覚えること・書かないでね・ふつうの返事)
 import { CAMERA_MOCK_LINES, CAMERA_MOCK_NOTICE, cameraTurnContent, imageTokens, seeingAsked } from './camera.mjs'; // BCV: カメラの絵
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
@@ -18,8 +19,6 @@ const EXAMPLE_MOTIONS = ['nod', 'tilt', 'none']; // 話し方の例の返事
 const AIZUCHI_MOTIONS = ['nod', 'tilt'];
 // 分からない・できないと言う文は、考える顔にする(話し方の例・あいづち)
 const UNSURE = /(あれれ|わかりマセン|わかりません|わからない|分からない|調べられ|できマセン|できない)/;
-// 「人間なの?」「AI なの?」など、相手が何者かを聞く言葉
-const ASKS_IF_HUMAN = /(人間なの|人間なん|人間ですか|にんげんなの|人なの\?|本物の人|AI\s*なの|AI\s*ですか|ロボットなの|中の人)/i;
 
 /** 1 行の JSON を直す。コードブロックや前後の文字が付いていても、できるだけ拾う */
 export function parseLine(line) {
@@ -241,6 +240,7 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
   const { name, topic } = summarize(memory?.items ?? []);
   const san = name ? `${name}さん` : '';
   const hello = firstGreeting(persona); // 人格の「初めてのあいさつ」(無ければ空)
+  const turn = Math.floor(history.length / 2); // 何回目の話しかけか(仮の返事を替えるため)
   if (trigger === 'approach') {
     // 人が近づいた(カメラ・マウスの試し)。覚えている人でなければ、その子の言葉で声をかける。
     // 話の始めなら初めてのあいさつで名乗る。話の途中なら名乗り直さず、あいさつの最後の 1 文だけ(2026-11-07 本物の画面で、
@@ -260,10 +260,15 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
     return;
   }
   // 人間か AI かを聞かれたら、AI のキャラクターだと正直に答える(安全の決まり 5。仮の頭脳でも守る)
-  if (ASKS_IF_HUMAN.test(text)) {
+  if (asksIfAI(text)) {
     yield { type: 'thought', seen: seen || '', intent: '人間かどうか', stage: 'chat', handoff: false };
-    yield { type: 'say', text: 'AI のキャラクターだよ。人間じゃないんだ。', expression: 'happy', motion: 'nod', gaze: 'person' };
-    yield { type: 'say', text: 'でも、お話はちゃんと聞くよ。', expression: 'happy', motion: 'tilt', gaze: 'person' };
+    for (const [i, line] of aiAnswer(text, turn).entries()) yield { type: 'say', text: line, expression: 'happy', motion: i === 0 ? 'nod' : 'tilt', gaze: 'person' };
+    return;
+  }
+  // 何を覚えるか・覚えないかを、子どもの言葉で言う(覚えた事が無い回。UIR 13)
+  if (asksMemory(text) && !learned.length) {
+    yield { type: 'thought', seen: seen || '', intent: '覚えること', stage: 'chat', handoff: false };
+    for (const [i, line] of MEMORY_PLAIN_LINES.entries()) yield { type: 'say', text: line, expression: 'happy', motion: i === 0 ? 'nod' : 'none', gaze: 'person' };
     return;
   }
   const hit = landmarks.find((l) => text.includes(l.name));
@@ -275,10 +280,18 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
   }
   const learnedName = learned.find((f) => f.kind === 'name')?.text.replace(/^名前: /, '');
   const learnedLike = learned.find((f) => f.kind === 'like')?.text.replace(/^好きなもの: /, '');
-  if (learnedName || learnedLike) {
+  const learnedAge = learned.find((f) => f.kind === 'age')?.text.replace(/^年: /, '').replace(/さい$/, '');
+  if (learnedName || learnedLike || learnedAge) {
     yield { type: 'thought', seen: seen || '', intent: '自己紹介', stage: 'chat', handoff: false };
-    if (learnedName) yield { type: 'say', text: memoryLine(persona, '名前を覚えた', { 名前: learnedName }) || `${learnedName}さんっていうんだね。`, expression: 'happy', motion: 'nod', gaze: 'person' };
-    if (learnedLike) yield { type: 'say', text: memoryLine(persona, '好きなものを覚えた', { 好きなもの: learnedLike }) || `${learnedLike}が好きなんだ。覚えておくね。`, expression: 'happy', motion: 'nod', gaze: 'person' };
+    const lines = [];
+    const nameOwn = learnedName ? memoryLine(persona, '名前を覚えた', { 名前: learnedName }) : ''; // その子の言葉(人格の「覚えている時の言い方」)
+    const likeOwn = learnedLike ? memoryLine(persona, '好きなものを覚えた', { 好きなもの: learnedLike }) : '';
+    if (learnedName) lines.push(nameOwn || `${learnedName}さんっていうんだね。`);
+    if (learnedAge) lines.push(`${learnedAge}さいなんだね。覚えておくね。`);
+    if (learnedLike) lines.push(likeOwn || `${learnedLike}が好きなんだ。覚えておくね。`);
+    // はじめて覚えた回(覚えている事が無かった回)だけ、覚えない物も 1 文で言う(UIR 13)。その子の言葉で話している時は、口調がちがうので足さない
+    if (!memory?.items?.length && lines.length < 3 && !nameOwn && !likeOwn) lines.push(MEMORY_FIRST_NOTE);
+    for (const [i, line] of lines.slice(0, 3).entries()) yield { type: 'say', text: line, expression: 'happy', motion: i < 2 ? 'nod' : 'none', gaze: 'person' };
     return;
   }
   // 会話の始め(履歴が無い)で、覚えている事があれば、続きから話す
@@ -321,8 +334,10 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
     for (const [i, line] of own.entries()) yield { type: 'say', text: line, expression: i === 0 ? 'think' : 'happy', motion: AIZUCHI_MOTIONS[i] ?? 'none', gaze: 'person' };
     return;
   }
-  yield { type: 'say', text: 'そうなんだ。', expression: 'think', motion: 'nod', gaze: 'person' };
-  yield { type: 'say', text: 'もう少し聞かせてくれる?', expression: 'happy', motion: 'tilt', gaze: 'person' };
+  // 決まった 1 文にしない。聞かれたことは、知っているふりをせず、正直に「かんたんなお返事しかできない」と言う(UW3 UIR 12)
+  const { lines } = standinReply(text, turn);
+  yield { type: 'say', text: lines[0], expression: 'think', motion: 'nod', gaze: 'person' };
+  yield { type: 'say', text: lines[1], expression: 'happy', motion: 'tilt', gaze: 'person' };
 }
 
 export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で流れて見えるように)。まとめて返す公開の関数は 0 にする
@@ -333,7 +348,9 @@ export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で�
  * paceMs は仮の頭脳の 1 文ごとの間(既定 120ms)。
  */
 export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, memory = null, learned = [], forceMock = false, brain: want = 'auto', paceMs = MOCK_PACE_MS }) {
-  const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
+  const { text = '', trigger = null, scene = '', character = {}, place = {} } = body;
+  // UIR 19: 住所・電話・学校の名前などを書いた発言は、前の話からも消す(頭脳にもう渡さない・覚えない・記録しない)
+  const history = (Array.isArray(body.history) ? body.history : []).map((m) => (m?.role === 'user' && personalWarn(String(m.content ?? '')) ? { ...m, content: PERSONAL_HISTORY_MASK } : m));
   // BCV: カメラの絵(使う人がカメラを入れて話しかけた回だけ。点検済みの形 = server/camera.mjs の readCameraImage)。この回の呼び出しにだけ使い、どこにも書かない
   const image = trigger === 'approach' ? null : (body.image ?? null);
   // 表情と動きの名前は、決まった形(英小文字・数字・_ : -)の物だけ(指示文に名前のまま入るため。F6)
@@ -386,6 +403,14 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(source), text: source })) emit(obj);
     return;
   }
+  // UIR 19(UW3 11-08): 住所・電話・メール・学校の名前・本名を書いたら、頭脳を呼ばずに、やさしく「書かないでね」と言う。どちらの頭脳でも同じ。覚えない・記録しない
+  const personal = trigger === 'approach' ? null : personalWarn(text);
+  if (personal) {
+    onEvent({ type: 'meta', brain, privacy: 'personal' });
+    emit({ type: 'thought', seen: '', intent: '個人のこと', stage: 'chat', handoff: false });
+    for (const [i, line] of personalLines(personal).entries()) emit({ type: 'say', text: line, expression: i === 0 ? 'neutral' : 'happy', motion: i === 0 ? 'none' : 'nod', gaze: 'person' });
+    return;
+  }
   // BSF 11-08: 長い会話・夜おそく。決まった返事の回と、近づいた時の声かけには付けない(次のふつうの回に回す)
   const rest = trigger === 'approach' ? null : restNeed(body.session);
   let restSaid = false;
@@ -423,7 +448,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
     // BCV: 絵がついた回は [絵, 絵の決まり + この回の言葉](server/camera.mjs)。ついていない回は、今までどおりの文字だけ
-    { role: 'user', content: cameraTurnContent(buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard, hasHistory: history.length > 0 }), image) },
+    { role: 'user', content: cameraTurnContent(buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', learned, guard, hasHistory: history.length > 0 }), image) },
   ];
   let raw = '';
   let said = 0;

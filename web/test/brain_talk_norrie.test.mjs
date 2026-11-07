@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { mockReply, runTurn } from '../server/brain.mjs';
 import { aizuchi, firstGreeting, talkExamples } from '../server/greeting.mjs';
 import { isUnsafeOutput, sanitizePersona } from '../server/safety.mjs';
+import { standinReply } from '../server/talk_lines.mjs';
 
 const PERSONA = readFileSync(join(import.meta.dirname, '..', '..', 'characters', 'norrie', 'persona.md'), 'utf8');
 const MOTIONS = ['none', 'nod', 'bow', 'wave', 'tilt'];
@@ -87,7 +88,7 @@ test('公開の関数のように mockReply を直接呼んでも、安全の層
     assert.equal(e.intent, undefined);
     assert.equal(e.safety, undefined);
   }
-  assert.deepEqual(run('今日はいい日').filter((e) => e.type === 'say').map((e) => e.text), ['そうなんだ。', 'もう少し聞かせてくれる?']);
+  assert.deepEqual(run('今日はいい日').filter((e) => e.type === 'say').map((e) => e.text), standinReply('今日はいい日', 0).lines, '決まった 1 文でなく、仮の返事の言い回しから(UW3)');
   // 人格の文を渡せば、直接呼んでもその子の言葉
   assert.deepEqual(run('きみはだれ?', { persona: PERSONA }).filter((e) => e.type === 'say').map((e) => e.text), talkExamples(PERSONA)[0].replies);
   // 近づいた時(言葉なし)は、安全の層で止めない

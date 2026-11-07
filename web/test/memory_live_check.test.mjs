@@ -120,7 +120,8 @@ test('本物の頭脳(偽の API)のサーバーで通しが全部通り、回�
     assert.equal(brain.seen[0].body.system[0].text, SAFETY_RULES);
     assert.match(brain.seen[0].body.system[1].text, /あなたは「ノリー」/);
     assert.match(brain.seen[0].body.system[1].text, /執事見習い/);
-    const memo = brain.seen.map((x) => String(x.body.messages.at(-1).content).includes('名前: タロウ'));
+    const memo = brain.seen.map((x) => { const c = String(x.body.messages.at(-1).content); return c.includes('【覚えていること】') && c.includes('名前: タロウ'); });
+    assert.ok(String(brain.seen[0].body.messages.at(-1).content).includes('【いま覚えた】'), 'この回に覚えた事は、その回の頭脳にも渡す(UW3)');
     assert.deepEqual(memo, [false, true, true, false]);
     assert.equal(brain.seen[0].headers['x-api-key'], FAKE_BRAIN_KEY, '鍵はサーバーの中にだけある(道具は送らない)');
     assert.ok(!logs.join('\n').includes(FAKE_BRAIN_KEY));
