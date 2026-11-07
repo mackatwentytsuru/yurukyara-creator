@@ -203,7 +203,7 @@ test('言葉 → PC の絵 → 直したい(一言)= G1 → 2 回目 → この�
   assert.match(h.offeredAll[0].url, /&view=convert&cid=yc1106_2201_ab12&shape=maru&mat=fur$/, '選んだ形と しつかんを作る画面へ渡す');
   await h.send({ ev: 'converted', id: 'yc1106_2201_ab12' });
   assert.equal(h.fr.step, 4);
-  assert.ok(h.texts('guide').includes('この かたちで 3D に するね。パソコンで つくるよ(やく 20 ぷん)。'));
+  assert.ok(h.texts('guide').includes('この かたちで 3D の ちゅうもんを 書くね。3D は まだ できていないよ。'));
   assert.deepEqual(h.offered, ['persona_ok', 'persona_edit', 'persona_roll']);
   const s = h.stored.get('yc1106_2201_ab12');
   assert.ok(s, '性格はできた子の id で覚える');

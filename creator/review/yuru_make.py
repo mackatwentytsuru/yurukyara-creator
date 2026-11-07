@@ -661,7 +661,7 @@ def write_handoff(cid):
         d["looks"] = looks
         d["origin"] = {**(d.get("origin") or {}), "convert": {"shape": rec["shape"], "material": rec["material"], "round": rnd}}
         cj.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-    rs.set_activity(cid, "かたちが決まりました。3D は パソコンで つくります(やく 20 ぷん)")
+    rs.set_activity(cid, "かたちが決まりました。3D の ちゅうもんを 書きました。3D は まだ できていません")
     return out({"id": cid, "did": "handoff", "handoff": rel(hp), "shape": rec["shape"], "material": rec["material"],
                 "tell": "変換の絵が OK でした。3D は make-character のスキルで、この変換の絵から作ります(約 20 分。受け渡し: " + rel(hp) + ")"})
 

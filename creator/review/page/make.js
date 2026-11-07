@@ -468,7 +468,7 @@ function phoneAfterOk() {
   };
   const go = (c) => {
     box.hidden = true;
-    convertView({ ...c, cid: S.id }, { onAgain: () => { show("done"); askShape(); }, onDone: () => { $("doneMsg").textContent = "3D は パソコンで つくるよ(やく 20 ぷん)。それまで 2D で 話せるよ。"; } });
+    convertView({ ...c, cid: S.id }, { onAgain: () => { show("done"); askShape(); }, onDone: () => { $("doneMsg").textContent = "3D の ちゅうもんを 書いたよ。3D は まだ できていないよ。それまで 2D で 話せるよ。"; } });
   };
   const tick = async () => {
     try {
@@ -516,7 +516,7 @@ async function convertView(c = CONVERT, { onAgain = null, onDone = null } = {}) 
     $("convOk").disabled = true;
     try {
       await api("/api/review/make/convert_ok", { method: "POST", body: { round: rnd } });
-      act.textContent = "この かたちで 3D に するね。パソコンで つくるよ(やく 20 ぷん)。";
+      act.textContent = "この かたちで 3D の ちゅうもんを 書くね。3D は まだ できていないよ。";
       $("convOk").hidden = true;
       $("convAgain").hidden = true;
       tell("converted", { id: c.cid });

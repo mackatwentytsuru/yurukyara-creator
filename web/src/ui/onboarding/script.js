@@ -911,7 +911,7 @@ export class FirstRun {
       lines.push({ who: 'note', text: 'ぜんぶ、あとから かえられるよ。' });
     }
     if (away && c.local && !c.twod) lines.push({ who: 'note', text: `${c.name}の 3D は、パソコンの Claude Code で つくれるよ(約 20 分)。それまでは、${this.guideName}が 舞台に 立つよ。` });
-    if (away && c.local && c.twod) lines.push({ who: 'note', text: c.want3d ? `${c.name}は 2D で 舞台に いるよ。3D は パソコンで つくっているよ(やく 20 ぷん)。` : `${c.name}は 2D で 舞台に いるよ。` });
+    if (away && c.local && c.twod) lines.push({ who: 'note', text: c.want3d ? `${c.name}は 2D で 舞台に いるよ。3D の ちゅうもんは 書いたよ。3D は まだ できていないよ。` : `${c.name}は 2D で 舞台に いるよ。` });
     if (away && !c.local) lines.push({ who: 'note', text: `${c.name}は、舞台に立ったままだよ。${this.guideName}にもどしたい時は、「${this.guideName}にもどす」を押してね。` });
     await this._say(...lines);
     this._offer([{ id: 'begin', label: 'はじめる', primary: true }]);
@@ -1086,7 +1086,7 @@ export class FirstRun {
     this.character = { ...this.character, want3d: true, convert: { ...this.convert } };
     await this._say(
       { who: 'user', text: 'この かたちで 3D に する' },
-      { who: 'guide', text: 'この かたちで 3D に するね。パソコンで つくるよ(やく 20 ぷん)。' },
+      { who: 'guide', text: 'この かたちで 3D の ちゅうもんを 書くね。3D は まだ できていないよ。' },
       { who: 'note', text: 'それまでは 2D で 話せるよ。' },
     );
     return this._after2d();

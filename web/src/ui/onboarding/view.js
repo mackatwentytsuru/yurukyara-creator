@@ -123,7 +123,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     chips.classList.remove('fr-chips-scroll');
     const tops = new Set([...chips.children].filter((c) => c.offsetParent !== null).map((c) => Math.round(c.offsetTop)));
     // 見本の子の絵つきの札は、折り返して全部見せる(UIR 10。3 段まで)。ほかは 2 段まで(越えたら、2 段のまま横に巻く)
-    const rows = chips.querySelector('.fr-card') ? CARD_ROWS : CHIP_ROWS;
+    const rows = chips.querySelector('.fr-card') || chips.querySelector('[data-act="role_auto"]') ? CARD_ROWS : CHIP_ROWS; // 役目の札(5 つ)も折り返して全部見せる(B4 直し)
     if (tops.size > rows) chips.classList.add('fr-chips-scroll');
   }
   globalThis.addEventListener?.('resize', fitChips);
