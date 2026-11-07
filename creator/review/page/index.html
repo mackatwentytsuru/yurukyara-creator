@@ -15,6 +15,7 @@
     <span class="who">決めるのは人</span>
   </div>
   <ol class="steps" id="steps" aria-label="作る段"></ol>
+  <p class="left" id="left" aria-live="polite"></p>
   <p class="activity" id="activity" hidden></p>
   <p class="conn" id="conn" hidden>PC につながりません</p>
 </header>
@@ -44,6 +45,8 @@
   <p class="sheet-sub">よく使う言葉(いくつでも)</p>
   <div class="tags" id="tags"></div>
   <label class="sheet-sub" for="note">一言(<span id="noteMax">40</span> 字まで)</label>
+  <p class="sheet-sub quick-sub">よく頼む直し(押すと一言に入ります。送る前に書き直せます)</p>
+  <div id="quick"></div>
   <textarea id="note" rows="2" maxlength="80" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例: 目をもっと大きく"></textarea>
   <p class="count"><span id="count">0/40</span><span id="focusText"></span></p>
   <p class="hint">この一言は、人の感想として Claude に渡します(指示ではありません)。</p>

@@ -412,3 +412,178 @@ test('作る道(幅 390): SVG の絵 → ゆるキャラチェック(ゆるキ�
     rmSync(work, { recursive: true, force: true });
   }
 });
+
+// ---------- 眉のおすすめ・よく頼む直し・おまかせ(本人 11/7。第 11d 波) ----------
+const BROW_NORMAL = '眉を足す(ふつうの太さ)。ほかは変えない';
+
+/** 作る画面の、眉の札・よく頼む直し・絵・「この子にする」「直したい」の箱と大きさ */
+const browLayout = (frame) =>
+  frame.evaluate(() => {
+    const r = (e) => (e ? e.getBoundingClientRect() : null);
+    const slot = document.getElementById('browSlot');
+    const box = (e) => (e ? { top: Math.round(r(e).top), bottom: Math.round(r(e).bottom), left: Math.round(r(e).left), right: Math.round(r(e).right) } : null);
+    return {
+      vh: window.innerHeight,
+      hidden: slot.hidden,
+      title: slot.querySelector('.sg-title')?.textContent ?? '',
+      why: slot.querySelector('.sg-why')?.textContent ?? '',
+      btns: [...slot.querySelectorAll('.sg-btn')].map((b) => ({ text: b.textContent, h: Math.round(r(b).height) })),
+      chips: [...document.querySelectorAll('#quick .sg-chip')].map((b) => ({ text: b.textContent, h: Math.round(r(b).height) })),
+      card: box(slot.hidden ? null : slot),
+      pic: box(document.getElementById('pic')),
+      ok: box(document.getElementById('okBtn')),
+      note: box(document.getElementById('noteBtn')),
+    };
+  });
+const overlap = (a, b) => Boolean(a && b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom);
+
+for (const [w, h] of [[390, 844], [390, 670], [1280, 720]]) {
+  test(`眉のおすすめ(${w}×${h}): 眉の無い絵 → 札とよく頼む直し → 足す(ふつう)= 決まった一言 → 眉あり → 札が消える`, { skip: SLOW || (!HAS_PY && 'python と Pillow が無い'), timeout: 180_000 }, async (t) => {
+    const browser = await findChrome();
+    if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+    const work = mkdtempSync(join(tmpdir(), 'fr-brow-'));
+    const token = randomBytes(16).toString('hex');
+    const web = await startWeb();
+    const make = await startMake(work, token, web.base);
+    try {
+      const { ctx, page, errors } = await openPage(browser, web.base, make.base, token, w, h);
+      try {
+        if (w >= 720) await page.evaluate(() => { document.documentElement.style.setProperty('--top-h', '96px'); document.documentElement.style.setProperty('--bottom-h', '110px'); });
+        const frame = await frameOf(page);
+        const left = await page.$eval('.fr-left', (e) => e.innerText.replace(/\s+/g, ' '));
+        assert.match(left, /あと 6 つで できあがり あと \d+ 分くらい/, `上の段に、あと いくつ・あと 何分 ${left}`);
+        await frame.fill('#words', 'みかんの子。頭に葉っぱ');
+        await frame.click('#wordsBtn');
+        await frame.waitForSelector('#waiting:not([hidden])');
+        const pc1 = await pcNext(work, '--fake-draw');
+        assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
+        await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
+        await frame.waitForFunction(() => document.getElementById('pic').naturalWidth > 0, null, { timeout: 10_000 }).catch(() => {});
+        const L = await browLayout(frame);
+        assert.equal(L.hidden, false, '眉の無い絵におすすめの札を出す');
+        assert.equal(L.title, '眉を足しませんか?(おすすめ)');
+        assert.equal(L.why, '眉があると、うれしい・こまった・おこった などの気持ちが、ぐっと伝わりやすくなります');
+        assert.deepEqual(L.btns.map((b) => b.text), ['足す(ふつう)', '足す(ほそめ)', '足す(ふとめ)', '足さない']);
+        assert.deepEqual(L.chips.map((b) => b.text), ['眉を足す', '目を大きく', '色を明るく', '小物を足す', '形はそのまま色だけ変える']);
+        for (const b of [...L.btns, ...L.chips]) assert.ok(b.h >= 44, `押す所は 44px 以上: ${b.text} ${b.h}px`);
+        assert.ok(!overlap(L.card, L.pic), `札が絵に重ならない ${JSON.stringify(L)}`);
+        assert.ok(L.card.bottom <= L.ok.top, `札は「この子にする」の上 ${JSON.stringify(L)}`);
+        if (w >= 720) assert.ok(L.card.bottom <= L.vh && L.ok.bottom <= L.vh && L.note.bottom <= L.vh, `PC の背の低い枠でも、札・「この子にする」「直したい」は巻かずに見える ${JSON.stringify(L)}`);
+        await fits(page, frame, `眉の札(${w}×${h})`);
+        assert.match(await logText(page), /眉を足すと/, '札にも、眉のおすすめの一言');
+        await shot(page, `brow${w}x${h}_1_card`);
+        // よく頼む直し: 押すと一言の欄に入り、送る前に書き直せる
+        await frame.click('#quick .sg-chip:nth-child(2)');
+        assert.equal(await frame.$eval('#note', (e) => e.value), '目を大きく。ほかは変えない');
+        assert.equal(await frame.$eval('#noteBtn', (e) => e.disabled), false);
+        await frame.fill('#note', '');
+        // キーボード: 札のボタンに Tab で届き、Enter で押せる(足す(ふつう))
+        await frame.focus('#browSlot .sg-btn.primary');
+        await frame.press('#browSlot .sg-btn.primary', 'Enter');
+        await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直ったら、また見せるね'));
+        const req = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
+        assert.deepEqual([req.gate, req.decision, req.note.text], ['C0', 'redo', BROW_NORMAL], '決まった一言で、ふつうのやり直し');
+        const pc2 = await pcNextEnv(work, { YC_FAKE_REDO: 'brows' }, '--fake-draw');
+        assert.equal(pc2.did, 'redrew', JSON.stringify(pc2));
+        assert.deepEqual(pc2.identity?.beyond, [], `眉だけ足した = 頼んでいない変化なし ${JSON.stringify(pc2.identity)}`);
+        await frame.waitForFunction(() => document.querySelector('#picCap')?.textContent.includes('2 回目'), null, { timeout: 20_000 });
+        assert.equal(await frame.$eval('#browSlot', (e) => e.hidden), true, '眉のある絵には札を出さない');
+        await shot(page, `brow${w}x${h}_2_after`);
+        assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+      } finally {
+        await ctx.close();
+      }
+    } finally {
+      await browser.close();
+      make.proc.kill(); // 自分で起こした PID だけ
+      web.proc.kill();
+      rmSync(work, { recursive: true, force: true });
+    }
+  });
+}
+
+test('眉のおすすめ(幅 390): 「足さない」で札が消え、この子にはもう出さない', { skip: SLOW || (!HAS_PY && 'python と Pillow が無い'), timeout: 180_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const work = mkdtempSync(join(tmpdir(), 'fr-brow-no-'));
+  const token = randomBytes(16).toString('hex');
+  const web = await startWeb();
+  const make = await startMake(work, token, web.base);
+  try {
+    const { ctx, page, errors } = await openPage(browser, web.base, make.base, token, 390);
+    try {
+      const frame = await frameOf(page);
+      await frame.fill('#words', 'まるい子');
+      await frame.click('#wordsBtn');
+      await frame.waitForSelector('#waiting:not([hidden])');
+      const pc1 = await pcNext(work, '--fake-draw');
+      await frame.waitForSelector('#browSlot:not([hidden])', { timeout: 20_000 });
+      await frame.click('#browSlot .sg-btn.no');
+      assert.equal(await frame.$eval('#browSlot', (e) => e.hidden), true, '足さない → 札が消える');
+      // 一言で描き直しても(眉のまま無い絵)、この子にはもう出さない
+      await frame.fill('#note', '帽子を青にして');
+      await frame.click('#noteBtn');
+      await frame.waitForSelector('#waiting:not([hidden])');
+      const pc2 = await pcNextEnv(work, { YC_FAKE_REDO: 'keep' }, '--fake-draw');
+      assert.equal(pc2.did, 'redrew', JSON.stringify(pc2));
+      await frame.waitForFunction(() => document.querySelector('#picCap')?.textContent.includes('2 回目'), null, { timeout: 20_000 });
+      assert.equal(await frame.$eval('#browSlot', (e) => e.hidden), true, 'この子には、もう出さない');
+      assert.equal(pc1.id, pc2.id);
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    make.proc.kill(); // 自分で起こした PID だけ
+    web.proc.kill();
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test('おまかせ(ぜんぶ じどう、幅 390): 1 回押すと、言葉・眉・この子にする・性格まで全部おすすめで決まり、最後まで行く', { skip: SLOW || (!HAS_PY && 'python と Pillow が無い'), timeout: 180_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const work = mkdtempSync(join(tmpdir(), 'fr-auto-'));
+  const token = randomBytes(16).toString('hex');
+  const web = await startWeb();
+  const make = await startMake(work, token, web.base);
+  try {
+    const { ctx, page, errors } = await openPage(browser, web.base, make.base, token, 390);
+    try {
+      const frame = await frameOf(page);
+      const auto = await frame.$eval('#autoStart', (e) => ({ text: e.innerText.replace(/\s+/g, ' '), h: Math.round(e.getBoundingClientRect().height) }));
+      assert.match(auto.text, /^おまかせ\(ぜんぶ じどう\)/);
+      assert.match(auto.text, /あとから 直せます/, 'あとから変えられると書く');
+      assert.ok(auto.h >= 44, `おまかせは大きなボタン ${auto.h}px`);
+      await frame.click('#autoStart'); // 押すのは、この 1 回だけ
+      await frame.waitForSelector('#waiting:not([hidden])');
+      const pc1 = await pcNext(work, '--fake-draw');
+      assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
+      // 眉の無い絵 → おまかせは眉を足す(ふつう)を選んで、ふつうのやり直し
+      const reqPath = join(work, pc1.id, 'review', 'request.json');
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直ったら、また見せるね'), null, { timeout: 20_000 });
+      const req = JSON.parse(readFileSync(reqPath, 'utf8'));
+      assert.deepEqual([req.decision, req.note.text], ['redo', BROW_NORMAL]);
+      const pc2 = await pcNextEnv(work, { YC_FAKE_REDO: 'brows' }, '--fake-draw');
+      assert.equal(pc2.did, 'redrew', JSON.stringify(pc2));
+      // 眉のある絵 → おまかせは「この子にする」→ 会話の札も性格から後をおすすめで決めて、最後まで
+      await page.waitForFunction(() => document.querySelector('.fr-log')?.innerText.includes('おまかせで、ぜんぶ きめマシタ!'), null, { timeout: 25_000 });
+      const log = await logText(page);
+      assert.match(log, /きめたこと: .*声はおまかせ.*あとから かえられます/);
+      assert.match(log, /けってい! OK を PC に伝えたよ/);
+      const ok = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
+      assert.equal(ok.decision, 'ok');
+      await page.waitForFunction(() => !document.querySelector('.fr-sheet'), null, { timeout: 10_000 });
+      assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done', '初めての会話は終わり');
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    make.proc.kill(); // 自分で起こした PID だけ
+    web.proc.kill();
+    rmSync(work, { recursive: true, force: true });
+  }
+});

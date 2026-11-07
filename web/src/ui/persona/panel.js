@@ -50,7 +50,7 @@ function segmented(label, entries, current, onPick, { className = 'yp-seg', with
  * @param {(role:string)=>({choice:string, role:string|null, own:string|null}|null)} [o.onVoiceRole] 声の役(おまかせ・男の子・女の子)を
  *   選んだ時に、舞台の読み上げへ渡す(試しの返事もその声で話す)。返り値は今の役(声の下の一言に出す)。「もどす」では元の役で呼び直す
  */
-export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body, lockTone = false, onVoiceRole = null }) {
+export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body, lockTone = false, onVoiceRole = null, recommended = null }) {
   injectStyles(parent.ownerDocument);
   // 話し方の決まった子は、口調をいつも own にする(覚えた設定・おまかせ・古い保存でも。「これにする」で主役の話し方を上書きしない)
   const fix = (v) => (lockTone ? normalize({ ...normalize(v), tone: 'own', ending: '' }) : normalize(v));
@@ -109,14 +109,19 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   const reply = el('p', { className: 'yp-reply', ariaLive: 'polite' }, replyName, replyText);
   const note = el('p', { className: 'yp-note yp-brain-note' });
   const block = el('pre', { className: 'yp-block' });
-  const randomBtn = el('button', { type: 'button', className: 'yp-random', textContent: 'おまかせ' });
+  // くじびき: 性格を くじで選び直す(画面は閉じない)。上の「おまかせ(ぜんぶ じどう)」と同じ名前にしない(押した後が違うので。11/7 S4w11d)
+  const randomBtn = el('button', { type: 'button', className: 'yp-random', textContent: 'くじびき', title: '性格を くじで えらびなおします(この画面は とじません)' });
   const saveBtn = el('button', { type: 'button', className: 'yp-save', textContent: 'これにする' });
   const cancelBtn = el('button', { type: 'button', className: 'yp-cancel', textContent: 'もどす' });
+  // おまかせ(ぜんぶ じどう): この子のおすすめの性格と、声の役「おまかせ」で決めて、すぐ閉じる(本人 11/7。あとから変えられる)
+  const autoBtn = el('button', { type: 'button', className: 'yp-auto', textContent: 'おまかせ(ぜんぶ じどう)' });
+  const autoNote = el('p', { className: 'yp-note yp-auto-note', textContent: 'えらぶ所は 5 つ(性格・口調・元気さ・長さ・声)。ぜんぶ えらばなくても だいじょうぶ。おまかせなら 1 回で おわります(あとから いつでも かえられます)。' });
 
   // 返事の試しは上に置き、下の設定を選んでいる間も見えるようにする(スマホでは上に貼りつく)
   panel.append(
     el('h2', { textContent: `${characterName}の性格` }),
     el('p', { className: 'yp-lead', textContent: '選ぶと、すぐ上の返事が変わります。' }),
+    el('div', { className: 'yp-auto-row' }, autoBtn, autoNote),
     el('div', { className: 'yp-try' }, el('div', { className: 'yp-try-row' }, tryIn, tryBtn), reply, note),
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '性格' }), presets.box),
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '口調' }), tone.box, toneLock, endingRow, endingMsg),
@@ -194,6 +199,13 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   saveBtn.addEventListener('click', () => {
     close();
     onSave(fix(s));
+  });
+  autoBtn.addEventListener('click', () => {
+    const rec = normalize(recommended?.() ?? initial);
+    const next = fix({ ...rec, voice: { ...rec.voice, role: 'auto' } });
+    if (s.voice.role !== 'auto') onVoiceRole?.('auto');
+    close();
+    onSave(next);
   });
   cancelBtn.addEventListener('click', () => {
     close();

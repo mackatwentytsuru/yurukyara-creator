@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { createStage } from './scene.js';
 import { loadFirstCharacter, loadCharacter, availableLooks, motionChoices, MAIN_CHARACTER } from './character/index.js';
 import { writeRemembered, characterKey, lookKey, hasBothLooks } from './character/looks.js'; // 見た目(3D・2D)の切り替えの決まり・このタブで選んだ見た目を覚える
-import { guardBottom } from './stage/framing.js'; // キャラを上の段の下に収める
+import { topLimit, topClearance, tvTopLimit } from './stage/framing.js'; // キャラを上の段の下に収める(すき間は画面の高さの 6%。テレビ表示では画面の上の端から)
+// テレビ表示(11/7 本人「iPhone にあるものを AirPlay で、テレビにすぐパンって映せるようにしたい」): 入口の形・字幕の大きさ・画面ミラーリングの手順の決まり
+import { tvPlan, tvCaptionPx, tvBottomReserve, castSteps, castLead, castNote, TV_CLASS, TV_LABEL, CAST_LABEL } from './stage/tvMode.js';
 import { pickSpec, isLoopbackPage, SPEC_NOTICE } from './character/urlSpec.js'; // ?character= ?place= は公開の URL では id だけ(CRITsec F5)
 import { shouldOpenFirstRun, FIRST_RUN_DONE_KEY } from './stage/firstVisit.js'; // 初めての訪問なら、入口の後に 7 歩を出す(CRITux 2)
 // 入力の差し替え口(tracking/sources/index.js の約束)。カメラの顔の部品(mediapipeSource.js)は重いので、ここでは読まず、
@@ -94,6 +96,10 @@ const app = {
 window.__app = app; // 試験と開発の確認用
 if (IS_HEADSET) document.documentElement.classList.add('is-headset');
 if (params.get('led') === '1') document.documentElement.classList.add('is-led'); // 入口の LED: 顔にかぶる窓と操作の帯を隠す
+// テレビ表示の入口の形(iPhone・iPad は「テレビに映す」、ほかは「テレビ表示」。ヘッドセット・LED などでは出さない)。
+// ?tv=1 なら、最初の置き方からテレビ表示(入口は出す。全画面は入口のボタンを押した時に頼む)
+const TV = tvPlan({ params, nav: navigator, headset: IS_HEADSET });
+if (TV.start) document.documentElement.classList.add(TV_CLASS);
 app.speaker = speaker;
 app.stage = stage;
 app.THREE = THREE;
@@ -340,6 +346,8 @@ function updatePrivacy() {
   if (listener?.listening) text += listener.provider === 'server' ? ' 声は、この画面を配っている PC へ送って文字にします。音は保存しません。' : ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
   if (stereoMic?.status === 'stereo') text += ' 声のする向きは、この端末の中で左右の音の差を調べるだけです(音は保存も、この仕組みからの送信もしません)。';
   ui.privacy(text, app.mode !== 'camera');
+  // テレビ表示はカメラを使わない時の注意書きを隠すが、マイクで聞いている間は残す(style.css の .privacy.off:not(.mic))
+  $('privacy')?.classList.toggle('mic', Boolean(listener?.listening));
 }
 
 /* ---------- 画面の状態 ---------- */
@@ -660,18 +668,205 @@ async function setupPresentation() {
 // 上の段: 上の札・見せ方のボタン・覚えていること・見た目の切り替え・「Claude の考え」の見出し。
 // 「Claude の考え」を開いている間は、窓の全体も数える(CRITux 21: スマホで開くと顔に重なった。キャラを窓の下へ置き直す)。
 // 「VR(Quest)で開く」の QR の箱も、開いている間は数える(キャラを箱の下へ。箱の下の端は style.css が画面の 45% より上で止める)
-const TOP_GUARD = '.top .chip, .top .top-row > *, #thoughtToggle, #thought:not(.collapsed), #questLinkBox:not([hidden])';
-const TOP_GAP_PX = 8; // 上の段とキャラの頭のすき間
+// 11/7 本人「頭が切れちゃってる」: PC では上の段がキャラの横に重ならず、耳が画面の上の端まで出ていた。
+// 上の段(札・ボタン・見た目の切り替え)は横の位置にかかわらず数え、下の端から画面の高さの 6% 下にキャラのいちばん上を置く(framing.js の topLimit)
+// 「テレビ」の入口(#tvBtn)は、幅 640 までは上の段の下の行(畳んだ見出しと同じ行)に置くので、横に重なる時だけ数える側へ
+// (見た目の切り替えが無い子で、その行を横いっぱいに数えてキャラを下げないように)
+const TOP_BAR = '.top .chip, .top .top-row > *:not(#tvBtn)'; // 上の段(横いっぱいに数える)
+const TOP_SIDE = '#thoughtToggle, #tvBtn'; // スマホで上の段の下に並ぶ畳んだ見出しと「テレビ」(キャラの横に重なる時だけ。同じすき間)
+const TOP_PANELS = '#thought:not(.collapsed), #questLinkBox:not([hidden])'; // 開いた窓(重なる時だけ)
+const TOP_GAP_PX = 8; // 開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
+const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
 
-/** 画面の横の範囲 [left, right] に重なる上の段の、下の端(px)。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
+/** キャラの頭を置いてよいいちばん上の線(px)。[left, right] はキャラの横の範囲。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
 function topGuard(left, right) {
-  return guardBottom([...document.querySelectorAll(TOP_GUARD)].map((el) => el.getBoundingClientRect()), left, right, TOP_GAP_PX);
+  // テレビ表示: 上の段は隠すので、画面の上の端から画面の高さの 6%(隅の「もどる」・縦持ちの一言がキャラの横に重なる時だけ、その下から)
+  if (tvActive()) return tvTopLimit({ corner: rectsOf('#tvExit, #tvRotate'), left, right, clear: topClearance(window.innerHeight, TOP_GAP_PX) });
+  return topLimit({
+    bar: rectsOf(TOP_BAR),
+    side: rectsOf(TOP_SIDE),
+    panels: rectsOf(TOP_PANELS),
+    left,
+    right,
+    clear: topClearance(window.innerHeight, TOP_GAP_PX),
+    panelGap: TOP_GAP_PX,
+  });
 }
 stage.state.topGuard = topGuard;
 
 /** 今の見せ方で、キャラを置き直す(画面の大きさ・上の段・下の帯が変わった時)。AR・VR の間は端末が決めるので何もしない */
 function reframe() {
   if (app.character && !stage.state.immersive) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
+}
+
+/**
+ * 下の帯(よくある質問のボタン・入力欄)の高さが変わったら、全身の見せ方を取り直す(足が帯に隠れないように)。
+ * テレビ表示では帯を隠すので、字幕の 2 行分(字の大きさは画面の高さの 6%)と、下の端に残る物(カメラの注意書き)の高さを空ける
+ */
+function fitBottom() {
+  const bottomBar = document.querySelector('.bottom');
+  if (!bottomBar) return;
+  const h = bottomBar.offsetHeight;
+  document.documentElement.style.setProperty('--bottom-h', `${h}px`);
+  if (tvActive()) {
+    document.documentElement.style.setProperty('--tv-cap', `${tvCaptionPx(window.innerHeight)}px`);
+    stage.state.bottomInset = h + tvBottomReserve(window.innerHeight);
+  } else {
+    stage.state.bottomInset = h + 8 + 80; // 80 は、帯の上に出る字幕と札の分(足に重ならないように)
+  }
+  reframe();
+}
+
+/* ---------- テレビ表示(11/7 本人「iPhone にあるものを AirPlay で、テレビにすぐパンって映せるようにしたい」。決まりは stage/tvMode.js) ---------- */
+// ウェブの頁は画面ミラーリング(AirPlay)を自分では始められないので、画面は ① 大きく見せる「テレビ表示」(画面いっぱい・キャラを大きく真ん中・
+// 3 m 先から読める字幕・小さな窓を隠して隅の「もどる」だけ)と、② iPhone・iPad の「テレビに映す」の 3 つの手順(と「テレビ表示にする」)を出す。
+// 全画面は、使う人が押した時だけ頼む(iPhone の Safari には全画面の口が無いので、縦持ちなら「よこむきに」の一言)
+let tvFull = false; // テレビ表示のために全画面にしたか(やめる時に戻す)
+function tvActive() {
+  return document.documentElement.classList.contains(TV_CLASS);
+}
+
+function requestTvFullscreen() {
+  const el = document.documentElement;
+  if (document.fullscreenElement || document.webkitFullscreenElement) return;
+  const req = el.requestFullscreen ?? el.webkitRequestFullscreen;
+  if (typeof req !== 'function') return; // 全画面の口が無いブラウザ(iPhone の Safari など)
+  try {
+    Promise.resolve(req.call(el, { navigationUI: 'hide' }))
+      .then(() => {
+        tvFull = true;
+        return screen.orientation?.lock?.('landscape'); // 横に固定できる端末だけ(できなければ何もしない)
+      })
+      .catch(() => {});
+  } catch {
+    // 断られた時はそのまま(テレビ表示は続ける)
+  }
+}
+
+function leaveTvFullscreen() {
+  if (!tvFull) return;
+  tvFull = false;
+  try {
+    screen.orientation?.unlock?.();
+  } catch {
+    // 固定していない
+  }
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  else if (document.webkitFullscreenElement) document.webkitExitFullscreen?.();
+}
+
+/** テレビ表示にする・やめる。fullscreen は押した時(使う人の操作の中)だけ真にする */
+function setTvMode(on, { fullscreen = false } = {}) {
+  if (on && !TV.show) return; // ヘッドセットの中・入口の LED などではしない
+  const btn = $('tvBtn');
+  if (on !== tvActive()) {
+    document.documentElement.classList.toggle(TV_CLASS, on);
+    if (TV.kind === 'toggle') btn?.setAttribute('aria-pressed', String(on));
+    if (on) {
+      app.questLink?.close(); // 開いた箱・札を残さない
+      const drawer = $('memoryDrawer');
+      if (drawer?.open) drawer.open = false;
+    }
+    closeTvCast();
+    fitBottom(); // 字幕の大きさ・下の余白・キャラの置き直し
+  }
+  if (on && fullscreen) requestTvFullscreen();
+  if (!on) {
+    leaveTvFullscreen();
+    if (btn && !btn.hidden) btn.focus({ preventScroll: true });
+  }
+}
+
+/** 「テレビに映す」の箱の文(stage/tvMode.js の文を textContent で入れる。外の住所は書かない) */
+function fillTvCast(device) {
+  const lead = $('tvCastLead');
+  if (lead) lead.textContent = castLead();
+  const note = $('tvCastNote');
+  if (note) note.textContent = castNote(device);
+  const steps = $('tvCastSteps');
+  if (steps) {
+    steps.replaceChildren(
+      ...castSteps(device).map((s) => {
+        const li = document.createElement('li');
+        li.append(Object.assign(document.createElement('b'), { textContent: s.main }), Object.assign(document.createElement('small'), { textContent: s.sub }));
+        return li;
+      }),
+    );
+  }
+}
+
+function openTvCast() {
+  const box = $('tvCast');
+  if (!box) return;
+  app.questLink?.close();
+  box.hidden = false;
+  $('tvBtn')?.setAttribute('aria-expanded', 'true');
+  $('tvEnter')?.focus({ preventScroll: true });
+}
+
+function closeTvCast(focusButton = false) {
+  const box = $('tvCast');
+  if (!box || box.hidden) return;
+  box.hidden = true;
+  $('tvBtn')?.setAttribute('aria-expanded', 'false');
+  if (focusButton) $('tvBtn')?.focus({ preventScroll: true });
+}
+
+/**
+ * 幅 640 まで: 入口は、畳んだ「Claude の考え」の見出しと同じ行の右、見た目の切り替えの左(style.css)。
+ * 切り替えの幅を測って --tv-right に入れる(切り替えが無ければ右の端から 12px)
+ */
+function placeTvButton() {
+  const look = $('lookSwitch');
+  const w = look && !look.hidden ? Math.ceil(look.getBoundingClientRect().width) : 0;
+  document.documentElement.style.setProperty('--tv-right', `${12 + (w > 0 ? w + 8 : 0)}px`);
+}
+
+/** 上の段の入口と、隅の「もどる」・手順の箱の押す所を付ける。ヘッドセットの中・入口の LED・自動で始める画面・重さを測る時は出さない */
+function setupTvMode() {
+  const btn = $('tvBtn');
+  $('tvExit')?.addEventListener('click', () => setTvMode(false));
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if ($('tvCast') && !$('tvCast').hidden) {
+      e.preventDefault();
+      closeTvCast(true);
+    } else if (tvActive() && !document.fullscreenElement && !document.webkitFullscreenElement) {
+      setTvMode(false); // 全画面の間の Escape はブラウザが全画面だけを戻す(テレビ表示は「もどる」まで続ける)
+    }
+  });
+  if (!btn || !TV.show) return;
+  const name = TV.kind === 'cast' ? CAST_LABEL : TV_LABEL;
+  btn.setAttribute('aria-label', name);
+  btn.title = name;
+  const label = $('tvBtnLabel');
+  if (label) label.textContent = name; // 見せる言葉(幅 640 までは style.css が「テレビ」だけにする)
+  if (TV.kind === 'cast') {
+    fillTvCast(TV.device);
+    btn.setAttribute('aria-haspopup', 'dialog');
+    btn.setAttribute('aria-controls', 'tvCast');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('click', () => ($('tvCast')?.hidden === false ? closeTvCast(true) : openTvCast()));
+    $('tvEnter')?.addEventListener('click', () => setTvMode(true, { fullscreen: true }));
+    $('tvCastClose')?.addEventListener('click', () => closeTvCast(true));
+    $('tvCast')?.addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeTvCast(true); // 札の外(暗い所)を押すと閉じる
+    });
+  } else {
+    btn.setAttribute('aria-pressed', String(tvActive()));
+    btn.addEventListener('click', () => setTvMode(!tvActive(), { fullscreen: true }));
+  }
+  app.tv = {
+    plan: TV,
+    get active() {
+      return tvActive();
+    },
+    set: setTvMode,
+  };
+  const look = $('lookSwitch');
+  if (look) new ResizeObserver(placeTvButton).observe(look); // 切り替えが出る・隠れる・幅が変わる時に置き直す
+  placeTvButton();
+  btn.hidden = false;
 }
 
 /* ---------- 見た目の切り替え(3D と 2D。両方あるキャラだけ。このタブだけで覚える) ---------- */
@@ -914,16 +1109,11 @@ async function boot() {
   stage.resize();
   window.addEventListener('resize', () => {
     stage.resize();
-    if (app.character) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
+    if (tvActive()) fitBottom(); // テレビ表示の字幕の大きさと下の余白は、画面の高さで決まる(置き直しも中で)
+    else if (app.character) stage.frameCharacter(app.character, undefined, app.place?.loaded?.object3d);
   });
-  // 下の帯(よくある質問のボタン・入力欄)の高さが変わったら、全身の見せ方を取り直す(足が帯に隠れないように)
-  const bottomBar = document.querySelector('.bottom');
-  const fitBottom = () => {
-    document.documentElement.style.setProperty('--bottom-h', `${bottomBar.offsetHeight}px`);
-    stage.state.bottomInset = bottomBar.offsetHeight + 8 + 80; // 80 は、帯の上に出る字幕と札の分(足に重ならないように)
-    reframe();
-  };
-  new ResizeObserver(fitBottom).observe(bottomBar);
+  // 下の帯(よくある質問のボタン・入力欄)の高さが変わったら、全身の見せ方を取り直す(足が帯に隠れないように。テレビ表示は字幕の分)
+  new ResizeObserver(fitBottom).observe(document.querySelector('.bottom'));
   fitBottom();
   // 上の段(札・ボタン)の高さが変わったら(始めると札が 2 行になる・ボタンが増える)、「Claude の考え」をその下へ下げ(--top-h)、
   // キャラを置き直す(頭と耳が段の下に入らないように)。幅 390 で、考えの見出しが「覚えていること」に重なって押せなかった
@@ -986,6 +1176,7 @@ async function boot() {
   setupPass();
   setupMemory();
   setupQuestLink(); // 見せ方を調べた後(Quest の中なら出さない)
+  setupTvMode(); // テレビ表示の入口(iPhone・iPad は「テレビに映す」。ヘッドセットの中では出さない)
   void refreshLookSwitch(app.character); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない。舞台の子が替わるたびにも作り直す)
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
@@ -998,6 +1189,7 @@ async function boot() {
   /** 入力を選んで始める。失敗したら理由を出して、ゲートに戻る */
   async function startSource(kind, pending) {
     speaker.unlock(); // 音を出す許可は、最初のタップの中で取る
+    if (tvActive()) requestTvFullscreen(); // ?tv=1: 全画面も、このタップの中で頼む(待つ前に)
     buttons.forEach((b) => (b.disabled = true));
     status.textContent = pending;
     try {

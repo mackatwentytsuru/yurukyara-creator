@@ -343,11 +343,11 @@ def draw_pass(cid, a, folder, name, brief_text, timeout, fix=False):
     """絵の Claude(か試験のふり)を 1 回流す。C0 にはまだ出さない(確かめの後に draw が出す)。"""
     svg, png = folder / "drawing.svg", folder / "drawing.png"
     log = folder / "stage_run.log"
+    brief = folder / ("brief_fix.md" if fix else "brief.md")
+    brief.write_text(brief_text, encoding="utf-8")       # 試験のふりの時も残す(頼みの文の中身を試験で見る)
     if a.fake_draw:
         return stage_tool(cid, 0, name, [py_word(), FAKE_DRAW, folder, "--round", folder.name[1:]] + (["--fix"] if fix else []),
                           review="on", log=log)
-    brief = folder / ("brief_fix.md" if fix else "brief.md")
-    brief.write_text(brief_text, encoding="utf-8")
     return stage_claude(cid, 0, name, brief, a.model, timeout, None, folder, log=log)
 
 
@@ -376,6 +376,8 @@ def draw(cid, a, kind, feedback=None, extra=None):
                 "申し送りが指す所だけを直し、ほかは前の回のまま保つ。名前(settings.md の 1 行目)は変えない(使う人には同じ子の直しに見える)")
         if ref["svg"]:
             prev += "\n" + rc.keep_brief(ref["svg"].read_text(encoding="utf-8", errors="replace"), req["note"], req["tags"], labels, prev_name)
+        if rc.brow_brief(req["note"]):           # 眉の足し(確かめる画面のおすすめ「眉を足す」など): 眉は K1 の決まった部品へ
+            prev += "\n" + rc.brow_brief(req["note"])
         prev += f"\n- 描いた後に、前の回とくらべる(決まった確かめ): {check_cmd(ref, folder)}\n  「頼まれていない変化」が出たら、その所を前の回に戻す(申し送りの直しは残す)"
     elif rnd > 1 and (prev_dir / "gen.py").exists():
         prev = (f"\n- 前の回の絵: {rel(prev_dir / 'drawing.svg')}・{rel(prev_dir / 'drawing.png')}(Read で見る)。"
@@ -406,6 +408,8 @@ def draw(cid, a, kind, feedback=None, extra=None):
             rs.set_make(cid, status="drawing", activity=f"頼んでいない所まで変わったので、もう一度描いています({rnd} 回目)")
             diffs = "\n".join(f"  - {b['brief']}" for b in check["beyond"])
             keep = rc.keep_brief(ref["svg"].read_text(encoding="utf-8", errors="replace"), req["note"], req["tags"], labels, prev_name) if ref["svg"] else ""
+            if rc.brow_brief(req["note"]):
+                keep = (keep + "\n" + rc.brow_brief(req["note"])).strip()
             fix_text = FIX_BRIEF.format(source=source, out=rel(folder), prev_pics="・".join(rel(p) for p in (ref["svg"], ref["png"]) if p),
                                         diffs=diffs, keep=keep, check=check_cmd(ref, folder), minutes=max(1, int(left // 60) - 1),
                                         name=prev_name or read_name(folder / "settings.md") or "前の回の名前")

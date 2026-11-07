@@ -68,3 +68,34 @@ html.mk-pic .mk-fig, html.mk-pic .mk-fig img { width: 100%; height: 100%; border
 /* 描き直しで頼んでいない所も変わった時の一言(PC の決まった確かめが書く) */
 .mk-drift { margin: 6px 0 10px; padding: 8px 10px; border-radius: 10px; background: #fff3cd; color: #5c4400; font-size: 14px; line-height: 1.5; }
 @media (prefers-color-scheme: dark) { .mk-drift { background: #4a3b10; color: #ffe8a3; } }
+
+/* 眉のおすすめの札(「この子にする」の上)・よく頼む直しの列(一言の欄の横)・おまかせ(本人 11/7)。押す所は 44px 以上 */
+.mk-brow[hidden] { display: none; }
+.sg-card { border: 2px solid var(--accent); border-radius: 14px; padding: 10px; display: grid; gap: 6px; }
+.sg-title { margin: 0; font-size: 15px; line-height: 1.4; }
+.sg-why { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.sg-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sg-btn { font: inherit; font-size: 14px; min-height: 44px; padding: 6px 8px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; line-height: 1.3; }
+.sg-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.sg-btn:disabled { opacity: 0.5; cursor: default; }
+.sg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sg-chip { font: inherit; font-size: 14px; min-height: 44px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--ok); background: transparent; color: var(--text); cursor: pointer; white-space: nowrap; }
+.sg-btn:focus-visible, .sg-chip:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+.mk-btn.auto { border: 2px solid var(--ok); font-weight: 600; flex-direction: column; gap: 2px; }
+.mk-sub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+/* 横に広くて背の低い枠(PC の札): 「この子にする」「直したい」を巻かずに見せたまま、おすすめの札とおまかせは下に横いっぱいで並べる。
+   よく頼む直しは一言の欄の下に 1 行(はみ出す分は列の中で横に送る。頁は横にはみ出さない) */
+@media (min-width: 380px) and (max-height: 420px) {
+  /* 眉の札は「この子にする」の上のまま、小さな形に(題・理由の一言 11px・4 つのボタンを 1 行。「足す(」は見た目だけ隠す)。
+     札が出ている間は、一言の欄の名前を見た目だけ隠して(読み上げには残す)、「この子にする」「直したい」を巻かずに見せる */
+  #c0 .sg-card { padding: 6px 8px; gap: 4px; }
+  #c0 .sg-title { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #c0 .sg-why { font-size: 11px; line-height: 1.35; }
+  #c0 .sg-btns { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  #c0 .sg-btn { font-size: 13px; padding: 4px 2px; }
+  #c0 .sg-verb { display: none; }
+  #c0:has(.mk-brow:not([hidden])) #noteForm .mk-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  #c0 #autoPick { grid-column: 1 / -1; order: 11; }
+  #noteForm .mk-quick { grid-column: 1 / -1; order: 5; min-width: 0; }
+  #noteForm .sg-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+}

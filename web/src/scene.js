@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 // 上の段と下の帯の間に収める計算(three を読まない小さな部品)
-import { fitBand } from './stage/framing.js';
+import { fitBand, fullSpan, topPad, MOTION_TOLERANCE } from './stage/framing.js';
 
 /** ふだんの画角(度)。部屋の中で下がれない時だけ広げる */
 const BASE_FOV = 28;
@@ -57,7 +57,8 @@ export function createStage(canvas) {
    * キャラの大きさ・位置・向きに合わせてカメラを置く。bust は腰から上、full は全身。
    * state.headY と state.camZ は、キャラの座標(足元が原点・+z が正面)での値。
    * 上の段(札・ボタン・「Claude の考え」の見出し)と下の帯の間に収める: 1 回置いてキャラの横の範囲を測り、
-   * そこに重なる上の段(state.topGuard)の下にキャラの上の端が来ていなければ、上の段の下から置き直す(スマホの幅で頭と耳が段の下に入った)。
+   * state.topGuard(left, right)(main.js が渡す。上の段の下の端 + 画面の高さの 6%。上の段は横の位置にかかわらず数える)より上に
+   * キャラの上の端が来ていれば、その線から置き直す(スマホの幅で頭と耳が段の下に入った。11/7 PC で耳が画面の上の端で切れた)。
    * 2 回目はキャラが小さくなるだけなので、横に重なる段は増えない。
    */
   function frameCharacter(character, view = state.view, obstacles = state.obstacles) {
@@ -70,15 +71,47 @@ export function createStage(canvas) {
     placeCamera(character, box, view, obstacles, viewH, 0);
     let topPx = 0;
     if (typeof state.topGuard === 'function' && !state.immersive) {
-      const span = screenSpan(box, viewW, viewH);
+      // 動きで上へ出る分(跳ねる・手を振る。rig の読み込みで測った割合)も含めて、上の段の線より上に出るかを見る
+      const reach = box.clone();
+      const rise = Number(character.motionRise);
+      if (rise > 0) reach.max.y += rise * (box.max.y - box.min.y);
+      const span = screenSpan(reach, viewW, viewH);
       const guard = Number(state.topGuard(span.left, span.right)) || 0;
       if (guard > 0 && span.top < guard) {
         topPx = guard;
         placeCamera(character, box, view, obstacles, viewH, topPx);
+        // 遠近: 頭がキャラの真ん中の面より前にあると、計算(真ん中の面)より上に写る。止まった形のいちばん上の点(+ 動きの分)を画面へ写し、
+        // 線より上なら、その分だけ帯の上を下げて置き直す(rig だけ。点は読み込みで測る)。2 回で収まる
+        for (let k = 0; k < 2; k++) {
+          const t = pointsTop(character, box, viewH);
+          if (!(t < guard - 0.5)) break;
+          topPx += guard - t;
+          placeCamera(character, box, view, obstacles, viewH, topPx);
+        }
       }
     }
     state.topInset = topPx;
     return state;
+  }
+
+  /** 止まった形のいちばん上の点(character.topPoints、キャラの座標)を、動きで上へ出る分だけ上げて画面へ写した、いちばん上(px)。点が無ければ Infinity */
+  function pointsTop(character, box, viewH) {
+    const pts = character.topPoints;
+    if (!Array.isArray(pts) || !pts.length) return Infinity;
+    camera.updateMatrixWorld(true);
+    character.object3d.updateWorldMatrix(true, false);
+    const sy = character.object3d.getWorldScale(new THREE.Vector3()).y || 1;
+    const rise = Number(character.motionRise);
+    if (!(rise >= 0)) return Infinity; // 測れていない子は確かめない(余白は前のまま)
+    const lift = ((rise + MOTION_TOLERANCE) * (box.max.y - box.min.y)) / sy;
+    const v = new THREE.Vector3();
+    let top = Infinity;
+    for (const [x, y, z] of pts) {
+      v.set(x, y + lift, z);
+      character.object3d.localToWorld(v).project(camera);
+      top = Math.min(top, ((1 - v.y) / 2) * viewH);
+    }
+    return top;
   }
 
   /** 箱の 8 つの角を画面へ写した、横の範囲と上の端(px) */
@@ -110,8 +143,11 @@ export function createStage(canvas) {
     state.headY = floor + height * 0.9;
     const aspect = camera.aspect;
     const fov = THREE.MathUtils.degToRad(BASE_FOV);
-    const visibleH = view === 'full' ? height * 1.18 : height * 0.62;
-    const centerY = floor + (view === 'full' ? height * 0.5 : height * 0.67);
+    // 全身: 足元の下に FULL_PAD。頭の上は、動き(跳ねる・手を振る)で上へ出る分(character.motionRise、rig の読み込みで測る)+ 余り。
+    // 上の段の線で置き直す時は、動かないキャラは余白を小さくして大きく見せる(framing.js の topPad)
+    const span = fullSpan(topPad(character.motionRise, topPx > 0));
+    const visibleH = view === 'full' ? height * span.visible : height * 0.62;
+    const centerY = floor + (view === 'full' ? height * span.center : height * 0.67);
     // 横が狭い画面(スマホ)でも、肩と腕が入るようにする。全身のときは、キャラの実際の幅(真ん中から遠い側の 2 倍)も入れる
     const width = view === 'full' ? Math.max(height * 0.55, halfWidth(character, box, base) * 2 * 1.04) : height * 0.4;
     // 全身のときは、下の入力の帯(字幕・ボタン・入力欄)に足が隠れないよう、帯の上の範囲に全身を収める。上の段の下からにも収める

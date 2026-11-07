@@ -1,5 +1,7 @@
 // 確かめる画面(C0 絵・C2 形)。状態は PC のファイルが正で、この画面は何も持たない。
 // データから来る文字は全部 textContent で入れる(HTML として入れない)。
+import { browCard, quickChips, wantBrow } from "/r/assets/suggest.js";
+
 const $ = (id) => document.getElementById(id);
 const NAME_RE = /^[a-z0-9_]{1,48}\.(png|jpg|svg|json)$/;
 const GATE_LABEL = { C0: "絵", C2: "形", C3: "色", C5: "話す" };
@@ -92,6 +94,7 @@ function render() {
   $("name").textContent = st.name;
   document.title = `${st.name} を確かめる`;
   renderSteps(st);
+  renderLeft(st);
   const act = st.current && st.current.activity;
   $("activity").hidden = !act;
   $("activity").textContent = act || "";
@@ -110,6 +113,22 @@ function renderSteps(st) {
     li.title = `${s.n} ${s.label}: ${s.status}`;
     ol.append(li);
   }
+}
+
+/**
+ * あと いくつ きめれば おわるか(本人 11/7: すぐ終わるのに途中でやめる人がいるので、残りを見せる)。
+ * 人が きめるのは、画面がある確認(絵・形)だけ。ほかの段は PC が作る
+ */
+function leftText(gates) {
+  const left = READY_GATES.filter((k) => gates[k] && gates[k].status !== "ok");
+  if (!left.length) return "あなたが きめる所は ぜんぶ おわり!(あとは PC が つくります)";
+  const now = left[0];
+  const names = left.map((k) => GATE_LABEL[k]).join("・");
+  return `いま: ${GATE_LABEL[now]}を きめる ・ あなたが きめるのは あと ${left.length} つ(${names}。1 つ 1 分くらい)`;
+}
+
+function renderLeft(st) {
+  $("left").textContent = leftText(st.gates);
 }
 
 function renderGates(st) {
@@ -167,6 +186,11 @@ function renderC0(view, m) {
   c.append(el("p", { class: "meta" }, "形がかわいいか、言葉に合っているかを見てください。"));
   view.append(c);
   if (m.metrics.length) view.append(metricsCard(m));
+  // 眉の無い子には、眉を足すのをすすめる(OK・やり直しの帯のすぐ上。絵には重ねない)。押せる時だけ
+  const b = currentBundle();
+  if (app.gate === "C0" && !app.pending && !barReason() && wantBrow(b && b.look, app.state.id)) {
+    view.append(browCard({ id: app.state.id, disabled: app.sending, onPick: (choice) => send("redo", choice.note, []), onNo: () => renderBar() }));
+  }
 }
 
 function renderC2(view, m) {
@@ -352,6 +376,7 @@ const picked = new Set();
 function openSheet() {
   picked.clear();
   $("note").value = "";
+  if (!$("quick").firstChild) $("quick").append(quickChips({ input: $("note"), onFill: updateSheet }));
   $("sheetTitle").textContent = `${GATE_LABEL[app.gate]}をやり直す`;
   $("noteMax").textContent = String(app.noteMax);
   const box = $("tags");

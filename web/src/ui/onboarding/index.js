@@ -473,6 +473,8 @@ export function mountFirstRun({
       characterName: ch.name,
       lockTone: fixesOwnSpeech(ch.id, { persona: rawPersona(ch.id), mainId: MAIN_CHARACTER.id }),
       random: () => randomFor(ch.id, ch),
+      // おまかせ(ぜんぶ じどう)のおすすめ = その子の人格の文の性格(主役ノリーはおっとり)
+      recommended: () => ownSettings(rawPersona(ch.id), { ownSpeech: own }),
       preview: async (s, text) => {
         const r = await previewReply(ch, s, text);
         lastBrain = r.brain === 'haiku' ? 'haiku' : 'mock';
@@ -549,6 +551,7 @@ export function mountFirstRun({
       voice,
       parent,
       onAct: (id, payload) => engine.act(id, payload),
+      onAuto: () => engine.omakase(), // おまかせ(ぜんぶ じどう): どの歩みからでも、おすすめで最後まで(本人 11/7)
       openPersona: (onSave) => openPersona({ character: engine.character, initial: engine.settings, onSave }),
       stage: () => (app?.character ? { character: app.character, speaker: app.speaker, guideId: lead.id } : null),
       onClose: (reason) => {
