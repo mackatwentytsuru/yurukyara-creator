@@ -193,15 +193,17 @@ html:not(.guide-ready) .gate-guide { visibility: hidden; }
 .status { margin: 0; min-height: 1.4em; font-size: 14px; color: var(--warn); }
 
 /* ---------- BSF(11-08 安全): 「AI のキャラクターと話しています」をいつも見せる(使う人と話すチャットは、AI だと知らせる決まり) ----------
-   ふだん・入口の LED・テレビ表示: 下の帯のいちばん上の 1 行(下の帯の高さ --bottom-h に入るので、字幕とキャラは、その上に置かれる)。
-   はじめての会話(下を札が覆う間): 上の段のすぐ下の左(その間は隠れている「Claude の考え」の場所)。入口: 入口の札の中の 1 行(#gateAi。Q-0114 の子どもの使い方も)。
+   ふだん・入口の LED・テレビ表示: 字幕の列(.subs)のいちばん下 = 下の帯のすぐ上の 1 行。下の帯の高さ(--bottom-h)を変えないので、キャラは小さくならない
+   (字幕が出ている間は、字幕の列の高さに入るので、長い返事の字幕も足にかからない。main.js の subsHeight)。
+   はじめての会話(下を札が覆う間): #aiNoticeTop を上の段のすぐ下の左に(その間は隠れている「Claude の考え」の場所)。入口: 入口の札の中の 1 行(#gateAi。Q-0114 の子どもの使い方も)。
    画面のキーボードが出ている間だけは、入力の 1 行と字幕を先に見せるため隠す(注意書きと同じ。入る前と閉じた後は見える) */
-.ai-notice { margin: 0; font-size: 13px; line-height: 1.3; color: var(--muted); text-align: center; letter-spacing: 0.02em; pointer-events: none; }
+.ai-notice { margin: 0; padding: 2px 10px; border-radius: 999px; background: rgba(12, 10, 22, 0.5); font-size: 13px; line-height: 1.3; color: var(--muted); text-align: center; letter-spacing: 0.02em; pointer-events: none; }
 html.tv-mode .ai-notice { font-size: max(12px, 1.6vh); opacity: 0.85; }
-html.kb-open .ai-notice { display: none; }
-html.fr-open .ai-notice {
-  position: fixed; z-index: 31; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left));
-  max-width: calc(100vw - 180px); padding: 5px 10px; border-radius: 999px; background: rgba(12, 10, 22, 0.62); text-align: left; font-size: 12px; letter-spacing: 0;
+html.kb-open .ai-notice, html.fr-open #aiNotice { display: none; }
+.ai-notice-top { display: none; }
+html.fr-open:not(.kb-open) .ai-notice-top {
+  display: block; position: fixed; z-index: 31; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left));
+  max-width: calc(100vw - 180px); padding: 5px 10px; background: rgba(12, 10, 22, 0.62); text-align: left; font-size: 12px; letter-spacing: 0;
 }
 .gate-ai { margin: -2px 0 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
 /* 入口の札が画面より高い時(はじめての訪問の 1 行も出る低い画面)は、札を巻いて読める(上も下も切らない) */

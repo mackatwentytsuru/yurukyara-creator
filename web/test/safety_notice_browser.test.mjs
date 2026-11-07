@@ -161,7 +161,9 @@ test('「AI のキャラクターと話しています」: ふだん・はじめ
       const { ctx, page: p, errors } = await open(browser, size);
       for (const st of ['normal', 'first', 'led', 'tv']) {
         await setState(p, st);
-        const f = await noticeFacts(p, '#aiNotice');
+        // はじめての会話の間(下を札が覆う)は、上の段の下の #aiNoticeTop。ほかは字幕の列のいちばん下の #aiNotice
+        const sel = st === 'first' ? '#aiNoticeTop' : '#aiNotice';
+        const f = await noticeFacts(p, sel);
         const where = `${size.join('x')} ${st}`;
         await shot(p, `ai_${st}_${size.join('x')}`);
         assert.equal(f.text, AI_TEXT, where);
@@ -170,10 +172,16 @@ test('「AI のキャラクターと話しています」: ふだん・はじめ
         assert.ok(f.onTop, `${where} ほかの物に覆われていない ${JSON.stringify(f.box)}`);
         assert.deepEqual(f.overlaps, [], `${where} 押す所に重ならない`);
         assert.ok(f.font >= 12, `${where} 字は 12px 以上(${f.font})`);
+        // 2 つが同時に出ない
+        const other = await noticeFacts(p, st === 'first' ? '#aiNotice' : '#aiNoticeTop');
+        assert.equal(other.shown, false, `${where} もう 1 つは隠れている`);
       }
+      // 下の帯(--bottom-h。キャラの置き方の下の線)に入らない = この 1 行でキャラが小さくならない
+      assert.equal(await p.evaluate(() => document.querySelector('.bottom').contains(document.getElementById('aiNotice'))), false);
       // 画面のキーボードが出ている間だけは、入力の 1 行と字幕を先に見せるため隠す(入る前と閉じた後は見える)
       await setState(p, 'kb');
       assert.equal((await noticeFacts(p, '#aiNotice')).shown, false, `${size.join('x')} キーボードの間は隠す`);
+      assert.equal((await noticeFacts(p, '#aiNoticeTop')).shown, false, `${size.join('x')} キーボードの間は隠す(上)`);
       assert.deepEqual(errors, []);
       await ctx.close();
     }

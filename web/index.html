@@ -54,7 +54,11 @@
     <p id="uiNotice" class="ui-notice" role="status" hidden></p>
     <p id="shopBadge" class="shop-badge" role="status" hidden></p>
     <section id="caption" class="caption" aria-live="polite" hidden></section>
+    <!-- BSF(11-08 安全): いつも見える 1 行。字幕の列のいちばん下(下の帯のすぐ上)。下の帯の高さを変えないので、キャラは小さくならない。
+         はじめての会話の間(下を札が覆う)は、下の #aiNoticeTop が上の段のすぐ下に出す。置き場所は style.css の BSF の段 -->
+    <p class="ai-notice" id="aiNotice" role="note">AI のキャラクターと話しています</p>
   </div>
+  <p class="ai-notice ai-notice-top" id="aiNoticeTop" aria-hidden="true">AI のキャラクターと話しています</p>
 
   <aside id="thought" class="thought" aria-label="Claude の考え">
     <button class="thought-head" id="thoughtToggle" type="button" aria-expanded="true">
@@ -71,8 +75,6 @@
   </aside>
 
   <footer class="bottom">
-    <!-- BSF(11-08 安全): いつも見える 1 行(はじめての会話・入口の LED・テレビ表示でも。置き場所は style.css の BSF の段) -->
-    <p class="ai-notice" id="aiNotice" role="note">AI のキャラクターと話しています</p>
     <p class="privacy" id="privacy" role="note">
       <span class="rec"></span>
       <span id="privacyText">カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。</span>
