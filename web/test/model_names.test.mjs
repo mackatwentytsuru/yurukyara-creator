@@ -51,7 +51,7 @@ test('サーバーの設定は、呼ぶたびに環境変数を読む(起こし�
 
 test('画面の声の鍵の道も同じ既定: voiceRole.js の VOICE_MODEL_ID と elevenDirect.js の控え', () => {
   assert.equal(VOICE_MODEL_ID, MODEL_DEFAULTS.voice);
-  assert.equal(DEFAULT_MODEL_ID, MODEL_DEFAULTS.voice, 'elevenDirect.js はほかの部品を読み込まない決まりなので文字で持つ。値は同じ');
+  assert.equal(DEFAULT_MODEL_ID, MODEL_DEFAULTS.voice, 'elevenDirect.js も models.js の同じ値を読む(文字の控えは持たない)');
 });
 
 test('頭脳を呼ぶ時(手元のサーバーも公開の関数も runTurn)、CLAUDE_MODEL の名前で頼む', async () => {
@@ -108,9 +108,9 @@ function files(dir) {
   return out;
 }
 
-test('モデルの名前の文字は、models.js(と、部品を読み込まない elevenDirect.js の控え)の外のコードに無い', () => {
+test('モデルの名前の文字は、models.jsの外のコードに無い(elevenDirect.js も、そこを読む)', () => {
   const MODEL_LITERAL = /claude-(?:haiku|sonnet|opus)-\d|eleven_(?:v\d|flash|multilingual|turbo|monolingual)/;
-  const allowed = new Set(['src/conversation/models.js', 'src/conversation/elevenDirect.js']);
+  const allowed = new Set(['src/conversation/models.js']);
   const hits = [];
   for (const dir of ['server', 'src', 'api', 'scripts']) {
     for (const f of files(join(WEB, dir))) {

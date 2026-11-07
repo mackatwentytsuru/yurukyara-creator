@@ -12,6 +12,7 @@ export const GREETING_MAX_LINES = 3;
 export const GREETING_LINE_MAX = 40; // 指示文の決まり(1 文は 40 字以内)と同じ
 export const EXAMPLES_MAX = 8;
 export const AIZUCHI_MAX_LINES = 2;
+export const AIZUCHI_POOL_MAX = 8; // あいづちの手持ち(2 文ずつ、回ごとに組み合わせを替える)
 
 const ITEM = /^[-*・]\s*(.+)$/u;
 const QUOTED = /「([^「」]+)」/gu;
@@ -96,8 +97,21 @@ export function aizuchi(persona) {
   return sectionItems(persona, 'あいづち', AIZUCHI_MAX_LINES).filter((t) => !isUnsafeOutput(t));
 }
 
+/**
+ * あいづちの 2 文を、会話の進み(turn)と言葉で替える。手持ちが 2 文までなら、いつも同じ(aizuchi と同じ)。
+ * 手持ちが 3 文以上なら、続きの 2 文を輪になって選ぶ(1 回目はいつも書いてある最初の 2 文)。
+ */
+export function aizuchiPair(persona, turn = 0, text = '') {
+  const pool = sectionItems(persona, 'あいづち', AIZUCHI_POOL_MAX).filter((t) => !isUnsafeOutput(t));
+  if (pool.length <= AIZUCHI_MAX_LINES) return pool;
+  let h = 0;
+  for (const ch of String(text ?? '')) h = (h * 31 + ch.codePointAt(0)) % 100003;
+  const start = turn <= 0 ? 0 : (turn * 2 + h) % pool.length;
+  return [pool[start], pool[(start + 1) % pool.length]];
+}
+
 /** 「## 覚えている時の言い方」の合図(仮の頭脳が使う場面) */
-export const MEMORY_CUES = ['また会えた', '話の続き', '名前を覚えた', '好きなものを覚えた', '全部わすれた', 'まだ覚えていない'];
+export const MEMORY_CUES = ['また会えた', '話の続き', '名前を覚えた', '好きなものを覚えた', '全部わすれた', 'まだ覚えていない', '覚えないものを言う'];
 const SLOT = /\{(名前|好きなもの|話題)\}/gu;
 
 /**

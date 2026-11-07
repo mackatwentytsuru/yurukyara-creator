@@ -50,3 +50,8 @@
 
 ## 試験
 - `web/test/memory.test.mjs`(本体)・`web/test/memory_browser.test.mjs`(画面なしの Chrome。開いただけでは合鍵なし → タブ A で覚えた回に合鍵を受け取る → 番号 → タブ B で続き → 1 つ消す → 全部わすれる(知らせの時に一覧は 0 件・合鍵を作り直さない)→ 番号の使い回し不可 → どの画面も `/api/memory/new` を呼ばない → 合鍵が記録に無い。手元のサーバーの「最初に覚えた回に合鍵」と 1 分 10 回の上限も)・`web/test/memory_panel_dom.test.mjs`(偽の DOM と遅い偽の通信で札の順)。仮の頭脳で、本物の API は呼ばない。
+
+## UW3(11-08)の足し
+- 覚える種類に age(「年: 7さい」。name と同じく 1 つだけ)。
+- 覚えた時のイベントは { type:"memory", added, fresh, kinds }(reflect.mjs の memoryAddedEvent)。画面は fresh: true で新しい札を光らせる。
+- 住所・電話・メール・学校の名前・本名を含む言葉は覚えない(safety.mjs の looksPersonal / personalWarn)。

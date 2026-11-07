@@ -6,8 +6,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { mockReply, runTurn } from '../server/brain.mjs';
-import { aizuchi, firstGreeting, talkExamples } from '../server/greeting.mjs';
+import { aizuchi, aizuchiPair, firstGreeting, talkExamples } from '../server/greeting.mjs';
 import { isUnsafeOutput, sanitizePersona } from '../server/safety.mjs';
+import { standinReply } from '../server/talk_lines.mjs';
 
 const PERSONA = readFileSync(join(import.meta.dirname, '..', '..', 'characters', 'norrie', 'persona.md'), 'utf8');
 const MOTIONS = ['none', 'nod', 'bow', 'wave', 'tilt'];
@@ -32,7 +33,8 @@ test('はじめまして → 話し方の例 5 つ → あいづち: どの返�
   const examples = talkExamples(PERSONA);
   assert.deepEqual(turns[0].said, firstGreeting(PERSONA));
   for (const [i, t] of turns.slice(1, 6).entries()) assert.deepEqual(t.said, examples[i].replies, t.text);
-  assert.deepEqual(turns[6].said, aizuchi(PERSONA));
+  assert.deepEqual(turns[6].said, aizuchiPair(PERSONA, 6, turns[6].text)); // 手持ちの中から回ごとに替わる
+  assert.deepEqual(aizuchiPair(PERSONA, 0, 'x'), aizuchi(PERSONA), '1 回目は書いてある最初の 2 文');
   for (const t of turns) {
     assert.equal(t.events[0].brain, 'mock');
     assert.equal(t.safety, null, t.text);
@@ -87,9 +89,16 @@ test('公開の関数のように mockReply を直接呼んでも、安全の層
     assert.equal(e.intent, undefined);
     assert.equal(e.safety, undefined);
   }
-  assert.deepEqual(run('今日はいい日').filter((e) => e.type === 'say').map((e) => e.text), ['そうなんだ。', 'もう少し聞かせてくれる?']);
+  assert.deepEqual(run('今日はいい日').filter((e) => e.type === 'say').map((e) => e.text), standinReply('今日はいい日', 0).lines, '決まった 1 文でなく、仮の返事の言い回しから(UW3)');
   // 人格の文を渡せば、直接呼んでもその子の言葉
   assert.deepEqual(run('きみはだれ?', { persona: PERSONA }).filter((e) => e.type === 'say').map((e) => e.text), talkExamples(PERSONA)[0].replies);
   // 近づいた時(言葉なし)は、安全の層で止めない
   assert.equal(run(undefined, { trigger: 'approach' })[0].stage, 'greet');
+});
+
+test('UW3f: ノリーのあいづちは回ごとに替わる(同じ 1 文が続かない)', async () => {
+  const turns = await talk(['サッカーをしたよ', 'あめがふってたよ', 'ねこをかってるよ', 'きょうはなにしようかな', 'おやつをたべたよ', 'ともだちとあそんだよ']);
+  const sets = new Set(turns.map((t) => t.said.join('|')));
+  assert.ok(sets.size >= 4, [...sets].join(' / '));
+  for (const t of turns) assert.match(t.said.join(''), OWN_VOICE, t.text);
 });

@@ -15,7 +15,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { aizuchi, exampleReply, firstGreeting, talkExamples } from '../greeting.mjs';
+import { aizuchiPair, exampleReply, firstGreeting, talkExamples } from '../greeting.mjs';
 import { isUnsafeOutput, sanitizePersona } from '../safety.mjs';
 import { createLiveClient, describeBase, summarizeEvents } from './liveClient.mjs';
 import { checkOutDir } from './memory-live-check.mjs';
@@ -65,7 +65,7 @@ export function judgeTurn(turn, persona, examples) {
     const want = exampleReply(persona, turn.user);
     if (!want.length || JSON.stringify(said) !== JSON.stringify(want)) problems.push('話し方の例と違う');
   }
-  if (kind === 'aizuchi' && JSON.stringify(said) !== JSON.stringify(aizuchi(persona))) problems.push('あいづちと違う');
+  if (kind === 'aizuchi' && JSON.stringify(said) !== JSON.stringify(aizuchiPair(persona, turn.turn ?? 0, turn.user))) problems.push('あいづちと違う');
   if (kind === 'safety') {
     if (turn.safety !== sub) problems.push(`安全の層が ${sub} と分けていない(${turn.safety ?? 'なし'})`);
     if (said.some((s) => exampleLines.has(s))) problems.push('安全の返事のはずが、その子の手本を言った');
@@ -86,6 +86,7 @@ async function runScript(client, { name, persona, script }) {
     const safety = s.safety ?? r.events.find((e) => e.type === 'thought' && e.safety)?.safety ?? null;
     turns.push({
       user: step.text,
+      turn: history.length / 2,
       expect: step.expect,
       brain: s.brain,
       calledBrain: s.calledBrain,

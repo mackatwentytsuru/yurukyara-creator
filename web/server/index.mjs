@@ -10,7 +10,7 @@ import { runTurn } from './brain.mjs';
 import { isAbortError } from './abort.mjs';
 import { createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memory/store.mjs';
 import { createMemoryRoutes, forgetReplyEvents, isForgetRequest } from './memory/routes.mjs';
-import { extractFacts, selfNamesOf } from './memory/reflect.mjs';
+import { extractFacts, memoryAddedEvent, selfNamesOf } from './memory/reflect.mjs';
 import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
 import { warmFirstVisit } from './ttsWarm.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
@@ -129,7 +129,7 @@ function latencySummary() {
   };
 }
 
-const memoryAdded = (learned) => learned.map(({ id, kind, text }) => ({ id, kind, text }));
+
 
 /** 合鍵がある回: 覚えていることを読み、この回の言葉から覚える事を足す(知らせは send で) */
 function rememberWithKey(memoryKey, text, send, selfNames = []) {
@@ -140,7 +140,7 @@ function rememberWithKey(memoryKey, text, send, selfNames = []) {
   } catch {
     learned = []; // 合鍵の記憶が無い(消えた・7 日たった)ときは、覚えずに話す
   }
-  if (learned.length) send({ type: 'memory', added: memoryAdded(learned) });
+  if (learned.length) send(memoryAddedEvent(learned));
   return { recalled, learned };
 }
 
@@ -155,7 +155,7 @@ function rememberFirstTime(text, client, send, selfNames = []) {
   if (!facts.length || !memoryLimiter.take(client).ok) return none;
   const made = memory.create();
   const learned = memory.add(made.key, facts);
-  send({ type: 'memory', key: made.key, added: memoryAdded(learned), notice: made.notice, retentionDays: made.retentionDays, expiresAt: made.expiresAt });
+  send(memoryAddedEvent(learned, { key: made.key, notice: made.notice, retentionDays: made.retentionDays, expiresAt: made.expiresAt }));
   return { recalled: null, learned };
 }
 
