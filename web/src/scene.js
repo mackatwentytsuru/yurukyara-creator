@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 // 上の段と下の帯の間に収める計算(three を読まない小さな部品)
-import { fitBand, fullSpan, topPad, MOTION_TOLERANCE } from './stage/framing.js';
+import { fitBand, fullSpan, topPad, MOTION_TOLERANCE, KB_MAX_BOTTOM_FRACTION, KB_MIN_USABLE } from './stage/framing.js';
 
 /** ふだんの画角(度)。部屋の中で下がれない時だけ広げる */
 const BASE_FOV = 28;
@@ -49,9 +49,9 @@ export function createStage(canvas) {
   scene.add(rim);
   scene.add(makeFloorGlow());
 
-  // bottomInset: 下の帯の高さ(px。main.js が測る)。topGuard(left, right): 画面の横の範囲に重なる上の段の下の端(px。main.js が渡す)。
+  // bottomInset: 下の帯の高さ(px。main.js が測る)。kbInset: 画面のキーボードの高さ(px。出ている間だけ 0 より大きい。bottomInset に含まれる)。topGuard(left, right): 画面の横の範囲に重なる上の段の下の端(px。main.js が渡す)。
   // topInset: いま避けている上の段の高さ(px。frameCharacter が書く。試験と確かめ用)
-  const state = { view: 'bust', height: 1.5, headY: 1.35, immersive: false, bottomInset: 0, topGuard: null, topInset: 0 };
+  const state = { view: 'bust', height: 1.5, headY: 1.35, immersive: false, bottomInset: 0, kbInset: 0, topGuard: null, topInset: 0 };
 
   /**
    * キャラの大きさ・位置・向きに合わせてカメラを置く。bust は腰から上、full は全身。
@@ -170,8 +170,14 @@ export function createStage(canvas) {
     // 横が狭い画面(スマホ)でも、肩と腕が入るようにする。全身のときは、キャラの実際の幅(真ん中から遠い側の 2 倍)も入れる
     const width = (view === 'full' ? Math.max(height * 0.55, halfWidth(character, box, base) * 2 * 1.04) : height * 0.4) * wScale;
     // 全身のときは、下の入力の帯(字幕・ボタン・入力欄)に足が隠れないよう、帯の上の範囲に全身を収める。上の段の下からにも収める
-    const bottomPx = view === 'full' ? state.bottomInset ?? 0 : 0;
-    const band = fitBand({ viewH, topPx, bottomPx, needH: visibleH, needW: width, aspect });
+    // 画面のキーボードが出ている間(state.kbInset > 0)は、キーボードの裏も下の帯として数える(bottomInset に含まれている)ので、
+    // 半身(bust)でも使い、上限と下限を広げて、見える範囲の中にキャラを収める(QA 高 2・高 3)
+    const kbMode = state.kbInset > 0;
+    const bottomPx = view === 'full' || kbMode ? state.bottomInset ?? 0 : 0;
+    const band = fitBand({
+      viewH, topPx, bottomPx, needH: visibleH, needW: width, aspect,
+      ...(kbMode ? { maxBottomFraction: KB_MAX_BOTTOM_FRACTION, minUsable: KB_MIN_USABLE } : {}),
+    });
     let dist = band.neededH / (2 * Math.tan(fov / 2));
     camera.fov = BASE_FOV;
     if (obstacles) {

@@ -175,11 +175,12 @@ test('言葉 → PC の絵 → 直したい(一言)= G1 → 2 回目 → この�
   await h.send({ ev: 'decided', decision: 'ok', id: 'yc1106_2201_ab12', name: 'ちょうちんちゃん', round: 2 });
   assert.equal(h.fr.step, 4);
   assert.ok(h.texts('guide').includes('ちょうちんちゃんにけってい! OK を PC に伝えたよ。'));
-  const told = h.texts('note').find((t) => t.includes('この画面からはまだ始まりません'));
+  const told = h.texts('note').find((t) => t.includes('この画面からは まだ はじまらないよ'));
   assert.ok(told, 'できていない所(3D)を正直に言う: この画面からは始まらない・make-character で作る');
-  assert.match(told, /make-character のスキル/);
+  assert.match(told, /パソコンの Claude Code で つくれるよ/);
+  assert.ok(!/make-character|スキル|README/.test(told), '開発の言葉を出さない(中 9)');
   assert.ok(!/これから作ります|続けて作ります/.test(told), '始まっていない物を「作っています」と言わない(CRITux3 M2)');
-  assert.match(told, /ノリーがかわりに舞台に立って、ちょうちんちゃんの言葉を話します/, '主役が代わりに立つと言う(D5)');
+  assert.match(told, /ノリーがかわりに舞台に立って、ちょうちんちゃんの言葉を話すよ/, '主役が代わりに立つと言う(D5)');
   assert.ok(!/段 \d|C0/.test(told), '内部の言葉(段 1〜6・C0)を出さない(D7)');
   assert.equal(h.pins.at(-1)?.frame, 'http://127.0.0.1:8796/m/#k=test-key&p=http%3A%2F%2Flocalhost%3A5173&view=pic', '描いた絵だけの枠を、札の上に出したままにする(D5)');
   assert.match(h.pins.at(-1)?.caption ?? '', /ちょうちんちゃん/);
@@ -214,11 +215,11 @@ test('作る画面から「開いた」の知らせが来なければ、黙ら�
   await quiet.fr.start();
   await quiet.send({ ev: 'ready' });
   await new Promise((r) => setTimeout(r, 120));
-  assert.ok(!quiet.texts('note').some((t) => t.includes('作る画面が開けません')));
+  assert.ok(!quiet.texts('note').some((t) => t.includes('ひらけないよ')));
   const lost = harness({ frameWaitMs: 40 });
   await lost.fr.start();
   await new Promise((r) => setTimeout(r, 120));
-  assert.ok(lost.texts('note').some((t) => t.includes('serve_review.py --make --web')), 'PC のサーバーと許す元を確かめるよう言う');
+  assert.ok(lost.texts('note').some((t) => t.includes('ひらけないよ') && !t.includes('serve_review')), 'パソコンの じゅんびを見てもらうよう、子どもの言葉で言う');
 });
 
 test('内部の言葉(段 0・C0 など)を、作る画面からの文でふつうの言葉にする(D7)', () => {

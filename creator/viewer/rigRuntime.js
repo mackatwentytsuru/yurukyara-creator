@@ -114,6 +114,18 @@ export class RigCharacterV2 extends CharacterBase {
     this._talkW = 0;
   }
 
+  /** もう使わない時の後片づけ: GPU の物を捨て(CharacterBase)、動き(ミキサー)も止めて捨てる。使い回す子には releaseGpu だけを使う */
+  dispose() {
+    try {
+      this.mixer?.stopAllAction();
+      this.mixer?.uncacheRoot(this.gltf.scene);
+    } catch {
+      // 後片づけの失敗で止めない
+    }
+    this.face?.tex?.dispose?.();
+    super.dispose();
+  }
+
   _startLoop(name, w) {
     const a = this.actions.get(name);
     if (!a) return;

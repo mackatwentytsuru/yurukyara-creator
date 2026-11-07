@@ -318,14 +318,4 @@ export class Svg2DCharacter extends CharacterBase {
     this.state2d.facing = Math.cos(yaw) >= 0 ? 'front' : 'back';
   }
 
-  dispose() {
-    this.object3d.traverse((o) => {
-      if (o.isMesh) {
-        o.geometry.dispose();
-        o.material.map?.dispose();
-        o.material.dispose();
-      }
-    });
-    super.dispose();
-  }
 }

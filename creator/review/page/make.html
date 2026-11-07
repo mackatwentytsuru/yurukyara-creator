@@ -17,14 +17,14 @@
       <label class="mk-label" for="words">どんな子?(<span id="wordsMax">60</span> 字まで)</label>
       <input id="words" type="text" maxlength="120" placeholder="例: 赤い提灯の子" enterkeyhint="send" autocomplete="off">
       <p class="mk-count" id="wordsCount">0 / 60</p>
-      <button type="submit" class="mk-btn primary" id="wordsBtn" disabled>これで作る</button>
+      <button type="submit" class="mk-btn primary" id="wordsBtn" aria-label="これで作る" disabled>これで作る</button>
     </form>
     <div class="mk-two">
       <label class="mk-btn" data-act="photo"><input type="file" id="photo" accept="image/*" capture="environment">写真を撮る</label>
       <label class="mk-btn" data-act="pick"><input type="file" id="pick" accept="image/*,.svg">絵を選ぶ</label>
     </div>
     <p class="mk-hint mk-formats" id="formats">使える絵: PNG・JPEG・WebP・SVG(20MB まで)</p>
-    <button type="button" class="mk-btn auto" id="autoStart">おまかせ(ぜんぶ じどう)<span class="mk-sub">言葉も 絵も おすすめで きめます。あとから 直せます</span></button>
+    <button type="button" class="mk-btn auto" id="autoStart" aria-label="おまかせ(ぜんぶ じどう)。言葉も 絵も おすすめで きめます">おまかせ(ぜんぶ じどう)<span class="mk-sub">言葉も 絵も おすすめで きめます。あとから 直せます</span></button>
   </section>
 
   <section id="waiting" class="mk-part" hidden>
@@ -36,25 +36,26 @@
   <section id="check" class="mk-part" hidden>
     <p class="mk-big" id="checkMsg"></p>
     <button type="button" class="mk-btn primary" id="chooseBtn"></button>
-    <button type="button" class="mk-btn" id="otherBtn">別の絵にする</button>
-    <button type="button" class="mk-btn auto" id="autoCheck">おまかせ(ぜんぶ じどう)</button>
+    <button type="button" class="mk-btn" id="otherBtn" aria-label="別の絵にする">別の絵にする</button>
+    <button type="button" class="mk-btn auto" id="autoCheck" aria-label="おまかせ(ぜんぶ じどう)">おまかせ(ぜんぶ じどう)</button>
   </section>
+
+  <p class="mk-drift" id="drift" role="status" hidden></p>
 
   <section id="c0" class="mk-part" hidden>
     <figure class="mk-fig"><img id="pic" alt="Claude が描いた絵"><figcaption id="picCap"></figcaption></figure>
-    <p class="mk-drift" id="drift" role="status" hidden></p>
     <div class="mk-brow" id="browSlot" hidden></div>
-    <button type="button" class="mk-btn primary" id="okBtn">この子にする</button>
+    <button type="button" class="mk-btn primary" id="okBtn" aria-label="この子にする">この子にする</button>
     <p class="mk-limit" id="limit" role="status" hidden>直しは 3 回までです。この子にするか、「やり直す(別の子にする)」を選んでね。</p>
     <form id="noteForm" class="mk-row" autocomplete="off">
       <label class="mk-label" for="note">直したい所を一言(<span id="noteMax">40</span> 字まで<span class="mk-label-more">。人の感想として渡します</span>)</label>
       <div class="mk-quick" id="quick"></div>
       <input id="note" type="text" maxlength="80" placeholder="例: 帽子を青にして" enterkeyhint="send" autocomplete="off">
       <p class="mk-count" id="noteCount">0 / 40</p>
-      <button type="submit" class="mk-btn" id="noteBtn" disabled><span class="mk-long">直したい(一言を送る)</span><span class="mk-short">直したい</span></button>
+      <button type="submit" class="mk-btn" id="noteBtn" aria-label="直したい(一言を送る)" disabled><span class="mk-long">直したい(一言を送る)</span><span class="mk-short">直したい</span></button>
     </form>
-    <button type="button" class="mk-btn ghost" id="againBtn"><span class="mk-long">やり直す(別の子にする)</span><span class="mk-short">別の子に</span></button>
-    <button type="button" class="mk-btn auto" id="autoPick">おまかせ(おすすめで きめる)</button>
+    <button type="button" class="mk-btn ghost" id="againBtn" aria-label="やり直す(別の子にする)"><span class="mk-long">やり直す(別の子にする)</span><span class="mk-short">別の子に</span></button>
+    <button type="button" class="mk-btn auto" id="autoPick" aria-label="おまかせ(おすすめで きめる)">おまかせ(おすすめで きめる)</button>
   </section>
 
   <section id="done" class="mk-part" hidden>

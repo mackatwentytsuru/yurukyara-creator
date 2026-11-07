@@ -235,6 +235,10 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直してみたよ。どうかな?'));
       const drift = await frame.$eval('#drift', (e) => ({ hidden: e.hidden, text: e.textContent }));
       assert.ok(!drift.hidden && /^頼んでいない所も変わりました: .*体の色/.test(drift.text), `作る画面に頼んでいない変化の一言が無い ${JSON.stringify(drift)}`);
+      // QF4 中 11: 知らせは 2 つの列の外(絵と「この子にする」の上)に置く。列が左の細い列に崩れない
+      const pos = await frame.evaluate(() => ({ d: document.getElementById('drift').getBoundingClientRect(), f: document.querySelector('#c0 .mk-fig').getBoundingClientRect(), ok: document.getElementById('okBtn').getBoundingClientRect(), w: innerWidth }));
+      assert.ok(pos.d.bottom <= pos.f.top + 1, `知らせは絵の上 ${JSON.stringify(pos)}`);
+      assert.ok(pos.ok.width > pos.w * 0.35, `「この子にする」の列が細く崩れない ${JSON.stringify(pos)}`);
       assert.match(await logText(page), /頼んでいない所も変わりました: .*体の色/, '札にも頼んでいない変化の一言');
       await fits(page, frame, '3 歩目(2 回目・頼んでいない変化の一言つき)');
       await shot(page, 'make390_3_c0_r2');
@@ -385,6 +389,12 @@ test('作る道(幅 390): SVG の絵 → ゆるキャラチェック(ゆるキ�
       const frame = await frameOf(page);
       const formats = await frame.$eval('#formats', (e) => ({ text: e.textContent, shown: e.offsetParent !== null }));
       assert.ok(formats.shown && /PNG/.test(formats.text) && /JPEG/.test(formats.text) && /SVG/.test(formats.text), `使える絵の形: ${JSON.stringify(formats)}`);
+      // QF4 低 15: 前の赤い断りの文は、新しく書き始めたら消える(前は残って、次の入力の横に居座った)
+      await frame.setInputFiles('#pick', { name: 'memo.txt', mimeType: 'text/plain', buffer: Buffer.from('x') });
+      await frame.waitForFunction(() => !document.getElementById('err').hidden, null, { timeout: 5000 });
+      await frame.fill('#words', 'あ');
+      assert.equal(await frame.$eval('#err', (e) => e.hidden), true, '書き始めたら、前の断りは消える');
+      await frame.fill('#words', '');
       await frame.setInputFiles('#pick', { name: 'drawing.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(TEST_SVG) });
       await frame.waitForSelector('#waiting:not([hidden])', { timeout: 15_000 });
       assert.equal(await frame.$eval('#err', (e) => e.hidden), true, `SVG を断った: ${await frame.$eval('#err', (e) => e.textContent)}`);
@@ -465,8 +475,8 @@ test('作る道(幅 390): 直しは 3 回まで。4 枚目の絵の後は「直�
         assert.equal(pc.did, 'redrew', JSON.stringify(pc));
         await frame.waitForFunction((k) => document.querySelector('#picCap')?.textContent.includes(`${k} 回目`) && !document.getElementById('c0').hidden, n, { timeout: 20_000 });
       }
-      const lim = await frame.evaluate(() => ({ form: document.getElementById('noteForm').hidden, limit: !document.getElementById('limit').hidden, text: document.getElementById('limit').textContent, ok: !document.getElementById('okBtn').disabled, again: !document.getElementById('againBtn').hidden }));
-      assert.deepEqual([lim.form, lim.limit, lim.ok, lim.again], [true, true, true, true], `4 枚目の絵の後の画面 ${JSON.stringify(lim)}`);
+      const lim = await frame.evaluate(() => ({ form: document.getElementById('noteForm').classList.contains('mk-off') && document.getElementById('note').disabled && document.getElementById('noteBtn').disabled, limit: !document.getElementById('limit').hidden, text: document.getElementById('limit').textContent, ok: !document.getElementById('okBtn').disabled, again: !document.getElementById('againBtn').hidden }));
+      assert.deepEqual([lim.form, lim.limit, lim.ok, lim.again], [true, true, true, true], `4 枚目の絵の後は、一言の欄と送るが灰色で押せない(確かめる画面と同じ。QF4 低 15)。画面 ${JSON.stringify(lim)}`);
       assert.match(lim.text, /直しは 3 回までです。この子にするか/);
       await fits(page, frame, '4 枚目の絵(直しの上限)');
       await shot(page, 'make390_3_c0_limit');
@@ -625,8 +635,13 @@ test('おまかせ(ぜんぶ じどう、幅 390): 1 回押すと、言葉・眉
       assert.match(log, /けってい! OK を PC に伝えたよ/);
       const ok = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
       assert.equal(ok.decision, 'ok');
-      await page.waitForFunction(() => !document.querySelector('.fr-sheet'), null, { timeout: 10_000 });
+      // QF4 中 5: 終わっても札を自動で閉じない。決めたことと「はじめる」を出し、押した時だけ閉じる
+      await page.waitForSelector('.fr-actions [data-act="begin"]', { timeout: 10_000 });
+      await page.waitForTimeout(2500);
+      assert.ok(await page.$('.fr-sheet'), '2.5 秒たっても閉じない');
       assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done', '初めての会話は終わり');
+      await page.click('.fr-actions [data-act="begin"]');
+      await page.waitForFunction(() => !document.querySelector('.fr-sheet'), null, { timeout: 10_000 });
       assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();

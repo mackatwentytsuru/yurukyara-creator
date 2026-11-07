@@ -144,6 +144,11 @@ try {
     await page.click("#okBtn");
     await sleep(600);
     assert.equal(readReq(), null);
+    // QF4 低 15: 1 回目の後に「もう一度 押すと きまるよ」と言い、待ちは 3 秒より長い(6 秒)。読み上げ用の名前も付く
+    assert.match(await page.locator("#okBtn").textContent(), /もう一度 押すと きまるよ/);
+    await sleep(3500);
+    assert.match(await page.locator("#okBtn").textContent(), /もう一度 押すと きまるよ/, "3.5 秒たっても待っている");
+    assert.match((await page.locator("#okBtn").getAttribute("aria-label")) || "", /もう一度 押すと/);
     await page.click("#okBtn");
     await page.waitForSelector("#pending:not([hidden])", { timeout: 5000 });
     const r = readReq();

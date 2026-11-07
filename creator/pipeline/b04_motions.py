@@ -118,10 +118,28 @@ def build_all(spec):
         return pose(body={"rot": (a, 0, 0), "scale": squash(-0.01 * a / 13)},
                     lid={"rot": (a * 0.5, 0, 0)})
 
+    BW = M.get("bow") or {}
+    BONE_AT = {b["name"]: b["at"] for b in spec.get("bones", [])}
+
     def bow(t):
         a = tri(t, 0.0, 0.7, 1.1, 1.8)
-        return pose(root={"loc": (0, 0, -0.02 * H * a)},
-                    body={"rot": (30 * a, 0, 0), "scale": squash(-0.03 * a)},
+        if not BW:
+            return pose(root={"loc": (0, 0, -0.02 * H * a)},
+                        body={"rot": (30 * a, 0, 0), "scale": squash(-0.03 * a)},
+                        **two(arm(1, 6 - 4 * a, -10 * a), arm(-1, 6 - 4 * a, -10 * a)),
+                        flap_L={"rot": (0, -8 * a, 0)}, flap_R={"rot": (0, 8 * a, 0)})
+        # spec["motion"]["bow"] = {"body": 度, "head": 度, "drop": 身長に対する沈み, "pivot": [x, y, z]}
+        # pivot があれば、体を骨の位置ではなく pivot のまわりに傾ける(骨を動かして同じにする)。足の上の低い点にすると、
+        # 胴の下が後ろ上へ逃げず、足と体が離れない(丸い胴に足が付いたキャラ)
+        th = BW.get("body", 30.0) * a
+        body = {"rot": (th, 0, 0), "scale": squash(-0.03 * a)}
+        piv = BW.get("pivot")
+        at = BONE_AT.get(R.get("body"))
+        if piv and at:
+            dy, dz = at[1] - piv[1], at[2] - piv[2]
+            c, s = math.cos(math.radians(th)), math.sin(math.radians(th))
+            body["loc"] = (0.0, (dy * c - dz * s) - dy, (dy * s + dz * c) - dz)
+        return pose(root={"loc": (0, 0, -BW.get("drop", 0.02) * H * a)}, body=body,
                     **two(arm(1, 6 - 4 * a, -10 * a), arm(-1, 6 - 4 * a, -10 * a)),
                     flap_L={"rot": (0, -8 * a, 0)}, flap_R={"rot": (0, 8 * a, 0)})
 
@@ -172,7 +190,7 @@ def build_all(spec):
                 a = tri(t, 0.0, 0.2, 0.25, 0.45) * 16 + tri(t, 0.45, 0.65, 0.7, 0.95) * 11
                 out["head"] = {"rot": (a, 0, 0)}
             elif name == "bow":
-                out["head"] = {"rot": (14 * tri(t, 0.0, 0.7, 1.1, 1.8), 0, 0)}
+                out["head"] = {"rot": (BW.get("head", 14.0) * tri(t, 0.0, 0.7, 1.1, 1.8), 0, 0)}
             elif name == "sad":
                 out["head"] = {"rot": (10, 0, 0)}
             elif name == "think":

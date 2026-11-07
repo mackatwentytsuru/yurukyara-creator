@@ -32,8 +32,8 @@ export const FRAME_WAIT_MS = 10000; // 作る画面(枠)から「開いた」の
  * 画面のリンク(index.js の readGuideUrl)は、この見出しから GitHub の節の印を作る。見出しが変わると試験 onboarding_readme_ja が落ちる
  */
 export const README_SECTION = '自分の PC で、Claude Code と自分のキャラを作る';
-/** PC で新しい子を作る手順の短いまとめ(くわしくは README の節)。画面のコードに外の住所は書かない(privacy の試験) */
-export const MAKE_STEPS = `PC での作り方: ① python creator/review/serve_review.py --make --web <会話の画面の元> を動かす ② PC のブラウザでその /qr の画面を開き、「この PC の初めての会話」のリンクから言葉か絵を入れる ③ Claude Code で /yuru-next と打つ(描くのに数分)。くわしくはリポジトリの README.md の「${README_SECTION}」。`;
+/** 新しい子の作り方(子どもにも分かる 1 文。くわしい手順は、下の「つくりかたを見る」のリンク先)。画面のコードに外の住所は書かない(privacy の試験) */
+export const MAKE_STEPS = 'あたらしい子は、パソコンの Claude Code で つくれるよ。';
 
 const chars = (s) => [...String(s ?? '')].length;
 const clip = (s, n) => [...String(s ?? '').trim()].slice(0, n).join('');
@@ -131,6 +131,7 @@ export class FirstRun {
     if (this.step === n) return;
     this.step = n;
     this.d.onStep?.(n, { skipped: [...this.skipped], local: this.local });
+    if (n <= STEPS.length) this.d.progress?.(this.snapshot()); // 歩みごとに途中経過を残す(読み込み直しても続きから。高 1)
   }
 
   /**
@@ -186,7 +187,7 @@ export class FirstRun {
       { who: 'guide', text: nori ? 'おまかせで、ぜんぶ きめマシタ!' : 'おまかせで、ぜんぶ きめたよ!' },
       {
         who: 'note',
-        text: `きめたこと: ${this.character?.name ?? 'この子'}・性格「${summary(this.settings)}」・声はおまかせ・声の鍵はなし。ぜんぶ、あとから かえられます(「性格」ボタンと「はじめての会話」)。`,
+        text: `きめたこと: ${this.character?.name ?? 'この子'}・性格「${summary(this.settings)}」・声はおまかせ・かぎは なし。ぜんぶ、あとから かえられます(「性格」ボタンと「はじめての会話」)。`,
       },
     );
     return this._finish();
@@ -194,7 +195,7 @@ export class FirstRun {
 
   /** 押された物を受け取る。今出している選択肢に無い物(古いボタン)と、動いている最中の 2 回押しは捨てる */
   async act(id, payload = {}) {
-    if (this.busy || this.done) return false;
+    if (this.busy || (this.done && id !== 'begin')) return false;
     if (!this.actions.some((a) => a.id === id)) return false;
     this.busy = true;
     this.d.offer([]); // 押した後は、次の選択肢が出るまでボタンを出さない
@@ -241,7 +242,7 @@ export class FirstRun {
       if (!this.frameReady) {
         this.frameTimer = setTimeout(() => {
           if (!this.frameReady && !this.done && this.step <= 1) {
-            this._say({ who: 'note', text: 'PC の作る画面が開けません。PC で serve_review.py --make --web <この画面の元> が動いているか確かめてね。' });
+            this._say({ who: 'note', text: 'パソコンの「作る画面」が ひらけないよ。パソコンの じゅんびが できているか、見てもらってね。' });
           }
         }, this.d.frameWaitMs ?? FRAME_WAIT_MS);
         this.frameTimer?.unref?.(); // node の試験で、待つ間に終われなくならないように
@@ -307,6 +308,9 @@ export class FirstRun {
         return this._later();
       case 'close':
         return this._finish();
+      case 'begin': // 最後の「はじめる」: 札を閉じるのは、使う人が押した時だけ
+        this.d.onBegin?.();
+        return undefined;
       default:
         if (id.startsWith('s_')) return this._pickSample(id.slice(2));
         return undefined;
@@ -407,7 +411,7 @@ export class FirstRun {
       return this._offerStart();
     }
     this.input = { from: 'words', words };
-    await this._say({ who: 'user', text: words });
+    await this._say({ who: 'user', text: words }, { who: 'note', text: 'ことばから つくるから、2 つ目の「チェック」は とばすよ。' });
     this.skipped.add(2);
     return this._meet();
   }
@@ -456,7 +460,7 @@ export class FirstRun {
   }
 
   _readmeAction() {
-    return this.d.guideUrl ? [{ id: 'readme', kind: 'link', label: 'PC での作り方を見る(README)', url: this.d.guideUrl }] : [];
+    return this.d.guideUrl ? [{ id: 'readme', kind: 'link', label: 'つくりかたを見る(パソコンで)', url: this.d.guideUrl }] : [];
   }
 
   _offerNoMatch() {
@@ -663,7 +667,7 @@ export class FirstRun {
     }
     await this._say(
       { who: 'char', text: 'ねえ、本物の声で話してみたいな。' },
-      { who: 'guide', text: 'ElevenLabs の鍵(API キー)を入れると、声が出せるようになるよ。' },
+      { who: 'guide', text: 'こえの かぎを入れると、本物の声で話せるよ。かぎは、おうちの人や 係の人が 知っているよ。なくても、文字と音で 話せるよ。' },
       { who: 'note', text: v.notice() },
     );
     this._offerKey();
@@ -671,9 +675,9 @@ export class FirstRun {
 
   _offerKey() {
     this._offer([
-      { id: 'key', label: '鍵を入れる', kind: 'key', remember: Boolean(this.d.voice.canRemember?.()), primary: true },
+      { id: 'key', label: 'かぎを入れる', kind: 'key', remember: Boolean(this.d.voice.canRemember?.()), primary: true },
       // 札の右上の「あとで」(初めての会話ごと閉じる)と同じ名前にしない(撮影の練習で、7 歩目に「あとで」が 2 つ並んでいた)
-      { id: 'later', label: '鍵なしで続ける' },
+      { id: 'later', label: 'かぎなしで つづける' },
     ]);
   }
 
@@ -686,7 +690,10 @@ export class FirstRun {
 
   async _key(p) {
     const key = String(p?.key ?? '');
-    if (!key.trim()) return this._offerKey();
+    if (!key.trim()) {
+      await this._say({ who: 'note', text: 'かぎが からっぽだよ。かぎを入れてね。' });
+      return this._offerKey();
+    }
     const r = await this.d.voice.useKey(key.trim(), { remember: Boolean(p?.remember) });
     if (!r?.ok) {
       await this._say({ who: 'char', text: 'うまくいかなかったみたい。' }, { who: 'note', text: r?.message ?? '鍵を確かめてね。' });
@@ -708,13 +715,14 @@ export class FirstRun {
     clearTimeout(this.frameTimer);
     this._go(8);
     const c = this.character;
-    const away = Boolean(c?.id) && c.id !== this.guide.id; // 舞台は案内役(主役)に戻る(D4)
-    await this._say(
-      { who: 'guide', text: '準備ができたよ。いっぱい話してあげてね。' },
-      away && c.local ? { who: 'note', text: `${c.name}の 3D は、まだ作っていません。PC の Claude Code で make-character のスキルを始めると作れます。それまでは、舞台は${this.guideName}のままです。` } : null,
-      away && !c.local ? { who: 'note', text: `舞台は${this.guideName}に戻ります。${c.name}には、また「はじめての会話」から会えます。` } : null,
-    );
-    this.d.offer([]);
+    const away = Boolean(c?.id) && c.id !== this.guide.id; // 選んだ子は舞台に立ったまま(Q-0111)。「ノリーにもどす」で戻せる
+    const lines = [{ who: 'guide', text: '準備ができたよ。いっぱい話してあげてね。' }];
+    // 決めたことを見せる(おまかせの時は、おまかせの文で言い終わっている)
+    if (!this.auto && c?.name) lines.push({ who: 'note', text: `きめたこと: ${c.name}${this.settings ? `・性格「${summary(this.settings)}」` : ''}。ぜんぶ、あとから かえられるよ。` });
+    if (away && c.local) lines.push({ who: 'note', text: `${c.name}の 3D は、まだ つくっていないよ。あたらしい子は、パソコンの Claude Code で つくれるよ(約 20 分)。それまでは、舞台は${this.guideName}のままだよ。` });
+    if (away && !c.local) lines.push({ who: 'note', text: `${c.name}は、舞台に立ったままだよ。${this.guideName}にもどしたい時は、「${this.guideName}にもどす」を押してね。` });
+    await this._say(...lines);
+    this._offer([{ id: 'begin', label: 'はじめる', primary: true }]);
     this.d.onDone?.();
   }
 
@@ -781,7 +789,7 @@ export class FirstRun {
           this.d.pin?.({ frame: this.d.creator.picUrl ?? null, caption: `${name}(PC の Claude Code が描いた絵。3D はまだ)` });
           await this._say(
             { who: 'guide', text: `${name}にけってい! OK を PC に伝えたよ。` },
-            { who: 'note', text: `3D は、PC の Claude Code で make-character のスキルを始めると作れます(約 20 分。この画面からはまだ始まりません)。それまでは、${this.guideName}がかわりに舞台に立って、${name}の言葉を話します。${name}の姿は、上の絵です。` },
+            { who: 'note', text: `3D は、パソコンの Claude Code で つくれるよ(約 20 分。この画面からは まだ はじまらないよ)。それまでは、${this.guideName}がかわりに舞台に立って、${name}の言葉を話すよ。${name}の姿は、上の絵だよ。` },
           );
         }
         // 作る画面で「おまかせ(ぜんぶ じどう)」を選んだ時は、性格から後もおすすめで決めて終わる
@@ -824,20 +832,29 @@ export class FirstRun {
       from: this.input?.from ?? null,
       words: this.input?.from === 'words' ? this.input.words : null,
       check: this.check,
-      character: this.character ? { id: this.character.id, name: this.character.name, sample: Boolean(this.character.sample), note: this.character.note ?? '' } : null,
+      character: this.character ? { id: this.character.id, name: this.character.name, sample: Boolean(this.character.sample), ...(this.character.local ? { local: true } : {}), note: this.character.note ?? '' } : null,
       skipped: [...this.skipped],
+      ...(this.settings ? { settings: this.settings } : {}),
       ...(this.auto ? { auto: true } : {}),
     };
   }
 
-  /** snapshot から続ける(3 歩目の「この子はどうかな?」から) */
+  /** snapshot から続ける(3 歩目の「この子はどうかな?」か、残した歩みから) */
   async resume(snap) {
-    if (!snap || snap.v !== SNAPSHOT_VERSION || !snap.character?.id) return this.start();
+    if (!snap || snap.v !== SNAPSHOT_VERSION) return this.start();
     this.input = snap.from ? { from: snap.from, words: snap.words ?? '' } : null;
     this.check = snap.check ?? null;
-    this.character = { ...snap.character };
     for (const n of snap.skipped ?? []) this.skipped.add(n);
+    if (!snap.character?.id) return this.start(); // 子を選ぶ前の歩み: 1 歩目からやり直す(入力は残していない)
+    this.character = { ...snap.character };
+    if (snap.settings) this.settings = normalize(snap.settings);
     if (snap.auto === true) return this._omakaseRest(); // おまかせの途中で読み込み直した: 続きもおまかせ
+    if (snap.reload) {
+      const n = Math.min(STEPS.length, Math.max(3, snap.step || 3));
+      this._go(n);
+      await this._say({ who: 'guide', text: 'おかえり! さっきの つづきからだよ。' });
+      return this._resumeAt(n);
+    }
     return this._meetAsk();
   }
 }
