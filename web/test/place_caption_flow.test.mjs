@@ -21,14 +21,14 @@ function speak(flow, sentences) {
   return views;
 }
 
-const HELLO = ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリ、がんばりマス! なにをお手伝いしまショウ?'];
+const HELLO = ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリー、がんばりマス! なにをお手伝いしまショウ?'];
 
 test('話している間: 前の文を残し、今の文を足していく(文が入れ替わっても前の文が消えない)', () => {
   const flow = createCaptionFlow();
   const views = speak(flow, HELLO);
   const mid = views.find((v) => v.reply && v.current === 'セスジ');
   assert.deepEqual(mid, { reply: true, prev: HELLO[0], current: 'セスジ', settled: false });
-  const third = views.find((v) => v.reply && v.current === 'ノリ');
+  const third = views.find((v) => v.reply && v.current === 'ノリー');
   assert.equal(third.prev, HELLO[0] + HELLO[1]);
   assert.deepEqual(views[0], { reply: true, prev: '', current: '', settled: false }, '1 文目の文字送りの始まりは、まだ何も無い(画面は隠す)');
 });
