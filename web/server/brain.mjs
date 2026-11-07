@@ -1,13 +1,13 @@
 // 会話の頭脳。Haiku を呼んで、1 行ずつの JSON を onEvent に渡す。
 // 鍵が無いときは、同じ形で返す仮の頭脳(固定の台本)を使う。
 // どちらの頭脳でも、安全の層(safety.mjs)を先に通す: つらい話には決まった案内、出力も確かめる。
+import { gestureBudget, gestureForIntent, resolveMotion } from '../src/conversation/gestureNames.js'; // B3(第 12 波 b): 仕草の名前
 import { config } from './env.mjs';
 import { buildSystemBlocks, buildUserTurn, MOTIONS, safeChoices } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, turnGuard, SAFETY_VERSION } from './safety.mjs';
 import { summarize } from './memory/reflect.mjs';
 import { aizuchi, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
-import { gestureBudget, gestureForIntent, resolveMotion } from '../src/conversation/gestureNames.js';
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
 // 仮の頭脳の仕草(かわいい仕草の層の名前。そのキャラに無い名前は、emit が近い物へ落とす。1 つの返事で仕草は 2 回まで。第 12 波 b)
