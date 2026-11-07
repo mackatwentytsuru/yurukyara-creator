@@ -479,7 +479,7 @@ def text_report(version, rows):
 
 def run_migrate(chars_dir, repo, caps, backups, only):
     tracked, shipped = tracked_ids(repo), set(caps.get("samples", []))
-    lines = [f"古い形のキャラを、今の形にそろえます(版 {read_version(repo)})"]
+    lines = [f"キャラの書き方を、今の版の形にそろえます(版 {read_version(repo)})"]
     changed = same = skipped = rc = 0
     for cid, folder in list_characters(chars_dir, only):
         cj = read_char(folder)
@@ -503,7 +503,11 @@ def run_migrate(chars_dir, repo, caps, backups, only):
         lines += [f"  ・{c}" for c in changes]
         if new.get("id") != folder.name:
             lines.append(f"  ・注意: id {new.get('id')!r} がフォルダの名前と違います(変えていません)")
-    lines.append(f"そろえた: {changed} 体 / そのまま: {same} 体 / 見本なので変えない: {skipped} 体")
+    if changed:
+        lines.append(f"そろえた: {changed} 体 / そのまま: {same} 体 / 見本なので変えない: {skipped} 体")
+    else:
+        mine = f"あなたのキャラ {same} 体はそのまま" if same else "あなたのキャラは、まだいません"
+        lines.append(f"そろえる物はありませんでした({mine}。見本 {skipped} 体は変えません)")
     return "\n".join(lines), rc
 
 

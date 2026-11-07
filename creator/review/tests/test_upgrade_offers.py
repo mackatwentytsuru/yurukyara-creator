@@ -239,7 +239,7 @@ class TestMigrate(Base):
         self.assertEqual(validate(d / "character.json")[0], 0)
         after = (d / "character.json").read_bytes()
         rc, out, _ = run("--migrate", "--characters", str(self.chars), "--backups", str(self.backups))
-        self.assertIn("そろえた: 0 体 / そのまま: 1 体", out)
+        self.assertIn("そろえる物はありませんでした(あなたのキャラ 1 体はそのまま", out)
         self.assertEqual((d / "character.json").read_bytes(), after, "2 回目は何も変えない")
         self.assertEqual(len(list(self.backups.glob("old_one/*"))), 1, "2 回目は控えも増えない")
 
