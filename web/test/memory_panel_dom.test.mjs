@@ -133,6 +133,19 @@ test('会話のイベントで届いた合鍵(覚える事が出た最初の回)
   assert.ok(!calls.some((c) => c.url === '/api/memory/new'), '札は /api/memory/new を呼ばない');
 });
 
+test('会話のイベントの合鍵は、もう持っている合鍵(番号で受け取った物)を上書きしない', async () => {
+  const { panel, q } = mount();
+  await panel.ready;
+  q('mem-code-in').value = '123456';
+  q('mem-claim').click();
+  await until(() => q('mem-status').textContent.startsWith('受け取りました'));
+  assert.equal(getKey(), KEY_B);
+  // 受け取る前に送った回の返事が、後から届いた(その回は合鍵なしで送ったので、サーバーが新しい合鍵を作った)
+  panel.onChatEvent({ type: 'memory', key: KEY_A, added: [{ id: '9', kind: 'like', text: '好きなもの: カレー' }] });
+  await settle();
+  assert.equal(getKey(), KEY_B, '受け取った合鍵のまま');
+});
+
 test('番号を出す: まだ合鍵が無ければ、通信せずに「先に話しかけてね」と知らせる(合鍵は作らない)', async () => {
   const { panel, q } = mount();
   await panel.ready;
@@ -146,6 +159,8 @@ test('番号を出す: まだ合鍵が無ければ、通信せずに「先に話
 test('番号で受け取る: 札の合言葉の欄(main.js が会話の合言葉を入れる)を、見出し x-demo-pass で送る', async () => {
   const { panel, q } = mount();
   await panel.ready;
+  const claims = () => calls.filter((c) => c.url === '/api/memory/claim').length;
+  const before = claims(); // 前の試験の受け取りも calls に残っているので、この試験の分だけ数える
   q('mem-pass').value = ' pass-from-field ';
   q('mem-code-in').value = '123456';
   q('mem-claim').click();
@@ -159,7 +174,7 @@ test('番号で受け取る: 札の合言葉の欄(main.js が会話の合言葉
   setDemoPass('pass-from-gate');
   q('mem-code-in').value = '654321';
   q('mem-claim').click();
-  await until(() => calls.filter((c) => c.url === '/api/memory/claim').length === 2);
+  await until(() => claims() === before + 2);
   assert.equal(calls.findLast((c) => c.url === '/api/memory/claim').headers['x-demo-pass'], 'pass-from-gate');
   setDemoPass('');
 });

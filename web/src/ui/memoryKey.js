@@ -92,10 +92,10 @@ export async function loadMemory() {
 
 /**
  * 会話の返事のイベントで届いた合鍵を持つ(覚える事が出た最初の回に、サーバーが作って渡す)。
- * 形の違う値は持たない。持ったら true
+ * 形の違う値は持たない。もう合鍵を持っている時も持たない(その回を送った後に番号で受け取った合鍵を、上書きしない)。持ったら true
  */
 export function adoptKey(key) {
-  if (typeof key !== 'string' || !KEY_RE.test(key)) return false;
+  if (typeof key !== 'string' || !KEY_RE.test(key) || getKey()) return false;
   setKey(key);
   return true;
 }
