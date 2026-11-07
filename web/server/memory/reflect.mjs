@@ -1,7 +1,7 @@
 // 会話から「覚えておく事」を取り出す(決まった形の言葉だけを拾う、軽い取り出し)。
 // 仮の頭脳でも本物の頭脳でも同じに動く。つらい話・安全の層が止めた話は覚えない。
 // 本物の頭脳で要点を書かせる道は、後で足す(試験は、この決まった取り出しで通す)。
-import { classifyInput } from '../safety.mjs';
+import { classifyInput, looksPersonal } from '../safety.mjs';
 
 const NAME_RE = /(?:わたしの名前は|私の名前は|ぼくの名前は|僕の名前は|名前は|わたしは|私は|ぼくは|僕は|おれは|俺は)\s*([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z]{1,10}?)(?:です|だよ|だ|って言います|っていいます|と言います|といいます|って呼んで|と呼んで|[。、!！?？\s]|$)/u;
 const CALL_RE = /([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z]{1,10}?)(?:って呼んで|と呼んで)/u;
@@ -30,7 +30,8 @@ export function selfNamesOf({ name = '', persona = '' } = {}) {
  */
 export function extractFacts(text, { selfNames = [] } = {}) {
   const whole = String(text ?? '').trim();
-  if (!whole || classifyInput(whole)) return [];
+  // 本名・学校・住所・電話番号・メールの入った言葉は覚えない(BSF 11-08 子どもの決まり。名前はニックネームでよい)
+  if (!whole || classifyInput(whole) || looksPersonal(whole)) return [];
   const selves = new Set(selfNames.map((v) => String(v ?? '').trim()).filter(Boolean));
   const out = [];
   // 問いの形の文は読まない(「好きなものを教えて」「ノリーは何が好き?」は、使う人の好きなものではない)

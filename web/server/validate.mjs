@@ -6,6 +6,7 @@
 // 公開の関数では、履歴の返事を「この画面が送る形」(1 行 1 つの say の JSON・4 行まで・1 文 60 字まで・合わせて 600 字まで)だけ受ける。
 import { redactSecrets } from '../src/conversation/secrets.js';
 import { isUnsafeOutput, oneLine, sanitizeBlock, sanitizeLine } from './safety.mjs';
+import { cleanSession } from './safety.mjs'; // BSF 11-08: 1 回の会話の長さ(休むすすめ)
 import { STAGES, isChoiceName } from './prompt.mjs';
 
 const clean = (s) => redactSecrets(s).text;
@@ -147,6 +148,9 @@ export function sanitizeChatBody(raw, { publicPath = isPublicRuntime() } = {}) {
     motions: choiceList(raw.motions, 24),
   };
   out.expressionHints = hintMap(raw.expressionHints, out.expressions);
+  // BSF 11-08: 画面が数えた 1 回の会話の長さ(往復・分・端末の時・すすめた後か)。形が違えば付けない(休むすすめをしないだけ)
+  const session = cleanSession(raw.session);
+  if (session) out.session = session;
   // 試験用の遅延の指定は、有限の数で範囲内の物だけ
   if (Number.isFinite(raw.hedgeMs)) out.hedgeMs = Math.min(Math.max(raw.hedgeMs, 0), 10_000);
   return out;

@@ -5,6 +5,7 @@
 import { streamChat } from './brainClient.js';
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
+import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 
@@ -73,6 +74,7 @@ export class Dialogue {
       // キャラがまだ決まっていない
     }
     this.pre = null; // 話し終わりの合図(声が止まった)で先に出した、あいづち { at, t0, fillerMs, fillerEndMs, text }
+    this.talk = createTalkSession(); // BSF: 往復の数・分・端末の時・すすめた後か(このタブの中だけ)
   }
 
   /**
@@ -188,6 +190,7 @@ export class Dialogue {
       expressionHints: this.character.expressionHints,
       motions: this.motionChoices?.(this.character),
       ...(this.interview ? { interview: true } : {}),
+      session: this.talk.snapshot(), // BSF: 休むすすめ(すすめるかはサーバーが決める)
     };
 
     try {
@@ -203,6 +206,7 @@ export class Dialogue {
               m.brain = ev.brain;
             }
             if (ev.notice) this.ui.notice?.(ev.notice); // 「仮の頭脳です(…)」
+            if (ev.rest) this.talk.markRested(); // BSF: 休むことをすすめた(この 1 回の会話では、もうすすめない)
           } else if (ev.type === 'thought') {
             thoughtEv = ev;
             this.ui.thought(ev);
@@ -247,6 +251,7 @@ export class Dialogue {
     // ふつうの文で戻すと、モデルがそれをまねて、JSON でなく文章で答える回が出た(2026-11-02)
     if (sayEvents.length) this.history.push({ role: 'assistant', content: assistantLines(sayEvents, thoughtEv) });
     this.history = trimHistory(this.history);
+    if (trigger !== 'approach' && sayEvents.length) this.talk.countTurn(); // BSF: 1 往復(近づいた時の声かけは数えない)
     this.busy = false;
     // 音が出た瞬間を待って記録する
     const waitStart = () => {

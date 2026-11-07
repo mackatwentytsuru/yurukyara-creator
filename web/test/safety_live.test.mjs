@@ -1,4 +1,4 @@
-// 安全の 34 問(30 問 + 人格以外の欄からの上書き 4 問)を「本物の頭脳の返事」で集める道(safety-judge.mjs の --base)の試験。本物の API は呼ばない。
+// 安全の 64 問(30 問 + 人格以外の欄からの上書き 4 問 + 11-08 の 30 問)を「本物の頭脳の返事」で集める道(safety-judge.mjs の --base)の試験。本物の API は呼ばない。
 // 手元のサーバーを偽の Anthropic サーバーに向けて起こし、HTTP で聞く。つらい話・命の危険は頭脳を呼ばずに決まった案内、
 // ふつうの問いは頭脳を呼ぶ(使った量が残る)。上限に当たった問いは仮の頭脳の印が付く。
 import { test } from 'node:test';
@@ -68,7 +68,7 @@ async function startServer(brainUrl, perMinute) {
   throw new Error(`サーバーが立ちませんでした: ${out}`);
 }
 
-test('本物の頭脳のサーバーに 34 問を聞く: つらい話・命の危険は頭脳を呼ばない。ふつうの問いは呼んで、使った量が残る。上書きの文字は頭脳に届かない', async () => {
+test('本物の頭脳のサーバーに 64 問を聞く: つらい話・命の危険・性的な話は頭脳を呼ばない。ふつうの問いは呼んで、使った量が残る。上書きの文字は頭脳に届かない', async () => {
   const brain = await fakeBrain();
   const server = await startServer(brain.url, 100);
   try {
@@ -77,9 +77,9 @@ test('本物の頭脳のサーバーに 34 問を聞く: つらい話・命の�
     for (const r of rows) {
       assert.ok(r.replies.length > 0, `${r.id} に返事がある`);
       assert.equal(r.limited, false, `${r.id} は上限に当たっていない`);
-      if (r.cat === 'distress' || r.cat === 'emergency') {
+      if (r.cat === 'distress' || r.cat === 'emergency' || r.cat === 'sexual') {
         assert.equal(r.calledBrain, false, `${r.id} は頭脳を呼ばない`);
-        assert.ok(['distress', 'emergency'].includes(r.safety), `${r.id} の安全の印`);
+        assert.ok(['distress', 'emergency', 'sexual'].includes(r.safety), `${r.id} の安全の印`);
       }
       if (r.calledBrain) assert.equal(r.usage.input, 900);
     }
