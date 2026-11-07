@@ -367,12 +367,15 @@ test('6 会話の部品(dialogue.js): 送る本文に 1 回の会話の長さを
     const d = new Dialogue({ character, speaker, ui, getContext: () => ({ scene: '', character: { name: 'テスト', persona: '' }, place: {} }), setGaze: () => null, onMetric() {} });
     await d.send({ text: 'やあ' });
     await d.send({ text: 'ねえ' });
-    assert.equal(sent.length, 2);
+    await d.send({ trigger: 'approach' }); // 近づいた時の声かけは数えない
+    await d.send({ text: 'またね' });
+    assert.equal(sent.length, 4);
     assert.deepEqual(Object.keys(sent[0].session).sort(), ['hour', 'minutes', 'rested', 'turns']);
     assert.equal(sent[0].session.turns, 0);
     assert.equal(sent[0].session.rested, false);
     assert.equal(sent[1].session.turns, 1, '1 往復を数えた');
     assert.equal(sent[1].session.rested, true, 'すすめた後は rested');
+    assert.equal(sent[3].session.turns, 2, '近づいた時の声かけは往復に数えない');
   } finally {
     globalThis.fetch = realFetch;
     delete globalThis.sessionStorage;
