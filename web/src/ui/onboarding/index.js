@@ -66,9 +66,30 @@ export const CLOSED_EVENT = 'yc:firstrun-closed'; // 閉じた時に window へ�
 const TALK_TIMEOUT_MS = 20000;
 const STAGE_WAIT_MS = 15000; // 舞台のキャラが読み終わるのを待つ長さ(入れ替えの前)
 const GATE_HOLD_MS = 3000; // 閉じた後、入口を消しておく長さ(カメラなしの入力が始まるまで。始まれば入口は main.js が隠す)
-// PC で札(右)が開いている間、舞台の絵を札の左に収める(幅の広い見本の右の端が札に隠れていた。CRITux2 低 13)。
-// 札の左に残る幅がこれより狭い画面(縦のタブレットなど)では、舞台を狭めない
-const SIDE_MIN_STAGE_PX = 420;
+// PC と iPad で札(右)が開いている間、舞台の絵を札の左に収める(幅の広い見本の右の端が札に隠れていた。CRITux2 低 13)。
+// 札の左に残る幅がこれより狭い画面では、舞台を狭めない(iPad の縦 768 で 396px 残る)
+const SIDE_MIN_STAGE_PX = 300;
+/** 札を右の横に置く幅(これより狭いスマホは、下の札か重ねる形) */
+const SIDE_MIN_WIDTH = 720;
+/**
+ * スマホの会話の形(11/8 本人「LINE のように」「キャラの上に重ねた方が見やすいかも」)。2 つとも作り、1 か所で切り替える:
+ *   'sheet'   = キャラの下に会話の札(キャラは札の上に全身で立つ。舞台の絵を札の上だけにする)
+ *   'overlay' = キャラの下の方に会話を重ねる(吹き出しの後ろは上へ向かって薄くなる。顔と上半身は見えたまま。押す札は不透明)
+ * 既定は 'sheet'(390×670 の比べで、字の後ろにキャラの体が透けず読みやすく、キャラも全身が見えた。比べの絵は OL1 の札)。
+ * URL の ?chat=overlay / ?chat=sheet で替えられる
+ */
+export const PHONE_LAYOUTS = ['sheet', 'overlay'];
+export const DEFAULT_PHONE_LAYOUT = 'sheet';
+/** 形 B で、キャラの立つ帯の下に空ける高さ(画面の高さに対する割合)。キャラの腰から下に吹き出しが重なる */
+const OVERLAY_BOTTOM = 0.36;
+/** 形 A で、札の上の舞台の絵の、いちばん下に空けるすき間(px) */
+const SHEET_STAGE_GAP = 6;
+
+/** スマホの会話の形を決める(?chat= があればそれ、無ければ既定) */
+export function phoneLayout(params) {
+  const asked = params?.get?.('chat');
+  return PHONE_LAYOUTS.includes(asked) ? asked : DEFAULT_PHONE_LAYOUT;
+}
 
 function storageOf(kind) {
   try {
@@ -428,10 +449,20 @@ export function mountFirstRun({
     returnBtn?.remove();
     returnBtn = null;
   }
+  /** 上の段が変わった時に、キャラを置き直す(頭のすき間の決まりは上の段の下から測る) */
+  function reframeStage() {
+    try {
+      const st = app?.stage;
+      if (st?.state && !st.state.immersive && app.character) st.frameCharacter(app.character, st.state.view, st.state.obstacles);
+    } catch {
+      // 置き直せなくても続ける
+    }
+  }
   function showReturn(back) {
     hideReturn();
     const name = (app?.character?.id === back.id && app.character.name) || back.name;
-    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'fr-return', textContent: `${name}にもどす` });
+    // 上の段のボタンの列があれば、そこに並べる(下に浮かべると、仮の頭脳の知らせ・字幕に重なった。OL1 の写真)
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: buttonHost ? 'place-mode-button fr-launch fr-return fr-return-inline' : 'fr-return', textContent: `${name}にもどす` });
     b.setAttribute('aria-label', `${name}にもどす(いまの子から、${name}に かわります)`);
     b.addEventListener('click', async () => {
       b.disabled = true;
@@ -439,12 +470,14 @@ export function mountFirstRun({
         await putOnStage(back.id);
         root.classList.remove('fr-guest');
         hideReturn();
+        reframeStage();
       } catch {
         b.disabled = false;
       }
     });
     returnBtn = b;
-    parent.append(b);
+    (buttonHost ?? parent).append(b);
+    reframeStage();
   }
 
   /** 入口(ゲート)がまだ出ていれば、カメラなしで始める(閉じた後に入口が戻ってこないように。D4)。始まれば main.js が入口を隠す */
@@ -558,41 +591,102 @@ export function mountFirstRun({
   }
 
   /**
-   * スマホでは札が画面の下の半分ほどを隠すので、舞台(app.stage)の「下の余白」を札の高さにして、キャラを札の上に収める。
-   * PC では札が右に立つので、舞台の絵(canvas)を札の左までにして、キャラを札の左に収める(幅の広い見本の右の端が札に
-   * 隠れていた。CRITux2 低 13。html.fr-side の幅は styles.js)。閉じたら元に戻す。舞台の形が違う・AR/VR の間は何もしない。
+   * 舞台の下の余白(st.state.bottomInset)を、札が開いている間だけ、この札の値に止めておく。main.js も同じ欄を書く(下の帯と札の高さ)が、
+   * その値は画面ぜんたいの高さで測った物で、形 A の短くした舞台の絵には合わない。書かれた値は覚えておき、閉じたら戻す
    */
-  let savedInset = null;
+  let held = null; // { st, stored, value }
+  function holdInset(st, value) {
+    if (!held || held.st !== st) {
+      releaseInset();
+      const h = { st, stored: st.state.bottomInset ?? 0, value };
+      try {
+        Object.defineProperty(st.state, 'bottomInset', {
+          configurable: true,
+          enumerable: true,
+          get: () => h.value,
+          set: (v) => {
+            h.stored = v;
+          },
+        });
+      } catch {
+        st.state.bottomInset = value; // 止められない形なら、そのまま書く
+        return;
+      }
+      held = h;
+    }
+    held.value = value;
+  }
+  function releaseInset() {
+    if (!held) return;
+    const { st, stored } = held;
+    held = null;
+    try {
+      delete st.state.bottomInset;
+    } catch {
+      // 消せなくても続ける
+    }
+    st.state.bottomInset = stored;
+  }
+
+  /**
+   * 札が開いている間の舞台の見せ方。閉じたら元に戻す。舞台の形が違う・AR/VR の間は何もしない。
+   * - PC と iPad(幅 720px から): 札が右に立つので、舞台の絵(canvas)を札の左までにして、キャラを札の左に収める(html.fr-side)
+   * - スマホの形 A(sheet): 舞台の絵を札の上だけにする(html.fr-stack と --fr-stage-h)。キャラは札の上に全身で立つ(頭のすき間の決まりはそのまま)
+   * - スマホの形 B(overlay): 舞台の絵は画面いっぱいのまま。キャラの帯の下を画面の 36% 空け、腰から下に吹き出しが重なる
+   * キーボードが出ている間は、札が見える範囲に重なるので、舞台は替えない(下がったら最初の見え方のまま)
+   */
   let side = false;
+  let stack = null;
+  let stageH = 0;
   function fitStage(open) {
     const st = app?.stage;
     if (!st?.state || typeof st.frameCharacter !== 'function' || !app.character || st.state.immersive) return;
-    const wide = window.innerWidth >= 720;
-    const wantSide = Boolean(open && wide && sheet && !sheet.closed && sideRoom() >= SIDE_MIN_STAGE_PX);
+    if (open && sheet?.typing) return;
+    const live = Boolean(open && sheet && !sheet.closed);
+    const wide = window.innerWidth >= SIDE_MIN_WIDTH;
+    const wantSide = Boolean(live && wide && sideRoom() >= SIDE_MIN_STAGE_PX);
+    const wantStack = live && !wide ? sheet.layout : null;
+    let resized = false;
     let changed = false;
     if (wantSide !== side) {
       side = wantSide;
       root.classList.toggle('fr-side', side);
+      resized = true;
+    }
+    if (wantStack === 'sheet') {
+      const top = Math.round(sheet.element.getBoundingClientRect().top);
+      const h = Math.max(120, top);
+      if (stack !== 'sheet' || Math.abs(h - stageH) > 1) {
+        stageH = h;
+        root.style.setProperty('--fr-stage-h', `${h}px`);
+        root.classList.add('fr-stack');
+        resized = true;
+      }
+      holdInset(st, SHEET_STAGE_GAP);
+      changed = true;
+    } else if (stack === 'sheet') {
+      root.classList.remove('fr-stack');
+      root.style.removeProperty('--fr-stage-h');
+      stageH = 0;
+      resized = true;
+    }
+    if (wantStack === 'overlay') {
+      holdInset(st, Math.round(window.innerHeight * OVERLAY_BOTTOM));
+      changed = true;
+    }
+    if (!wantStack && held) {
+      releaseInset();
+      changed = true;
+    }
+    stack = wantStack;
+    if (resized) {
       try {
         st.resize?.(); // canvas の大きさが変わったので、描く大きさと画角の縦横を取り直す(main.js は窓の大きさの変化でしか呼ばない)
       } catch {
         // 取り直せなくても、会話は続ける
       }
-      changed = true;
     }
-    // 札を横に置けない時(スマホ・iPad の縦=幅 911px まで)は、札の高さを舞台の下の余白にして、キャラを札の上に収める
-    // (札は画面の 45% まで。styles.js)。作る画面の枠が出ている PC の札(右に立つ)は、この形にしない
-    const stack = Boolean(open && !wantSide && sheet && !sheet.closed && (!wide || sheet.element.dataset.actions !== 'frame'));
-    if (stack) {
-      if (savedInset === null) savedInset = st.state.bottomInset ?? 0;
-      st.state.bottomInset = Math.max(savedInset, sheet.element.offsetHeight + 8);
-      changed = true;
-    } else if (savedInset !== null) {
-      st.state.bottomInset = savedInset;
-      savedInset = null;
-      changed = true;
-    }
-    if (!changed) return;
+    if (!changed && !resized) return;
     try {
       st.frameCharacter(app.character, st.state.view, st.state.obstacles);
     } catch {
@@ -615,6 +709,11 @@ export function mountFirstRun({
     const onResize = () => fitStage(true); // 窓の大きさが変わった時も、PC の舞台を札の左に収め直す
     sheet = createSheet({
       guideName: guideName(),
+      guideId: lead.id,
+      layout: phoneLayout(params),
+      onTyping: (on) => {
+        if (!on) setTimeout(() => fitStage(true), 60); // キーボードが下がったら、最初の見え方で測り直す(値は同じ)
+      },
       voice,
       parent,
       onAct: (id, payload) => engine.act(id, payload),

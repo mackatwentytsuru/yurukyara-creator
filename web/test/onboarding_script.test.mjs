@@ -74,8 +74,8 @@ test('言葉の入口: 7 歩を最後まで通す(仮の頭脳・鍵を入れて
   assert.equal(await h.fr.act('words', { text: '赤い提灯の子' }), true);
   assert.equal(h.fr.character.id, 'd_lantern', '提灯 → ちょうちんくん');
   assert.ok(h.texts('note').some((t) => t.startsWith('見本: ちょうちんくん')));
-  assert.ok(h.texts('guide').includes('見本の中に、近い子がいたよ。'), '見本だと言ってから出す(だまって選ばない)');
-  assert.ok(h.texts('guide').includes('ちょうちんくんだよ。この子はどうかな?'), '見本は「できたよ」と言わない');
+  assert.ok(h.texts('guide').includes('見本の中に、近い子が いたよ!'), '見本だと言ってから出す(だまって選ばない)');
+  assert.ok(h.texts('guide').includes('ちょうちんくんだよ。この子は どうかな?'), '見本は「できたよ」と言わない');
   assert.deepEqual(h.shown, ['d_lantern'], '舞台に出すのは 1 回(その場で入れ替える)');
   assert.deepEqual(h.offered, ['keep', 'fix', 'again']);
 
@@ -92,11 +92,11 @@ test('言葉の入口: 7 歩を最後まで通す(仮の頭脳・鍵を入れて
   const hello = h.said.filter((l) => l.who === 'char').at(-1);
   assert.notEqual(hello.text, 'こんにちは。今日は、どんなお話をしようか。', '仮の頭脳の返事を、性格の話し方にそろえた');
   assert.equal(hello.voice, true);
-  assert.ok(h.texts('note').some((t) => t.startsWith('仮の頭脳です')), '仮の頭脳だと出す');
+  assert.ok(h.texts('note').some((t) => t.includes('おためしの あたま')), '仮の頭脳だと、子どもの言葉で出す');
 
   await h.fr.act('to_retro');
   assert.equal(h.fr.step, 6);
-  assert.ok(h.texts('guide').includes('まだ声が出せないから、文字とレトロな音で話すね。なにか話しかけてみて。'));
+  assert.ok(h.texts('guide').includes('まだ 声が出せないから、文字と レトロな音で 話すね。'));
   await h.fr.act('say', { text: '好きな食べ物はなに?' });
   assert.equal(h.talks.at(-1).text, '好きな食べ物はなに?');
   assert.equal(h.fr.history.length, 4);
@@ -127,14 +127,14 @@ test('絵の入口(見本の道): 人の絵なら「ゆるキャラにしてみ�
   assert.deepEqual(h.pins, [{ img: 'blob:fake', caption: '選んだ絵' }], '選んだ絵は札の上に出したまま(D3)');
   assert.deepEqual(h.offered, ['kind_yuru', 'kind_human', 'kind_complex']);
   await h.fr.act('kind_human');
-  assert.ok(h.texts('guide').includes('これはちょっとリアルな写真みたい。ゆるキャラにしてみる?'));
-  assert.ok(h.texts('note').some((t) => t.includes('どんな写真でもきれいに作れるわけではありません')));
+  assert.ok(h.texts('guide').includes('人の絵なんだね。ゆるキャラに してみる?'));
+  assert.ok(h.texts('note').some((t) => t.includes('どんな写真でも きれいに できるわけでは ないよ')));
   assert.deepEqual(h.offered, ['yurufy', 'other']);
   await h.fr.act('yurufy');
   assert.equal(h.fr.character, null, '絵と関係の無い子を「できた子」にしない');
   assert.equal(h.fr.step, 3);
-  assert.ok(h.texts('guide').includes('ごめんね。この画面では、絵から新しい子を作れないんだ。'));
-  assert.ok(h.texts('note').includes(MAKE_STEPS), 'PC での作り方を見せる');
+  assert.ok(h.texts('guide').includes('じゃあ、見本の子で ためしてみよう!'), '見本の子で ためす道を出す');
+  assert.equal(h.texts('note').filter((t) => t.includes('パソコンの Claude Code で するよ')).length, 1, '写真や絵の道の限界は、やさしく 1 回だけ言う(OL1)');
   assert.deepEqual(h.offered, ['use_guide', 'choose_sample', 'again']);
   assert.equal(h.pins.length, 1, '絵は出したまま');
   assert.equal(h.fr.input.yurufy, true);
@@ -142,11 +142,11 @@ test('絵の入口(見本の道): 人の絵なら「ゆるキャラにしてみ�
   assert.ok(!JSON.stringify(h.fr.snapshot()).includes('blob:'));
   await h.fr.act('use_guide');
   assert.equal(h.fr.character.id, MAIN.id, '使う人が選んだ時だけ主役で続ける');
-  assert.ok(h.texts('guide').includes('じゃあ、ノリーで続けマス。性格やあいさつを、ためしてみてくだサイ!'), '主役は自分のことも「ノリー」と呼ぶ');
+  assert.ok(h.texts('guide').includes('じゃあ、ノリーで つづけマス! 性格や あいさつを ためしてくだサイ。'), '主役は自分のことも「ノリー」と呼ぶ');
   assert.equal(h.fr.character.sample, true);
   assert.ok(h.texts('note').some((t) => t.startsWith(`見本: ${MAIN.name}(協力者が手で描いた絵から`)), '主役も見本の子だと書く');
   assert.equal(h.fr.step, 4, '主役は 3 歩目の「この子はどうかな?」をとばして性格へ');
-  assert.ok(!h.texts('guide').includes(`${MAIN.name}だよ。この子はどうかな?`), '案内役が自分を「できた子」として紹介しない');
+  assert.ok(!h.texts('guide').includes(`${MAIN.name}だよ。この子は どうかな?`), '案内役が自分を「できた子」として紹介しない');
 });
 
 test('こまかい絵 → 別の絵にする → 1 歩目に戻る。古いボタンと 2 回押しは捨てる', async () => {
@@ -155,7 +155,7 @@ test('こまかい絵 → 別の絵にする → 1 歩目に戻る。古いボ�
   assert.equal(await h.fr.act('keep'), false, '今出していないボタンは効かない');
   await h.fr.act('photo', { url: 'blob:x' });
   await h.fr.act('kind_complex');
-  assert.ok(h.texts('guide').includes('いろんな物が描いてあるね。主役を 1 つ選んで、描き直してみる?'));
+  assert.ok(h.texts('guide').includes('いろんな物が うつってるね。主役を 1 つ えらんで 描きなおす?'));
   await h.fr.act('other');
   assert.equal(h.fr.step, 1);
   assert.deepEqual(h.offered, ['photo', 'pick', 'words']);
@@ -179,15 +179,15 @@ test('手元の道(つながった時の形): チェックは Claude の結果�
   await h.fr.start();
   assert.ok(!h.texts('note').some((t) => t.includes('見本')), '手元の道では見本の注を出さない');
   await h.fr.act('photo', { url: 'blob:y' });
-  assert.ok(h.texts('guide').includes('ゆるキャラにぴったりの絵だね。この絵から作るよ。'));
+  assert.ok(h.texts('guide').includes('ゆるキャラに ぴったりの絵だね。この絵から 作るよ。'));
   await h.fr.act('next_meet');
-  assert.ok(h.texts('guide').includes('こんな子ができたよ。どうかな?'));
+  assert.ok(h.texts('guide').includes('こんな子が できたよ。どうかな?'));
   const long = 'あ'.repeat(NOTE_MAX + 10);
   await h.fr.act('fix', { text: long });
   assert.equal(reviews.length, 1);
   assert.equal(reviews[0].decision, 'redo');
   assert.equal([...reviews[0].note].length, NOTE_MAX);
-  assert.ok(h.texts('guide').some((t) => t.startsWith('PC の Claude Code に伝えたよ')));
+  assert.ok(h.texts('guide').some((t) => t.startsWith('パソコンの Claude Code に つたえたよ')));
 });
 
 test('鍵が違う → もう一度。あとで → 文字で話す。鍵の受け口が無い → 正直に言う', async () => {
@@ -275,7 +275,7 @@ test('読み込み直しをまたぐ: 3 歩目で状態を残し、続きから�
   const r = harness();
   await r.fr.resume(snap);
   assert.equal(r.fr.step, 3);
-  assert.ok(r.texts('guide').includes('ロボくんだよ。この子はどうかな?'));
+  assert.ok(r.texts('guide').includes('ロボくんだよ。この子は どうかな?'));
   assert.deepEqual(r.offered, ['keep', 'fix', 'again']);
   const bad = harness();
   await bad.fr.resume({ v: 99 });
@@ -297,12 +297,12 @@ test('見本えらび: 言葉に当たる子だけ。当たらなければ null(
 test('D1: 当たらない言葉は、だまって見本を出さない。正直に言い、作り方と自分で選ぶ道を出す', async () => {
   const h = harness({ guideUrl: 'https://example.org/readme#make' });
   await h.fr.start();
-  assert.deepEqual(h.offered, ['photo', 'pick', 'words', 'readme'], '1 歩目から PC での作り方へ 1 回で行ける(CRITux 1)');
+  assert.deepEqual(h.offered, ['photo', 'pick', 'words'], '1 歩目の押す札は 1 段(パソコンでの作り方は、見本がいない時に出す。OL1)');
   await h.fr.act('words', { text: '空を飛ぶペンギンの郵便屋さん' });
   assert.equal(h.fr.step, 3);
   assert.equal(h.fr.character, null);
   assert.deepEqual(h.shown, [], '舞台を替えない');
-  assert.ok(h.texts('guide').includes('ごめんね。見本の中に、近い子がいないんだ。'));
+  assert.ok(h.texts('guide').includes('ごめんね。見本の中に、近い子が いないんだ。'));
   assert.ok(!h.texts('guide').some((t) => t.includes('連れてきたよ')), '「近い子を連れてきたよ」と言わない');
   const steps = h.texts('note').find((t) => t.startsWith('あたらしい子は'));
   assert.equal(steps, MAKE_STEPS);
@@ -312,13 +312,13 @@ test('D1: 当たらない言葉は、だまって見本を出さない。正直�
   assert.deepEqual(h.offered, ['use_guide', 'choose_sample', 'readme', 'again']);
   const readme = h.offeredAll.find((a) => a.id === 'readme');
   assert.deepEqual([readme.kind, readme.url], ['link', 'https://example.org/readme#make'], 'README の節へ 1 回で飛ぶ');
-  assert.equal(h.offeredAll.find((a) => a.id === 'again').label, '言葉を変える');
+  assert.equal(h.offeredAll.find((a) => a.id === 'again').label, 'やりなおす');
   await h.fr.act('choose_sample');
   assert.deepEqual(h.offered, [...SAMPLE_CHARACTERS.map((s) => `s_${s.id}`), 'again']);
   await h.fr.act('s_robo');
   assert.equal(h.fr.character.id, 'robo');
   assert.deepEqual(h.shown, ['robo']);
-  assert.ok(h.texts('guide').includes('ロボくんだよ。この子はどうかな?'));
+  assert.ok(h.texts('guide').includes('ロボくんだよ。この子は どうかな?'));
   assert.deepEqual(h.offered, ['keep', 'fix', 'again']);
 });
 
@@ -328,9 +328,9 @@ test('D2: 見本の「直したい」は行き止まりにしない(ここで変
   await h.fr.act('words', { text: '赤い提灯の子' });
   await h.fr.act('fix');
   assert.ok(h.texts('guide').some((t) => t.includes('性格と話し方は、次のステップで変えられる')));
-  assert.ok(h.texts('note').some((t) => t.includes('手元の PC の Claude Code で作った子なら')));
+  assert.ok(h.texts('note').some((t) => t.includes('パソコンの Claude Code で 作った子なら')));
   assert.deepEqual(h.offered, ['keep', 'readme', 'again']);
-  assert.equal(h.offeredAll[0].label, 'この子で性格を決める');
+  assert.equal(h.offeredAll[0].label, 'この子で 性格を きめる');
   await h.fr.act('keep');
   assert.equal(h.fr.step, 4);
   const noLink = harness();
@@ -350,9 +350,9 @@ test('D3: 選んだ絵は札に出したまま。やり直すと消す', async (
   assert.ok(!h.texts('guide').some((t) => t.includes('ぴったりの絵')), '絵を見ていないので、ほめない(P1)');
   assert.ok(h.texts('guide').includes('ゆるキャラなんだね。教えてくれてありがとう。'));
   assert.ok(!h.texts('guide').some((t) => t.includes('この絵から作るよ')), '見本の道では「この絵から作るよ」と言わない');
-  assert.ok(h.texts('note').some((t) => t.includes('写真は見ません')), '見る前に、見ないと正直に言う(撮った写真を絵と呼ばない)');
+  assert.ok(h.texts('note').some((t) => t.includes('写真を見ないで')), '見る前に、見ないと正直に言う(撮った写真を絵と呼ばない)');
   assert.ok(h.texts('guide').includes('この写真は、どれに近い?'));
-  assert.equal(h.offeredAll.find((a) => a.id === 'again').label, '別の写真にする');
+  assert.equal(h.offeredAll.find((a) => a.id === 'again').aria, 'やりなおす(べつの写真にする)');
   await h.fr.act('again');
   assert.equal(h.pins.at(-1), null);
   assert.equal(h.fr.step, 1);
@@ -411,10 +411,10 @@ test('?character=<id> の子が案内役: 名乗り・「〜で続きを試す�
   assert.ok(!h.texts('guide').join('').includes('ノリー、'), '主役の口調で名乗らない');
   await h.fr.act('words', { text: '空を飛ぶペンギンの郵便屋さん' });
   assert.deepEqual(h.offered, ['use_guide', 'choose_sample', 'again']);
-  assert.equal(h.offeredAll[0].label, 'みかんちゃんで続きを試す');
+  assert.equal(h.offeredAll[0].label, 'みかんちゃんで ためす');
   await h.fr.act('use_guide');
   assert.ok(h.texts('note').includes(`見本: みかんちゃん(${mikan.note})`), h.texts('note').join(' / '));
-  assert.ok(h.texts('guide').includes('じゃあ、みかんちゃんで続けるね。'));
+  assert.ok(h.texts('guide').includes('じゃあ、みかんちゃんで つづけるね。'));
   assert.deepEqual(h.shown, ['mikan'], '舞台に出すのは案内役(もう舞台にいる子)');
   assert.equal(h.fr.step, 4);
   await h.fr.act('persona_ok');
@@ -441,7 +441,7 @@ test('QF4 高 1: 歩みごとに途中経過を残し、読み込み直した後
   await g.fr.resume({ ...last, reload: true });
   assert.equal(g.fr.step, 5, '5 歩目から続く');
   assert.equal(g.fr.character.id, 'robo');
-  assert.ok(g.texts('guide').includes('おかえり! さっきの つづきからだよ。'));
+  assert.ok(g.texts('guide').some((t) => t.includes('さっきの つづきからだよ')));
   assert.ok(!g.texts('guide').includes('どんな子を生み出そうか?'), '1 歩目に戻さない');
   assert.deepEqual(g.offered, ['to_retro']);
 });
@@ -467,7 +467,7 @@ test('QF4 低 14: 空の鍵は「かぎが からっぽだよ」と言う。こ�
   const h = harness();
   await h.fr.start();
   await h.fr.act('words', { text: 'ねこ' });
-  assert.ok(h.texts('note').some((t) => t.includes('2 つ目の「チェック」は とばすよ')));
+  assert.ok(h.texts('note').some((t) => t.includes('チェックは とばすよ')));
   await h.fr.act('use_guide');
   await h.fr.act('persona_ok');
   await h.fr.act('to_retro');

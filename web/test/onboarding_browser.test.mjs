@@ -145,6 +145,7 @@ async function checkLayout(page, where) {
     for (const root of roots) {
       for (const e of [root, ...root.querySelectorAll('*')]) {
         if (!visible(e) || e.closest('.fr-sr') || e.classList.contains('fr-file')) continue;
+        if (e.closest('.fr-chips-scroll') && !e.matches('.fr-chips-scroll')) continue; // 2 段で横に巻ける札の中(巻けば届く。おまかせは先頭)
         const b = e.getBoundingClientRect();
         if (b.right > vw + 0.5 || b.left < -0.5) out.wide.push(`${e.tagName}.${e.className} ${Math.round(b.left)}..${Math.round(b.right)}`);
         const tap = e.matches('button, label.fr-btn, input[type="text"], input[type="password"], summary') && !e.closest('.yp-energy');
@@ -165,15 +166,17 @@ async function checkLayout(page, where) {
         out.latestTop = t.top - lb.top;
         out.latestShown = Math.min(t.bottom, lb.bottom) - Math.max(t.top, lb.top);
         out.latestH = t.height;
+        out.groupH = last.getBoundingClientRect().bottom - t.top;
+        out.logInner = log.clientHeight;
       }
     }
     return out;
   });
-  if (r.latestTop !== undefined) {
-    assert.ok(r.latestTop >= -1, `${where}: 今のまとまりの最初の行が上に ${Math.round(-r.latestTop)}px 隠れている`);
-    assert.ok(r.latestShown >= Math.min(r.latestH, 40) - 1, `${where}: 今のまとまりの最初の行が見えていない(見えている ${Math.round(r.latestShown)}px)`);
-    assert.ok(!(r.lastHidden > 1) || r.latestTop <= 20, `${where}: 最後の文が ${Math.round(r.lastHidden)}px 隠れているのに、最初の行が欄の上の端にない(${Math.round(r.latestTop)}px)`);
-  } else assert.ok(!(r.lastHidden > 1), `${where}: 最後の文が ${Math.round(r.lastHidden)}px 隠れている`);
+  // OL1(LINE のような会話): いちばん新しい吹き出しは、いつも見える。今のまとまりが欄に入る時は、その最初の行も見える(入らない時だけ上へ流れてよい)
+  assert.ok(!(r.lastHidden > 1), `${where}: いちばん新しい吹き出しが ${Math.round(r.lastHidden)}px 隠れている`);
+  if (r.latestTop !== undefined && r.groupH <= r.logInner - 12) {
+    assert.ok(r.latestTop >= -1, `${where}: 今のまとまりが欄に入るのに、最初の行が上に ${Math.round(-r.latestTop)}px 隠れている`);
+  }
   assert.ok(r.scrollW <= r.vw, `${where}: 横にはみ出しています(${r.scrollW} > ${r.vw})`);
   assert.deepEqual(r.wide, [], `${where}: 画面の外に出た物`);
   assert.deepEqual(r.small, [], `${where}: 押す所が 44px より小さい`);
@@ -208,7 +211,7 @@ async function walkWords(page, label, { full }) {
   assert.ok(label7.text === '声' && label7.lh >= label7.fs * 1.4, `「7 声」の行の高さ ${JSON.stringify(label7)}`);
   if (SHOTS) {
     mkdirSync(SHOTS, { recursive: true });
-    await page.locator('.fr-steps').screenshot({ path: join(SHOTS, `${label}_steps.png`) });
+    await page.locator('.fr-head').screenshot({ path: join(SHOTS, `${label}_head.png`) });
   }
   const gate = () => page.$eval('#gate', (e) => [getComputedStyle(e).opacity, getComputedStyle(e).pointerEvents].join(' '));
   assert.equal(await gate(), '0 none', '初めての会話の間は、入口のゲートを消して舞台を見せる');
@@ -217,14 +220,14 @@ async function walkWords(page, label, { full }) {
   // スマホの 1 歩目は、写真と絵を 2 つ並べて札を低くする(上に案内役の顔が見えるように。CRITux 16)
   const vh = await page.evaluate(() => innerHeight);
   const sheetH = await page.$eval('.fr-sheet', (e) => e.getBoundingClientRect().height);
-  if ((await page.evaluate(() => innerWidth)) < 720) assert.ok(sheetH <= Math.max(0.58 * vh, 440) + 1, `1 歩目の札が高すぎる ${sheetH}/${vh}`);
+  if ((await page.evaluate(() => innerWidth)) < 720) assert.ok(sheetH >= 0.55 * vh - 1 && sheetH <= 0.66 * vh + 1, `1 歩目の会話の札は、見える高さの 55〜65%(OL1): ${sheetH}/${vh}`);
 
   await page.fill('.fr-actions [data-act="words"] input', '赤い提灯の子');
   await page.click('.fr-actions [data-act="words"] button[type="submit"]');
   await waitAct(page, 'keep');
-  assert.match(await logText(page), /見本の中に、近い子がいたよ。/, '見本だと言う説明が、読み込み直しで消えない(D2)');
+  assert.match(await logText(page), /見本の中に、近い子が いたよ!/, '見本だと言う説明が、読み込み直しで消えない(D2)');
   assert.match(await logText(page), /見本: ちょうちんくん/);
-  assert.match(await logText(page), /ちょうちんくんだよ。この子はどうかな\?/);
+  assert.match(await logText(page), /ちょうちんくんだよ。この子は どうかな\?/);
   assert.equal(await page.$eval('.fr-steps li[data-n="2"]', (e) => e.className), 'skip', '言葉のときは 2 歩目(チェック)をとばす');
   await checkLayout(page, `${label} 3 歩目`);
   await shot(page, `${label}_3_meet`);
@@ -280,7 +283,7 @@ async function walkWords(page, label, { full }) {
   await waitAct(page, 'to_retro');
   const hello = await lastChar(page);
   assert.match(hello, /^(あ、あの…|えっと…)こんにちはにゃ。$/, `あいさつ: ${hello}`);
-  assert.match(await logText(page), /仮の頭脳です/);
+  assert.match(await logText(page), /おためしの あたま/);
   await shot(page, `${label}_5_hello`);
 
   // 6 歩目: 文字とレトロな音で話す
@@ -390,13 +393,13 @@ test('初めての会話: 言葉の入口から 7 歩目まで(幅 390・400・P
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64');
 
 /** 案内役の「ごめんね…」の行が、会話の欄の中に全部見えているか(スマホで上へ流れて見えなかった。CRITux2 中 2) */
-const sorryShown = (page) =>
-  page.evaluate(() => {
+const sorryShown = (page, word = 'ごめんね') =>
+  page.evaluate((w) => {
     const log = document.querySelector('.fr-log').getBoundingClientRect();
-    const line = [...document.querySelectorAll('.fr-line.guide')].find((l) => l.textContent.includes('ごめんね'));
+    const line = [...document.querySelectorAll('.fr-line.guide')].find((l) => l.textContent.includes(w));
     const b = line?.getBoundingClientRect();
     return b ? { top: Math.round(b.top - log.top), below: Math.round(log.bottom - b.bottom), latest: line.classList.contains('fr-latest'), logH: Math.round(log.height) } : null;
-  });
+  }, word);
 
 test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」→ この画面では作れないと正直に言う → 主役で続ける。絵は札に出したまま。鍵の部品が無いと正直に言う', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
@@ -416,12 +419,12 @@ test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」�
       await shot(page, 'w390_2_check');
       await page.click('.fr-actions [data-act="kind_human"]');
       await waitAct(page, 'yurufy');
-      assert.match(await logText(page), /これはちょっとリアルな写真みたい。ゆるキャラにしてみる\?/);
+      assert.match(await logText(page), /人の絵なんだね。ゆるキャラに してみる\?/);
       await shot(page, 'w390_2_human');
       await page.click('.fr-actions [data-act="yurufy"]');
       await waitAct(page, 'use_guide');
-      assert.match(await logText(page), /この画面では、絵から新しい子を作れないんだ/, 'だまって見本を「できた子」にしない(D1)');
-      assert.match(await logText(page), /あたらしい子は、パソコンの Claude Code で つくれるよ/);
+      assert.match(await logText(page), /見本の子で ためしてみよう/, 'だまって見本を「できた子」にしない(D1)');
+      assert.match(await logText(page), /絵からの 絵づくりは、パソコンの Claude Code で するよ/, '写真や絵の道の限界を、やさしく正直に言う(OL1)');
       assert.doesNotMatch(await logText(page), /serve_review|yuru-next|README|make-character/, '子どもの画面に開発の言葉を出さない(QF4 中 9)');
       const readme = await page.$eval('.fr-actions a[data-act="readme"]', (a) => ({ href: a.href, target: a.target, rel: a.rel, h: a.getBoundingClientRect().height }));
       assert.equal(readme.href, 'https://example.org/readme#make-your-own-character-on-your-pc-with-claude-code', 'README の作り方の節へ 1 回で飛ぶ(頁の link rel="help")');
@@ -430,9 +433,9 @@ test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」�
       const pinned = () => page.$eval('.fr-pin', (e) => ({ hidden: e.hidden, src: e.querySelector('img')?.src ?? '', h: e.getBoundingClientRect().height }));
       assert.ok(!(await pinned()).hidden && /^blob:/.test((await pinned()).src), '選んだ絵を札の上に出したまま(D3)');
       assert.ok((await pinned()).h <= 70, `スマホの絵の欄は小さく(${(await pinned()).h}px)`);
-      const sorry = await sorryShown(page);
-      assert.ok(sorry && sorry.top >= -1 && sorry.below >= -1, `「ごめんね…」が会話の欄の中に全部見えない ${JSON.stringify(sorry)}`);
-      assert.ok(sorry.latest, '「ごめんね…」は今のまとまりの最初の行');
+      const sorry = await sorryShown(page, 'ためしてみよう');
+      assert.ok(sorry && sorry.top >= -1 && sorry.below >= -1, `「見本の子で ためしてみよう」が会話の欄の中に全部見えない ${JSON.stringify(sorry)}`);
+      assert.ok(sorry.latest, '「見本の子で ためしてみよう」は今のまとまりの最初の行');
       await checkLayout(page, '絵 3 歩目(見本がいない)');
       await shot(page, 'w390_3_nomatch_picture');
       await page.click('.fr-actions [data-act="use_guide"]');
@@ -614,7 +617,7 @@ test('背の低い画面(390×670・1280×670・400×640): 1 歩目の最初の�
           const extra = fb.height - lines * lh; // 名前・吹き出しの余白
           return { text: text.textContent, top: fb.top - lb.top, below: fb.bottom - lb.bottom, room: log.clientHeight - padTop, need3: extra + 3 * lh, scrollTop: log.scrollTop };
         });
-        assert.match(m.text, /^はじめまして! 執事見習いのノリーデス。.*ノリー、がんばりマス!$/u, `${label}: 1 歩目の最初の一言`);
+        assert.match(m.text, /^はじめまして! ノリーデス。いっしょに ゆるキャラを 生み出しマス!$/u, `${label}: 1 歩目の最初の一言`);
         assert.ok(m.top >= -1 && m.below <= 1 && m.scrollTop === 0, `${label}: 最初の一言が欠けている ${JSON.stringify(m)}`);
         assert.ok(m.room >= m.need3, `${label}: 3 行の一言(${Math.round(m.need3)}px)が欄(${Math.round(m.room)}px)に入らない`);
         await checkLayout(page, `${label} 1 歩目`);
@@ -653,7 +656,7 @@ test('?character=<id> で開いた初めての訪問(幅 390): その子が案�
       await page.fill('.fr-actions [data-act="words"] input', '空を飛ぶペンギンの郵便屋さん');
       await page.click('.fr-actions [data-act="words"] button[type="submit"]');
       await waitAct(page, 'use_guide');
-      assert.equal(await page.$eval('.fr-actions [data-act="use_guide"]', (e) => e.textContent), 'みかんちゃんで続きを試す');
+      assert.equal(await page.$eval('.fr-actions [data-act="use_guide"]', (e) => e.textContent), 'みかんちゃんで ためす');
       const sorry = await sorryShown(page);
       assert.ok(sorry && sorry.top >= -1 && sorry.below >= -1 && sorry.latest, `「ごめんね…」が会話の欄の中に全部見えない ${JSON.stringify(sorry)}`);
       await checkLayout(page, '?character=mikan 見本がいない');
@@ -722,8 +725,8 @@ test('PC(1280×720): 札が開いている間は、舞台の絵を札の左に�
       await waitAct(tab.page, 'words');
       await tab.page.waitForTimeout(400);
       const m = await measure(tab.page);
-      assert.equal(m.side, false, `札の左が狭い画面で舞台を狭めた ${JSON.stringify(m)}`);
-      assert.equal(m.canvasW, 768);
+      assert.equal(m.side, true, `iPad の縦(768)も、横の札と、その左の舞台(OL1) ${JSON.stringify(m)}`);
+      assert.ok(m.canvasRight <= m.sheetLeft - 8 && m.canvasW >= 300, `iPad の縦: 舞台の絵が札にかかる・狭すぎる ${JSON.stringify(m)}`);
       assert.deepEqual(tab.errors, [], `画面のエラー: ${tab.errors.join(' / ')}`);
     } finally {
       await tab.ctx.close();
@@ -736,7 +739,7 @@ test('PC(1280×720): 札が開いている間は、舞台の絵を札の左に�
 
 // 札は画面の高さの 45% まで(第 12 波。7 つのステップの札が見本の子を隠した: 390×664 で 98%・iPhone 15 で 75%・iPad 縦で 68%)。
 // 1 歩目と、絵を選んだ後(絵の欄が出る)と、見本の一覧で測る。選ぶ所は札の中で巻けるが、消えない(押す所が 1 つは見える)。
-test('札の高さ(スマホ 390×844・390×664・360×640・iPad 縦 768×1024): 画面の 45% まで。選ぶ所は消えない', { skip: SLOW, timeout: 150_000 }, async (t) => {
+test('札の高さ(スマホ 390×844・390×664・360×640・iPad 縦 768×1024): スマホは見える高さの 55〜65%(OL1)・iPad は横の札。選ぶ所は消えない', { skip: SLOW, timeout: 150_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
   const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
@@ -759,14 +762,15 @@ test('札の高さ(スマホ 390×844・390×664・360×640・iPad 縦 768×1024
       try {
         await waitAct(page, 'words');
         let m = await measure(page);
-        assert.ok(m.ratio <= 0.451, `${label} 1 歩目: 札が画面の ${Math.round(m.ratio * 100)}%(${m.h}/${m.vh}px)`);
-        assert.equal(m.bottom, 0, `${label}: 札は画面の下いっぱい`);
+        const phone = v.width < 720;
+        if (phone) assert.ok(m.ratio >= 0.549 && m.ratio <= 0.661, `${label} 1 歩目: 札が画面の ${Math.round(m.ratio * 100)}%(${m.h}/${m.vh}px)`);
+        if (phone) assert.equal(m.bottom, 0, `${label}: 札は画面の下いっぱい`);
         assert.ok(m.visibleBtn, `${label} 1 歩目: 選ぶ所が 1 つも見えない`);
         assert.match(m.opaque, /^rgb\(/, `${label}: 札の背景は不透明(WebKit で透けた。P1)`);
         await page.setInputFiles('.fr-actions [data-act="pick"] input[type="file"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG_1PX });
         await waitAct(page, 'kind_human');
         m = await measure(page);
-        assert.ok(m.ratio <= 0.451, `${label} 絵の欄あり: 札が画面の ${Math.round(m.ratio * 100)}%(${m.h}/${m.vh}px)`);
+        if (phone) assert.ok(m.ratio >= 0.549 && m.ratio <= 0.661, `${label} 絵の欄あり: 札の高さは変わらない ${Math.round(m.ratio * 100)}%(${m.h}/${m.vh}px)`);
         assert.ok(m.visibleBtn, `${label} 絵の欄あり: 選ぶ所が 1 つも見えない`);
         await shot(page, `card45_${label}`);
         assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
