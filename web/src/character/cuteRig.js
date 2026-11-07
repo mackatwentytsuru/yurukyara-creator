@@ -350,7 +350,6 @@ export class CuteRig {
     const touched = [this.root, this.body, this.head, this.armL, this.armR, this.earL, this.earR, ...this.tail].filter(Boolean);
     this.bones = [...new Set(touched)];
     this.base = new Map(this.bones.map((b) => [b, { q: b.quaternion.clone(), p: b.position.clone() }]));
-    this.restPos = new Map(this.bones.map((b) => [b, b.position.clone()]));
     // 腕: 動き wave の、腕がいちばん上がった形を「上げた形」にする(そのキャラの作り手が確かめた形)。反対の腕は写して使う
     const wave = clips.get('wave');
     const pr = clipPeak(wave, this.armR);
@@ -512,7 +511,7 @@ export class CuteRig {
       const z = r.out * (outA + swing);
       if (z || fwd) this._rot(arm, -fwd, 0, z); // 前へ寄せる(もじもじ・あごに手)は、体の向きの x 軸のまわり
       if (sh) arm.position.y += sh * u;
-      // 脇が持ちこたえる角度より上には上げない(動き clip の腕も)
+      // 脇が持ちこたえる角度より上には上げない(動き clip の腕も)。角度は休みの向き(作例は回転なし)から数える
       const hold = this.hold[side];
       if (Number.isFinite(hold) && limitAngle(arm.quaternion, hold)) this.limited[side] += 1;
     }
