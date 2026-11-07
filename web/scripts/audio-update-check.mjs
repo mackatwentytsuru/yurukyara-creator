@@ -53,16 +53,16 @@ function silentWav(path, seconds = 3, rate = 16000) {
   writeFileSync(path, b);
 }
 
-let server = null;
-async function startServer() {
-  const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', LOG_DIR: mkdtempSync(join(tmpdir(), 'bux-log-')), YURU_UPDATE_UI: '1' };
-  delete env.ANTHROPIC_API_KEY;
+const servers = [];
+async function startServer(port = PORT, host = '127.0.0.1') {
+  const env = { ...process.env, PORT: String(port), HOST: host, LOG_DIR: mkdtempSync(join(tmpdir(), 'bux-log-')), YURU_UPDATE_UI: '1' };
+  delete env.ANTHROPIC_API_KEY; // 本物の頭脳・声を呼ばない
   delete env.ELEVENLABS_API_KEY;
   delete env.APP_PASSPHRASE;
-  server = spawn(process.execPath, [join(WEB, 'server', 'index.mjs')], { env, stdio: 'ignore', windowsHide: true });
+  servers.push(spawn(process.execPath, [join(WEB, 'server', 'index.mjs')], { env, stdio: 'ignore', windowsHide: true }));
   for (let i = 0; i < 150; i++) {
     try {
-      if ((await fetch(`${BASE}/api/status`)).ok) return;
+      if ((await fetch(`http://127.0.0.1:${port}/api/status`)).ok) return;
     } catch {
       // まだ
     }
@@ -71,9 +71,11 @@ async function startServer() {
   throw new Error('会話サーバーが立ちませんでした');
 }
 function stopServer() {
-  if (!server?.pid) return;
-  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(server.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true, timeout: 10000 });
-  else server.kill('SIGTERM');
+  for (const s of servers) {
+    if (!s?.pid) continue;
+    if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(s.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true, timeout: 10000 });
+    else s.kill('SIGTERM');
+  }
 }
 
 // ページの中: 動きを止めて、描いたキャラの外の四角(CSS の px)と縦横の比を測る
@@ -239,6 +241,56 @@ try {
     const typing = await sp.isVisible('#textInput');
     check('文字で話す道は残っている', typing);
     await sp.close();
+    // Quest のブラウザのまね(2D の画面): 聞き取りはいつも PC。歯車の窓は開け、キャラに重ならない
+    const quest = await browser.newPage({ viewport: { width: 1280, height: 720 }, userAgent: 'Mozilla/5.0 (X11; Linux x86_64; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/37.0 Chrome/130.0 Safari/537.36' });
+    try {
+      await quest.addInitScript(() => localStorage.setItem('yc.onboarded.v1', 'done'));
+      await quest.goto(`${BASE}/?character=${CHAR}`);
+      await quest.waitForSelector('#startCam:not([disabled])', { timeout: 60000 });
+      await quest.click('#startCam');
+      await quest.waitForTimeout(3000);
+      await quest.evaluate(FREEZE);
+      await quest.click('#ycAudioBtn');
+      if (await quest.isVisible('#ycAudioAllow')) await quest.click('#ycAudioAllow');
+      await quest.waitForSelector('#ycMicSelect option', { state: 'attached', timeout: 15000 });
+      await quest.waitForTimeout(800);
+      const route = await quest.textContent('.yc-au-route');
+      check('Quest のまね: 聞き取りは PC(歯車の窓の一言)', /この PC で もじに する|PC の ききとりが ないと/.test(route ?? ''), route);
+      const mq = await quest.evaluate(MEASURE);
+      judge('Quest のまね マイクの窓', mq, base);
+      await quest.screenshot({ path: join(OUT, 'quest_audio.png') });
+    } catch (err) {
+      check('Quest のまね', false, String(err?.message ?? err));
+    } finally {
+      await quest.close();
+    }
+    // この PC の名前でない住所で開いた時(同じ Wi-Fi のスマホ・Quest と同じ): アップデートの印・道は出ず、受け口も答えない。
+    // 0.0.0.0 で待つと PC の防火壁の確認が出ることがあるので、Chrome の名前の付け替え(yc-lan.test → 127.0.0.1)で、頁の名前と Host だけを替える
+    {
+      const farBrowser = await chromium.launch({ ...opts, headless: true, args: [...GPU_ARGS, ...media, '--host-resolver-rules=MAP yc-lan.test 127.0.0.1'] });
+      const far = await farBrowser.newPage({ viewport: { width: 390, height: 844 } });
+      try {
+        await far.addInitScript(() => localStorage.setItem('yc.onboarded.v1', 'done'));
+        await far.goto(`http://yc-lan.test:${PORT}/?character=${CHAR}`);
+        await far.waitForSelector('#startSim:not([disabled])', { timeout: 60000 });
+        await far.click('#startSim');
+        await far.waitForTimeout(2500);
+        const seen = await far.evaluate(async () => ({
+          badge: Boolean(document.getElementById('ycUpdateBadge')),
+          api: (await fetch('/api/update')).status,
+          gear: Boolean(document.getElementById('ycAudioBtn')),
+        }));
+        await far.click('#ycAudioBtn');
+        await far.waitForSelector('#ycAudio:not([hidden])');
+        const link = await far.isVisible('#ycAudioUpdate');
+        check('PC の名前でない住所: アップデートの印も道も出ない・受け口は 404・歯車はある', !seen.badge && seen.api === 404 && seen.gear && !link, JSON.stringify({ ...seen, link }));
+        await far.screenshot({ path: join(OUT, 'lan_phone844_audio.png') });
+      } catch (err) {
+        check('PC の名前でない住所', false, String(err?.message ?? err));
+      } finally {
+        await farBrowser.close().catch(() => {});
+      }
+    }
   } finally {
     await browser.close().catch(() => {});
     await silentBrowser.close().catch(() => {});

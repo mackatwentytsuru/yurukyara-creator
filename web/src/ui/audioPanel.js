@@ -187,18 +187,28 @@ export function mountAudioPicker({ app, update = null } = {}) {
     return named;
   }
 
-  function stopMeter() {
+  /** 音の部品は、押した瞬間(待つ前)に作って動かす(iPhone の Safari は、押した瞬間の外で作ると止まったままで、メーターが動かない) */
+  function wakeMeterCtx() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!meterCtx) meterCtx = new AC();
+    if (meterCtx.state !== 'running') meterCtx.resume().catch(() => {});
+  }
+
+  function stopMeter({ keepCtx = false } = {}) {
     cancelAnimationFrame(meterRaf);
     meterStream?.getTracks().forEach((t) => t.stop());
-    meterCtx?.close().catch(() => {});
     meterStream = null;
-    meterCtx = null;
+    if (!keepCtx) {
+      meterCtx?.close().catch(() => {});
+      meterCtx = null;
+    }
     meterBar.style.transform = 'scaleX(0)';
     meter.setAttribute('aria-valuenow', '0');
   }
 
   async function startMeter() {
-    stopMeter();
+    stopMeter({ keepCtx: true });
     const mic = chosenMic();
     try {
       meterStream = await navigator.mediaDevices.getUserMedia({ audio: mic && mic.id !== 'default' ? { deviceId: { exact: mic.id } } : true });
@@ -207,8 +217,9 @@ export function mountAudioPicker({ app, update = null } = {}) {
       unavailable.textContent = micFailureText(err);
       return;
     }
-    const AC = window.AudioContext || window.webkitAudioContext;
-    meterCtx = new AC();
+    if (!sheet.isOpen()) return stopMeter(); // 待っている間に閉じた
+    wakeMeterCtx();
+    if (!meterCtx) return;
     const analyser = meterCtx.createAnalyser();
     analyser.fftSize = 1024;
     meterCtx.createMediaStreamSource(meterStream).connect(analyser);
@@ -281,6 +292,7 @@ export function mountAudioPicker({ app, update = null } = {}) {
 
   async function open(from) {
     sheet.show(from ?? gear);
+    wakeMeterCtx(); // 押した瞬間に(待つ前に)
     const unav = micUnavailableText({ secure: window.isSecureContext, mediaDevices: navigator.mediaDevices });
     unavailable.hidden = !unav;
     unavailable.textContent = unav ?? '';
@@ -295,6 +307,7 @@ export function mountAudioPicker({ app, update = null } = {}) {
   }
 
   allowBtn.addEventListener('click', async () => {
+    wakeMeterCtx();
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: true });
       s.getTracks().forEach((t) => t.stop());
@@ -308,6 +321,7 @@ export function mountAudioPicker({ app, update = null } = {}) {
   });
 
   micSelect.addEventListener('change', () => {
+    wakeMeterCtx();
     const d = mics.find((m) => m.id === micSelect.value) ?? null;
     choice = saveChoice({ ...choice, mic: d ? { ...d, def: isDefaultMic(mics, d) } : null });
     route.textContent = routeText();

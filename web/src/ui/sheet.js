@@ -3,6 +3,12 @@
 //   キャラを窓の上へ置き直す(キャラに重ならない・形は変えない)。幅 1100 以上では右に浮かせる(キャラは真ん中なので重ならない)。
 // - 開くのは 1 つずつ。Esc か「とじる」で閉じ、開いたボタンへ戻る。会話(入力の列・字幕)は、窓を開いていても使える。
 const open = new Set();
+// 文字の入力欄に触れたら、開いている窓を閉じる(スマホでキーボードが出ると、帯と一緒に窓が上へ押し上げられて見えなくなるため)
+if (typeof document !== 'undefined') {
+  document.addEventListener('focusin', (e) => {
+    if (e.target?.id === 'textInput') for (const s of [...open]) s.hide({ restoreFocus: false }); // 入力欄から目を離さない
+  });
+}
 
 /** 文字だけの要素を作る(innerHTML を使わない) */
 export function el(tag, attrs = {}, ...kids) {
@@ -40,19 +46,19 @@ export function createSheet({ id, title, onClose = () => {} }) {
     body,
     isOpen: () => !root.hidden,
     show(from) {
-      for (const other of [...open]) if (other !== api) other.hide();
+      for (const other of [...open]) if (other !== api) other.hide({ restoreFocus: false });
       opener = from ?? null;
       root.hidden = false;
       open.add(api);
       opener?.setAttribute('aria-expanded', 'true');
       root.focus({ preventScroll: true });
     },
-    hide() {
+    hide({ restoreFocus = true } = {}) {
       if (root.hidden) return;
       root.hidden = true;
       open.delete(api);
       opener?.setAttribute('aria-expanded', 'false');
-      opener?.focus?.({ preventScroll: true });
+      if (restoreFocus) opener?.focus?.({ preventScroll: true });
       onClose();
     },
   };
