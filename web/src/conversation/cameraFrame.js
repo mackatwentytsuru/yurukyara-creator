@@ -10,6 +10,7 @@ export const FRAME_QUALITY = 0.7;
 export const FRAME_MAX_BASE64 = 150_000; // これを超えたら画質を下げて作り直す(サーバーの上限は 160,000 字)
 const LOWER_QUALITY = [0.55, 0.4];
 const JPEG_PREFIX = 'data:image/jpeg;base64,';
+let shared = null; // 使い回す 1 枚の下書き(iOS の Safari は canvas のメモリに厳しいので、回ごとに作らない。使った後は 1x1 に縮めて手放す)
 
 /**
  * 縦横の比を保って、長い辺を longSide にした大きさ(元が小さければ、そのまま)。
@@ -31,7 +32,7 @@ export function frameSize(width, height, longSide = FRAME_LONG_SIDE) {
 export function takeFrame(video, { canvas, longSide = FRAME_LONG_SIDE, quality = FRAME_QUALITY, maxBase64 = FRAME_MAX_BASE64 } = {}) {
   if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return null;
   const { width, height } = frameSize(video.videoWidth, video.videoHeight, longSide);
-  const c = canvas ?? document.createElement('canvas');
+  const c = canvas ?? (shared ??= document.createElement('canvas'));
   c.width = width;
   c.height = height;
   const ctx = c.getContext('2d');
@@ -49,5 +50,7 @@ export function takeFrame(video, { canvas, longSide = FRAME_LONG_SIDE, quality =
     return null; // 描けなかった(送らない)
   } finally {
     ctx.clearRect(0, 0, width, height); // 下書きの絵を残さない
+    c.width = 1; // 下書きのメモリを手放す(大きさを変えると中身も消える)
+    c.height = 1;
   }
 }

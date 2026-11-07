@@ -39,11 +39,11 @@ test('絵の 1 枚: JPEG 0.7 で 1 回作り、下書きを消す', () => {
   const { canvas, calls } = fakeCanvas(() => 'data:image/jpeg;base64,QUJD');
   const f = takeFrame(video, { canvas });
   assert.deepEqual(f, { type: 'jpeg', data: 'QUJD', width: 512, height: 384 });
-  assert.equal(canvas.width, 512);
-  assert.equal(canvas.height, 384);
+  assert.deepEqual(calls.draw[0].slice(1), [0, 0, 512, 384], '長い辺 512 で描いた');
   assert.deepEqual(calls.quality, [0.7]);
   assert.equal(calls.draw.length, 1);
   assert.equal(calls.cleared, 1, '下書きの絵を消した');
+  assert.deepEqual([canvas.width, canvas.height], [1, 1], '使った後は 1x1 に縮めて、下書きのメモリを手放す(iOS の Safari)');
 });
 
 test('絵の 1 枚: 大きすぎたら画質を下げて作り直す。それでも大きければ送らない', () => {
