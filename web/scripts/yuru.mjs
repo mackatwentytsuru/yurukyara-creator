@@ -30,17 +30,28 @@ export function findPython(pathValue = process.env.PATH ?? '', platform = proces
   return null;
 }
 
-/** 同じ Wi-Fi のスマホから届く、この PC の住所(家の中の住所を先に)。無ければ null */
+// PC の中だけの仮の網(WSL・Hyper-V・Docker・仮の PC)。スマホからは届かないので選ばない(11/8 の試しで WSL の住所を選んだ)
+const VIRTUAL_NET = /vEthernet|WSL|Hyper-V|Docker|VirtualBox|VMware|vboxnet|^br-|^veth|^virbr|Loopback/i;
+
+/** 同じ Wi-Fi のスマホから届く、この PC の住所(家の中の住所を 192.168 → 10 → 172 の順に)。無ければ null */
 export function lanAddress(nets = networkInterfaces()) {
-  const all = Object.values(nets).flat().filter((n) => n && n.family === 'IPv4' && !n.internal).map((n) => n.address);
-  const home = all.find((a) => /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a));
-  return home ?? all[0] ?? null;
+  const all = Object.entries(nets)
+    .filter(([name]) => !VIRTUAL_NET.test(name))
+    .flatMap(([, list]) => list ?? [])
+    .filter((n) => n && n.family === 'IPv4' && !n.internal)
+    .map((n) => n.address);
+  for (const re of [/^192\.168\./, /^10\./, /^172\.(1[6-9]|2\d|3[01])\./]) {
+    const hit = all.find((a) => re.test(a));
+    if (hit) return hit;
+  }
+  return all[0] ?? null;
 }
 
 /** 起きた時に出す行(住所と、次にすること)。決まりを試験で見られるように、文の組み立てだけを分ける */
-export function addressLines({ port, makePort, makeUp, lan }) {
+export function addressLines({ port, makePort, makeUp, lan, makeSkipped = false }) {
   const lines = ['', 'ゆるキャラクリエイターが おきました。', `  アプリ: http://127.0.0.1:${port}/  (この PC のブラウザで ひらいてね)`];
   if (makeUp) lines.push(`  作る道: http://127.0.0.1:${makePort}/qr  (この PC で ひらくと、作る画面への リンクと、スマホで よむ QR が でるよ)`);
+  else if (makeSkipped) lines.push('  作る道: とめてあります(--no-make)');
   else lines.push('  作る道: うごいていません(Python 3 と、README の「自分の PC で、Claude Code と自分のキャラを作る」の部品が いります)');
   if (lan) lines.push(`  スマホ: http://${lan}:${port}/  (おなじ Wi-Fi で。もじで はなす・作るは このままで できるよ。こえと カメラは https が いるよ)`);
   lines.push('  とめるときは Ctrl+C。アップデートは、アプリの 画面の「あたらしい はんが あります」から できるよ。', '');
@@ -123,7 +134,7 @@ if (process.argv[1] && same(resolve(process.argv[1]), fileURLToPath(import.meta.
     const [appUp, makeUp] = await Promise.all([waitApp(port), make ? make.up : Promise.resolve(false)]);
     if (!appUp) return;
     const lan = lanOn ? lanAddress() : null;
-    for (const line of addressLines({ port, makePort, makeUp, lan })) say(line);
+    for (const line of addressLines({ port, makePort, makeUp, lan, makeSkipped: argv.includes('--no-make') })) say(line);
     if (lan) showQr(py, `http://${lan}:${port}/`);
   })();
   const code = await w.done;

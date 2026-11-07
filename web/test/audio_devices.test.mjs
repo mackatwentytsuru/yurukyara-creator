@@ -156,4 +156,9 @@ test('始める命令の住所の行: アプリ・作る道・(--lan の時)ス�
   const nets = { eth: [{ family: 'IPv4', internal: false, address: '100.x.x.x' }, { family: 'IPv4', internal: false, address: '192.168.x.x' }], lo: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }] };
   assert.equal(lanAddress(nets), '192.168.x.x');
   assert.equal(lanAddress({ lo: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }] }), null);
+  // PC の中だけの仮の網(WSL・Hyper-V)は選ばない。192.168 を 172 より先に
+  const win = { 'vEthernet (WSL (Hyper-V firewall))': [{ family: 'IPv4', internal: false, address: '172.30.0.1' }], 'Wi-Fi': [{ family: 'IPv4', internal: false, address: '192.168.x.x' }] };
+  assert.equal(lanAddress(win), '192.168.x.x');
+  assert.equal(lanAddress({ 'イーサネット': [{ family: 'IPv4', internal: false, address: '172.20.0.5' }], 'vEthernet (Default Switch)': [{ family: 'IPv4', internal: false, address: '172.17.0.1' }] }), '172.20.0.5');
+  assert.match(addressLines({ port: 8787, makePort: 8796, makeUp: false, lan: null, makeSkipped: true }).join('\n'), /作る道: とめてあります/);
 });
