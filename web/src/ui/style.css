@@ -580,6 +580,9 @@ html.tv-mode .tv-cam:focus-visible { outline: 2px solid var(--lav); outline-offs
 .cam-ask button { font: inherit; font-size: 16px; min-height: 48px; padding: 8px 12px; border-radius: 14px; cursor: pointer; color: var(--text); border: 1px solid var(--line); }
 .cam-ask .cam-ask-yes { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 0; font-weight: 700; }
 .cam-ask .cam-ask-no { background: transparent; }
+.cam-ask .cam-ask-back { display: grid; gap: 2px; justify-items: center; background: rgba(123, 224, 195, 0.12); border-color: rgba(123, 224, 195, 0.45); }
+.cam-ask .cam-ask-back[hidden] { display: none; }
+.cam-ask-back .btn-sub { font-size: 14px; opacity: 0.85; }
 .cam-ask button:disabled { opacity: 0.55; cursor: wait; }
 .cam-ask button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .cam-ask-status { margin: 0; font-size: 14px; line-height: 1.5; color: var(--warn); }

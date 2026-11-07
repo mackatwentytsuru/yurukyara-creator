@@ -14,6 +14,7 @@ export const CAMERA_LABEL_ON = 'カメラ オン';
 export const CAMERA_YES = 'カメラを つかう';
 export const CAMERA_NO = 'やめる';
 export const CAMERA_STARTING = 'カメラを じゅんびしています…';
+export const CAMERA_BACK = 'うしろの カメラを つかう';
 export const CAMERA_TITLE_OFF = 'カメラを つかう(いまは きっています)';
 export const CAMERA_TITLE_ON = 'カメラを きる(いまは つかっています)';
 /** 下の注意書き(絵を送るカメラが入っている間) */
@@ -56,20 +57,23 @@ export function cameraFailureText(err, { secure = true, mediaDevices = {} } = {}
  * @param {object} o
  * @param {HTMLButtonElement} o.button 入力の列のボタン(#camBtn)
  * @param {HTMLButtonElement|null} [o.tvButton] テレビ表示の隅のボタン(#tvCam)
- * @param {HTMLElement} o.ask 知らせの窓(#camAsk。中に #camAskText・#camAskMock・#camAskYes・#camAskNo・#camAskStatus)
- * @param {() => Promise<void>} o.turnOn カメラを入れる(失敗したら投げる。今の入力はそのまま)
+ * @param {HTMLElement} o.ask 知らせの窓(#camAsk。中に #camAskText・#camAskMock・#camAskYes・#camAskNo・#camAskStatus・あれば #camAskBack)
+ * @param {(facing: 'user'|'environment') => Promise<void>} o.turnOn カメラを入れる(まえ = user・うしろ = environment。失敗したら投げる。今の入力はそのまま)
  * @param {() => Promise<void>} o.turnOff カメラを切る(カメラの流れを止める)
  * @param {() => boolean} [o.isMock] いま仮の頭脳か(知らせに 1 行足す)
+ * @param {boolean} [o.backCamera] 「うしろの カメラを つかう」を出すか(指で触る端末だけ。道案内で前の景色や看板を見せる)
  * @param {() => {secure: boolean, mediaDevices: object|null}} [o.env]
  * @returns {{set(on: boolean): void, readonly on: boolean, open(): void, close(focusButton?: boolean): void, readonly isOpen: boolean}}
  */
-export function mountCameraSwitch({ button, tvButton = null, ask, turnOn, turnOff, isMock = () => false, env = () => ({ secure: true, mediaDevices: {} }) }) {
+export function mountCameraSwitch({ button, tvButton = null, ask, turnOn, turnOff, isMock = () => false, backCamera = false, env = () => ({ secure: true, mediaDevices: {} }) }) {
   const q = (sel) => ask.querySelector(sel);
   const text = q('#camAskText');
   const mock = q('#camAskMock');
   const yes = q('#camAskYes');
   const no = q('#camAskNo');
+  const back = backCamera ? q('#camAskBack') : null;
   const status = q('#camAskStatus');
+  if (back) back.hidden = false;
   let on = false;
   let busy = false;
   let opener = button;
@@ -103,8 +107,7 @@ export function mountCameraSwitch({ button, tvButton = null, ask, turnOn, turnOf
     status.textContent = '';
     mock.hidden = !isMock();
     mock.textContent = CAMERA_MOCK_NOTE;
-    yes.disabled = false;
-    no.disabled = false;
+    for (const b of [yes, no, back]) if (b) b.disabled = false;
     ask.hidden = false;
     from?.setAttribute('aria-expanded', 'true');
     yes.focus({ preventScroll: true });
@@ -128,15 +131,14 @@ export function mountCameraSwitch({ button, tvButton = null, ask, turnOn, turnOf
     }
   };
 
-  yes.addEventListener('click', async () => {
+  const start = async (facing) => {
     if (busy) return;
     busy = true;
-    yes.disabled = true;
-    no.disabled = true;
+    for (const b of [yes, no, back]) if (b) b.disabled = true;
     status.textContent = CAMERA_STARTING;
     paint();
     try {
-      await turnOn();
+      await turnOn(facing);
       on = true;
       busy = false;
       paint();
@@ -144,11 +146,12 @@ export function mountCameraSwitch({ button, tvButton = null, ask, turnOn, turnOf
     } catch (err) {
       busy = false;
       status.textContent = cameraFailureText(err, env());
-      yes.disabled = false;
-      no.disabled = false;
+      for (const b of [yes, no, back]) if (b) b.disabled = false;
       paint();
     }
-  });
+  };
+  yes.addEventListener('click', () => start('user'));
+  back?.addEventListener('click', () => start('environment'));
   no.addEventListener('click', () => close(true));
   ask.addEventListener('click', (e) => {
     if (e.target === ask && !busy) close(true); // 窓の外(暗い所)を押すと閉じる

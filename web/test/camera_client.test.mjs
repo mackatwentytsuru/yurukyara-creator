@@ -129,7 +129,7 @@ class El {
   }
 }
 
-function mount({ turnOn = async () => {}, turnOff = async () => {}, isMock = () => false } = {}) {
+function mount({ turnOn = async () => {}, turnOff = async () => {}, isMock = () => false, backCamera = false } = {}) {
   globalThis.document = { documentElement: new El('html') };
   const button = new El('camBtn');
   const label = new El();
@@ -137,14 +137,16 @@ function mount({ turnOn = async () => {}, turnOff = async () => {}, isMock = () 
   const tvButton = new El('tvCam');
   const ask = new El('camAsk');
   ask.hidden = true;
-  for (const id of ['camAskText', 'camAskMock', 'camAskYes', 'camAskNo', 'camAskStatus']) ask.kids[`#${id}`] = new El(id);
+  for (const id of ['camAskText', 'camAskMock', 'camAskYes', 'camAskNo', 'camAskStatus', 'camAskBack']) ask.kids[`#${id}`] = new El(id);
+  ask.kids['#camAskBack'].hidden = true;
   const log = [];
   const sw = mountCameraSwitch({
     button,
     tvButton,
     ask,
-    turnOn: async () => {
-      log.push('on');
+    backCamera,
+    turnOn: async (facing) => {
+      log.push(facing === 'environment' ? 'on-back' : 'on');
       await turnOn();
     },
     turnOff: async () => {
@@ -196,6 +198,22 @@ test('切り替え: 「やめる」・外を押す・Escape では入れない�
   await m.ask.fire('keydown', { key: 'Escape' });
   assert.equal(m.ask.hidden, true, 'Escape で閉じる');
   assert.deepEqual(m.log, [], 'どれでも入れない');
+});
+
+test('切り替え: 指で触る端末だけ「うしろの カメラを つかう」(前の景色や看板を見せる)。PC では出さない', async () => {
+  const pc = mount();
+  assert.equal(pc.k('camAskBack').hidden, true, 'PC では出さない');
+  const ph = mount({ backCamera: true });
+  assert.equal(ph.k('camAskBack').hidden, false, 'スマホでは出す');
+  await ph.button.fire('click');
+  await ph.k('camAskBack').fire('click');
+  assert.deepEqual(ph.log, ['on-back'], 'うしろのカメラで入れる');
+  assert.equal(ph.sw.on, true);
+  assert.equal(ph.ask.hidden, true);
+  const main = read('src', 'main.js');
+  assert.match(main, /await next\.tracker\.start\(\{ facingMode: 'environment' \}\);/, 'うしろのカメラも、顔の追従と同じ部品の流れ(絵も同じ video から)');
+  assert.match(main, /next\.getPeople = \(\) => \[\];/, 'うしろのカメラでは顔の向きを追わない(写った人の逆を見ない)');
+  assert.match(main, /backCamera: TOUCH,/);
 });
 
 test('切り替え: 入れられなかった時は、やさしい理由を出して切ったまま(もう一度押せる)', async () => {

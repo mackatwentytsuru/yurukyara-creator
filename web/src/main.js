@@ -1233,12 +1233,19 @@ dialogue.onEvent = (ev) => {
   ui.notice(ev.cameraNotice);
 };
 
-/** カメラを入れる(顔の追従を始める)。先に新しい入力を動かし、動いてから前の入力を止める(失敗したら今の入力のまま投げる) */
-async function cameraOn() {
+/**
+ * カメラを入れる(顔の追従を始める)。先に新しい入力を動かし、動いてから前の入力を止める(失敗したら今の入力のまま投げる)。
+ * facing: 'user' = まえのカメラ(ふだん。顔の向きも見る)/ 'environment' = うしろのカメラ(スマホで前の景色や看板を見せる。顔は見えないことが多い)
+ */
+async function cameraOn(facing = 'user') {
   if (modes && modes.mode !== 'screen') throw new Error('xr');
   const { MediapipeSource } = await import('./tracking/sources/mediapipeSource.js');
   const next = new MediapipeSource({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV });
-  await next.start();
+  if (facing === 'environment') {
+    await next.tracker.start({ facingMode: 'environment' }); // 顔の追従(FaceTracker)の向きの口を使う。絵は同じ流れから取る
+    next.getPeople = () => []; // うしろのカメラでは顔の向きを追わない(左右が鏡でないので、写った人の逆を見てしまう。顔の部品も回さない)
+  } else await next.start();
+  cameraUse.facing = facing;
   const prev = app.source;
   app.source = next;
   app.mode = 'camera';
@@ -1280,6 +1287,7 @@ function setupCameraSwitch() {
     turnOn: cameraOn,
     turnOff: cameraOff,
     isMock: () => currentBrain() === 'mock',
+    backCamera: TOUCH, // 指で触る端末(スマホ・タブレット)だけ「うしろの カメラを つかう」
     env: () => ({ secure: window.isSecureContext, mediaDevices: navigator.mediaDevices ?? null }),
   });
   button.hidden = false;
