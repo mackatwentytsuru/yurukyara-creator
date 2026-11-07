@@ -287,8 +287,9 @@ export function mountAudioPicker({ app, update = null } = {}) {
   }
 
   async function refreshUpdateLink() {
+    // 手元のサーバーがアップデートの受け口で答えた時だけ出す(Python が無い・受け口を止めた・公開の版では出さない)
     const r = update?.report?.() ?? null;
-    updateBtn.hidden = !update;
+    updateBtn.hidden = !r;
     updateBtn.textContent = r?.ours ? `${PICKER_WORDS.update}(いまの はん ${r.ours})` : PICKER_WORDS.update;
   }
 
