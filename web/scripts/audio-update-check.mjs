@@ -283,6 +283,10 @@ try {
     const said = await sp.textContent('#ycAudioNote');
     check('無音のマイクで押すと「こえが とどいていないみたい」と窓への道', /こえが とどいていないみたい/.test(said) && /マイクを えらぶ/.test(said), `${((Date.now() - t1) / 1000).toFixed(1)} 秒・${said}`);
     await sp.screenshot({ path: join(OUT, 'phone670_silent_real.png') });
+    const mReal = await sp.evaluate(MEASURE); // 聞いている間(下の注意書きが変わる)の知らせも、キャラに重ならないか
+    judge('phone670 聞いている間の知らせ', mReal, await sameBase(sp), null);
+    await sp.setViewportSize({ width: 390, height: 670 });
+    await sp.waitForTimeout(600);
     await sp.click('#ycAudioNote .yc-note-action');
     await sp.waitForSelector('#ycAudio:not([hidden])', { timeout: 5000 });
     check('知らせのボタンで「マイクと スピーカー」の窓が開く', true);
