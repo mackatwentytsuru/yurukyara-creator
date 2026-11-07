@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMemoryStore } from '../api/_lib/store.mjs';
 import { handleMemoryRoute } from '../api/_lib/memory.mjs';
-import { PASS_FAILS_PER_MINUTE, chatMemory, handleMemory, memoryConfig, memorySub } from '../server/memory/handler.mjs';
+import { PASS_FAILS_PER_MINUTE, PASS_SUBS, chatMemory, handleMemory, memoryConfig, memorySub } from '../server/memory/handler.mjs';
 import { GLOBAL_FAIL_LIMIT, PAIR_TTL_MS, RETENTION_MS } from '../server/memory/store.mjs';
 
 const PASS = 'pass-for-test-only';
@@ -255,6 +255,19 @@ test('合言葉の間違い: 同じ接続元が 1 分に 5 回間違えたら、
   assert.equal((await call('/api/memory/pair', { method: 'POST', key, pass: PASS, ip: '192.0.2.91' })).status, 200, 'ほかの接続元');
   clock.t += 61 * 1000;
   assert.equal((await call('/api/memory/pair', { method: 'POST', key, pass: PASS, ip: '192.0.2.90' })).status, 200, '1 分たてば戻る');
+});
+
+test('合言葉を比べる下の道 PASS_SUBS は、番号を作る・受け取るの 2 つ(公開の入口は、この全部を会話と同じ間違いの数えに通す。CRITsec2 N2)', async () => {
+  assert.deepEqual([...PASS_SUBS], ['pair', 'claim']);
+  assert.ok(Object.isFrozen(PASS_SUBS), 'ほかから足したり消したりできない');
+  const { call } = setup();
+  const key = (await call('/api/memory/new', { method: 'POST' })).data.key;
+  for (const sub of PASS_SUBS) {
+    const r = await call(`/api/memory/${sub}`, { method: 'POST', key, body: { code: '123456' }, ip: '203.0.113.7' });
+    assert.equal(r.status, 403, `${sub} は合言葉なしで断る`);
+    assert.equal(r.data.reason, 'no_pass', sub);
+  }
+  assert.equal((await call('/api/memory', { key, ip: '203.0.113.7' })).status, 200, '一覧は合言葉を見ない');
 });
 
 test('合言葉の設定(環境変数)は、前後の空白と改行を外して比べる', () => {
