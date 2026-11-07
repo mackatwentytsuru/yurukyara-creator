@@ -1,9 +1,10 @@
 """あとから新しい表現を入れる案内。作る道の表(creator/capabilities.json)と、使う人のキャラのフォルダを見くらべる。
 
 使い方:
-  python creator/review/upgrade_offers.py --text            やさしい日本語で、入れられる表現を出す(既定)
-  python creator/review/upgrade_offers.py --json            同じ中身を JSON で出す
-  python creator/review/upgrade_offers.py --migrate         古い形の character.json を今の形にそろえる(何度流しても同じ。変える前に控えを取る)
+  python creator/review/upgrade_offers.py --text            やさしい日本語で、入れられる表現を出す(既定。人に見せる文だけ)
+  python creator/review/upgrade_offers.py --json            同じ中身を JSON で出す(Claude 向けの kind・steps・preview_steps・undo_steps も)
+  python creator/review/upgrade_offers.py --migrate         古い形の character.json を今の形にそろえる(何度流しても同じ。変える前に控えを取る。
+                                                            人には、やさしい言葉だけを出す。変えた項目は控えの backup.json の changes)
   python creator/review/upgrade_offers.py --character <id>  そのキャラだけ(見本のキャラでも見られる)
   python creator/review/upgrade_offers.py --backup <id>     キャラのフォルダの控えを取る(入れる前に)
   python creator/review/upgrade_offers.py --restore <id> [--from <控えの名前>]  控えに戻す(性格の文と知識のファイルは変えない)
@@ -127,12 +128,28 @@ class Folder:
             self._ids = set(re.findall(r'\bid="([^"]+)"', text))
         return self._ids
 
+    def svg_source(self, cid, repo):
+        """2D を作るのに使える元の SVG の場所(リポジトリからの相対)。looks.2d.svg → 段 0 のいちばん新しい絵 → 見本の絵。無ければ None。"""
+        own = get(self.cj, "looks.2d.svg")
+        if self.file(own):
+            return f"characters/{cid}/{own}"
+        draws = Path(repo) / "creator" / "work" / cid / "draw"
+        rounds = [p for p in draws.glob("r*/drawing.svg") if p.parent.name[1:].isdigit()]
+        if rounds:
+            last = max(rounds, key=lambda p: int(p.parent.name[1:]))
+            return last.relative_to(repo).as_posix()
+        sample = f"creator/samples/{cid}_元の絵.svg"
+        return sample if (Path(repo) / sample).is_file() else None
+
+    def svg_2d(self, cid):
+        """今の 2D の SVG の場所(parts.json の svg)。2D が無ければ None。"""
+        rel = self.parts_rel()
+        svg = self.parts.get("svg") if rel else None
+        return f"characters/{cid}/{(Path(rel).parent / svg).as_posix()}" if isinstance(svg, str) else None
+
     def has_svg_drawing(self, cid, repo):
         """2D を作るのに使える元の SVG があるか(段 0 の絵・looks.2d.svg・見本の絵)。"""
-        if self.file(get(self.cj, "looks.2d.svg")):
-            return True
-        work = Path(repo) / "creator" / "work" / cid / "draw"
-        return any(work.glob("r*/drawing.svg")) or (Path(repo) / "creator" / "samples" / f"{cid}_元の絵.svg").is_file()
+        return self.svg_source(cid, repo) is not None
 
 
 def kinds_of(f):
@@ -248,16 +265,73 @@ def is_sample(cid, cj, tracked, shipped):
     return cid in shipped or (tracked is not None and cid in tracked)
 
 
-def picture_words(cap, kind, f, cid, repo):
-    need = cap["apply"].get("picture", "no")
-    if need == "if_no_svg":
-        need = "no" if f.has_svg_drawing(cid, repo) else "yes"
-    if need == "yes":
+# ---- 入れ方の手順(Claude 向け)。表の <…> を、そのキャラの本当の場所に替える ----
+
+HOLDER = re.compile(r"<(?:id|名前|作業フォルダ|pack|出力|元の絵\.png|元の絵\.svg|2D の SVG)>")
+DEFAULT_UNDO_STEPS = ["python creator/review/upgrade_offers.py --restore <id>"]
+
+
+def expand(caps, items):
+    """手順の並び。"@名前" は表の step_sets のその並びに替える(知らない名前は表の書き誤りなので止める)。"""
+    if isinstance(items, str):        # 前の形(「→」でつないだ 1 行)も読む
+        items = [s.strip() for s in items.split("→") if s.strip()]
+    out = []
+    for s in items or []:
+        if isinstance(s, str) and s.startswith("@"):
+            sets = caps.get("step_sets") or {}
+            if s[1:] not in sets:
+                raise ValueError(f"capabilities.json に知らない手順の組があります: {s}")
+            out += expand(caps, sets[s[1:]])
+        elif isinstance(s, str):
+            out.append(s)
+    return out
+
+
+def fill(text, values):
+    return HOLDER.sub(lambda m: values.get(m.group(0), m.group(0)), text)
+
+
+def place_values(cap, f, cid, name, repo):
+    """<…> の中身と、見つからなかった絵(png・svg)。"""
+    work = f"creator/work/{cid}/upgrade/{cap['id']}"
+    png = next((r for r in (f"creator/samples/{cid}_元の絵_noshadow.png", f"creator/samples/{cid}_元の絵.png")
+                if (Path(repo) / r).is_file()), None)
+    svg = f.svg_source(cid, repo)
+    values = {"<id>": cid, "<名前>": str(name).replace('"', ""), "<作業フォルダ>": work, "<pack>": f"{work}/pack",
+              "<出力>": f"{work}/talk", "<元の絵.png>": png or f"{work}/元の絵.png",
+              "<元の絵.svg>": svg or f"{work}/drawing.svg", "<2D の SVG>": f.svg_2d(cid) or f"characters/{cid}/2d/body.svg"}
+    return values, png, svg
+
+
+def plan_steps(cap, missing, f, cid, name, repo, caps):
+    """足りない種類ごとの手順(場所は埋めた形)と、先に使う人に聞くこと・足りない物。"""
+    values, png, svg = place_values(cap, f, cid, name, repo)
+    targets, need_png, need_svg, builder = [], False, False, False
+    for k in missing:
+        items = expand(caps, cap["apply"].get(k))
+        need_png |= png is None and any("<元の絵.png>" in s for s in items)
+        need_svg |= svg is None and any("<元の絵.svg>" in s for s in items)
+        builder |= any("run_groups.sh" in s or "run_built.sh" in s for s in items)
+        look = cap.get("adds_look") or ("2d" if k == "2d" else "3d")    # 手を入れる見た目(2D の見た目・3D の形は、足す方)
+        targets.append({"kind": k, "look": look, "steps": [fill(s, values) for s in items]})
+    ask, missing_notes = [], []
+    if need_png:
+        ask.append(f"元の絵(PNG)が見つかりません。使う人に元の絵をもらい、{values['<元の絵.png>']} に置く")
+    if need_svg:
+        ask.append(f"元の絵の SVG が見つかりません。使う人に元の絵をもらい、yc-0-draw の「絵から作るとき」で SVG にして {values['<元の絵.svg>']} に置く")
+    if builder and not (Path(repo) / "creator" / "builders" / f"{cid}.py").is_file():
+        missing_notes.append(f"creator/builders/{cid}.py がありません(作る道の外で作った子)。make-character の段 ① 見る〜⑤ で builder を作ってから入れる")
+    return values, targets, ask, missing_notes
+
+
+def picture_words(cap, needs_picture):
+    if needs_picture:
         return cap["apply"].get("picture_note") or "元の絵がもう一度いります"
     return "絵はもう一度いりません"
 
 
-def make_offer(cap, missing, kinds, f, cid, name, repo):
+def make_offer(cap, missing, kinds, f, cid, name, repo, caps=None, new=False):
+    caps = caps or {}
     title = cap["title"]
     both_looks = any(k in LOOK_3D for k in kinds) and "2d" in kinds
     both_fit = "2d" in cap["kinds"] and any(k in LOOK_3D for k in cap["kinds"])
@@ -266,11 +340,20 @@ def make_offer(cap, missing, kinds, f, cid, name, repo):
             title += "(2D)"
         elif "2d" not in missing:
             title += "(3D)"
+    values, targets, ask, missing_notes = plan_steps(cap, missing, f, cid, name, repo, caps)
+    needs_picture = cap["apply"].get("picture", "no") == "yes" or bool(ask)
     how = (f"Claude Code で「{name}に、{cap['title']}を入れて」と頼みます。"
-           f"{picture_words(cap, missing[0], f, cid, repo)}。入れる前に控えを取り、性格の文と思い出は変えません。")
-    sub = lambda s: s.replace("<id>", cid)  # noqa: E731
+           f"{picture_words(cap, needs_picture)}。入れる前に控えを取り、性格の文と思い出は変えません。")
+    before = [fill(s, values) for s in expand(caps, caps.get("before_steps") or [])]
+    steps = before + ask + [s for t in targets for s in t["steps"]]
     return {"cap": cap["id"], "title": title, "why": cap["why"], "how": how,
-            "preview": sub(cap["preview"]), "undo": sub(cap["undo"])}
+            "preview": fill(cap["preview"], values), "undo": fill(cap["undo"], values),
+            "new": new, "kind": missing[0], "kinds": list(missing), "look": targets[0]["look"],
+            "picture": "yes" if needs_picture else "no", "ready": not missing_notes, "missing": missing_notes,
+            "skill": cap["apply"].get("skill", ""), "work": values["<作業フォルダ>"],
+            "steps": steps, "targets": targets,
+            "preview_steps": [fill(s, values) for s in expand(caps, cap.get("preview_steps") or [])],
+            "undo_steps": [fill(s, values) for s in expand(caps, cap.get("undo_steps") or caps.get("undo_steps") or DEFAULT_UNDO_STEPS)]}
 
 
 def character_report(cid, folder, cj, caps, repo):
@@ -284,7 +367,8 @@ def character_report(cid, folder, cj, caps, repo):
         if missing:
             since = version_key(cap.get("since"))
             new = bool(made and since and since > made)
-            offers.append((0 if new else 1, i, new, make_offer(cap, missing, kinds, f, cid, cj.get("name") or cid, repo)))
+            offer = make_offer(cap, missing, kinds, f, cid, cj.get("name") or cid, repo, caps, new)
+            offers.append((0 if new else 1, i, new, offer))
     offers.sort(key=lambda t: t[:2])
     return {"id": cid, "name": cj.get("name") or cid, "offers": [o[3] for o in offers]}, [o[2] for o in offers]
 
@@ -297,8 +381,13 @@ def list_characters(chars_dir, only=None):
 
 # ---- 古い形を今の形にそろえる(--migrate)。何度流しても同じ。変える時だけ、先に控えを取る ----
 
+MIGRATE_PLAIN = {   # 人に見せる言葉。ここに無い直し(中の書き方だけの直し)は、1 行のまとめにだけ入る
+    "looks": "2D のすがたでも出られるようにしました(3D と 2D は、画面のボタンで切りかえられます)。",
+}
+
+
 def migrate_dict(cj, folder):
-    """今の形にそろえた写しと、変えた事の一覧。元の dict は変えない。"""
+    """今の形にそろえた写しと、変えた事の一覧 [(項目, くわしい中身)]。元の dict は変えない。"""
     d = json.loads(json.dumps(cj))
     changes = []
     rig = d.get("rig")
@@ -306,20 +395,20 @@ def migrate_dict(cj, folder):
         moved = [k for k in rig if k not in d]
         d.update({k: rig[k] for k in moved})
         del d["rig"]
-        changes.append("入れ子の rig の中身(" + "・".join(moved or ["なし"]) + ")を上の段に出した")
+        changes.append(("rig", "入れ子の rig の中身(" + "・".join(moved or ["なし"]) + ")を上の段に出した"))
     model = d.get("model")
     if "type" not in d and isinstance(model, str) and model:
         d["type"] = "vrm" if model.lower().endswith(".vrm") else "rig"
-        changes.append(f'type を "{d["type"]}" にした')
+        changes.append(("type", f'type を "{d["type"]}" にした'))
     if "id" not in d:
         d["id"] = folder.name
-        changes.append(f"id を {folder.name} にした")
+        changes.append(("id", f"id を {folder.name} にした"))
     if "persona" not in d and (folder / "persona.md").is_file():
         d["persona"] = "persona.md"
-        changes.append("persona を persona.md にした(中身は変えない)")
+        changes.append(("persona", "persona を persona.md にした(中身は変えない)"))
     if "schema_version" not in d:
         d["schema_version"] = 1
-        changes.append("schema_version を 1 にした")
+        changes.append(("schema_version", "schema_version を 1 にした"))
     if "looks" not in d and (folder / "2d" / "parts.json").is_file():
         has3d = isinstance(model, str) and (folder / model).is_file()
         looks = {"default": "3d" if has3d else "2d"}
@@ -327,8 +416,16 @@ def migrate_dict(cj, folder):
             looks["3d"] = {"at": "top"}
         looks["2d"] = {"parts": "2d/parts.json"}
         d["looks"] = looks
-        changes.append("looks を足した(2d/parts.json があるので、画面で 2D も出せる)")
+        changes.append(("looks", "looks を足した(2d/parts.json があるので、画面で 2D も出せる)"))
     return d, changes
+
+
+def shown_path(p, repo):
+    """人に見せる場所。リポジトリの中ならリポジトリからの相対(/ でつなぐ)。"""
+    try:
+        return Path(p).resolve().relative_to(Path(repo).resolve()).as_posix()
+    except ValueError:
+        return str(p)
 
 
 def write_char(folder, d):
@@ -343,13 +440,15 @@ def _new_backup_dir(backups, cid):
     return d
 
 
-def _save_manifest(d, cid, kind, files, reason):
+def _save_manifest(d, cid, kind, files, reason, changes=None):
     man = {"id": cid, "kind": kind, "reason": reason, "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
            "version": read_version(), "files": files}
+    if changes:
+        man["changes"] = changes      # --migrate が変えた項目(くわしい中身。人には見せない)
     (d / "backup.json").write_text(json.dumps(man, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def backup(folder, cid, backups, reason="manual", only=None):
+def backup(folder, cid, backups, reason="manual", only=None, changes=None):
     """キャラのフォルダ(only を渡せばそのファイルだけ)を写す。性格の文も写す(戻す時は使わない)。"""
     folder = Path(folder)
     d = _new_backup_dir(backups, cid)
@@ -360,7 +459,7 @@ def backup(folder, cid, backups, reason="manual", only=None):
         (d / "files" / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(p, d / "files" / rel)
         files.append(rel)
-    _save_manifest(d, cid, "file" if only else "folder", files, reason)
+    _save_manifest(d, cid, "file" if only else "folder", files, reason, changes)
     return d
 
 
@@ -496,13 +595,14 @@ def run_migrate(chars_dir, repo, caps, backups, only):
         if not changes:
             same += 1
             continue
-        b = backup(folder, cid, backups, reason="migrate", only=["character.json"])
+        b = backup(folder, cid, backups, reason="migrate", only=["character.json"], changes=[c for _, c in changes])
         write_char(folder, new)
         changed += 1
-        lines.append(f"■ {cj.get('name') or cid}({cid}): 先に控えを取りました → {b}")
-        lines += [f"  ・{c}" for c in changes]
+        lines.append(f"■ {cj.get('name') or cid}({cid}): 新しい版でも読めるように、キャラの書き方を少しそろえました(性格・声・思い出は変わりません)。")
+        lines += [f"  ・{MIGRATE_PLAIN[k]}" for k, _ in changes if k in MIGRATE_PLAIN]
         if new.get("id") != folder.name:
-            lines.append(f"  ・注意: id {new.get('id')!r} がフォルダの名前と違います(変えていません)")
+            lines.append(f"  ・気をつけること: キャラの中に書いてある名前の印({new.get('id')})が、フォルダの名前({folder.name})とちがいます。そのままにしてあります。")
+        lines.append(f"  先に控えを取りました(元に戻すときに使います): {shown_path(b, repo)}")
     if changed:
         lines.append(f"そろえた: {changed} 体 / そのまま: {same} 体 / 見本なので変えない: {skipped} 体")
     else:
@@ -524,7 +624,7 @@ def backup_or_restore(a, chars, repo, caps):
         print(f"キャラ {cid} が見つかりません({chars})", file=sys.stderr)
         return 2
     if a.backup:
-        print(f"控えを取りました: {backup(folder, cid, a.backups)}")
+        print(f"控えを取りました: {shown_path(backup(folder, cid, a.backups), repo)}")
         return 0
     if is_sample(cid, read_char(folder) or {}, tracked_ids(repo), set(caps.get("samples", []))):
         print(f"{cid} は見本のキャラなので、ここでは戻しません(git で戻します)", file=sys.stderr)

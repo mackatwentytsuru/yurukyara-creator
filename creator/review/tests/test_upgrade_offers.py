@@ -4,6 +4,7 @@ Claude も GPU も使わない。キャラは試験の一時フォルダに写�
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -20,8 +21,17 @@ import upgrade_offers as UO  # noqa: E402
 
 CHARS = ROOT / "characters"
 PY = sys.executable
-OFFER_KEYS = {"cap", "title", "why", "how", "preview", "undo"}
+OFFER_KEYS = {"cap", "title", "why", "how", "preview", "undo",                       # 人に見せる文
+              "new", "kind", "kinds", "look", "picture", "ready", "missing", "skill", "work",
+              "steps", "targets", "preview_steps", "undo_steps"}                      # Claude 向け
 ENV = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+# 人に見せる文に入れない物(命令・ファイルの場所・中の書き方の言葉)
+NOT_FOR_PEOPLE = re.compile(r"python|node |\.py\b|\.mjs\b|\.json\b|\.svg\b|--|creator/|characters/|WebGL|schema_version|type を|rig|looks|persona")
+
+
+def plain(test, text, where):
+    found = NOT_FOR_PEOPLE.search(text)
+    test.assertIsNone(found, f"{where}: 人に見せる文に {found.group(0) if found else ''!r} がある → {text}")
 
 
 def run(*args):
@@ -89,6 +99,22 @@ class TestTable(unittest.TestCase):
             for c in caps["capabilities"]:
                 UO.assess(c, list(caps["kinds"]), f)      # 知らない決まりがあれば ValueError で落ちる
 
+    def test_people_words_and_claude_steps_are_apart(self):
+        """人に見せる文(title・why・preview・undo)に命令が無く、手順は種類ごとに、略さずに書いてある"""
+        caps = UO.load_caps()
+        for c in caps["capabilities"]:
+            for k in ("title", "why", "preview", "undo"):
+                plain(self, c[k], f"{c['id']}.{k}")
+            self.assertTrue(c.get("preview_steps"), f"{c['id']} に preview_steps が無い")
+            for k in c["kinds"]:
+                steps = UO.expand(caps, c["apply"].get(k))         # 知らない "@組" は ValueError で落ちる
+                self.assertIsInstance(c["apply"][k], list, f"{c['id']}.apply.{k} は並びで書く")
+                self.assertTrue(steps, f"{c['id']} に {k} の手順が無い")
+                for s in steps:
+                    self.assertNotIn("…", s, f"{c['id']}.{k}: 略さずに書く → {s}")
+        with self.assertRaises(ValueError):
+            UO.expand(caps, ["@no_such_set"])
+
     def test_shipped_samples_are_listed_for_copies_without_git(self):
         tracked = UO.tracked_ids(ROOT)
         if tracked is None:
@@ -143,6 +169,56 @@ class TestOffers(Base):
                 self.assertNotIn("<id>", o["undo"] + o["preview"])
         self.assertEqual(self.caps_of(data, "my_robo"), ["look_2d"])
         self.assertEqual(self.caps_of(data, "my_vrm"), [], "VRM に合わない物を出さない")
+        o = by["my_robo"]["offers"][0]
+        self.assertEqual((o["kind"], o["kinds"], o["look"]), ("rig_morph", ["rig_morph"], "2d"), "3D の子に 2D の見た目を足す")
+        self.assertEqual(o["steps"][0], "python creator/review/upgrade_offers.py --backup my_robo", "最初に控え")
+        self.assertEqual(o["undo_steps"], ["python creator/review/upgrade_offers.py --restore my_robo"])
+
+    def test_steps_name_the_real_places_of_this_character(self):
+        """手順の <…> は、そのキャラの本当の場所に替わる(前に作った子の元の絵・作業フォルダ・pack)"""
+        def old(cj):
+            cj.pop("blink")
+            cj["name"] = "ロボ \"2\""
+        self.copy("robo", "old_robo", old)
+        data = self.offers()
+        blink = [o for o in data["characters"][0]["offers"] if o["cap"] == "blink"][0]
+        text = "\n".join(blink["steps"] + blink["preview_steps"] + blink["undo_steps"])
+        self.assertIsNone(UO.HOLDER.search(text), f"埋まっていない場所がある: {text}")
+        self.assertNotIn("…", text)
+        work = "creator/work/old_robo/upgrade/blink"
+        self.assertIn(f"sh creator/pipeline/run_groups.sh old_robo {work} {work}/元の絵.png", blink["steps"])
+        self.assertIn(f'python creator/pipeline/t07_talk.py {work}/pack old_robo --name "ロボ 2" --out {work}/talk --force', blink["steps"])
+        self.assertEqual(blink["picture"], "yes", "元の絵が無いので、もらう")
+        self.assertIn("元の絵がもう一度いります", blink["how"])
+        self.assertTrue(any("使う人に元の絵をもらい" in s for s in blink["steps"]))
+        self.assertFalse(blink["ready"], "builder が無い子は、先に builder を作る")
+        self.assertIn("creator/builders/old_robo.py", blink["missing"][0])
+        # 前に作った時の元の絵と builder があれば、それを使い、絵はもう一度いらない
+        (self.tmp / "creator" / "samples").mkdir(parents=True)
+        (self.tmp / "creator" / "samples" / "old_robo_元の絵_noshadow.png").write_bytes(b"png")
+        (self.tmp / "creator" / "builders").mkdir(parents=True)
+        (self.tmp / "creator" / "builders" / "old_robo.py").write_text("# builder\n", encoding="utf-8")
+        blink = [o for o in self.offers()["characters"][0]["offers"] if o["cap"] == "blink"][0]
+        self.assertIn(f"sh creator/pipeline/run_groups.sh old_robo {work} creator/samples/old_robo_元の絵_noshadow.png", blink["steps"])
+        self.assertEqual((blink["picture"], blink["ready"], blink["missing"]), ("no", True, []))
+        self.assertIn("絵はもう一度いりません", blink["how"])
+
+    def test_text_shows_only_words_for_people(self):
+        """--text(新しい版にした後に、使う人にそのまま見える)に、命令やファイルの場所を出さない"""
+        def robo(cj):
+            cj.pop("blink")
+            cj["motions"].pop("nod")
+
+        def led(cj):
+            cj["motions"].pop("jump")
+        self.copy("robo", "my_robo", robo)
+        self.copy("f_led", "my_led", led)
+        rc, out, err = run("--text", "--characters", str(self.chars))
+        self.assertEqual(rc, 0, err)
+        for line in out.splitlines():
+            if "■" not in line:                 # ■ の行は名前(id)
+                plain(self, line, "--text")
+        self.assertIn("「ロボくんを、入れる前に戻して」", out)
 
     def test_missing_parts_are_offered_and_new_ones_first(self):
         def old(cj):
@@ -228,7 +304,11 @@ class TestMigrate(Base):
         self.assertEqual(validate(d / "character.json")[0], 0, "前の形も K1 の形として通る(知らない項目は止めない)")
         rc, out, err = run("--migrate", "--characters", str(self.chars), "--backups", str(self.backups))
         self.assertEqual(rc, 0, err)
-        self.assertIn("入れ子の rig の中身", out)
+        self.assertIn("新しい版でも読めるように、キャラの書き方を少しそろえました", out)
+        self.assertIn("2D のすがたでも出られるようにしました", out)
+        for line in out.splitlines():           # 使う人にそのまま見える(新しい版にした後)ので、中の言葉を出さない
+            if "■" not in line and "控えを取りました" not in line:
+                plain(self, line, "--migrate")
         cj = json.loads((d / "character.json").read_text(encoding="utf-8"))
         self.assertNotIn("rig", cj)
         self.assertEqual((cj["type"], cj["schema_version"], cj["mouth"]["kind"]), ("rig", 1, "morph"))
@@ -236,6 +316,9 @@ class TestMigrate(Base):
         saved = list(self.backups.glob("old_one/*/files/character.json"))
         self.assertEqual(len(saved), 1)
         self.assertEqual(saved[0].read_bytes(), before, "変える前の物を控えた")
+        man = json.loads((saved[0].parents[1] / "backup.json").read_text(encoding="utf-8"))
+        self.assertIn("schema_version を 1 にした", man["changes"], "くわしい中身は控えに残す(Claude と作り手が見る)")
+        self.assertTrue(any(c.startswith("入れ子の rig の中身") for c in man["changes"]))
         self.assertEqual(validate(d / "character.json")[0], 0)
         after = (d / "character.json").read_bytes()
         rc, out, _ = run("--migrate", "--characters", str(self.chars), "--backups", str(self.backups))
