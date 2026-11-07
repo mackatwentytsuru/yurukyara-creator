@@ -95,6 +95,16 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
   padding: 10px 16px; border-radius: 16px; background: rgba(12, 10, 22, 0.78); border: 1px solid var(--lav); color: var(--text);
 }
 .align.bad { border-color: var(--warn); color: var(--warn); }
+/* VR・AR を頼んだ後、入るか断られるまで、画面の真ん中に出す(実機の Quest: ブラウザの下に「許可する」の帯が出て、答えるまで何も起きなかった)。
+   押す所は無い(読むだけ)。下の帯・上の段より手前 */
+.xr-wait {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; pointer-events: none;
+  width: min(88vw, 640px); margin: 0; text-align: center; font-size: 22px; font-weight: 700; line-height: 1.5;
+  padding: 18px 22px; border-radius: 18px; background: rgba(12, 10, 22, 0.9); border: 2px solid var(--lav); color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.xr-wait[hidden] { display: none; }
+html.is-headset .xr-wait { font-size: 30px; }
 
 /* Claude の考え(上の段より奥。z-index 4) */
 .thought {
@@ -321,6 +331,15 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
 .ql-title { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--text); }
 .ql-how, .ql-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .ql-url { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text); word-break: break-all; }
+/* 「Meta Quest に送る」(Meta 公式のウェブローンチ。https の公開の URL の時だけ)。押す所は 44px 以上。箱の高さを増やしすぎないよう 1 行 */
+.ql-send {
+  justify-self: start; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 14px;
+  border-radius: 999px; font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; text-decoration: none;
+  color: #14121f; background: var(--lav); border: 1px solid var(--lav); cursor: pointer;
+}
+.ql-send:hover { filter: brightness(1.08); }
+.ql-send:active { transform: scale(0.97); }
+.ql-send:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 /* スマホ: 箱は上の段の左右いっぱい。QR は幅の 44% まで(横に読み取り方と URL) */
 @media (max-width: 760px) {
   .quest-link-box { --ql-size: clamp(96px, min(44vw, calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px)), 186px); right: 0; grid-template-columns: var(--ql-size) minmax(0, 1fr); gap: 10px; padding: 10px; }

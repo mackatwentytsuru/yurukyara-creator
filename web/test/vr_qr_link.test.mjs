@@ -1,12 +1,22 @@
 // 「VR(Quest)で開く」の決まり(web/src/stage/questLink.js)と、画面へのつなぎ方(index.html・style.css・panel.js・main.js)の試験。
 // QR に入れるのはこの画面の場所と ?character=(id)・?look=(3d・2d)だけ / 合言葉・記憶の番号・鍵・# は入れない /
 // この PC・家の中のアドレスでは QR の代わりに 1 行 / Quest の中(immersive-vr が使える・ヘッドセットのブラウザ)では出さない。
+// 「Meta Quest に送る」(本人の答え、11/7): https の時だけ、Meta 公式のウェブローンチ(WEB_LAUNCH に url= で QR と同じ URL)。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { questLinkPlan, questTarget, isPrivateHost, PRIVATE_NOTE, SCAN_HOW } from '../src/stage/questLink.js';
+import { questLinkPlan, questTarget, isPrivateHost, webLaunchUrl, PRIVATE_NOTE, SCAN_HOW, WEB_LAUNCH, SEND_LABEL, SEND_NAME } from '../src/stage/questLink.js';
 import { encodeQr } from '../src/stage/qrCode.js';
+
+/** ウェブローンチの URL から、送る URL を取り出す(公式の形: WEB_LAUNCH?url=<エンコードした URL>) */
+const sentUrl = (launch) => {
+  const u = new URL(launch);
+  assert.equal(`${u.origin}${u.pathname}`, WEB_LAUNCH, 'Meta 公式の入口だけ');
+  assert.deepEqual([...u.searchParams.keys()], ['url'], 'url= の 1 つだけ');
+  assert.equal(u.hash, '');
+  return u.searchParams.get('url');
+};
 
 const WEB = join(import.meta.dirname, '..');
 const read = (...p) => readFileSync(join(WEB, ...p), 'utf8').replace(/\r\n/g, '\n');
@@ -40,15 +50,21 @@ test('何も秘密が入らない: 合言葉・記憶の番号・鍵・トーク
   const plan = questLinkPlan({ loc: page, character: 'norrie', look: '3d' });
   assert.equal(plan.kind, 'qr');
   assert.equal(plan.target, 'https://yuru.example/?character=norrie&look=3d');
-  for (const s of secrets) assert.ok(!plan.target.includes(s), `QR の文に ${s}`);
+  for (const s of secrets) assert.ok(!plan.target.includes(s) && !plan.launch.includes(s), `QR の文かウェブローンチに ${s}`);
   assert.ok(!plan.target.includes('#') && !/pass|memory|key|token|code=/i.test(plan.target));
-  assert.deepEqual(Object.keys(plan).sort(), ['kind', 'show', 'target'], '決まりの返す物は 3 つだけ(ほかの値を持ち出さない)');
+  assert.equal(sentUrl(plan.launch), plan.target, 'Quest へ送るのは QR と同じ URL だけ');
+  assert.deepEqual(Object.keys(plan).sort(), ['kind', 'launch', 'show', 'target'], '決まりの返す物は 4 つだけ(ほかの値を持ち出さない)');
 });
 
 test('公開の URL: QR の文はこの画面の URL(http の試しの名前でも同じ形)。QR は小さい版に収まる', () => {
   const plan = questLinkPlan({ loc: loc('https://yuru.example/?pass=1'), character: 'yokoso', look: '2d' });
-  assert.deepEqual(plan, { show: true, kind: 'qr', target: 'https://yuru.example/?character=yokoso&look=2d' });
-  assert.deepEqual(questLinkPlan({ loc: loc('http://yuru.test:43123/?memory=1'), character: 'mikan' }), { show: true, kind: 'qr', target: 'http://yuru.test:43123/?character=mikan' });
+  assert.deepEqual(plan, {
+    show: true,
+    kind: 'qr',
+    target: 'https://yuru.example/?character=yokoso&look=2d',
+    launch: 'https://www.oculus.com/open_url/?url=https%3A%2F%2Fyuru.example%2F%3Fcharacter%3Dyokoso%26look%3D2d',
+  });
+  assert.deepEqual(questLinkPlan({ loc: loc('http://yuru.test:43123/?memory=1'), character: 'mikan' }), { show: true, kind: 'qr', target: 'http://yuru.test:43123/?character=mikan' }, 'http の時はウェブローンチを出さない(公式: https だけ)');
   const qr = encodeQr(plan.target);
   assert.ok(qr && qr.version <= 5, `QR は小さい版(${qr?.version})`);
   assert.match(SCAN_HOW, /Quest 3・3S の QR コードスキャナー/, '公式の名前で読み取り方を出す');
@@ -109,6 +125,45 @@ test('panel.js: QR に入れるのは決まりの target だけ。文字は text
   assert.match(body, /e\.key === 'Escape'/);
   assert.match(body, /if \(opened && !root\.contains\(e\.target\)\) close\(\);/);
   assert.doesNotMatch(body, /innerHTML|<img|url\(|data:|https?:\/\//);
-  const link = read('src', 'stage', 'questLink.js').replace(/^\s*\/\/.*$/gm, '');
-  assert.doesNotMatch(link, /https?:\/\//, 'questLink.js のコードに外の住所を書かない(画面のコードの決まり。privacy.test.mjs)');
+  // 画面のコードの外の住所は、questLink.js の WEB_LAUNCH の 1 か所だけ(privacy.test.mjs の例外 1 つ。コメントは数えない)
+  const link = read('src', 'stage', 'questLink.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '');
+  assert.deepEqual([...link.matchAll(/\b(?:https?|wss?):\/\/[^\s'"`]*/g)].map((m) => m[0]), ['https://www.oculus.com/open_url/'], 'questLink.js のコードの外の住所は WEB_LAUNCH だけ');
+  assert.match(link, /^export const WEB_LAUNCH = 'https:\/\/www\.oculus\.com\/open_url\/';$/m);
+});
+
+test('ウェブローンチ(Meta 公式): https の URL だけ・公式の例と同じ作り方(URL と URLSearchParams で url= に入れる)', () => {
+  assert.equal(WEB_LAUNCH, 'https://www.oculus.com/open_url/');
+  // 公式の頁の例(https://www.meta.com/ を送る)と同じ文になる
+  assert.equal(webLaunchUrl('https://www.meta.com/'), 'https://www.oculus.com/open_url/?url=https%3A%2F%2Fwww.meta.com%2F');
+  for (const t of ['https://yuru.example/', 'https://yuru.example/app/?character=norrie&look=2d', 'https://a.b.ts.net:8444/?look=3d']) assert.equal(sentUrl(webLaunchUrl(t)), t, t);
+  for (const bad of ['http://yuru.example/', 'http://127.0.0.1:8799/', 'https://user:pw@yuru.example/', 'https://yuru.example/#yc-key=1', 'ftp://yuru.example/', 'javascript:alert(1)', '', null, undefined, 'yuru.example']) {
+    assert.equal(webLaunchUrl(bad), null, String(bad));
+  }
+  assert.match(SEND_LABEL, /^Meta Quest に送る$/, '押す所に Meta Quest の名前(公式の決まり)。本人の言葉「Quest に送る」を含む');
+  assert.match(SEND_NAME, /Meta Quest に送る.*新しいタブ/, '読み上げの名前で、Meta の頁が新しいタブで開くと分かる');
+});
+
+test('Quest の中・この PC・家の中のアドレス・http では「Meta Quest に送る」を出さない', () => {
+  const https = loc('https://yuru.example/');
+  assert.equal(questLinkPlan({ loc: https, headset: true }).launch, undefined, 'ヘッドセットのブラウザ');
+  assert.equal(questLinkPlan({ loc: https, immersiveVr: true }).launch, undefined, 'immersive-vr が使えるブラウザ');
+  for (const href of ['https://localhost:8444/', 'https://192.168.x.x/', 'https://mypc/', 'http://127.0.0.1:8799/', 'http://yuru.test/']) {
+    assert.equal(questLinkPlan({ loc: loc(href), character: 'norrie' }).launch, undefined, href);
+  }
+  assert.equal(typeof questLinkPlan({ loc: https }).launch, 'string', 'https の公開の URL では出す');
+});
+
+test('panel.js:「Meta Quest に送る」は決まりの launch だけを新しいタブで開くリンク。この頁の URL を送らない・押しても箱は閉じない。押す所は 44px', () => {
+  const panel = read('src', 'ui', 'panel.js');
+  const body = panel.slice(panel.indexOf('export function mountQuestLink'));
+  assert.match(body, /if \(p\.launch\) text\.append\(sendLink\(p\.launch\)\);/);
+  const send = body.slice(body.indexOf('const sendLink'), body.indexOf('async function render'));
+  assert.match(send, /el\('a', 'ql-send', SEND_LABEL\)/);
+  assert.match(send, /a\.href = href;/);
+  assert.match(send, /a\.target = '_blank';/);
+  assert.match(send, /a\.rel = 'noopener noreferrer';/);
+  assert.match(send, /a\.referrerPolicy = 'no-referrer';/);
+  assert.match(send, /e\.stopPropagation\(\)/, '押しても箱を閉じない');
+  const css = read('src', 'ui', 'style.css');
+  assert.match(css, /\.ql-send \{[^}]*min-height: 44px; min-width: 44px;/);
 });

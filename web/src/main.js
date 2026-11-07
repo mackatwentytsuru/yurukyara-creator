@@ -18,7 +18,7 @@ import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
 import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
-import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink } from './ui/panel.js';
+import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink, latencyNote } from './ui/panel.js';
 import { questLinkPlan } from './stage/questLink.js'; // 「VR(Quest)で開く」: この画面の QR に入れてよい物の決まり
 import { getDemoPass, setDemoPass } from './conversation/demoPass.js'; // 合言葉(S3。会話と記憶の通信に見出し x-demo-pass で付く)
 import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
@@ -29,7 +29,7 @@ import { createVrPanel } from './ui/vrPanel.js';
 import { createAlignFlow } from './stage/alignFlow.js'; // 撮った部屋を現実に重ねる手順(場所の柱)
 // 見せ方(画面・AR・VR)の切りかえは、場所の柱が出している入口(docs/共通の決まり.md)
 import { createPresentation } from './stage/modes.js';
-import { mountModeButtons } from './stage/modeButtons.js';
+import { mountModeButtons, XR_WAIT_TEXT } from './stage/modeButtons.js';
 import { detectTierInBrowser, applyTier } from './stage/tiers.js'; // 端末の段(軽いのにきれい)
 
 const params = new URLSearchParams(location.search);
@@ -41,6 +41,9 @@ const GREET_COOLDOWN_S = 90;
 // ヘッドセットのブラウザ。カメラは使えず、聞き取りはサーバーで行い、マイクの許可は VR に入る前に取る
 const IS_HEADSET = params.get('headset') === '1' || /OculusBrowser|Quest/i.test(navigator.userAgent);
 const VR_HELLO = 'こんにちは'; // コントローラーのトリガーで話しかける言葉(マイクが使えなくても、返事と声を確かめられる)
+// ヘッドセットの 2D の画面で、はじめた後に出す案内(マイクの答えを待たずに出し、マイクが使えなかった時だけ文を替える)
+const VR_GUIDE = '左上の「VR で見る」を押してください';
+const VR_GUIDE_NO_MIC = 'マイクなしで進めます。左上の「VR で見る」を押してください';
 
 const $ = (id) => document.getElementById(id);
 // このタブだけで覚える所(見た目の切り替え)。使えないブラウザ(プライベートの設定など)では覚えないだけ
@@ -191,10 +194,11 @@ const dialogue = new Dialogue({
     }).catch(() => {});
     const valid = app.metrics.filter((m) => m.valid).map((m) => m.totalMs).sort((a, b) => a - b);
     const med = valid.length ? valid[Math.floor(valid.length / 2)] : null;
-    // 分かる言葉で(CRITux 18): 「返事まで 281ms(参考: 頭脳か声が仮)・目標 1200ms」は読めなかった
+    // 分かる言葉で(CRITux 18): 「返事まで 281ms(参考: 頭脳か声が仮)・目標 1200ms」は読めなかった。
+    // 「仮の頭脳」と付けるのは、仮の頭脳で話した回だけ(本物の頭脳が声なしで答えた回にも出ていた。11/7 の本物の Haiku の録画)
     const sec = (ms) => `${(ms / 1000).toFixed(1)} 秒`;
     ui.foot(
-      `返事が始まるまで ${sec(entry.totalMs)}${entry.valid ? '' : '(仮の頭脳か声なしなので、参考の値)'}` +
+      `返事が始まるまで ${sec(entry.totalMs)}${latencyNote(entry, { fakeBrain: currentBrain() === 'mock' })}` +
         `${med !== null ? ` ・ ふだん ${sec(med)}(${valid.length} 回の真ん中)` : ''}` +
         ` ・ 目安は 1.2 秒以内`,
     );
@@ -329,7 +333,8 @@ function updatePrivacy() {
     sim: TOUCH ? 'カメラは使っていません(画面を指でなぞった向きに、人がいることにしています)。' : 'カメラは使っていません(マウスの向きに、人がいることにしています)。',
     bridge: '床のカメラの機械が、あなたのいる向き(数字)だけをこの画面に送ります。映像は保存も、送信もしません。',
   };
-  let text = texts[app.mode] ?? texts.sim;
+  // 始める前(app.mode が無い)は、ヘッドセットなら位置の文(実機の Quest で、入口の前に「マウスの向きに」と出ていた)
+  let text = texts[app.mode] ?? (IS_HEADSET ? texts.pose : texts.sim);
   if (listener?.listening) text += listener.provider === 'server' ? ' 声は、この画面を配っている PC へ送って文字にします。音は保存しません。' : ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
   if (stereoMic?.status === 'stereo') text += ' 声のする向きは、この端末の中で左右の音の差を調べるだけです(音は保存も、この仕組みからの送信もしません)。';
   ui.privacy(text, app.mode !== 'camera');
@@ -633,7 +638,17 @@ async function setupPresentation() {
     onHit: (p) => handleHit(p),
     onFloor: (y) => arPlacement?.onFloor(y),
   });
-  mountModeButtons({ modes, container: $('modes'), onError: (e) => ui.error(e.message) });
+  // VR・AR を頼んだら、入るか断られるまで、画面の真ん中に「ブラウザの下の『許可する』を押してください」(実機の Quest は、
+  // ブラウザの下の帯に答えるまで何も起きなかった)。頼んでいる間は、どのボタンも押せない(2 回目の頼みで InvalidStateError になった)
+  mountModeButtons({
+    modes,
+    container: $('modes'),
+    onError: (e) => ui.error(e.message),
+    onWait: (mode) => {
+      if (mode) ui.align(null); // 「VR で見る」の案内は、頼んだら消す(真ん中の知らせだけにする)
+      ui.xrWait(mode ? XR_WAIT_TEXT : null);
+    },
+  });
   // iPhone の殻の中なら、すぐ AR に入る(殻は、入ったあとに姿勢を送り始める)
   if (modes.available.ar_kind === 'native') await modes.enter('ar').catch((e) => ui.error(e.message));
   app.modes = modes;
@@ -1002,9 +1017,14 @@ async function boot() {
       gateClosed(); // 上の段を出す・初めての訪問なら 7 歩を出す
       updatePrivacy();
       if (IS_HEADSET) {
-        // マイクの許可は、VR に入る前のこの画面で取る(VR の中で許可の窓が出るとどうなるかは、資料が無い)
+        // マイクの許可は、VR に入る前のこの画面で取る(VR の中で許可の窓が出るとどうなるかは、資料が無い)。
+        // 「VR で見る」の案内は、マイクの答えを待たずに出す(実機の Quest で、マイクの許可の窓に答えないと案内が出なかった)。
+        // 答えが来た時に、案内がまだ出ていて(VR を頼んでいない・入っていない)マイクが使えなかった時だけ、文を替える
+        const guide = Boolean(modes?.available.vr);
+        if (guide) ui.align(VR_GUIDE);
         await toggleMic();
-        if (modes?.available.vr) ui.align(listener?.listening ? '左上の「VR で見る」を押してください' : 'マイクなしで進めます。左上の「VR で見る」を押してください');
+        const align = $('align');
+        if (guide && !listener?.listening && !align.hidden && align.textContent === VR_GUIDE && modes?.mode === 'screen' && !modes.pending) ui.align(VR_GUIDE_NO_MIC);
       }
     } catch (err) {
       console.error(err);
