@@ -37,11 +37,11 @@ export const RESUME_KEY = 'yc.onboarding.resume.v1';
 export const MAKE_KEY = 'yc.make.v1';
 export const PROGRESS_KEY = 'yc.onboarding.progress.v1'; // 歩みごとの途中経過(この端末の中だけ。読み込み直しても続きから。高 1)
 const PROGRESS_TTL_MS = 12 * 60 * 60 * 1000;
-/** 残した途中経過(3 歩目以降で、子を決めた物だけ。古い物・形の違う物は捨てる) */
+/** 残した途中経過(3 歩目以降で、子を決めた物か、言葉を入れて見本を待つ 3 歩目だけ。古い物・形の違う物は捨てる) */
 export function readProgress(store, now = Date.now()) {
   try {
     const p = JSON.parse(store?.getItem(PROGRESS_KEY) ?? 'null');
-    if (!p || p.v !== 1 || !p.character?.id || !(p.step >= 3 && p.step <= 7) || !(now - (p.t ?? 0) < PROGRESS_TTL_MS)) return null;
+    if (!p || p.v !== 1 || !(p.character?.id || (p.step === 3 && p.from === 'words' && p.words)) || !(p.step >= 3 && p.step <= 7) || !(now - (p.t ?? 0) < PROGRESS_TTL_MS)) return null;
     return { ...p, reload: true };
   } catch {
     return null;

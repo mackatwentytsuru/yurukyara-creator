@@ -9,9 +9,19 @@
 // 台本は枠からの知らせ(makeEvent)を受けて、案内役の言葉と歩みを進める。
 // 見本の道(公開のリンクの既定)は新しく描かない。言葉が見本に本当に当たる時だけ見本を出し、当たらない言葉と絵には
 // 「近い見本がいない」と正直に言う(だまって見本を選ばない。司令塔の決め D1)。
-import { PRESETS, summary, normalize } from '../persona/settings.js';
+import { PRESETS, LENGTHS, normalize } from '../persona/settings.js';
 import { styleLines } from '../persona/preview.js';
+
 import { MAIN_CHARACTER } from '../../character/defaults.js'; // 主役の決まりは 1 か所(S5)。ここでは写さない
+
+/** 決めたことを、子どもが読める言葉で 1 行にする(「元気さ」「レトロ音」「ElevenLabs」は使わない) */
+const KID_TONE = { own: 'この子らしい 話し方', friendly: 'なかよしの 話し方', polite: 'ていねいな 話し方' };
+const KID_VOICE = { none: '文字と おと', browser: 'この スマホの 声', elevenlabs: '本物の 声' };
+function summary(settings) {
+  const s = normalize(settings);
+  const tone = s.tone === 'ending' ? `語尾「${s.ending}」` : KID_TONE[s.tone] ?? KID_TONE.friendly;
+  return `${PRESETS[s.preset].label}・${tone}・げんき ${s.energy}・${LENGTHS[s.length].label}・${KID_VOICE[s.voice.provider] ?? KID_VOICE.none}`;
+}
 
 export const STEPS = [
   { n: 1, key: 'start', label: 'どんな子' },
@@ -200,7 +210,7 @@ export class FirstRun {
     for (const n of [5, 6, 7]) if (this.step < n) this.skipped.add(n);
     await this._say(
       { who: 'guide', text: this.nori ? 'おまかせで、ぜんぶ きめマシタ!' : 'おまかせで、ぜんぶ きめたよ!' },
-      { who: 'note', text: `きめたこと: ${this.character?.name ?? 'この子'}・性格「${summary(this.settings)}」・声は おまかせ・かぎは なし` },
+      { who: 'note', text: `きめたこと: ${this.character?.name ?? 'この子'}・性格「${summary(this.settings)}」` },
       { who: 'note', text: 'ぜんぶ、あとから かえられるよ。' },
     );
     return this._finish();
@@ -696,7 +706,7 @@ export class FirstRun {
       { who: 'char', text: 'ねえ、本物の声で 話してみたいな。' },
       { who: 'guide', text: 'こえの かぎを 入れると、本物の声に なるよ。' },
       { who: 'guide', text: 'かぎは、おうちの人や 係の人が 知っているよ。なくても 文字で 話せるよ。' },
-      { who: 'note', text: v.notice() },
+      { who: 'note', text: 'かぎは この スマホの 中だけで 使うよ。声を だすと、文字が 声の会社に 送られて、お金が かかるよ。' },
     );
     this._offerKey();
   }
@@ -880,7 +890,15 @@ export class FirstRun {
     this.input = snap.from ? { from: snap.from, words: snap.words ?? '' } : null;
     this.check = snap.check ?? null;
     for (const n of snap.skipped ?? []) this.skipped.add(n);
-    if (!snap.character?.id) return this.start(); // 子を選ぶ前の歩み: 1 歩目からやり直す(入力は残していない)
+    if (!snap.character?.id) {
+      // 子を選ぶ前でも、言葉を入れた後(3 歩目)なら、言葉は残っているので、同じ言葉で見本を出し直す。絵は残していないので 1 歩目から
+      if (snap.reload && snap.step >= 3 && snap.from === 'words' && snap.words) {
+        this._go(3);
+        await this._say({ who: 'guide', text: this.nori ? 'おかえりなサイ! さっきの つづきからだよ。' : 'おかえり! さっきの つづきからだよ。' });
+        return this._meet();
+      }
+      return this.start();
+    }
     this.character = { ...snap.character };
     if (snap.settings) this.settings = normalize(snap.settings);
     if (snap.auto === true) return this._omakaseRest(); // おまかせの途中で読み込み直した: 続きもおまかせ

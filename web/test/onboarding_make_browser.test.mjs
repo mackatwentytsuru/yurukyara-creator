@@ -635,7 +635,7 @@ test('おまかせ(ぜんぶ じどう、幅 390): 1 回押すと、言葉・眉
       await page.waitForFunction(() => document.querySelector('.fr-log')?.innerText.includes('おまかせで、ぜんぶ きめマシタ!'), null, { timeout: 25_000 });
       await page.waitForFunction(() => document.querySelector('.fr-log')?.innerText.includes('ぜんぶ、あとから かえられるよ。'), null, { timeout: 10_000 });
       const log = await logText(page);
-      assert.match(log, /きめたこと: .*声は おまかせ[\s\S]*あとから かえられるよ/);
+      assert.match(log, /きめたこと: .*文字と おと[\s\S]*あとから かえられるよ/);
       assert.match(log, /けってい! パソコンに つたえたよ/);
       const ok = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
       assert.equal(ok.decision, 'ok');

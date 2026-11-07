@@ -379,7 +379,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   }
 
   function chipButton(a) {
-    const b = el('button', { type: 'button', className: `fr-btn fr-chip${a.primary ? ' primary' : ''}`, textContent: a.label, ariaLabel: a.aria ?? a.label });
+    const b = el('button', { type: 'button', className: `fr-btn fr-chip${a.primary ? ' primary' : ''}${a.id === 'again' ? ' fr-again' : ''}`, textContent: a.label, ariaLabel: a.aria ?? a.label });
     b.dataset.act = a.id;
     b.addEventListener('click', () => {
       voice.unlock();

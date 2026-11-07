@@ -24,7 +24,7 @@ export const CSS = `
 .fr-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .fr-left { flex: 1 1 auto; min-width: 0; margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 15px; line-height: 1.3; color: var(--fr-muted); white-space: nowrap; overflow: hidden; }
 .fr-left b { font-weight: 800; color: var(--fr-mint); font-size: 16px; }
-.fr-left span { font-size: 13px; }
+.fr-left span { font-size: 14px; }
 .fr-left b:empty, .fr-left span:empty { display: none; }
 .fr-bar { position: absolute; left: 14px; right: 14px; bottom: 3px; height: 3px; border-radius: 3px; background: rgba(255,255,255,0.10); overflow: hidden; }
 .fr-bar i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, var(--fr-mint), #9b7dff); transition: width 0.4s ease; }
@@ -49,7 +49,7 @@ export const CSS = `
 .fr-line.cont .fr-bubble { border-radius: 18px; }
 .fr-line.char .fr-bubble { background: #213a37; border-color: rgba(123,224,195,0.40); }
 .fr-line.note .fr-bubble { background: #26233b; border: 1px dashed rgba(183,168,255,0.40); }
-.fr-name { display: block; font-size: 12px; font-weight: 700; color: var(--fr-muted); margin: 0 0 1px; }
+.fr-name { display: block; font-size: 16px; font-weight: 700; color: var(--fr-muted); margin: 0 0 1px; }
 .fr-text { margin: 0; font-size: 16px; line-height: 1.55; overflow-wrap: anywhere; min-height: 1.55em; }
 .fr-line.user { grid-template-columns: minmax(0, 1fr); justify-items: end; }
 .fr-line.user .fr-bubble { justify-self: end; max-width: 82%; border-radius: 18px 6px 18px 18px; background: linear-gradient(135deg, #7d62ff, #a35bff); border: 0; color: #fff; }
@@ -75,7 +75,7 @@ export const CSS = `
 .fr-chips[hidden], .fr-input[hidden] { display: none; }
 .fr-chips.fr-chips-scroll { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: max-content; overflow-x: auto;
   overscroll-behavior-x: contain; scrollbar-width: none; padding-bottom: 2px; -webkit-mask-image: linear-gradient(to right, #000 82%, transparent); mask-image: linear-gradient(to right, #000 82%, transparent); }
-.fr-chips.fr-chips-scroll > .fr-auto, .fr-chips.fr-chips-scroll > .primary { order: -1; } /* 横に巻く時も、おまかせと おすすめは最初に見える */
+.fr-chips.fr-chips-scroll > .fr-auto, .fr-chips.fr-chips-scroll > .primary, .fr-chips.fr-chips-scroll > .fr-again { order: -1; } /* 横に巻く時も、おまかせと おすすめは最初に見える */
 .fr-chips.fr-chips-scroll::-webkit-scrollbar { display: none; }
 .fr-btn { position: relative; font: inherit; font-size: 16px; min-height: 44px; padding: 8px 16px; border-radius: 999px; cursor: pointer; color: var(--fr-text);
   background: rgba(125,98,255,0.14); border: 1.5px solid rgba(183,168,255,0.55); display: inline-flex; align-items: center; justify-content: center;
@@ -95,7 +95,7 @@ export const CSS = `
 .fr-field input[type="text"], .fr-field input[type="password"], .yp-panel input[type="text"] { font: inherit; font-size: 16px; min-height: 48px; min-width: 0; width: 100%;
   padding: 10px 16px; border-radius: 24px; color: var(--fr-text); background: #0f0d1c; border: 1.5px solid rgba(183,168,255,0.55); }
 .fr-field .fr-btn { min-width: 84px; border-radius: 24px; }
-.fr-count { font-size: 13px; color: var(--fr-muted); text-align: right; margin: 0 4px; }
+.fr-count { font-size: 14px; color: var(--fr-muted); text-align: right; margin: 0 4px; }
 .fr-count:not(.over) { display: none; }
 .fr-count.over { color: var(--fr-warn); }
 .fr-remember { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; color: var(--fr-muted); }
@@ -104,7 +104,7 @@ export const CSS = `
 .fr-frame { display: block; width: 100%; height: min(400px, 48vh); border: 1px solid var(--fr-line); border-radius: 14px; background: #1d1a2e; }
 @supports (height: 1dvh) { .fr-frame { height: min(400px, 48dvh); } }
 .fr-more { display: none !important; }
-.fr-launch { font: inherit; font-size: 13px; padding: 9px 14px; min-height: 40px; border-radius: 999px; cursor: pointer; color: var(--text, #f4f1fb);
+.fr-launch { font: inherit; font-size: 14px; padding: 9px 14px; min-height: 40px; border-radius: 999px; cursor: pointer; color: var(--text, #f4f1fb);
   background: var(--glass, rgba(24,21,40,0.62)); border: 1px solid var(--line, rgba(255,255,255,0.12)); }
 .fr-launch.floating { position: fixed; top: max(12px, env(safe-area-inset-top)); right: 12px; z-index: 6; }
 

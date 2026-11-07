@@ -153,7 +153,7 @@ test('画面なしの Chrome(幅 390): 鍵なしはレトロ音と文字送り�
     await act('to_voice');
     await page.click('.fr-actions [data-act="to_voice"]');
     await act('key');
-    assert.match(await page.$eval('.fr-log', (e) => e.innerText), /私たちのサーバーには送りません/, 'S3 の説明を、鍵の前に出す');
+    assert.match(await page.$eval('.fr-log', (e) => e.innerText), /声の会社に 送られて/, '何をどこへ送るかを、鍵の前に出す(OL1f で子どもの言葉)');
     await page.fill('.fr-actions [data-act="key"] input[type="password"]', FAKE_KEY);
     await page.click('.fr-actions [data-act="key"] button[type="submit"]');
     await act('close');

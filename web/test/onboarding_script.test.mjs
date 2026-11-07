@@ -104,7 +104,7 @@ test('言葉の入口: 7 歩を最後まで通す(仮の頭脳・鍵を入れて
   await h.fr.act('to_voice');
   assert.equal(h.fr.step, 7);
   assert.deepEqual(h.offered, ['key', 'later']);
-  assert.ok(h.texts('note').includes('鍵の説明'), '何をどこへ送るかを、鍵の前に出す');
+  assert.ok(h.texts('note').includes('かぎは この スマホの 中だけで 使うよ。声を だすと、文字が 声の会社に 送られて、お金が かかるよ。'), '何をどこへ送るかを、子どもの言葉で鍵の前に出す(OL1f)');
   await h.fr.act('key', { key: 'good-key', remember: false });
   const thanks = h.said.filter((l) => l.who === 'char').at(-1);
   assert.equal(thanks.text, VOICE_THANKS);
@@ -444,6 +444,33 @@ test('QF4 高 1: 歩みごとに途中経過を残し、読み込み直した後
   assert.ok(g.texts('guide').some((t) => t.includes('さっきの つづきからだよ')));
   assert.ok(!g.texts('guide').includes('どんな子を生み出そうか?'), '1 歩目に戻さない');
   assert.deepEqual(g.offered, ['to_retro']);
+});
+
+test('OL1f: 子を選ぶ前の 3 歩目(見本が出ただけ)で読み込み直しても、同じ言葉で 3 歩目から続く', async () => {
+  const h = harness();
+  await h.fr.start();
+  await h.fr.act('words', { text: 'ロボ' });
+  const snap = JSON.parse(JSON.stringify({ ...h.progress.find((p) => p.step === 3), reload: true, character: null }));
+  assert.equal(snap.words, 'ロボ');
+  const g = harness();
+  await g.fr.resume(snap);
+  assert.equal(g.fr.step, 3, '1 歩目に戻らない');
+  assert.ok(g.texts('guide').some((t) => t.includes('さっきの つづきからだよ')));
+  assert.equal(g.fr.character.id, 'robo', '同じ言葉で見本を出し直す');
+});
+
+test('OL1f: 決めたことの 1 行と 7 歩目の説明は、子どもが読める言葉(元気さ・レトロ音・ElevenLabs・かぎは なし を出さない)', async () => {
+  const h = harness({ voice: { canTakeKey: () => false } });
+  await h.fr.start();
+  await h.fr.act('words', { text: 'ロボ' });
+  await h.fr.act('keep');
+  await h.fr.act('persona_ok');
+  await h.fr.act('to_retro');
+  await h.fr.act('to_voice');
+  await h.fr.act('close');
+  const all = h.texts('note').concat(h.texts('guide'), h.texts('char')).join(' / ');
+  assert.ok(!/ElevenLabs|元気さ|レトロ音|かぎは なし/.test(all), all);
+  assert.ok(h.texts('note').some((t) => /^きめたこと: ロボくん・性格「.*げんき \d.*文字と おと」$/.test(t)), h.texts('note').join('|'));
 });
 
 test('QF4 中 5: 最後まで行っても札を自動で閉じない。決めたことと「はじめる」を出し、押した時だけ閉じる', async () => {

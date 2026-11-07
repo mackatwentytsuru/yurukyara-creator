@@ -305,7 +305,7 @@ async function walkWords(page, label, { full }) {
   // 7 歩目: 鍵(違う鍵 → もう一度 → 正しい鍵 → 本物の声のかわりの記録に「ありがとう」)
   await page.click('.fr-actions [data-act="to_voice"]');
   await waitAct(page, 'key');
-  assert.match(await logText(page), /試しの鍵の部品です/, '鍵の前に、何をどこへ送るかを出す');
+  assert.match(await logText(page), /声の会社に 送られて/, '鍵の前に、何をどこへ送るかを出す');
   await checkLayout(page, `${label} 7 歩目`);
   await shot(page, `${label}_7_key`);
   await page.fill('.fr-actions [data-act="key"] input[type="password"]', BAD_KEY);
@@ -477,7 +477,7 @@ test('主役の絵の入口(幅 390): おまかせ・性格の画面のおまか
       assert.doesNotMatch(await logText(page), new RegExp(`${MAIN.name}だよ。この子はどうかな`), '主役を「できた子」として紹介しない');
       await page.click('.fr-actions [data-act="use_guide"]');
       await waitAct(page, 'persona_ok');
-      assert.match(await logText(page), /性格: .+・この子の話し方・/, '4 歩目のおまかせ');
+      assert.match(await logText(page), /性格: .+・この子らしい 話し方・/, '4 歩目のおまかせ');
 
       await page.click('.fr-actions [data-act="persona_edit"]');
       await page.waitForSelector('.yp-panel');

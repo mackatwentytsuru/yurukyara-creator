@@ -66,7 +66,7 @@ test('おまかせ: 1 歩目の 1 回で、最後まで進む(主役・その子
   assert.equal(h.texts('user')[0], OMAKASE_LABEL);
   assert.ok(h.texts('guide').includes('おまかせで、ぜんぶ きめマシタ!'), 'ノリーの口調で言う');
   const note = h.texts('note').find((t) => t.startsWith('きめたこと: '));
-  assert.ok(note && /ノリー/.test(note) && /声は おまかせ/.test(note), note);
+  assert.ok(note && /ノリー/.test(note) && /文字と おと/.test(note), note);
   assert.ok(h.texts('note').includes('ぜんぶ、あとから かえられるよ。'), 'あとから変えられると言う');
   assert.deepEqual(h.offered, ['begin'], '終わっても札は自動で閉じない。決めたことと「はじめる」だけを出す(QF4 中 5)');
   assert.equal(h.steps.at(-1).n, 8);
