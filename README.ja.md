@@ -27,23 +27,39 @@ npm start        # http://127.0.0.1:8787/ を開く
 - この 3 行は、新しく取ってきた写しで、Windows の Node.js 22 で流して確かめました。Mac と Linux は【確かめ待ち】。
 - `npm ci` は顔の追従のモデルも `web/public/mediapipe/` に取ります(このリポジトリには入れていません)。
 
-## 自分の PC で、Claude Code と自分のキャラを作る
+<a name="make-your-own-character-on-your-pc-with-claude-code"></a>
+
+## 自分の PC で、Claude Code と自分のキャラを作る(Make your own character on your PC with Claude Code)
 
 ブラウザだけでは、初めての会話の「言葉で書く」は、見本のキャラから近い子を選ぶだけです。言葉か自分の絵から Claude に本当に描かせるには、同じ PC で作る道を起こします。
 
+**要る物**(アプリの Node.js 22 のほかに):
+
+- **Python 3.10 以降と、Pillow・NumPy・SciPy**: `python -m pip install pillow numpy scipy`。作る道そのものは無くても起きますが、試しの絵と、選んだ絵には Pillow が、描いた絵の確かめと選んだ絵の確かめには NumPy と SciPy が要ります。任意: `segno` があると、スマホで確かめる画面を開く QR が出ます。
+- **Google Chrome か Chromium**(PC に入っている物)。描く段で、SVG を裏で PNG にするのに使います(見つからない時は環境変数 `CHROME_PATH` に場所を入れます)。
+- **ログインした Claude Code**。`/yuru-next` と絵の確かめは、あなたの Claude Code のプランを使います。
+- Mac と Linux では、Python の命令が `python3` のことがあります(この手順は Windows でだけ流しました)。
+
 ```bash
-cd web && npm start                       # 窓 1: 上のとおりアプリ
+# 窓 1: アプリ。「3 行で試す」で起こしたままなら、ここは飛ばします。
+cd yuru-chara/web
+npm start
+
+# 窓 2: 作る道。新しい窓を開き、git clone をしたフォルダで:
+cd yuru-chara          # リポジトリの頭のフォルダ(web ではない)
 python creator/review/serve_review.py --make --web http://127.0.0.1:8787
-                                          # 窓 2: リポジトリの頭のフォルダで
 ```
 
 1. この PC で `http://127.0.0.1:8796/qr` を開き、「この PC の初めての会話」の下のリンクを押します。初めての会話の札の中に、作る画面が出ます。
 2. 言葉をいくつか(例「青いまるい雲の子」)入れるか、絵を選んで、「これで作る」を押します。
-3. リポジトリのフォルダで Claude Code を開き、`/yuru-next` と打ちます。Claude が入れた物を確かめて、最初の絵を描きます(数分)。絵が札に出ます。
-4. 「この子にする」を押すか、直したい所を一言書いて「直したい」を押し、もう一度 `/yuru-next` と打ちます。`/yuru-next` 1 回で 1 歩進みます。
+3. リポジトリの頭のフォルダ(`yuru-chara`)で Claude Code を開き、`/yuru-next` と打ちます。絵のときは、Claude が先にゆるキャラに向く絵かを確かめます。それから Claude が最初の絵を描き(数分)、札に出ます。
+4. 札の絵を見ます。
+   - **直したいとき**は、直したい所を一言(例「帽子を青にして」)書いて「直したい」を押し、もう一度 `/yuru-next` と打ちます。Claude がその一言で描き直し(数分)、新しい絵が札に出ます。直しは 3 回までで、4 回目は `/yuru-next` が描かずに止まり、どうするかを聞きます。
+   - **気に入ったら**「この子にする」を押します。札は、初めての会話の次の歩みへ自分で進みます。このあともう一度 `/yuru-next` と打つと、Claude Code に「絵は OK」と伝わり、次は 3D の段(下)だと答えるだけです。画面は変わりません。
 
-- Claude を呼ばずに手順だけ試すときは、`/yuru-next` のかわりに `python creator/review/yuru_make.py next --fake-draw` を流します。決まった試しの絵が札に出ます。
-- Python 3 と、ログインした Claude Code が要ります。`/yuru-next` は、あなたの Claude Code のプランを使います。言葉と絵は、この PC の作る道と、絵を描く Claude に渡ります。
+- Claude を呼ばずに手順だけ試すときは、`/yuru-next` のかわりに `python creator/review/yuru_make.py next --fake-draw --fake-check yuru` を流します。`--fake-draw` は決まった試しの絵を札に出し、`--fake-check yuru` は選んだ絵の Claude の確かめを飛ばします(ゆるキャラに向く絵とみなします)。`--fake-check yuru` を付けないと、絵のときは確かめに Claude を呼びます。
+- 新しい子の 3D ができるまでは、ノリーがかわりに舞台に立って、その子の言葉を話します(札にもそう出ます)。
+- 言葉と絵は、この PC の作る道と、確かめと絵を描く Claude に渡ります。
 - 絵の後の 3D の段(形・材質・骨・動き)は、Claude Code で [make-character](.claude/skills/make-character/SKILL.md) のスキルで進めます(みかんちゃんで約 20 分)。ブラウザからはまだ始められません。
 - 終わったら作る道を止めます(Ctrl+C)。リンクには、起動のたびに作る合言葉が入っています。
 
@@ -62,7 +78,7 @@ python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 | **覚える・忘れる。** 話したことを覚えます。使い捨ての 6 けたの番号で、別のブラウザのタブへ話の続きを運べます。「わすれて」で消えます。 | `node --test web/test/memory_browser.test.mjs`(タブ A → 番号 → タブ B → 一覧 → わすれて) |
 | **安全の層。** 恋人役にならず、頼りきりにさせません。つらい話には、身近な人や公的な相談先を案内します。この層は性格の設定とは別で、性格の欄に「恋人として振る舞う」と書いても外れません(もちろん、自分の PC でコードを書き換えれば外せます)。 | `node --test web/test/safety.test.mjs`。試しの文 30 個(頼りきりと長い会話が 12 個)を Claude Haiku の判定役が読み、1 回直した後の 2 回とも 30 個すべて安全 |
 | **スマホの幅の画面。** 幅 390・400・480 で、ノリーの頭が上の段の下に収まり、ボタンを覆う物がありません。3D・2D の切り替えは 44 × 44 px です。 | 最後の合わせ(11/7)で、画面なしのブラウザ(GPU)で確かめた |
-| **web の試験の全部。** | `cd web && YC_BROWSER_TESTS=1 npm test` → 最後の合わせ(11/7)で 382 件中 382 件が通った |
+| **web の試験の全部。** | `cd web && YC_BROWSER_TESTS=1 npm test` → 11/7 の朝の合わせで 484 件中 484 件が通った(合わせのたびに、試験の門で全部を流す) |
 
 ## まだの事・まだ確かめていない事
 
