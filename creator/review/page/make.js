@@ -3,6 +3,10 @@
 // この画面の中だけで扱う。親の画面(会話の画面)には、状態の知らせ(postMessage)だけを送る。絵・合言葉は親に送らない。
 // - 合言葉は枠の URL の # の後ろ(k=)で受け、見出し X-YC-Key で送る(枠の中は Cookie が使えない)。読んだら # を消す。
 // - データから来る文字は全部 textContent で入れる。
+// - 眉の無い絵には、眉を足すおすすめの札を出す。一言の欄の横に、よく頼む直しの列(押すと欄に入る)。おまかせ(ぜんぶ じどう)は、
+//   残りの選びを全部おすすめで決めて最後まで進む(言葉はおまかせの一言・チェックはおすすめ・眉は足す(ふつう)・絵は OK。本人 11/7)
+import { BROW_AUTO, browCard, quickChips, wantBrow } from "/r/assets/suggest.js";
+
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.hash.slice(1));
 const KEY = params.get("k") || "";
@@ -19,7 +23,9 @@ const PARENT = (() => {
 history.replaceState(null, "", location.pathname); // 合言葉をアドレスの欄と履歴に残さない
 
 const S = { phase: "input", id: null, drawn: 0, ticket: null, hash: null, check: null, checkTold: false, seenAt: 0, lastAct: null, busy: false,
-  wordsMax: 60, noteMax: 40, name: "", picUrl: null };
+  wordsMax: 60, noteMax: 40, name: "", picUrl: null, look: null, auto: false, autoBrow: false };
+/** おまかせ(ぜんぶ じどう)で作る時の言葉 */
+const OMAKASE_WORDS = "まるくて げんきな ゆるキャラ";
 const SIDE = 1254;
 const chars = (s) => [...String(s ?? "")].length;
 
@@ -139,7 +145,13 @@ $("wordsForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const words = $("words").value.trim();
   if (!words || chars(words) > S.wordsMax) return;
+  S.auto = false;
   sendMake({ from: "words", words }, { from: "words", words });
+});
+// おまかせ(ぜんぶ じどう): おまかせの言葉で作り、この後の選びも全部おすすめで決める(あとから直せる)
+$("autoStart").addEventListener("click", () => {
+  Object.assign(S, { auto: true, autoBrow: false });
+  sendMake({ from: "words", words: OMAKASE_WORDS }, { from: "words", words: OMAKASE_WORDS, auto: true });
 });
 for (const id of ["photo", "pick"]) {
   $(id).addEventListener("change", async () => {
@@ -158,7 +170,12 @@ for (const id of ["photo", "pick"]) {
 }
 
 // ---------- 2 歩目: ゆるキャラチェックの後の選び ----------
-$("chooseBtn").addEventListener("click", async () => {
+$("chooseBtn").addEventListener("click", () => choose());
+$("autoCheck").addEventListener("click", () => {
+  S.auto = true;
+  choose();
+});
+async function choose() {
   if (S.busy || !S.check) return;
   const choice = S.check.class === "human" ? "yurufy" : "redraw";
   S.busy = true;
@@ -171,9 +188,10 @@ $("chooseBtn").addEventListener("click", async () => {
   } finally {
     S.busy = false;
   }
-});
+}
 const restart = () => {
   S.id = null;
+  Object.assign(S, { auto: false, autoBrow: false, look: null });
   $("words").value = "";
   updateWords();
   show("input");
@@ -189,11 +207,13 @@ async function decide(decision, note) {
   error("");
   try {
     await api("/api/review/decision", { method: "POST", body: { gate: "C0", decision, ticket: S.ticket, seen_hash: S.hash, note: note || null, tags: [], focus: null } });
+    const auto = S.auto ? { auto: true } : {};
     if (decision === "ok") {
-      $("doneMsg").textContent = `${S.name}にきまりました。形(3D)は PC の Claude Code が続けて作ります。`;
+      $("doneMsg").textContent = `${S.name}にきまりました。形(3D)は PC の Claude Code が続けて作ります。`
+        + (S.auto ? "おまかせで きめました。あとから「直したい」で いつでも 直せます。" : "");
       $("donePic").src = $("pic").src; // 決めた絵は、決めた後も見せる
       show("done");
-      tell("decided", { decision: "ok", id: S.id, name: S.name, round: S.drawn });
+      tell("decided", { decision: "ok", id: S.id, name: S.name, round: S.drawn, ...auto });
     } else {
       $("note").value = "";
       updateNote();
@@ -201,7 +221,7 @@ async function decide(decision, note) {
       S.seenAt = 0;
       show("waiting");
       $("activity").textContent = "";
-      tell("decided", { decision: "redo", note, round: S.drawn });
+      tell("decided", { decision: "redo", note, round: S.drawn, ...auto });
     }
   } catch (e) {
     error(e.reason === "changed" ? "絵が新しくなっています。見直してから、もう一度押してください" : e.message);
@@ -210,6 +230,18 @@ async function decide(decision, note) {
   }
 }
 $("okBtn").addEventListener("click", () => decide("ok"));
+/** おまかせの決め方: 眉の無い絵なら 1 回だけ眉を足す(ふつう)。ほかは OK */
+function autoDecide() {
+  if (wantBrow(S.look, S.id) && !S.autoBrow) {
+    S.autoBrow = true;
+    return decide("redo", BROW_AUTO.note);
+  }
+  return decide("ok");
+}
+$("autoPick").addEventListener("click", () => {
+  S.auto = true;
+  autoDecide();
+});
 function updateNote() {
   const n = chars($("note").value.trim());
   $("noteCount").textContent = `${n} / ${S.noteMax}`;
@@ -241,8 +273,21 @@ async function showDrawn(st) {
   const drift = g.round > 1 && /^頼んでいない所/.test(String(g.notice || "")) ? String(g.notice) : "";
   $("drift").textContent = drift;
   $("drift").hidden = !drift;
+  S.look = b.look || null;
+  const noBrows = renderBrow();
   show("c0");
-  tell("drawn", { id: S.id, name: S.name, round: g.round, ...(drift ? { drift: drift.slice(0, 120) } : {}) });
+  tell("drawn", { id: S.id, name: S.name, round: g.round, ...(drift ? { drift: drift.slice(0, 120) } : {}), ...(noBrows ? { noBrows: true } : {}) });
+  if (S.auto) autoDecide();
+}
+
+/** 眉のおすすめの札(「この子にする」の上)。出したら true */
+function renderBrow() {
+  const slot = $("browSlot");
+  slot.replaceChildren();
+  const want = wantBrow(S.look, S.id) && !S.auto;
+  if (want) slot.append(browCard({ id: S.id, onPick: (c) => decide("redo", c.note), onNo: () => { slot.hidden = true; } }));
+  slot.hidden = !want;
+  return want;
 }
 
 // ---------- 様子を見る ----------
@@ -275,6 +320,7 @@ async function poll() {
     $("checkMsg").textContent = mk.check.message;
     $("chooseBtn").textContent = mk.check.class === "human" ? "ゆるキャラにしてみる" : "主役を描き直してもらう";
     show("check");
+    if (S.auto) choose();
     return;
   }
   const g = st.gates.C0;
@@ -341,6 +387,7 @@ async function picOnly() {
   }
   updateWords();
   updateNote();
+  $("quick").append(quickChips({ input: $("note"), onFill: updateNote, cls: "mk-chips" }));
   try {
     const j = await api("/api/review/state");
     S.wordsMax = j.words_max || 60;

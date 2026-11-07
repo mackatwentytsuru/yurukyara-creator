@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import review_state as rs  # noqa: E402
+import redo_check as rc  # noqa: E402
 
 PAGE_DIR = Path(__file__).resolve().parent / "page"
 ASSET_RE = re.compile(r"^[a-z0-9_]+\.(js|css)$")
@@ -122,6 +123,23 @@ class ExclusiveServer(ThreadingHTTPServer):
         if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         super().server_bind()
+
+
+def look_of(bdir, man):
+    """見せる絵の様子(画面のおすすめに使う。束の manifest とハッシュは変えない)。
+    brows: 絵の絵(C0)が SVG の時、K1 の眉の部品(brow_R・brow_L)に図形があれば True、無ければ False。SVG でない・読めない時は None
+    (画面はおすすめを出さない)。"""
+    look = {"brows": None}
+    right = (man.get("compare") or {}).get("right") or ""
+    if man.get("gate") != "C0" or not right.endswith(".svg") or right not in (man.get("files") or {}):
+        return look
+    try:
+        text = (bdir / right).read_text(encoding="utf-8", errors="replace")
+        if len(text) <= 4 * 1024 * 1024:
+            look["brows"] = rc.brow_info(text)["has"]
+    except (OSError, ValueError, SyntaxError) as e:  # ET.ParseError は SyntaxError の仲間
+        print(f"眉を読めませんでした: {type(e).__name__}", file=sys.stderr)
+    return look
 
 
 def lan_address():
@@ -367,7 +385,7 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
             if n < 1 or not p.is_file():
                 return self._err(404, "not_found", "まだ出ていません")
             man = rs.read_json(p)
-            self._json(200, {"manifest": man, "hash": rs.bundle_hash(man)})
+            self._json(200, {"manifest": man, "hash": rs.bundle_hash(man), "look": look_of(p.parent, man)})
 
         def _bundle_file(self, g, n, name):
             bdir = (rs.review_dir(cur.id) / g / f"r{n}").resolve()

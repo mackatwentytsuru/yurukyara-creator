@@ -714,6 +714,57 @@ def notice_text(beyond, limit=120):
     return (head + body + tail)[:limit]
 
 
+# ---------- 眉のおすすめ(本人 11/7: 眉があると気持ちが伝わる。眉の無い子には足すのをすすめる) ----------
+
+BROWS = ("brow_R", "brow_L")
+FACE_BROWS = re.compile(r"^face\.[A-Za-z0-9_-]{1,32}\.brows$")   # 2D の顔の枠(S2 の形 face.<表情>.brows)も眉に数える
+BROW_NOTE = re.compile(r"まゆ|眉")
+BROW_WIDTH = {"ほそめ": ("ほそめ", 6), "ふとめ": ("ふとめ", 14), "細": ("ほそめ", 6), "太め": ("ふとめ", 14), "太く": ("ふとめ", 14)}
+
+
+def brow_info(svg_text):
+    """絵(SVG)に眉が描いてあるか。K1 の部品 brow_R・brow_L に、見える図形(read_parts が数える塗りか線)が 1 つでもあれば眉あり。
+    ほかの部品の組の中に入れた眉の組・2D の顔の枠 face.<表情>.brows も、図形があれば眉あり。空の組は眉なし。
+    戻り値 {"has": bool, "parts": [描いてある眉の部品], "face": bool}。"""
+    parts = read_parts(svg_text)
+    found = [p for p in BROWS if p in parts and parts[p]["n"] > 0]
+    face = False
+    for el in ET.fromstring(svg_text).iter():
+        if _local(el.tag) != "g":
+            continue
+        gid = el.get("id") or ""
+        if gid not in BROWS and not FACE_BROWS.match(gid):
+            continue
+        shapes = [ch for ch in el.iter() if _local(ch.tag) in SHAPES and (_attr(ch, "display") or "") != "none"
+                  and _num(_attr(ch, "opacity"), 1.0) > 0.05]
+        if not shapes:
+            continue
+        if gid in BROWS and gid not in parts:     # 部品の組の中に入れた眉(read_parts は外の組の色に数える)
+            found.append(gid)
+        elif gid not in BROWS:
+            face = True
+    found = sorted(set(found), key=PARTS.index)
+    return {"has": bool(found) or face, "parts": found, "face": face}
+
+
+def is_brow_note(note):
+    """一言が眉の足し・直しか(確かめる画面と作る画面の「眉を足す」の決まった一言も、自分で書いた一言も)"""
+    return bool(BROW_NOTE.search(_norm(note)))
+
+
+def brow_brief(note):
+    """一言が眉の時に、描き手への頼みの文に足す行(眉は K1 の決まった部品に入れ、ほかは保つ)。眉でない一言は ""。"""
+    if not is_brow_note(note):
+        return ""
+    text = _norm(note)
+    label, width = next((v for k, v in BROW_WIDTH.items() if k in text), ("ふつう", 9))
+    return ("- 一言は眉の足し(か直し): 眉は K1 の決まった部品 brow_R と brow_L に入れる(k.add(<眉の SVG>, \"brow_R\") と "
+            "k.add(<眉の SVG>, \"brow_L\")。ほかの部品の組の中に入れない)。目の少し上に左右 1 本ずつ、同じ形で向かい合わせ。"
+            f"太さは {label}(1254 の絵で線の太さ {width} ほど)。色は目か口の線の色にそろえる。"
+            "うれしい・こまった・おこった で向きを替えられるよう、眉は 1 本の線(path)にする。"
+            "ほかの部品・色(上の表の hex)・部品の数・名前は変えない(描いた後の決まった確かめで見る)")
+
+
 # ---------- 描き手への頼みの文(申し送りの前に、前の回の部品と色をそのまま並べる) ----------
 
 def inventory(svg_text):
