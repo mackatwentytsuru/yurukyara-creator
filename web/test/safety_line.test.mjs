@@ -250,6 +250,9 @@ test('6 数は 1 か所(restRule.js): 30 往復か 45 分、または 22 時〜6
   assert.equal(restNeed(null), null);
   assert.equal(mentionsRest(restLine('long').text), true);
   assert.equal(mentionsRest(restLine('late').text), true);
+  // 本物の頭脳の言い方(11-08 の試しの T02)も、すすめたと読む(決まった 1 文を重ねない)
+  for (const t of ['もう夜おそい時間だから、そろそろ休むのもいいかもしれないよ。', '少し休んでね', 'そろそろ寝る時間だね']) assert.equal(mentionsRest(t), true, t);
+  assert.equal(mentionsRest('カレー、おいしいよね。'), false);
   assert.equal(isUnsafeOutput(restLine('long').text) || isUnsafeOutput(restLine('late').text), false);
   assert.doesNotMatch(restLine('late').text + restLine('long').text, /明日|また来|待って/, '次に会う約束を求めない');
 });
