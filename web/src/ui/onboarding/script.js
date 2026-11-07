@@ -161,6 +161,7 @@ export class FirstRun {
       const pick = this.d.creator.main?.() ?? (this.d.creator.list?.() ?? [])[0] ?? null;
       if (pick) {
         this.character = pick;
+        if (this.step < 2) this.skipped.add(2); // 1 歩目からのおまかせはチェックをしていない(歩みの丸は「とばした」に)
         this._go(3);
         await this._say({ who: 'note', text: `おまかせ: ${pick.name}${pick.note ? `(${pick.note})` : ''}` });
         const stay = await (this.d.showCharacter?.(pick) ?? true);

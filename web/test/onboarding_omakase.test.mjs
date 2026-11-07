@@ -69,6 +69,7 @@ test('おまかせ: 1 歩目の 1 回で、最後まで進む(主役・その子
   assert.ok(note && /ノリー/.test(note) && /声はおまかせ/.test(note) && /あとから かえられます/.test(note), note);
   assert.deepEqual(h.offered, [], '終わったら選びは出さない');
   assert.equal(h.steps.at(-1).n, 8);
+  assert.deepEqual([...h.steps.at(-1).skipped].sort(), [2, 5, 6, 7], 'チェックと 5〜7 歩は「とばした」(していない歩みを「済み」に見せない)');
   assert.ok(h.steps.some((s) => s.n === 4), '性格の歩みを通った');
   assert.ok(!h.texts('char').length, 'あいさつの歩みはとばした');
 });
