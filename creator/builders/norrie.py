@@ -186,6 +186,9 @@ CATCH = [(-0.36, 0.40, 0.30), (0.34, -0.36, 0.13)]          # 目の光: (横, �
 CATCH_T, CATCH_LIFT = 0.0006, 0.0003                        # 光の板の厚みの半分と、目の面からの持ち上げ(m)
 BLUSH = [((499.0, 386.0), (21.0, 14.0)), ((638.0, 386.0), (21.0, 14.0))]     # ほお(仮面の下の左右、鼻づらの横)
 BLUSH_RGB = (244, 192, 198)
+# 案 C+眉(任意、既定は眉なし): NORRIE_BROWS=1 で目の上に小さな黒い眉。シェイプキー brow_up(上へ)・brow_sad(内の端を上げる)
+BROWS = os.environ.get("NORRIE_BROWS", "0") == "1"
+BROW_PY, BROW_UP_PX, BROW_SAD_PX = 176.0, 12.0, 7.0
 BOW_PY = 508.0 if CUTE else 499.0                          # 蝶ネクタイの高さ(絵の画素)。頭が大きいので 9 px 下げ、うなずき・おじぎで、あごと重ならない
 TOOTH_K = 0.62 if CUTE else 1.0                             # 前歯の幅の倍率(真ん中の線のまわりに細く)
 TOOTH_ROWS_BASE = list(TOOTH_ROWS) + list(TOOTH_EXT_ROWS)    # 前歯の後ろの黒い段は元の幅のまま(横から透けない)
@@ -822,6 +825,34 @@ def build_face(surf_head, mats):
                                                   mat=mats["tooth"], seg=(12, 6), rot_deg=tuple(math.degrees(a) for a in eul)))
                 catch_ctr.append(cpos)
     parts["eye_ctr"] = eye_ctr
+    parts["Brows"] = None
+    if BROWS:
+        def brow_line(cx, inner, lift, tilt):
+            """眉 1 本の中心線(5 点)と幅。inner = 顔の真ん中の向き(+1 / -1)。tilt > 0 で内の端が上がる。"""
+            pts = []
+            for k, dx in enumerate((-17, -8.5, 0, 8.5, 17)):
+                arch = 4.5 * (1 - (dx / 17.0) ** 2)
+                pts.append((cx + dx, BROW_PY - lift - arch - tilt * (dx * inner) / 17.0))
+            return pts
+        widths = [3, 6, 7, 6, 3]
+        sets = {}
+        for key, lift, tilt in (("base", 0.0, 0.0), ("brow_up", BROW_UP_PX, 0.0), ("brow_sad", 1.0, BROW_SAD_PX)):
+            obs = [ribbon("brow_%s_%d" % (key, i), brow_line(c[0], 1 if c[0] < CX else -1, lift, tilt), widths, surf_head, 0.0045, mats["black"])
+                   for i, c in enumerate(EYE_C)]
+            sets[key] = P.join(obs, "Brows_" + key)
+        brows = sets["base"]
+        brows.name = "Brows"
+        brows.shape_key_add(name="Basis")
+        for key in ("brow_up", "brow_sad"):
+            kb = brows.shape_key_add(name=key)
+            src = sets[key].data.vertices
+            assert len(src) == len(brows.data.vertices)
+            for i in range(len(src)):
+                kb.data[i].co = src[i].co.copy()
+            kb.value = 0.0
+            bpy.data.objects.remove(sets[key], do_unlink=True)
+        parts["Brows"] = brows
+        print("BUILD brows verts", len(brows.data.vertices))
     eyes = P.join(eyes_parts + catch_parts, "Eyes")
     gL = eyes.vertex_groups.new(name="eye_L")
     gR = eyes.vertex_groups.new(name="eye_R")
@@ -1011,7 +1042,8 @@ def main():
     # ---- 案 C: 頭を首の骨のまわりに一様に大きく、胴(と腕・足・蝶ネクタイ)を縦に短く。全高(耳の先)はそのまま。しっぽは変えない ----
     # 筋・輪郭の殻(頭の殻を除く)・骨の位置は、このあと形を変えた物から作る
     head_objs = [head_all] + ([ol_head_all] if ol_head_all is not None else []) + face["flat"] + face["cheeks"] + \
-        [face["Mouth"], face["Tooth"], face["Eyes"]] + ([face["Gum"]] if face["Gum"] is not None else [])
+        [face["Mouth"], face["Tooth"], face["Eyes"]] + ([face["Gum"]] if face["Gum"] is not None else []) + \
+        ([face["Brows"]] if face["Brows"] is not None else [])
     top = max((head_all.matrix_world @ v.co).z for v in head_all.data.vertices)
     body_kz = (TOP_Z - (top - HEAD_PIV.z) * HEAD_K) / HEAD_PIV.z if CUTE else 1.0
     piv2 = Vector((HEAD_PIV.x, HEAD_PIV.y, HEAD_PIV.z * body_kz))
@@ -1070,6 +1102,8 @@ def main():
         group(o, "head")
     group(face["Mouth"], "head")
     group(face["Tooth"], "head")
+    if face["Brows"] is not None:
+        group(face["Brows"], "head")
     for o in face["cheeks"]:
         group(o, "head")
         o["surface_only"] = True     # ほおは地の色の当て布と同じ扱い
