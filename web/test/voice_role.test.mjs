@@ -26,8 +26,10 @@ const persona = (id) => readFileSync(join(CHARS, id, 'persona.md'), 'utf8');
 const crlf = (s) => s.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
 const KEY = ['sk', 'beadfeed'.repeat(6)].join('_');
 const OWN_ID = ['Own', 'Voice', 'Id', '12345'].join(''); // 形の正しい、試しの声の id
-// 司令室 Q-0103(ノリーの声)の候補。本人の答えは A(11-07 15:49 に読んだ)。男の子の既定とノリーの「声の id」は A
+// 司令室 Q-0103(ノリーの声)の候補。本人は 11-07 に A を選んだ後、「ノリーの声は 4 番目がいい」と言い直した(= D・Asahi。Q-0103 に訂正あり)。
+// 男の子の既定とノリーの「声の id」は D。A(前の答え)はもう使わない
 const Q0103 = { A: 'A4AyGcPAjb1pHgflyZZp', B: 'j210dv0vWm7fCknyQpbA', C: 'EbuvaInXUGWtpYRUnKLQ', D: 'GKDaBI8TKSBJVhsCLD6n', E: 'b34JylakFZPlGS0BnwyY', F: '4sirbXwrtRlmPV80MJkQ' };
+const NORRIE_VOICE = Q0103.D;
 const OWN_PERSONA = `# ためしくん\n- 声: 男の子\n- 声の id: ${['Own', 'Voice', 'Id', '12345'].join('')}`;
 
 /** 通信の偽物。宛先ごとに返事を決め、送った物を全部覚える */
@@ -82,7 +84,8 @@ test('作例と主役の役: ノリーは「声: 男の子」の行、みかん�
     assert.equal(voiceRoleOf(p), role, id);
   }
   assert.match(persona('norrie'), /^- 声: 男の子\r?$/m, 'ノリーは執事見習いの男の子の役(11-07 本人)');
-  assert.equal(personaVoice(persona('norrie')).voiceId, Q0103.A, 'ノリーの声は本人が選んだ A(Q-0103)');
+  assert.equal(personaVoice(persona('norrie')).voiceId, NORRIE_VOICE, 'ノリーの声は本人が言い直した D(Q-0103 の 4 番目)');
+  assert.notEqual(personaVoice(persona('norrie')).voiceId, Q0103.A, '前の答え A は使わない');
   for (const id of ['mikan', 'yokoso', 'robo', 'f_led', 'd_lantern', '_test']) assert.equal(personaVoice(persona(id)).voiceId, null, `${id} は役の既定の声`);
 });
 
@@ -119,9 +122,9 @@ test('声の id の行: 形の正しい物だけ。話す役がその子の役�
   assert.deepEqual(resolveVoice({ choice: 'female', persona: p }), { choice: 'female', role: 'female', source: 'choice', voiceId: ROLE_DEFAULT_VOICES.female, ownVoiceId: null });
 });
 
-test('声の id の順: その子の声 > 役の既定(サーバーの環境変数 > 決まった既定)> ELEVEN_VOICE_ID。男の子の既定は本人が選んだ A、女の子は Yui', () => {
+test('声の id の順: その子の声 > 役の既定(サーバーの環境変数 > 決まった既定)> ELEVEN_VOICE_ID。男の子の既定は本人が言い直した D、女の子は Yui', () => {
   for (const id of [...Object.values(Q0103), ...Object.values(ROLE_DEFAULT_VOICES)]) assert.ok(isVoiceId(id), id);
-  assert.equal(ROLE_DEFAULT_VOICES.male, Q0103.A, '男の子の既定は、本人がノリーの声に選んだ A(Q-0103)。あいづちの声もこの声');
+  assert.equal(ROLE_DEFAULT_VOICES.male, NORRIE_VOICE, '男の子の既定は、本人がノリーの声に選んだ D(Q-0103 の言い直し)。あいづちの声もこの声');
   assert.equal(ROLE_DEFAULT_VOICES.female, 'fUjY9K2nAIwlALOwSiwc', '女の子は Yui(前からの既定)');
   assert.equal(ROLE_DEFAULT_VOICES.female, DEFAULT_VOICE_ID, '声の鍵の道の既定と同じ');
   assert.equal(VOICE_MODEL_ID, 'eleven_v4_turbo');
@@ -135,7 +138,7 @@ test('声の id の順: その子の声 > 役の既定(サーバーの環境変�
   const legacy = 'LegacyVoice00001';
   assert.equal(resolveVoice({ persona: yokoso, fallback: legacy }).voiceId, ROLE_DEFAULT_VOICES.male, 'ELEVEN_VOICE_ID は役の既定より後(.env の例の Yui が男の子に付かない)');
   assert.equal(resolveVoice({ persona: OWN_PERSONA, defaults: env, fallback: legacy }).voiceId, OWN_ID, 'その子の声がいちばん先');
-  assert.equal(resolveVoice({ persona: persona('norrie'), defaults: env }).voiceId, Q0103.A, 'ノリーは環境変数の男の子の声より、自分の声');
+  assert.equal(resolveVoice({ persona: persona('norrie'), defaults: env }).voiceId, NORRIE_VOICE, 'ノリーは環境変数の男の子の声より、自分の声');
   assert.equal(resolveVoice({ persona: '# x', ownVoiceId: OWN_ID }).voiceId, OWN_ID, 'キャラの設計図の声(setVoice)も、その子の声として使う');
 });
 
@@ -146,11 +149,11 @@ test('S4 が呼ぶ口 applyVoiceChoice: speaker の setVoiceChoice を呼び、�
   assert.deepEqual(applyVoiceChoice(fake, 'robot'), { choice: 'auto', role: 'female', voiceId: 'FakeVoiceId00001' });
   assert.deepEqual(calls, [['female', { persona: 'p' }], ['auto', {}]], '知らない値は auto で渡す。persona を省くと渡さない');
   const norrie = persona('norrie');
-  assert.deepEqual(applyVoiceChoice(null, 'auto', { persona: norrie }), { choice: 'auto', role: 'male', voiceId: Q0103.A });
+  assert.deepEqual(applyVoiceChoice(null, 'auto', { persona: norrie }), { choice: 'auto', role: 'male', voiceId: NORRIE_VOICE });
   assert.deepEqual(applyVoiceChoice({ setVoice() {} }, 'female', { persona: norrie }), { choice: 'female', role: 'female', voiceId: ROLE_DEFAULT_VOICES.female });
   const sp = new Speaker();
-  assert.deepEqual(applyVoiceChoice(sp, 'auto', { persona: norrie }), { choice: 'auto', role: 'male', voiceId: Q0103.A });
-  assert.equal(sp.voiceId, Q0103.A, '初めての会話の 7 歩目が読む声(鍵を確かめる時の声)');
+  assert.deepEqual(applyVoiceChoice(sp, 'auto', { persona: norrie }), { choice: 'auto', role: 'male', voiceId: NORRIE_VOICE });
+  assert.equal(sp.voiceId, NORRIE_VOICE, '初めての会話の 7 歩目が読む声(鍵を確かめる時の声)');
   assert.deepEqual(applyVoiceChoice(sp, 'female'), { choice: 'female', role: 'female', voiceId: ROLE_DEFAULT_VOICES.female }, '人格の文を省くと、前に渡した文のまま');
 });
 
@@ -166,7 +169,7 @@ test('サーバーの道: 話す役と、その子自身の声の id だけを�
     assert.deepEqual(body(), { text: 'こんにちは', voice: 'female' }, '人格の文がまだ無い時は女の子');
     sp.setVoiceChoice('auto', { persona: persona('norrie') });
     await sp.enqueue('はじめまして');
-    assert.deepEqual(body(), { text: 'はじめまして', voice: 'male', voiceId: Q0103.A }, 'ノリーは男の子で、自分の声(本人が選んだ A)');
+    assert.deepEqual(body(), { text: 'はじめまして', voice: 'male', voiceId: NORRIE_VOICE }, 'ノリーは男の子で、自分の声(本人が言い直した D)');
     sp.setVoiceChoice('female');
     await sp.enqueue('やあ');
     assert.deepEqual(body(), { text: 'やあ', voice: 'female' }, '選んだ値は人格の文より先。役を替えたら、その子の声の id は送らない');
@@ -195,7 +198,7 @@ test('声の鍵(BYOK)の道: 役の声で、eleven_v4_turbo で直接頼む。�
     Object.assign(sp, { ctx: fakeCtx(), analyser: {} });
     sp.setVoiceChoice('auto', { persona: persona('norrie') });
     await sp.enqueue('はじめまして');
-    assert.ok(f.sent[0].url.startsWith(`${ELEVEN_TTS}${Q0103.A}/stream`), f.sent[0].url);
+    assert.ok(f.sent[0].url.startsWith(`${ELEVEN_TTS}${NORRIE_VOICE}/stream`), f.sent[0].url);
     assert.deepEqual(JSON.parse(f.sent[0].body), { text: 'はじめまして', model_id: 'eleven_v4_turbo', language_code: 'ja' });
     applyVoiceChoice(sp, 'auto', { persona: persona('mikan') });
     await sp.enqueue('こんにちは');
