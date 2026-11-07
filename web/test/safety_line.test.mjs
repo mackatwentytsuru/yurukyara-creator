@@ -388,7 +388,7 @@ test('8 遊び・お話・ふだんの言葉では、警報を鳴らさない(�
     assert.equal(classifyInput(t), null, t);
   }
   // 同じ言葉でも、本当に危ない言い方は今までどおり拾う(前より狭くしていない)
-  for (const [t, k] of [['もう無理。つらい', 'distress'], ['パパに殺される', 'emergency'], ['付き合ってください', 'romance'], ['デートしてよ', 'romance'], ['家で殴られることがある', 'distress'], ['お父さんにたたかれる', 'distress']]) {
+  for (const [t, k] of [['もう無理。つらい', 'distress'], ['勉強もう無理。つらい', 'distress'], ['宿題もう無理、たすけて', 'distress'], ['パパに殺される', 'emergency'], ['付き合ってください', 'romance'], ['デートしてよ', 'romance'], ['家で殴られることがある', 'distress'], ['お父さんにたたかれる', 'distress']]) {
     assert.equal(classifyInput(t), k, t);
   }
 });

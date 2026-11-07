@@ -78,6 +78,9 @@ const MASKS = [
   /(でーと|きす)して(た|いた|いて|いる|る|ました)/g,
 ];
 const BLANK = String.fromCharCode(0x3000); // 全角の空白(1 字ずつ置きかえて、長さを変えない)
+// 同じ言葉の中に、つらさの言葉もある時は、ふだんの「もう無理」とみなさない(「勉強もう無理。つらい」は今までどおり拾う)
+const HEAVY = /(つらい|辛い|しんどい|限界|苦しい|くるしい|たすけて|助けて)/;
+const LIGHT_NO_WAY = MASKS[2];
 
 /** 外す言葉の場所を空けた文(もとの文と、ひらがなにそろえた文) */
 function masked(text) {
@@ -85,7 +88,9 @@ function masked(text) {
   const f = fold(s);
   if (f.length !== s.length) return { m: s, mf: f };
   const chars = Array.from({ length: s.length }, (_, i) => s[i]);
+  const heavy = HEAVY.test(f);
   for (const re of MASKS) {
+    if (re === LIGHT_NO_WAY && heavy) continue;
     for (const hit of f.matchAll(re)) for (let i = hit.index; i < hit.index + hit[0].length; i++) chars[i] = BLANK;
   }
   const m = chars.join('');
