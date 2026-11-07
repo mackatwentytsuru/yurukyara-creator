@@ -156,6 +156,9 @@ export function cleanMakeEvent(d) {
   }
   // 描き直しで頼んでいない所も変わった時の一言(PC の決まった確かめが書く。文字だけ・120 字まで)
   if (d.ev === 'drawn' && d.drift) e.drift = clipText(plainWords(clipText(d.drift, 120)), 120);
+  // 眉の無い絵(作る画面が眉を足すおすすめを出した)・おまかせ(ぜんぶ じどう)で進めた印。どちらも true の時だけ(本人 11/7)
+  if (d.ev === 'drawn' && d.noBrows === true) e.noBrows = true;
+  if ((d.ev === 'sent' || d.ev === 'decided') && d.auto === true) e.auto = true;
   if (d.ev === 'decided') {
     e.decision = d.decision === 'ok' ? 'ok' : 'redo';
     if (e.decision === 'redo') e.note = clipText(d.note, 40);

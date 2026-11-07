@@ -24,6 +24,7 @@
       <label class="mk-btn" data-act="pick"><input type="file" id="pick" accept="image/*,.svg">絵を選ぶ</label>
     </div>
     <p class="mk-hint mk-formats" id="formats">使える絵: PNG・JPEG・WebP・SVG(20MB まで)</p>
+    <button type="button" class="mk-btn auto" id="autoStart">おまかせ(ぜんぶ じどう)<span class="mk-sub">言葉も 絵も おすすめで きめます。あとから 直せます</span></button>
   </section>
 
   <section id="waiting" class="mk-part" hidden>
@@ -36,19 +37,23 @@
     <p class="mk-big" id="checkMsg"></p>
     <button type="button" class="mk-btn primary" id="chooseBtn"></button>
     <button type="button" class="mk-btn" id="otherBtn">別の絵にする</button>
+    <button type="button" class="mk-btn auto" id="autoCheck">おまかせ(ぜんぶ じどう)</button>
   </section>
 
   <section id="c0" class="mk-part" hidden>
     <figure class="mk-fig"><img id="pic" alt="Claude が描いた絵"><figcaption id="picCap"></figcaption></figure>
     <p class="mk-drift" id="drift" role="status" hidden></p>
+    <div class="mk-brow" id="browSlot" hidden></div>
     <button type="button" class="mk-btn primary" id="okBtn">この子にする</button>
     <form id="noteForm" class="mk-row" autocomplete="off">
-      <label class="mk-label" for="note">直したい所を一言(<span id="noteMax">40</span> 字まで。人の感想として渡します)</label>
+      <label class="mk-label" for="note">直したい所を一言(<span id="noteMax">40</span> 字まで<span class="mk-label-more">。人の感想として渡します</span>)</label>
+      <div class="mk-quick" id="quick"></div>
       <input id="note" type="text" maxlength="80" placeholder="例: 帽子を青にして" enterkeyhint="send" autocomplete="off">
       <p class="mk-count" id="noteCount">0 / 40</p>
       <button type="submit" class="mk-btn" id="noteBtn" disabled><span class="mk-long">直したい(一言を送る)</span><span class="mk-short">直したい</span></button>
     </form>
     <button type="button" class="mk-btn ghost" id="againBtn">やり直す(別の子にする)</button>
+    <button type="button" class="mk-btn auto" id="autoPick">おまかせ(おすすめで きめる)</button>
   </section>
 
   <section id="done" class="mk-part" hidden>

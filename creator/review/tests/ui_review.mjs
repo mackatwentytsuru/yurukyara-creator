@@ -76,6 +76,70 @@ try {
     assert.equal(await page.evaluate(() => document.querySelectorAll("canvas").length), 0);
   });
 
+  // ---------- 眉のおすすめ・よく頼む直し・あと いくつ(本人 11/7。第 11d 波)。見本のロボの絵は眉が無い ----------
+  const BROW_NORMAL = "眉を足す(ふつうの太さ)。ほかは変えない";
+  const c0Look = () => page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, h: b.height }; };
+    const card = document.querySelector("#browCard");
+    return {
+      title: card?.querySelector(".sg-title")?.textContent ?? null,
+      why: card?.querySelector(".sg-why")?.textContent ?? null,
+      btns: card ? [...card.querySelectorAll(".sg-btn")].map((b) => [b.textContent, b.getBoundingClientRect().height]) : [],
+      card: r("#browCard"), pic: r("#view img.single"), bar: r(".bar"), sw: document.documentElement.scrollWidth, iw: innerWidth,
+      left: document.querySelector("#left").textContent,
+    };
+  });
+
+  await step("C0: 眉の無い絵に眉のおすすめの札(題・理由・4 つ 44px 以上)。絵に重ならず、下の帯に隠れない。あと いくつの一言", async () => {
+    await page.waitForSelector("#browCard", { timeout: 5000 });
+    const m = await c0Look();
+    assert.equal(m.title, "眉を足しませんか?(おすすめ)");
+    assert.equal(m.why, "眉があると、うれしい・こまった・おこった などの気持ちが、ぐっと伝わりやすくなります");
+    assert.deepEqual(m.btns.map((b) => b[0]), ["足す(ふつう)", "足す(ほそめ)", "足す(ふとめ)", "足さない"]);
+    for (const [t, h] of m.btns) assert.ok(h >= 44, `${t} ${h}px`);
+    assert.ok(m.pic && !(m.card.top < m.pic.bottom && m.pic.top < m.card.bottom), `札が絵に重なる ${JSON.stringify(m)}`);
+    assert.ok(m.card.bottom <= m.bar.top + 0.5, `札が下の帯に隠れる ${m.card.bottom} > ${m.bar.top}`);
+    assert.ok(m.sw <= m.iw, `横のはみ出し ${m.sw}`);
+    assert.equal(m.left, "いま: 絵を きめる ・ あなたが きめるのは あと 2 つ(絵・形。1 つ 1 分くらい)");
+    await page.screenshot({ path: path.join(SHOTS, "c0_brow_390.png") });
+  });
+
+  await step("C0: やり直しの窓に、よく頼む直し 5 つ(44px 以上)。押すと一言の欄に入り、送る前に書き直せる", async () => {
+    await page.click("#redoBtn");
+    await page.waitForSelector("#sheet:not([hidden])");
+    const chips = await page.$$eval("#quick .sg-chip", (bs) => bs.map((b) => [b.textContent, b.getBoundingClientRect().height]));
+    assert.deepEqual(chips.map((c) => c[0]), ["眉を足す", "目を大きく", "色を明るく", "小物を足す", "形はそのまま色だけ変える"]);
+    for (const [t, h] of chips) assert.ok(h >= 44, `${t} ${h}px`);
+    await page.click("#quick .sg-chip:nth-child(5)");
+    assert.equal(await page.inputValue("#note"), "色だけ変える。ほかは そのまま");
+    await page.fill("#note", "色だけ変える。帽子は赤");
+    assert.equal(await page.inputValue("#note"), "色だけ変える。帽子は赤");
+    await page.screenshot({ path: path.join(SHOTS, "c0_chips_390.png") });
+    await page.click("#sheetCancel");
+    assert.equal(readReq(), null, "押しただけでは送らない");
+  });
+
+  await step("C0: 札の「足す(ふつう)」= 決まった一言のふつうのやり直し。2 回目も眉が無ければまた出し、「足さない」で消えて戻らない", async () => {
+    await page.click("#browCard .sg-btn.primary");
+    for (let i = 0; i < 50 && !readReq(); i++) await sleep(100);
+    const r = readReq();
+    assert.deepEqual([r.gate, r.decision, r.note.text], ["C0", "redo", BROW_NORMAL]);
+    const c = rs("claim", ID);
+    assert.equal(c.code, 0, c.err);
+    const o = JSON.parse(c.out);
+    assert.equal(o.result, "redo");
+    assert.ok(o.feedback.includes(BROW_NORMAL), "申し送りに決まった一言");
+    assert.equal(rs("publish", ID, "C0", "--right", sample("robo_元の絵.svg")).code, 0);
+    await page.waitForFunction(() => document.querySelector("#view h2")?.textContent.includes("2 回目"), null, { timeout: 8000 });
+    await page.waitForSelector("#browCard", { timeout: 5000 });
+    await page.click("#browCard .sg-btn.no");
+    assert.equal(await page.locator("#browCard").count(), 0);
+    await sleep(2500); // 様子を見る間隔の後も、この子には出さない
+    assert.equal(await page.locator("#browCard").count(), 0);
+    assert.equal(readReq(), null, "足さないは何も送らない");
+  });
+
   await step("C0: OK は 2 回押しで送られる(1 回では送られない)", async () => {
     await page.click("#okBtn");
     await sleep(600);
@@ -111,6 +175,8 @@ try {
     await page.dispatchEvent("input[type=range]", "input");
     const cut = await page.evaluate(() => document.querySelector(".compare").style.getPropertyValue("--cut"));
     assert.equal(cut, "20%");
+    assert.equal(await page.textContent("#left"), "いま: 形を きめる ・ あなたが きめるのは あと 1 つ(形。1 つ 1 分くらい)");
+    assert.equal(await page.locator("#browCard").count(), 0, "眉の札は絵(C0)だけ");
     await page.screenshot({ path: path.join(SHOTS, "c2_390.png"), fullPage: true });
   });
 

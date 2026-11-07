@@ -24,6 +24,13 @@ export const CSS = `
 .fr-title h2 { margin: 0; font-size: 16px; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fr-close { flex: none; font: inherit; font-size: 14px; min-height: 44px; min-width: 64px; padding: 0 14px; border-radius: 999px; cursor: pointer;
   color: var(--fr-muted); background: transparent; border: 1px solid var(--fr-line); }
+/* あと いくつ・あと 何分(本人 11/7)。「あとで」の左に 2 行。上の段の高さ(44px のボタン)の中に収め、札を高くしない */
+.fr-left { margin: 0 0 0 auto; display: grid; justify-items: end; font-size: 11px; line-height: 1.25; color: var(--fr-muted); text-align: right;
+  white-space: nowrap; min-width: 0; }
+.fr-left b { font-weight: 700; color: var(--fr-mint); }
+.fr-left b:empty, .fr-left span:empty { display: none; }
+/* おまかせ(ぜんぶ じどう): どの歩みでも、選びの下に大きく(本人 11/7) */
+.fr-btn.fr-auto { border: 2px solid var(--fr-mint); background: rgba(123,224,195,0.10); font-weight: 700; }
 .fr-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .fr-steps li { display: grid; justify-items: center; gap: 2px; min-width: 0; color: var(--fr-muted); }
 .fr-steps li span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
@@ -57,6 +64,9 @@ export const CSS = `
 .fr-sheet[data-actions^="photo pick words"] .fr-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .fr-sheet[data-actions^="photo pick words"] .fr-actions > .fr-wide, .fr-sheet[data-actions^="photo pick words"] .fr-actions > .fr-link { grid-column: 1 / -1; }
 .fr-sheet[data-actions^="photo pick words"] .fr-link { min-height: 44px; font-size: 14px; padding: 6px 12px; }
+/* 1 歩目は README のリンクとおまかせを 1 行に並べて、札を高くしない */
+.fr-sheet[data-actions^="photo pick words"] .fr-actions:has(> .fr-auto) > .fr-link,
+.fr-sheet[data-actions^="photo pick words"] .fr-actions > .fr-auto { grid-column: auto; min-height: 44px; font-size: 14px; padding: 6px 10px; }
 .fr-link { text-decoration: none; }
 /* スマホ: 選んだ絵は小さく、「近い見本がいない」の選択肢と見本の一覧は 2 つずつ並べて、会話の欄を広く残す
    (幅 390 で、絵と 4 つのボタンが札を埋め、「ごめんね…」が見えなかった。CRITux2 中 2) */
@@ -131,6 +141,11 @@ export const CSS = `
 @supports (height: 1dvh) { .yp-panel { max-height: 92dvh; } }
 .yp-panel h2 { margin: 0; font-size: 18px; letter-spacing: 0.04em; }
 .yp-lead { margin: -8px 0 0; font-size: 13px; color: var(--fr-muted); line-height: 1.5; }
+/* おまかせ(ぜんぶ じどう)と、えらぶ所の数(本人 11/7) */
+.yp-auto-row { display: grid; gap: 4px; }
+.yp-auto { font: inherit; font-size: 16px; font-weight: 700; min-height: 52px; border-radius: 14px; cursor: pointer; color: var(--fr-text);
+  background: rgba(123,224,195,0.12); border: 2px solid var(--fr-mint); }
+.yp-auto-note { margin: 0; }
 .yp-group { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
 .yp-group legend, .yp-label { padding: 0; font-size: 14px; font-weight: 700; color: var(--fr-text); margin-bottom: 6px; }
 .yp-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

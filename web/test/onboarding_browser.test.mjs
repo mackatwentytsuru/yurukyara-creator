@@ -542,6 +542,40 @@ test('「性格」のボタン(幅 400): 開く → おまかせ → これに�
   }
 });
 
+// 本人 11/7(第 11d 波): 全部オートでできる道。性格の画面の上の「おまかせ(ぜんぶ じどう)」は 1 回で決めて閉じる。下のくじびきとは名前を分ける
+test('性格の画面(幅 390): 上の「おまかせ(ぜんぶ じどう)」1 回で、おすすめの性格と声の役 おまかせ で決まって閉じる。下は「くじびき」', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
+  try {
+    const { ctx, page, errors } = await openPage(browser, server.base, { width: 390, height: 844, query: 'character=mikan', reduced: true });
+    try {
+      await page.waitForSelector('#modes [data-firstrun="persona"]');
+      await page.evaluate(() => document.getElementById('gate').classList.add('hidden'));
+      await page.click('#modes [data-firstrun="persona"]');
+      await page.waitForSelector('.yp-panel');
+      await waitPreview(page, 0);
+      const top = await page.$eval('.yp-auto', (e) => ({ text: e.textContent, h: Math.round(e.getBoundingClientRect().height) }));
+      assert.equal(top.text, 'おまかせ(ぜんぶ じどう)');
+      assert.ok(top.h >= 44, `おまかせは大きなボタン ${top.h}px`);
+      assert.match(await page.$eval('.yp-auto-note', (e) => e.textContent), /^えらぶ所は 5 つ.*おまかせなら 1 回で おわります/);
+      assert.equal(await page.$eval('.yp-random', (e) => e.textContent), 'くじびき', '下のくじ(画面は閉じない)は、上のおまかせと名前が違う');
+      await checkLayout(page, '性格の画面(おまかせつき)');
+      await page.click('.yp-auto'); // 押すのは、この 1 回だけ
+      await page.waitForSelector('.yp-panel', { state: 'detached' });
+      const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), `${STORE_PREFIX}mikan`);
+      assert.ok(saved && saved.v === SETTINGS_VERSION, '設定を覚えた');
+      assert.match(JSON.stringify(saved), /"role":"auto"/, '声の役は おまかせ');
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    server.proc.kill();
+  }
+});
+
 // 背の低い画面(本物の Quest 3 のブラウザは 1280×670): 1 歩目の最初の一言が欄の下で切れていた(第 11 波)。
 // 字の幅は端末の書体で変わる(Quest では 3 行、この PC の Chrome では 2 行)ので、「今の文が全部見える」に加えて
 // 「3 行の一言が入るだけの高さが欄にある」も見る。PC の上の段・下の帯の高さは、Quest で測った値(92px・103px)をまねる

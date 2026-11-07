@@ -38,6 +38,25 @@ export const MAKE_STEPS = `PC での作り方: ① python creator/review/serve_r
 const chars = (s) => [...String(s ?? '')].length;
 const clip = (s, n) => [...String(s ?? '').trim()].slice(0, n).join('');
 
+/** おまかせ(ぜんぶ じどう)のボタンの名前。どの歩みでも出す(本人 11/7: 全部オートでできるパターン) */
+export const OMAKASE_LABEL = 'おまかせ(ぜんぶ じどう)';
+/** 歩みごとの、だいたいの秒(残りの時間の目安)。手元の PC で描く時は、3 歩目に描く時間を足す */
+const STEP_SEC = { 1: 20, 2: 15, 3: 15, 4: 15, 5: 15, 6: 20, 7: 15 };
+const DRAW_SEC = 240;
+
+/**
+ * いまの歩みから、あと いくつ・あと 何分 で おわるか(本人 11/7: すぐ終わるのに途中でやめる人がいるので、残りを見せる)。
+ * 子どもにも分かる言葉で。とばした歩み(言葉の時のチェックなど)は数えない
+ * @returns {{left:number, main:string, time:string}}
+ */
+export function progressText(step, { skipped = [], local = false } = {}) {
+  if (step > STEPS.length) return { left: 0, main: 'できあがり!', time: '' };
+  const rest = STEPS.filter((s) => s.n >= Math.max(1, step) && !skipped.includes(s.n));
+  const left = rest.filter((s) => s.n > step).length;
+  const sec = rest.reduce((t, s) => t + STEP_SEC[s.n] + (local && s.n === 3 ? DRAW_SEC : 0), 0);
+  return { left, main: left ? `あと ${left} つで できあがり` : 'これで さいご!', time: `あと ${Math.max(1, Math.round(sec / 60))} 分くらい` };
+}
+
 /**
  * @typedef {{who:'guide'|'char'|'user'|'note', text:string, img?:string, expression?:string, motion?:string, voice?:boolean}} Line
  * @typedef {{id:string, label:string, kind?:'button'|'text'|'file'|'key'|'persona'|'frame', primary?:boolean, capture?:boolean,
@@ -79,6 +98,7 @@ export class FirstRun {
     this.mockNoted = false;
     this.makeQueue = Promise.resolve(); // 作る画面の知らせを 1 つずつ順に受ける
     this.progressSeen = new Set();
+    this.auto = false; // おまかせ(ぜんぶ じどう)で進めている
     this.log = []; // 試験と確かめのための、言った文の記録
   }
 
@@ -110,7 +130,66 @@ export class FirstRun {
   _go(n) {
     if (this.step === n) return;
     this.step = n;
-    this.d.onStep?.(n, { skipped: [...this.skipped] });
+    this.d.onStep?.(n, { skipped: [...this.skipped], local: this.local });
+  }
+
+  /**
+   * おまかせ(ぜんぶ じどう)。どの歩みからでも、残りの選びを全部おすすめで決めて、最後まで進む(本人 11/7)。
+   * 子がまだいなければ案内役(主役)、性格はその子の性格(無ければおまかせ)、声の役はおまかせ、声の鍵は入れない。
+   * あいさつと文字の歩みはとばす。決めたことと「あとから変えられる」を言ってから終わる
+   */
+  async omakase() {
+    if (this.busy || this.done) return false;
+    this.busy = true;
+    this.d.offer([]);
+    try {
+      await this._say({ who: 'user', text: OMAKASE_LABEL });
+      await this._omakaseRest();
+      return true;
+    } catch (err) {
+      await this._say({ who: 'note', text: `うまく進めませんでした(${err?.message ?? err})` });
+      this._offer(this._retryActions());
+      return false;
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async _omakaseRest() {
+    this.auto = true;
+    if (!this.character) {
+      const pick = this.d.creator.main?.() ?? (this.d.creator.list?.() ?? [])[0] ?? null;
+      if (pick) {
+        this.character = pick;
+        if (this.step < 2) this.skipped.add(2); // 1 歩目からのおまかせはチェックをしていない(歩みの丸は「とばした」に)
+        this._go(3);
+        await this._say({ who: 'note', text: `おまかせ: ${pick.name}${pick.note ? `(${pick.note})` : ''}` });
+        const stay = await (this.d.showCharacter?.(pick) ?? true);
+        if (stay === false) {
+          this.d.save?.(this.snapshot());
+          return undefined; // 読み込み直しの後、resume がおまかせの続きをする
+        }
+      }
+    }
+    this._go(4);
+    const id = this.character?.id ?? 'unknown';
+    let s = this.d.persona.get(id);
+    if (!s) {
+      s = this.d.persona.initial?.(this.character) ?? this.d.persona.random(this.character);
+      this.d.persona.set(id, s);
+    }
+    this.settings = normalize(s);
+    this.d.onPersona?.(this.settings, this.character);
+    for (const n of [5, 6, 7]) if (this.step < n) this.skipped.add(n);
+    const nori = this.guide.id === MAIN_CHARACTER.id;
+    await this._say(
+      { who: 'guide', text: nori ? 'おまかせで、ぜんぶ きめマシタ!' : 'おまかせで、ぜんぶ きめたよ!' },
+      {
+        who: 'note',
+        text: `きめたこと: ${this.character?.name ?? 'この子'}・性格「${summary(this.settings)}」・声はおまかせ・声の鍵はなし。ぜんぶ、あとから かえられます(「性格」ボタンと「はじめての会話」)。`,
+      },
+    );
+    return this._finish();
   }
 
   /** 押された物を受け取る。今出している選択肢に無い物(古いボタン)と、動いている最中の 2 回押しは捨てる */
@@ -653,6 +732,7 @@ export class FirstRun {
         clearTimeout(this.frameTimer);
         return undefined;
       case 'sent':
+        if (ev.auto) this.auto = true;
         if (ev.from === 'words') {
           this.input = { from: 'words', words: clip(ev.words, WORDS_MAX) };
           await this._say({ who: 'user', text: this.input.words });
@@ -681,6 +761,8 @@ export class FirstRun {
           { who: 'guide', text: ev.round > 1 ? '直してみたよ。どうかな?' : 'こんな子ができたよ。どうかな?' },
           // 描き直しで、頼んでいない所も変わってしまった時は、隠さずに言う(N-0026)
           ...(ev.round > 1 && ev.drift ? [{ who: 'note', text: ev.drift }] : []),
+          // 眉の無い絵: 作る画面のおすすめの札を、札の言葉でも知らせる(本人 11/7)
+          ...(ev.noBrows ? [{ who: 'note', text: 'おすすめ: 眉を足すと、うれしい・こまった・おこった などの気持ちが、ぐっと伝わりやすくなるよ。下の画面の「眉を足しませんか?」で選べます。' }] : []),
           { who: 'note', text: '下の画面で「この子にする」か「直したい(一言)」を選んでね。' },
         );
       case 'decided':
@@ -698,7 +780,8 @@ export class FirstRun {
             { who: 'note', text: `形・色・骨・動き(3D)は、PC の Claude Code がこれから作ります(数十分かかります)。3D ができるまでは、${this.guideName}がかわりに舞台に立って、${name}の言葉を話します。${name}の姿は、上の絵です。` },
           );
         }
-        return this._persona();
+        // 作る画面で「おまかせ(ぜんぶ じどう)」を選んだ時は、性格から後もおすすめで決めて終わる
+        return ev.auto || this.auto ? this._omakaseRest() : this._persona();
       case 'restart':
         this.input = null;
         this.check = null;
@@ -739,6 +822,7 @@ export class FirstRun {
       check: this.check,
       character: this.character ? { id: this.character.id, name: this.character.name, sample: Boolean(this.character.sample), note: this.character.note ?? '' } : null,
       skipped: [...this.skipped],
+      ...(this.auto ? { auto: true } : {}),
     };
   }
 
@@ -749,6 +833,7 @@ export class FirstRun {
     this.check = snap.check ?? null;
     this.character = { ...snap.character };
     for (const n of snap.skipped ?? []) this.skipped.add(n);
+    if (snap.auto === true) return this._omakaseRest(); // おまかせの途中で読み込み直した: 続きもおまかせ
     return this._meetAsk();
   }
 }

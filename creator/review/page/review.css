@@ -57,6 +57,23 @@ h1 { font-size: 22px; margin: 0; letter-spacing: 0.02em; overflow: hidden; text-
 @media (prefers-reduced-motion: reduce) { .step[data-s="running"] .dot { animation: none; } }
 
 .activity { margin: 6px 0 0; font-size: 14px; color: var(--run); }
+/* あと いくつ きめれば おわるか(本人 11/7) */
+.left { margin: 4px 0 0; font-size: 13px; color: var(--ink); line-height: 1.4; }
+.left:empty { display: none; }
+
+/* 眉のおすすめの札(絵の下・OK とやり直しの帯の上。本人 11/7)と、よく頼む直しの列 */
+.sg-card { background: var(--card); border: 2px solid var(--turn); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px; margin: 0 0 14px; }
+.sg-title { font-size: 17px; margin: 0 0 4px; }
+.sg-why { font-size: 14px; color: var(--ink-soft); margin: 0 0 10px; }
+.sg-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sg-btn { min-height: 48px; border-radius: 12px; border: 2px solid var(--line); background: var(--paper); font-size: 16px; font-weight: 700; cursor: pointer; padding: 0 8px; }
+.sg-btn.primary { background: var(--turn); border-color: var(--turn); color: #fff; }
+.sg-btn.no { font-weight: 500; }
+.sg-btn:disabled { opacity: 0.45; cursor: default; }
+.sg-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.sg-chip { min-height: 44px; padding: 0 12px; border-radius: 999px; border: 2px solid var(--run); background: var(--card); color: var(--ink); font-size: 15px; cursor: pointer; }
+.sg-btn:focus-visible, .sg-chip:focus-visible { outline: 3px solid var(--run); outline-offset: 2px; }
+.quick-sub { margin-top: 4px; }
 .conn { margin: 6px 0 0; font-size: 14px; color: var(--bad); font-weight: 700; }
 
 .gates { display: flex; gap: 8px; padding: 10px 16px; overflow: hidden; }
