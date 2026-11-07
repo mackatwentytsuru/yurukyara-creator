@@ -210,12 +210,13 @@ test('切り替え: 指で触る端末だけ「うしろの カメラを つか�
   assert.deepEqual(ph.log, ['on-back'], 'うしろのカメラで入れる');
   assert.equal(ph.sw.on, true);
   assert.equal(ph.ask.hidden, true);
-  const main = read('src', 'main.js');
-  assert.match(main, /next\.start = \(\) => next\.tracker\.start\(\{ facingMode: 'environment' \}\);/, 'うしろのカメラも、顔の追従と同じ部品の流れ(絵も同じ video から)。始め直しても、うしろのまま');
-  assert.match(main, /next\.stop\(\); \/\/ 途中まで読んだ顔の部品を捨てる/, '入れられなかった時は、途中まで読んだ顔の部品を捨てる');
-  assert.match(main, /const watchedTracks = new WeakSet\(\);/, '勝手に止まった時の見張りは、流れ(track)ごと');
-  assert.match(main, /next\.getPeople = \(\) => \[\];/, 'うしろのカメラでは顔の向きを追わない(写った人の逆を見ない)');
-  assert.match(main, /backCamera: TOUCH,/);
+  const use = read('src', 'stage', 'cameraUse.js');
+  assert.match(use, /next\.start = \(\) => next\.tracker\.start\(\{ facingMode: 'environment' \}\);/, 'うしろのカメラも、顔の追従と同じ部品の流れ(絵も同じ video から)。始め直しても、うしろのまま');
+  assert.match(use, /next\.stop\(\); \/\/ 途中まで読んだ顔の部品を捨てる/, '入れられなかった時は、途中まで読んだ顔の部品を捨てる');
+  assert.match(use, /const watchedTracks = new WeakSet\(\);/, '勝手に止まった時の見張りは、流れ(track)ごと');
+  assert.match(use, /next\.getPeople = \(\) => \[\];/, 'うしろのカメラでは顔の向きを追わない(写った人の逆を見ない)');
+  assert.match(use, /backCamera: touch,/);
+  assert.match(read('src', 'main.js'), /touch: TOUCH,/, 'main.js は指で触る端末かを渡すだけ');
 });
 
 test('切り替え: 入れられなかった時は、やさしい理由を出して切ったまま(もう一度押せる)', async () => {
@@ -290,5 +291,5 @@ test('画面の形: 入力の列にカメラのボタン(最初は隠す)・テ�
   const main = read('src', 'main.js');
   assert.match(main, /if \(app\.camera\?\.seeing\?\.\(\)\) chips\.unshift\(\['', 'カメラ オン', 'cam-rec'\]\);/, '絵を送るカメラの間は、上の札の先頭に赤い点の札');
   assert.match(main, /camera: app\.camera\?\.seeing\?\.\(\) \? app\.camera\.privacy :/, '下の注意書きも、絵を送る約束に替わる');
-  assert.match(main, /setupCameraSwitch\(\); \/\/ BCV/);
+  assert.match(main, /app\.camera\.setup\(\); \/\/ BCV/);
 });

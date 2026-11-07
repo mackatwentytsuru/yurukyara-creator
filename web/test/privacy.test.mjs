@@ -54,12 +54,14 @@ test('BCV: 絵の 1 枚(cameraFrame.js)は通信・保存をせず、JPEG を 1 
   assert.match(frame, /toDataURL\('image\/jpeg', q\)/, 'JPEG だけを作る');
   assert.match(frame, /clearRect\(/, '下書きの絵を消す');
   const users = files.filter((p) => /from '\.\/conversation\/cameraFrame\.js'|from '\.\.\/conversation\/cameraFrame\.js'|from '\.\/cameraFrame\.js'/.test(read(p))).map((p) => relative(SRC, p).split('\\').join('/'));
-  assert.deepEqual(users, ['main.js'], 'カメラの絵を作れるのは main.js の getImage だけ');
-  // main.js: 絵を送るのは、使う人が選んだカメラ(consent)が動いていて、近づいた合図でない回だけ
-  const main = code(join(SRC, 'main.js'));
-  assert.match(main, /dialogue\.getImage = \(\{ trigger \} = \{\}\) => \(trigger !== 'approach' && cameraUse\.seeing\(\) \? takeFrame\(app\.source\.video\) : null\);/);
-  assert.match(main, /seeing: \(\) => cameraUse\.consent && app\.mode === 'camera' && app\.source\?\.kind === 'mediapipe'/);
-  assert.match(main, /if \(e\.isTrusted && cameraUse\.plan\.show\) cameraUse\.consent = true;/, '入口は人が押した時だけ(自動で始める画面の click() では選んだことにしない)');
+  assert.deepEqual(users, ['stage/cameraUse.js'], 'カメラの絵を作れるのは stage/cameraUse.js の getImage だけ(main.js が 1 回作る)');
+  // cameraUse.js: 絵を送るのは、使う人が選んだカメラ(consent)が動いていて、近づいた合図でない回だけ
+  const use = code(join(SRC, 'stage', 'cameraUse.js'));
+  assert.match(use, /dialogue\.getImage = \(\{ trigger \} = \{\}\) => \(trigger !== 'approach' && use\.seeing\(\) \? takeFrame\(app\.source\.video\) : null\);/);
+  assert.match(use, /seeing: \(\) => use\.consent && app\.mode === 'camera' && app\.source\?\.kind === 'mediapipe'/);
+  assert.match(use, /if \(e\.isTrusted && use\.plan\.show\) use\.consent = true;/, '入口は人が押した時だけ(自動で始める画面の click() では選んだことにしない)');
+  assert.ok(!/\bfetch\s*\(/.test(use), 'cameraUse.js は通信しない(送るのは会話の側)');
+  assert.match(code(join(SRC, 'main.js')), /app\.camera = createCameraUse\(\{/, 'main.js は 1 回作るだけ');
 });
 
 test('カメラの追従(tracking/)は、通信をいっさいしない', () => {
