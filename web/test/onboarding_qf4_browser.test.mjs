@@ -105,7 +105,7 @@ for (const sz of SIZES) {
         const shadow = (e) => getComputedStyle(e).backgroundImage.includes('radial-gradient');
         const btns = [...actions.querySelectorAll('button, label, a')].filter((b) => b.getBoundingClientRect().height > 0);
         return {
-          vh: innerHeight, top: s.top, bottom: s.bottom, height: s.height, logH: log.getBoundingClientRect().height,
+          vh: innerHeight, top: s.top, bottom: s.bottom, height: s.height, width: s.width, logH: log.getBoundingClientRect().height,
           sheetScroll, actScroll, shadowSheet: shadow(sheet), shadowActions: shadow(actions), n: btns.length,
           overflowY: getComputedStyle(sheet).overflowY, sheetClient: sheet.clientHeight, sheetScrollH: sheet.scrollHeight,
         };
@@ -113,8 +113,8 @@ for (const sz of SIZES) {
       assert.ok(r.bottom <= r.vh + 1 && r.top >= -1, `札が画面に収まる: ${JSON.stringify(r)}`);
       if (sz.height <= 500) {
         assert.equal(r.overflowY, 'auto', '札ごと巻ける(overflow-y: auto)');
-        assert.ok(r.height <= r.vh * 0.8 + 2, `札は画面の 80% まで: ${r.height} / ${r.vh}`);
-        assert.ok(r.logH >= 55, `会話の欄は 56px 近くを残す: ${r.logH}`);
+        assert.ok(r.width === undefined || r.width < sz.width, '横向きは右の横の札(キャラは左。OL1)');
+        assert.ok(r.logH >= 120, `会話の欄は 140px 近くを残す: ${r.logH}`);
         // 巻けば、いちばん下のボタンまで届く
         await page.evaluate(() => { const s = document.querySelector('.fr-sheet'); s.scrollTop = s.scrollHeight; });
         await settle(page, 200);
@@ -122,9 +122,12 @@ for (const sz of SIZES) {
         const last = await page.evaluate(() => {
           const bs = [...document.querySelectorAll('.fr-actions button, .fr-actions label, .fr-actions a')].filter((b) => b.getBoundingClientRect().height > 0);
           const b = bs.at(-1).getBoundingClientRect();
-          return { bottom: b.bottom, vh: innerHeight };
+          const head = document.querySelector('.fr-head').getBoundingClientRect();
+          const sheet = document.querySelector('.fr-sheet').getBoundingClientRect();
+          return { bottom: b.bottom, vh: innerHeight, headTop: head.top, sheetTop: sheet.top };
         });
         assert.ok(last.bottom <= last.vh + 1, `巻いた後、いちばん下のボタンが画面の中: ${JSON.stringify(last)}`);
+        assert.ok(Math.abs(last.headTop - last.sheetTop) <= 2, `巻いても上の細い段(あと いくつ・あとで)は上に止まる: ${JSON.stringify(last)}`);
       } else if (sz.height <= 700) {
         assert.ok(!r.actScroll || r.shadowActions, `選ぶ所が札の中で巻ける時は影が出る: ${JSON.stringify(r)}`);
         const moreShown = await page.evaluate(() => !document.querySelector('.fr-more').hidden && getComputedStyle(document.querySelector('.fr-more')).display !== 'none');
@@ -138,12 +141,13 @@ for (const sz of SIZES) {
   });
 }
 
-test('キーボード(見える範囲だけが縮む): 札は見える範囲に収まり、入力欄と「これで作る」が見える', { skip: SLOW, timeout: 120_000 }, async (t) => {
+test('キーボード(見える範囲だけが縮む): 札は見える範囲に重なり、上の細い段・入力欄・「送る」が見える。下がると最初と同じ', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が無い');
   try {
     const { ctx, page, errors } = await open(browser, { width: 390, height: 844 });
     await ready(page);
+    const first = await page.evaluate(() => JSON.stringify(['.fr-sheet', '.fr-head', '.fr-log', '.fr-actions'].map((q) => { const b = document.querySelector(q).getBoundingClientRect(); return [b.top, b.bottom, b.left, b.right]; })));
     await page.fill('.fr-field input[type="text"]', '赤い提灯の子');
     await page.focus('.fr-field input[type="text"]');
     await page.evaluate(() => window.__kb(336)); // キーボードの高さ(約 336px)
@@ -154,17 +158,21 @@ test('キーボード(見える範囲だけが縮む): 札は見える範囲に�
       const s = sheet.getBoundingClientRect();
       const inp = document.querySelector('.fr-field input[type="text"]').getBoundingClientRect();
       const btn = document.querySelector('.fr-field button[type="submit"]').getBoundingClientRect();
-      return { vvh: visualViewport.height, kb: sheet.classList.contains('fr-kb'), bottom: s.bottom, top: s.top, inpTop: inp.top, inpBottom: inp.bottom, btnTop: btn.top, btnBottom: btn.bottom, bottomStyle: sheet.style.bottom };
+      const head = document.querySelector('.fr-head').getBoundingClientRect();
+      return { vvh: visualViewport.height, kb: sheet.classList.contains('fr-kb'), bottom: s.bottom, top: s.top, inpTop: inp.top, inpBottom: inp.bottom, btnTop: btn.top, btnBottom: btn.bottom, headTop: head.top, heightStyle: sheet.style.height };
     });
     assert.equal(r.kb, true, 'キーボード中の印');
-    assert.equal(r.bottomStyle, '336px', '札を見える範囲の下に付ける');
+    assert.equal(r.heightStyle, `${r.vvh}px`, '札を見える範囲の高さにする');
+    assert.ok(r.headTop >= 0 && r.headTop <= 2, `上の細い段が見える: ${JSON.stringify(r)}`);
     assert.ok(r.bottom <= r.vvh + 1 && r.top >= 0, `札が見える範囲に収まる: ${JSON.stringify(r)}`);
     assert.ok(r.inpTop >= 0 && r.inpBottom <= r.vvh + 1, `入力欄が見える: ${JSON.stringify(r)}`);
-    assert.ok(r.btnTop >= 0 && r.btnBottom <= r.vvh + 1, `「これで作る」が見える: ${JSON.stringify(r)}`);
-    await page.evaluate(() => window.__kb(0));
-    await settle(page, 300);
-    const back = await page.evaluate(() => ({ kb: document.querySelector('.fr-sheet').classList.contains('fr-kb'), bottom: document.querySelector('.fr-sheet').style.bottom }));
-    assert.deepEqual(back, { kb: false, bottom: '' }, 'キーボードが下がれば、元に戻る');
+    assert.ok(r.btnTop >= 0 && r.btnBottom <= r.vvh + 1, `「送る」が見える: ${JSON.stringify(r)}`);
+    await page.evaluate(() => { document.activeElement?.blur(); window.__kb(0); });
+    await settle(page, 1200);
+    const back = await page.evaluate(() => ({ kb: document.querySelector('.fr-sheet').classList.contains('fr-kb'), bottom: document.querySelector('.fr-sheet').style.bottom, height: document.querySelector('.fr-sheet').style.height }));
+    assert.deepEqual(back, { kb: false, bottom: '', height: '' }, 'キーボードが下がれば、元に戻る');
+    const again = await page.evaluate(() => JSON.stringify(['.fr-sheet', '.fr-head', '.fr-log', '.fr-actions'].map((q) => { const b = document.querySelector(q).getBoundingClientRect(); return [b.top, b.bottom, b.left, b.right]; })));
+    assert.equal(again, first, 'キーボードが下がった後は、最初と同じ見え方(札・上の細い段・会話・押す札の場所)');
     assert.deepEqual(errors, []);
     await ctx.close();
   } finally {

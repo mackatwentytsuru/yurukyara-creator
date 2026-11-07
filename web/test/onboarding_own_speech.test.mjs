@@ -146,7 +146,7 @@ test('初めての会話: 主役の絵の入口で、おまかせ・もう一度
     assert.equal(fr.character.id, MAIN.id, '選んだ時だけ主役');
     assert.equal(fr.step, 4);
     assert.equal(fr.settings.tone, 'own', `種 ${seed}: おまかせ`);
-    assert.ok(said.some((l) => l.who === 'note' && l.text.includes('この子の話し方')), '4 歩目のまとめに出る');
+    assert.ok(said.some((l) => l.who === 'note' && l.text.includes('この子らしい 話し方')), '4 歩目のまとめに出る');
     for (let i = 0; i < 4; i++) {
       await fr.act('persona_roll');
       assert.equal(fr.settings.tone, 'own', `種 ${seed}: もう一度ひく ${i + 1}`);

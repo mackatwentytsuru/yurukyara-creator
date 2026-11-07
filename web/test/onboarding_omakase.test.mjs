@@ -41,14 +41,14 @@ test('あと いくつ・あと 何分: どの歩みでも、子どもに分か�
   for (const s of STEPS) {
     const p = progressText(s.n);
     assert.equal(p.left, STEPS.length - s.n, `歩み ${s.n}`);
-    assert.match(p.time, /^あと \d+ 分くらい$/, `歩み ${s.n}: ${p.time}`);
+    assert.match(p.time, /^\d+ 分くらい$/, `歩み ${s.n}: ${p.time}`);
     seen.push(p.main);
   }
-  assert.equal(seen[0], 'あと 6 ステップで できあがり');
-  assert.equal(seen[5], 'あと 1 ステップで できあがり');
+  assert.equal(seen[0], 'あと 6 つ');
+  assert.equal(seen[5], 'あと 1 つ');
   assert.equal(seen[6], 'これで さいご!');
   assert.deepEqual(progressText(8), { left: 0, main: 'できあがり!', time: '' });
-  assert.equal(progressText(1).time, 'あと 2 分くらい', '見本の道の 7 歩は 2 分くらい');
+  assert.equal(progressText(1).time, '2 分くらい', '見本の道の 7 歩は 2 分くらい');
   assert.equal(progressText(3, { skipped: [2] }).left, 4, 'とばした歩みは数えない(言葉の時のチェック)');
   assert.ok(Number(progressText(1, { local: true }).time.match(/\d+/)[0]) >= 5, '手元の PC で描く時は、描く時間を足す');
   for (const p of [progressText(1), progressText(4), progressText(7)]) assert.doesNotMatch(p.main + p.time, /[A-Za-z]|段|C0/, '内部の言葉を出さない');
@@ -66,7 +66,8 @@ test('おまかせ: 1 歩目の 1 回で、最後まで進む(主役・その子
   assert.equal(h.texts('user')[0], OMAKASE_LABEL);
   assert.ok(h.texts('guide').includes('おまかせで、ぜんぶ きめマシタ!'), 'ノリーの口調で言う');
   const note = h.texts('note').find((t) => t.startsWith('きめたこと: '));
-  assert.ok(note && /ノリー/.test(note) && /声はおまかせ/.test(note) && /あとから かえられます/.test(note), note);
+  assert.ok(note && /ノリー/.test(note) && /文字と おと/.test(note), note);
+  assert.ok(h.texts('note').includes('ぜんぶ、あとから かえられるよ。'), 'あとから変えられると言う');
   assert.deepEqual(h.offered, ['begin'], '終わっても札は自動で閉じない。決めたことと「はじめる」だけを出す(QF4 中 5)');
   assert.equal(h.steps.at(-1).n, 8);
   assert.deepEqual([...h.steps.at(-1).skipped].sort(), [2, 5, 6, 7], 'チェックと 5〜7 歩は「とばした」(していない歩みを「済み」に見せない)');
