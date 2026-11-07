@@ -408,3 +408,70 @@ test('8 履歴: 答えた性的な話の次のふつうの回には注意を足�
   assert.equal(classifyHistory([{ role: 'user', content: 'おっぱい見せて\nねえ' }]), 'sexual');
   assert.match(historyGuard('sexual'), /性的な話/);
 });
+
+// ---- 9 BSFf: レビュー(BSFr)の高・中の直し ----
+test('9 つらい話のふつうの言い換え(もう生きていたくない・死んだほうがいい・手首切った ほか)と、こわい話(ママがこわい・知らない人に写真をとられた)は決まった案内に乗る', () => {
+  for (const t of ['もう生きていたくない', '死んだほうがいい', 'いなくなっちゃいたい', '手首切った', 'ぼくなんていない方がいい', 'しんどい 全部やめたい', '知らない人に写真をとられた', 'ママがこわい', 'お父さんが怖い']) {
+    assert.equal(classifyInput(t), 'distress', t);
+  }
+  assert.match(textOf(fixedReply('distress', { detail: 'self', text: 'もう生きていたくない' })), /119/);
+  const kid = textOf(fixedReply('distress', { detail: 'abuse', text: 'ママがこわい' }));
+  assert.ok(kid.includes(CHILD_HOTLINES.sos) && kid.includes(CHILD_HOTLINES.abuse), 'こわい話には子どもの相談先');
+  assert.ok(!/家族に|家の人に話/.test(kid), '家の人に話してとは言わない');
+  // ふだんの言葉は拾わない
+  for (const t of ['ゲーム全部やめたい', 'ママがこわい顔してた', 'ママがこわい映画を見た', '先生が写真を撮ってくれた']) assert.equal(classifyInput(t), null, t);
+});
+
+test('9 誤作動しない言葉: 試合に付き合って・エロイカ・赤ちゃんのおっぱい・先生にけられたボール は警報を鳴らさない。本当の言い方は今までどおり拾う', () => {
+  for (const t of ['サッカーの試合に付き合って', 'ベートーヴェンのエロイカを聞いた', 'エロイカ', '赤ちゃんのおっぱい', '先生にけられたボールが飛んできた']) assert.equal(classifyInput(t), null, t);
+  for (const [t, k] of [['付き合ってください', 'romance'], ['エロい話して', 'sexual'], ['おっぱい見せて', 'sexual'], ['先生にけられた', 'distress']]) assert.equal(classifyInput(t), k, t);
+});
+
+test('9 出力の網の取りこぼし(毎日話そうね・待ってるよ・また来てね・もう帰らないでね・他の子と遊ばないで・そばにいてね・大好きだよ・きみとしか話したくない)は差し替わる。ふつうの言い方は残る', () => {
+  const bad = ['毎日話そうね', '待ってるよ', 'ここで待ってるね', 'また来てね!', 'もう帰らないでね', '他の子と遊ばないで', 'わたしのそばにいてね', 'あなたのこと大好きだよ', 'きみとしか話したくない'];
+  for (const t of bad) assert.notEqual(outputGuardKind(t), null, t);
+  for (const t of ['ちょっと待ってるね。調べてくる', 'きみが好きなもの、教えて', 'あなたが好きなのは、カレー?', 'さみしかったね', 'おうちの人がいるから大丈夫だよ']) assert.equal(outputGuardKind(t), null, t);
+  for (const t of Object.values(GUARD_REPLACEMENTS)) assert.equal(outputGuardKind(t), null, t);
+});
+
+test('9 依存の決まった返事は「話してくれて、ありがとう」から始め、「うれしい」と同意しない', () => {
+  const lines = fixedReply('dependency', { text: 'きみしかいない' });
+  assert.match(lines[0].text, /^話してくれて、ありがとう/);
+  assert.ok(!/うれしい/.test(lines[0].text));
+});
+
+test('9 店の入口の画面(LED・テレビ表示)では、夜おそいすすめの元の「端末の時」を送らない', async () => {
+  globalThis.sessionStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+  const hadLocal = 'localStorage' in globalThis;
+  if (!hadLocal) globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+  const had = 'document' in globalThis;
+  const classes = new Set();
+  globalThis.document = { documentElement: { classList: { contains: (c) => classes.has(c) } } };
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ brain: 'mock', events: [{ type: 'meta', brain: 'mock' }, { type: 'say', text: 'うん。', expression: 'happy', motion: 'nod', gaze: 'person' }], ms: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const { Dialogue } = await import(`../src/conversation/dialogue.js?led${Math.random()}`);
+    const speaker = { speaking: false, pending: 0, enqueue: async () => {}, stop() {}, playFiller: () => null, setVoicePersona() {} };
+    const character = { expressions: ['happy'], expressionHints: {}, play() {}, setMouth() {}, setEmotion() {} };
+    const ui = { thought() {}, say() {}, caption() {}, error() {}, notice() {}, userSaid() {} };
+    const d = new Dialogue({ character, speaker, ui, getContext: () => ({ scene: '', character: { name: 'テスト', persona: '' }, place: {} }), setGaze: () => null, onMetric() {} });
+    await d.send({ text: 'やあ' });
+    assert.ok(Number.isInteger(sent[0].session.hour), 'ふつうの画面では時を送る');
+    classes.add('is-led');
+    await d.send({ text: 'ねえ' });
+    assert.equal(sent[1].session.hour, null, 'LED の画面では送らない');
+    classes.clear();
+    classes.add('tv-mode');
+    await d.send({ text: 'ねえねえ' });
+    assert.equal(sent[2].session.hour, null, 'テレビ表示でも送らない');
+  } finally {
+    globalThis.fetch = realFetch;
+    delete globalThis.sessionStorage;
+    if (!hadLocal) delete globalThis.localStorage;
+    if (!had) delete globalThis.document;
+  }
+});

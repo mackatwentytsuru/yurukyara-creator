@@ -7,6 +7,12 @@ import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
 
+/** 店の入口の画面(LED・テレビ表示)か。夜に動く画面なので、時間帯の休むすすめは付けない(BSFf) */
+function inShopScreen() {
+  const cl = globalThis.document?.documentElement?.classList;
+  return Boolean(cl && (cl.contains('is-led') || cl.contains('tv-mode')));
+}
+
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
@@ -74,7 +80,7 @@ export class Dialogue {
       // キャラがまだ決まっていない
     }
     this.pre = null; // 話し終わりの合図(声が止まった)で先に出した、あいづち { at, t0, fillerMs, fillerEndMs, text }
-    this.talk = createTalkSession(); // BSF: 往復の数・分・端末の時・すすめた後か(このタブの中だけ)
+    this.talk = createTalkSession({ hourOf: (ms) => (inShopScreen() ? null : new Date(ms).getHours()) }); // 店の入口の画面(LED・テレビ表示)は夜に動くので、時間帯のすすめは使わない(BSFf) // BSF: 往復の数・分・端末の時・すすめた後か(このタブの中だけ)
   }
 
   /**

@@ -39,7 +39,7 @@ npm ci
 npm start        # then open http://127.0.0.1:8787/
 ```
 
-- **Children in elementary school or younger: please use it together with a family member.** You are talking with an AI character (the screen says 「AI のキャラクターと話しています」). There is no age check, monitoring or reporting yet.<!-- BSF (11-08 safety, owner decision Q-0114 = A) -->
+- **Children in elementary school or younger: please use it together with a family member.** You are talking with an AI character (the screen says 「AI のキャラクターと話しています」). There is no age check, monitoring or reporting yet.<!-- BSF (11-08 safety) -->
 - Norrie appears first. The **3D / 2D** button switches Norrie between the 3D model and the 2D drawing (`?look=2d` opens the 2D one directly).
 - No API key is needed. Without one, the character talks with a stand-in brain, and the screen says so (「仮の頭脳です」).
 - To talk with Claude Haiku, set `ANTHROPIC_API_KEY` in your environment before `npm start`. Never write keys into files. (not checked yet)
