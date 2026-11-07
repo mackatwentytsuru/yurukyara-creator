@@ -273,6 +273,48 @@ html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origi
 .look-switch button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .look-switch button:disabled { cursor: wait; opacity: 0.6; }
 html.is-led .look-switch { display: none !important; }
+/* ---------- B5M: しつかん(3D の材質: いつもの・ぬの・け・つるつる)。見た目の 3D・2D の となり(main.js の B5M の塊・stage/shitsukanSwitch.js) ----------
+   押す所は 44px 以上・字は 14px 以上。幅 1600 未満: 「しつかん」のボタン 1 つ(スマホの上の段の行を増やさない幅。PC 1280 では 4 つを並べると
+   右上の「Claude の考え」に重なった)。押すと、ボタンのすぐ下に 4 つの札(画面からはみ出す時は stage/shitsukanSwitch.js が横へずらす。
+   選ぶと閉じる・外を押す・Esc でも閉じる。開いている間は main.js がキャラを札の下へ)。幅 1600 以上: 「しつかん」の字と 4 つのボタンを並べる */
+.shitsukan { position: relative; pointer-events: auto; }
+.shitsukan[hidden] { display: none; }
+html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
+.sk-open {
+  font: inherit; font-size: 14px; display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0 10px;
+  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.sk-open[aria-expanded="true"] { border-color: var(--lav); }
+.sk-open:focus-visible, .sk-list button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.sk-list { display: none; }
+.sk-title { display: none; }
+.sk-list button {
+  font: inherit; display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 56px; min-width: 44px; padding: 6px 4px;
+  border-radius: 14px; cursor: pointer; color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+}
+.sk-list button[aria-pressed="true"] { color: var(--ink); background: var(--lav); border-color: var(--lav); }
+.sk-main { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.sk-sub { font-size: 14px; line-height: 1.2; opacity: 0.85; white-space: nowrap; }
+@media (max-width: 1599px) {
+  .shitsukan.open .sk-list {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; position: absolute; top: calc(100% + 6px); right: 0; z-index: 6;
+    width: min(380px, calc(100vw - 24px)); padding: 8px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+}
+@media (min-width: 1600px) {
+  .sk-open { display: none; }
+  .sk-list {
+    display: inline-flex; align-items: center; gap: 2px; padding: 0 1px 0 12px; border-radius: 999px;
+    background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .sk-title { display: inline; font-size: 14px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+  .sk-list button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); transition: background 0.2s ease, color 0.2s ease; }
+  .sk-list .sk-sub { display: none; }
+  .sk-list .sk-main { font-size: 14px; }
+  .sk-list button[aria-pressed="true"] { color: var(--ink); background: var(--lav); }
+}
+/* ---------- B5M ここまで ---------- */
 .thought-body .row[hidden] { display: none; }
 
 /* 仮の頭脳の知らせ(契約 K5)。字幕の上に 1 行、黄色で */
