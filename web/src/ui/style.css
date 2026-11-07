@@ -304,6 +304,10 @@ html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
     width: min(380px, calc(100vw - 24px)); padding: 8px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   }
 }
+/* 低い画面(横向きのスマホ)では上の段の行が横に巻く(overflow-x)ので、札を上の段の全体(.top)の右にそろえて、巻く行で切れないようにする */
+@media (max-height: 500px) {
+  .shitsukan { position: static; }
+}
 @media (min-width: 1600px) {
   .sk-open { display: none; }
   .sk-list {
