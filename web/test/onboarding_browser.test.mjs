@@ -55,11 +55,13 @@ async function startServer(env) {
   throw new Error(`サーバーが立ちませんでした: ${out}`);
 }
 
-// 試しの画面: 会話の画面の CSS と、ボタンを置く #modes だけ。声の鍵の部品は、鍵を受け取ったら記録するだけの偽物
+// 試しの画面: 会話の画面の CSS と、ボタンを置く #modes だけ。声の鍵の部品は、鍵を受け取ったら記録するだけの偽物。
+// ?fakeapp=<id> の時は、舞台のまね(app。WebGL は使わない)を渡す: 舞台の子は <id>、入れ替え(swapCharacter)と描き直し(resize・
+// frameCharacter)は数えるだけ。canvas #stage は会話の画面と同じ CSS(style.css)で置く(PC で札の左に収めるかを測る)
 const PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="/__fr/src/ui/style.css"><link rel="help" href="https://example.org/readme#make-your-own-character-on-your-pc-with-claude-code"><title>初めての会話の試し</title></head>
-<body><header class="top"><div class="modes" id="modes"></div></header>
+<body><canvas id="stage"></canvas><header class="top"><div class="modes" id="modes"></div></header>
 <aside id="thought" class="thought" aria-label="Claude の考え"><button class="thought-head" type="button">Claude の考え</button></aside>
 <div id="gate" class="gate"><div class="gate-card"><h1>入口</h1><button type="button" class="primary">はじめる</button><button id="startSim" type="button">カメラなしで試す</button></div></div>
 <script type="module">
@@ -76,10 +78,21 @@ const byok = params.get('byok') === '1' ? {
   notice: () => '試しの鍵の部品です(本物の ElevenLabs は呼びません)。',
   canRemember: () => true,
 } : null;
-window.__test = { spoken, calls, simStarted: 0 };
+window.__test = { spoken, calls, simStarted: 0, swaps: [], resized: 0, framed: 0 };
+const fakeId = params.get('fakeapp');
+const NAMES = { mikan: 'みかんちゃん', norrie: 'ノリー', yokoso: 'ようこそくん' };
+const app = fakeId ? {
+  character: { id: fakeId, name: NAMES[fakeId] ?? fakeId },
+  characterId: fakeId,
+  persona: '',
+  stage: { state: {}, resize: () => { window.__test.resized += 1; }, frameCharacter: () => { window.__test.framed += 1; } },
+  swapCharacter: (next) => { window.__test.swaps.push(next?.id ?? null); },
+} : null;
+window.__test.app = app;
+addEventListener('yc:firstrun-closed', (e) => { window.__test.closed = e.detail; });
 // main.js の「カメラなしで試す」のまね: 押すと少し後に入口を隠す
 document.getElementById('startSim').addEventListener('click', () => { window.__test.simStarted += 1; setTimeout(() => document.getElementById('gate').classList.add('hidden'), 60); });
-window.__fr = mountFirstRun({ app: null, params, buttonHost: document.getElementById('modes'), byok, random: seededRandom(5) });
+window.__fr = mountFirstRun({ app, params, buttonHost: document.getElementById('modes'), byok, random: seededRandom(5) });
 </script></body></html>`;
 
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -139,13 +152,28 @@ async function checkLayout(page, where) {
         if (e.matches('.fr-text, .yp-reply') && parseFloat(getComputedStyle(e).fontSize) < 16) out.tiny.push(e.className);
       }
     }
-    // 会話の欄は、いつも最後の文が見えている(選択肢の高さが変わった後も)
+    // 会話の欄: 今のまとまりの最初の行(.fr-latest。「ごめんね…」など)がいつも見えていて、最後の文も見えている。
+    // まとまりが欄より長い時だけ、最後の文は下に隠れてよい(その時は、最初の行が欄の上の端にある)。CRITux2 中 2
     const log = document.querySelector('.fr-log');
     const last = log?.lastElementChild;
-    if (last && !document.querySelector('.yp-panel')) out.lastHidden = last.getBoundingClientRect().bottom - log.getBoundingClientRect().bottom;
+    const latest = log?.querySelector('.fr-latest');
+    if (last && !document.querySelector('.yp-panel')) {
+      const lb = log.getBoundingClientRect();
+      out.lastHidden = last.getBoundingClientRect().bottom - lb.bottom;
+      if (latest) {
+        const t = latest.getBoundingClientRect();
+        out.latestTop = t.top - lb.top;
+        out.latestShown = Math.min(t.bottom, lb.bottom) - Math.max(t.top, lb.top);
+        out.latestH = t.height;
+      }
+    }
     return out;
   });
-  assert.ok(!(r.lastHidden > 1), `${where}: 最後の文が ${Math.round(r.lastHidden)}px 隠れている`);
+  if (r.latestTop !== undefined) {
+    assert.ok(r.latestTop >= -1, `${where}: 今のまとまりの最初の行が上に ${Math.round(-r.latestTop)}px 隠れている`);
+    assert.ok(r.latestShown >= Math.min(r.latestH, 40) - 1, `${where}: 今のまとまりの最初の行が見えていない(見えている ${Math.round(r.latestShown)}px)`);
+    assert.ok(!(r.lastHidden > 1) || r.latestTop <= 20, `${where}: 最後の文が ${Math.round(r.lastHidden)}px 隠れているのに、最初の行が欄の上の端にない(${Math.round(r.latestTop)}px)`);
+  } else assert.ok(!(r.lastHidden > 1), `${where}: 最後の文が ${Math.round(r.lastHidden)}px 隠れている`);
   assert.ok(r.scrollW <= r.vw, `${where}: 横にはみ出しています(${r.scrollW} > ${r.vw})`);
   assert.deepEqual(r.wide, [], `${where}: 画面の外に出た物`);
   assert.deepEqual(r.small, [], `${where}: 押す所が 44px より小さい`);
@@ -175,6 +203,13 @@ async function walkWords(page, label, { full }) {
   await checkLayout(page, `${label} 1 歩目`);
   await shot(page, `${label}_1_start`);
   assert.equal(await page.$eval('.fr-sheet', (e) => e.dataset.step), '1');
+  // 歩みの名前(「7 声」など)は、行の高さを字の 1.4 倍以上にして、字の下が切れないようにする(幅 390 で「声」が「芦」に見えた。CRITux2 低 9)
+  const label7 = await page.$eval('.fr-steps li[data-n="7"] b', (e) => ({ lh: parseFloat(getComputedStyle(e).lineHeight), fs: parseFloat(getComputedStyle(e).fontSize), text: e.textContent }));
+  assert.ok(label7.text === '声' && label7.lh >= label7.fs * 1.4, `「7 声」の行の高さ ${JSON.stringify(label7)}`);
+  if (SHOTS) {
+    mkdirSync(SHOTS, { recursive: true });
+    await page.locator('.fr-steps').screenshot({ path: join(SHOTS, `${label}_steps.png`) });
+  }
   const gate = () => page.$eval('#gate', (e) => [getComputedStyle(e).opacity, getComputedStyle(e).pointerEvents].join(' '));
   assert.equal(await gate(), '0 none', '初めての会話の間は、入口のゲートを消して舞台を見せる');
   const thought = () => page.$eval('#thought', (e) => getComputedStyle(e).display);
@@ -340,12 +375,22 @@ test('初めての会話: 言葉の入口から 7 歩目まで(幅 390・400・P
 // 1×1 の白い PNG(試しの絵)
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64');
 
+/** 案内役の「ごめんね…」の行が、会話の欄の中に全部見えているか(スマホで上へ流れて見えなかった。CRITux2 中 2) */
+const sorryShown = (page) =>
+  page.evaluate(() => {
+    const log = document.querySelector('.fr-log').getBoundingClientRect();
+    const line = [...document.querySelectorAll('.fr-line.guide')].find((l) => l.textContent.includes('ごめんね'));
+    const b = line?.getBoundingClientRect();
+    return b ? { top: Math.round(b.top - log.top), below: Math.round(log.bottom - b.bottom), latest: line.classList.contains('fr-latest'), logH: Math.round(log.height) } : null;
+  });
+
 test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」→ この画面では作れないと正直に言う → 主役で続ける。絵は札に出したまま。鍵の部品が無いと正直に言う', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
   const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
   try {
-    const { ctx, page, errors } = await openPage(browser, server.base, { width: 390, height: 844, query: 'onboard=1&character=yokoso', reduced: true });
+    // ?character= なし: 案内役は主役(?character=<id> で開くと、その子が案内役になる。下の試験)
+    const { ctx, page, errors } = await openPage(browser, server.base, { width: 390, height: 844, query: 'onboard=1', reduced: true });
     try {
       await waitAct(page, 'pick');
       await page.setInputFiles('.fr-actions [data-act="pick"] input[type="file"]', { name: 'face.png', mimeType: 'image/png', buffer: PNG_1PX });
@@ -369,6 +414,10 @@ test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」�
       assert.ok(readme.h >= 44, 'README のリンクも押す所は 44px 以上');
       const pinned = () => page.$eval('.fr-pin', (e) => ({ hidden: e.hidden, src: e.querySelector('img')?.src ?? '', h: e.getBoundingClientRect().height }));
       assert.ok(!(await pinned()).hidden && /^blob:/.test((await pinned()).src), '選んだ絵を札の上に出したまま(D3)');
+      assert.ok((await pinned()).h <= 70, `スマホの絵の欄は小さく(${(await pinned()).h}px)`);
+      const sorry = await sorryShown(page);
+      assert.ok(sorry && sorry.top >= -1 && sorry.below >= -1, `「ごめんね…」が会話の欄の中に全部見えない ${JSON.stringify(sorry)}`);
+      assert.ok(sorry.latest, '「ごめんね…」は今のまとまりの最初の行');
       await checkLayout(page, '絵 3 歩目(見本がいない)');
       await shot(page, 'w390_3_nomatch_picture');
       await page.click('.fr-actions [data-act="use_guide"]');
@@ -478,6 +527,110 @@ test('「性格」のボタン(幅 400): 開く → おまかせ → これに�
       assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
     } finally {
       await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    server.proc.kill();
+  }
+});
+
+// README の「?character=mikan」で初めて開いた時(CRITux2 高 1): 入口の「案内するのは「みかんちゃん」です」のとおり、7 歩の案内役もその子。
+// 舞台を主役に替えず(舞台のまねの入れ替え 0 回)、「あとで」で閉じてもアドレスに ?character=mikan が残る(onboard=1 だけ消す)
+test('?character=<id> で開いた初めての訪問(幅 390): その子が案内役。舞台を主役に替えず、閉じても ?character=<id> を残す', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
+  try {
+    const { ctx, page, errors } = await openPage(browser, server.base, { width: 390, height: 844, query: 'onboard=1&character=mikan&fakeapp=mikan', reduced: true });
+    try {
+      await waitAct(page, 'words');
+      const guideLines = await page.$$eval('.fr-line.guide .fr-text', (els) => els.map((e) => e.textContent));
+      assert.match(guideLines[0], /^はじめまして。みかんちゃんだよ。/, `案内役の名乗り: ${guideLines[0]}`);
+      assert.ok(!guideLines.join('').includes('ノリ、'), '主役の口調で名乗らない');
+      assert.deepEqual(await page.$$eval('.fr-name', (els) => [...new Set(els.map((e) => e.textContent))]), ['みかんちゃん']);
+      assert.equal(await page.evaluate(() => window.__fr.lead.id), 'mikan');
+      await page.waitForTimeout(500);
+      assert.deepEqual(await page.evaluate(() => window.__test.swaps), [], '舞台を主役に替えない');
+      await shot(page, 'w390_mikan_1_start');
+
+      // 当たらない言葉: 「ごめんね…」が見えていて、「みかんちゃんで続きを試す」。見本の一覧は主役が先頭で、案内役は入れない
+      await page.fill('.fr-actions [data-act="words"] input', '空を飛ぶペンギンの郵便屋さん');
+      await page.click('.fr-actions [data-act="words"] button[type="submit"]');
+      await waitAct(page, 'use_guide');
+      assert.equal(await page.$eval('.fr-actions [data-act="use_guide"]', (e) => e.textContent), 'みかんちゃんで続きを試す');
+      const sorry = await sorryShown(page);
+      assert.ok(sorry && sorry.top >= -1 && sorry.below >= -1 && sorry.latest, `「ごめんね…」が会話の欄の中に全部見えない ${JSON.stringify(sorry)}`);
+      await checkLayout(page, '?character=mikan 見本がいない');
+      await shot(page, 'w390_mikan_3_nomatch');
+      await page.click('.fr-actions [data-act="choose_sample"]');
+      await waitAct(page, 'again');
+      const list = await page.$$eval('.fr-actions [data-act^="s_"]', (els) => els.map((e) => e.dataset.act));
+      assert.equal(list[0], `s_${MAIN.id}`, `見本の一覧の先頭は主役: ${list.join(' ')}`);
+      assert.ok(!list.includes('s_mikan'), '案内役は見本の一覧に入れない(「〜で続きを試す」で選べる)');
+      await checkLayout(page, '?character=mikan 見本の一覧');
+      await shot(page, 'w390_mikan_3_list');
+
+      // あとで: 閉じても ?character=mikan を残す。onboard=1 は消す。舞台は替えない
+      await page.click('.fr-sheet .fr-close');
+      await page.waitForSelector('.fr-sheet', { state: 'detached', timeout: 15_000 });
+      await page.waitForFunction(() => !/onboard=/.test(location.search), null, { timeout: 5000 });
+      const search = await page.evaluate(() => location.search);
+      assert.match(search, /[?&]character=mikan(&|$)/, `閉じた後のアドレス: ${search}`);
+      assert.deepEqual(await page.evaluate(() => window.__test.swaps), [], '閉じても舞台を替えない');
+      assert.equal(await page.evaluate(() => document.documentElement.classList.contains('fr-guest')), false);
+      assert.deepEqual(await page.evaluate(() => window.__test.closed), { reason: 'later', character: 'mikan' }, '閉じた知らせに、舞台の子');
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    server.proc.kill();
+  }
+});
+
+// PC(1280×720)で札が開いている間は、舞台の絵(canvas)を札の左までにする(幅の広い見本の右の端が札に隠れていた。CRITux2 低 13)。
+// 閉じると元の幅に戻す。札の左が狭い画面(768 の縦のタブレット)では狭めない
+test('PC(1280×720): 札が開いている間は、舞台の絵を札の左に収める。閉じると戻す。狭い画面では狭めない', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
+  const measure = (page) =>
+    page.evaluate(() => {
+      const c = document.getElementById('stage').getBoundingClientRect();
+      const s = document.querySelector('.fr-sheet')?.getBoundingClientRect();
+      return { side: document.documentElement.classList.contains('fr-side'), canvasW: Math.round(c.width), canvasRight: Math.round(c.right), sheetLeft: s ? Math.round(s.left) : null, resized: window.__test.resized, framed: window.__test.framed };
+    });
+  try {
+    const { ctx, page, errors } = await openPage(browser, server.base, { width: 1280, height: 720, query: 'onboard=1&character=mikan&fakeapp=mikan', reduced: true });
+    try {
+      await waitAct(page, 'words');
+      await page.waitForFunction(() => document.documentElement.classList.contains('fr-side'), null, { timeout: 5000 });
+      const open = await measure(page);
+      assert.ok(open.canvasRight <= open.sheetLeft - 8, `舞台の絵が札にかかる ${JSON.stringify(open)}`);
+      assert.ok(open.canvasW >= 420, `舞台の絵が狭すぎる ${JSON.stringify(open)}`);
+      assert.ok(open.resized >= 1 && open.framed >= 1, `舞台の大きさと見せ方を取り直していない ${JSON.stringify(open)}`);
+      await shot(page, 'pc1280_side_open');
+      await page.click('.fr-sheet .fr-close');
+      await page.waitForSelector('.fr-sheet', { state: 'detached', timeout: 15_000 });
+      await page.waitForFunction(() => !document.documentElement.classList.contains('fr-side'), null, { timeout: 5000 });
+      const closed = await measure(page);
+      assert.equal(closed.canvasW, 1280, `閉じた後の舞台の幅 ${JSON.stringify(closed)}`);
+      assert.ok(closed.resized > open.resized, '閉じた時も大きさを取り直す');
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+    } finally {
+      await ctx.close();
+    }
+    const tab = await openPage(browser, server.base, { width: 768, height: 1024, query: 'onboard=1&character=mikan&fakeapp=mikan', reduced: true, touch: false });
+    try {
+      await waitAct(tab.page, 'words');
+      await tab.page.waitForTimeout(400);
+      const m = await measure(tab.page);
+      assert.equal(m.side, false, `札の左が狭い画面で舞台を狭めた ${JSON.stringify(m)}`);
+      assert.equal(m.canvasW, 768);
+      assert.deepEqual(tab.errors, [], `画面のエラー: ${tab.errors.join(' / ')}`);
+    } finally {
+      await tab.ctx.close();
     }
   } finally {
     await browser.close();
