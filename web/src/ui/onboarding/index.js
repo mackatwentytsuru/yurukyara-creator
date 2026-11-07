@@ -35,6 +35,33 @@ import { isSpecId } from '../../character/urlSpec.js';
 export const DONE_KEY = 'yc.onboarded.v1';
 export const RESUME_KEY = 'yc.onboarding.resume.v1';
 export const MAKE_KEY = 'yc.make.v1';
+export const PROGRESS_KEY = 'yc.onboarding.progress.v1'; // 歩みごとの途中経過(この端末の中だけ。読み込み直しても続きから。高 1)
+const PROGRESS_TTL_MS = 12 * 60 * 60 * 1000;
+/** 残した途中経過(3 歩目以降で、子を決めた物だけ。古い物・形の違う物は捨てる) */
+export function readProgress(store, now = Date.now()) {
+  try {
+    const p = JSON.parse(store?.getItem(PROGRESS_KEY) ?? 'null');
+    if (!p || p.v !== 1 || !p.character?.id || !(p.step >= 3 && p.step <= 7) || !(now - (p.t ?? 0) < PROGRESS_TTL_MS)) return null;
+    return { ...p, reload: true };
+  } catch {
+    return null;
+  }
+}
+/** 舞台から捨てる見本の子の 3D の形と絵を、確実に捨てる(入れ替えのたびに GPU の物が積もらないように。高 1) */
+export function freeCharacter(ch) {
+  try {
+    ch?.dispose?.();
+    ch?.object3d?.traverse?.((o) => {
+      o.geometry?.dispose?.();
+      for (const m of [].concat(o.material ?? [])) {
+        for (const v of Object.values(m ?? {})) if (v && v.isTexture) v.dispose?.();
+        m?.dispose?.();
+      }
+    });
+  } catch {
+    // 捨てられなくても、会話は続ける
+  }
+}
 export const CLOSED_EVENT = 'yc:firstrun-closed'; // 閉じた時に window へ投げる(detail.reason = done | later)。S5 が使ってよい
 const TALK_TIMEOUT_MS = 20000;
 const STAGE_WAIT_MS = 15000; // 舞台のキャラが読み終わるのを待つ長さ(入れ替えの前)
@@ -322,7 +349,10 @@ export function mountFirstRun({
       const mod = await import('../../character/index.js');
       next = await mod.loadCharacter(mod.characterUrl(id), { ...(app.tierOverrides ?? {}) });
     }
+    const prevChar = app.character;
     swapIn(next);
+    // 見本の子から別の子に替えた時、前の見本の子は 3D の形と絵を捨てる(主役 = home は、戻す時に使うので捨てない)
+    if (prevChar && prevChar !== next && prevChar !== home.character) freeCharacter(prevChar);
     app.characterId = id;
     let text = rawPersonas.get(id);
     if (text === undefined) {
@@ -362,12 +392,15 @@ export function mountFirstRun({
    */
   async function afterClose(reason) {
     const back = lead;
+    // 最後まで行った時(done): 選んだ子は舞台に立ったまま。重い入れ替えをしない(Q-0111)。小さな「〜にもどす」ボタンを出す
+    const stay = reason === 'done';
     try {
-      if (app && (await whenStageReady()) && stageId() !== back.id) await putOnStage(back.id);
+      if (!stay && app && (await whenStageReady()) && stageId() !== back.id) await putOnStage(back.id);
     } catch (err) {
       console.warn('舞台を案内役に戻せませんでした:', err?.message ?? err);
     }
     if (stageId() === back.id || !app) root.classList.remove('fr-guest');
+    else if (stay) showReturn(back);
     try {
       const url = new URL(location.href);
       url.searchParams.delete('onboard');
@@ -381,7 +414,37 @@ export function mountFirstRun({
       // 消せなくても続ける
     }
     session?.removeItem(RESUME_KEY);
+    try {
+      local?.removeItem(PROGRESS_KEY);
+    } catch {
+      // 消せなくても続ける
+    }
     globalThis.dispatchEvent?.(new CustomEvent(CLOSED_EVENT, { detail: { reason, character: stageId() } }));
+  }
+
+  /** 選んだ子が舞台に残っている間、小さな「〜にもどす」ボタンを出す(押すと案内役に戻して、ボタンを消す) */
+  let returnBtn = null;
+  function hideReturn() {
+    returnBtn?.remove();
+    returnBtn = null;
+  }
+  function showReturn(back) {
+    hideReturn();
+    const name = (app?.character?.id === back.id && app.character.name) || back.name;
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'fr-return', textContent: `${name}にもどす` });
+    b.setAttribute('aria-label', `${name}にもどす(いまの子から、${name}に かわります)`);
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await putOnStage(back.id);
+        root.classList.remove('fr-guest');
+        hideReturn();
+      } catch {
+        b.disabled = false;
+      }
+    });
+    returnBtn = b;
+    parent.append(b);
   }
 
   /** 入口(ゲート)がまだ出ていれば、カメラなしで始める(閉じた後に入口が戻ってこないように。D4)。始まれば main.js が入口を隠す */
@@ -545,6 +608,7 @@ export function mountFirstRun({
 
   function startOnboarding({ resume = null } = {}) {
     if (sheet && !sheet.closed) return engine;
+    hideReturn();
     let finishTimer = null;
     let sizeWatch = null;
     lead = pickLead(); // ?character=<id> で開いた時は、その子が案内する(CRITux2 高 1)
@@ -562,6 +626,7 @@ export function mountFirstRun({
         sizeWatch?.disconnect();
         globalThis.removeEventListener?.('resize', onResize);
         if (reason === 'later') local?.setItem(DONE_KEY, 'later');
+        if (reason === 'done') local?.setItem(DONE_KEY, 'done');
         passGate(); // 入口を消したまま(fr-after)にしてから、fr-open を外す
         root.classList.remove('fr-open');
         fitStage(false);
@@ -591,10 +656,24 @@ export function mountFirstRun({
         session?.setItem(RESUME_KEY, JSON.stringify(snap));
         if (pendingNav) location.assign(pendingNav);
       },
+      // 歩みごとに途中経過を残す(読み込み直しても続きから)
+      progress: (snap) => {
+        try {
+          local?.setItem(PROGRESS_KEY, JSON.stringify({ ...snap, t: Date.now() }));
+        } catch {
+          // 覚えられなくても、会話は続ける
+        }
+      },
+      // 最後まで行った: 札は自動で閉じない(決めたことと「はじめる」を見せる)。閉じるのは「はじめる」を押した時
       onDone: () => {
         local?.setItem(DONE_KEY, 'done');
-        finishTimer = setTimeout(() => sheet.close('done'), 1600);
+        try {
+          local?.removeItem(PROGRESS_KEY);
+        } catch {
+          // 消せなくても続ける
+        }
       },
+      onBegin: () => sheet.close('done'),
     });
     api.engine = engine;
     api.sheet = sheet;
@@ -606,6 +685,9 @@ export function mountFirstRun({
       void whenStageReady()
         .then(async (ok) => {
           if (ok && !resume && !showCharacter && stageId() !== lead.id) await putOnStage(lead.id);
+          // 読み込み直した後の続き: 決めてあった見本の子を、舞台に出し直す(3D のまだない手元の子は、案内役のまま)
+          const rc = resume?.character;
+          if (ok && rc?.id && rc.sample && !rc.local && !showCharacter && stageId() !== rc.id) await putOnStage(rc.id);
           if (ok && sheet && !sheet.closed) fitStage(true);
         })
         .catch(() => null);
@@ -641,7 +723,18 @@ export function mountFirstRun({
     snap = null;
   }
   session?.removeItem(RESUME_KEY);
-  if (wanted === '1') startOnboarding({ resume: snap });
+  // 別の端末から続けた(6 桁の番号で合鍵を受け取った)端末では、7 つのステップは済みにする(1 歩目から始めない。低 14)。
+  // 合鍵は会話の記憶の部品(S3 の memoryKey.js。保存の名前 yc.memoryKey)が持つ。会話で覚える事が出た後にだけ作られる物なので、
+  // 合鍵がある端末は、この 7 歩を見たか、別の端末から続けたかのどちらか
+  try {
+    if (local && !local.getItem(DONE_KEY) && /^[A-Za-z0-9_-]{43}$/.test(local.getItem('yc.memoryKey') ?? '')) local.setItem(DONE_KEY, 'paired');
+  } catch {
+    // 覚えられなくても続ける
+  }
+  // 途中で読み込み直した時は、?onboard=1 が無くても続きから(歩みごとに残した途中経過。高 1)
+  const saved = !kiosk && wanted !== '0' && local?.getItem(DONE_KEY) !== 'done' ? readProgress(local) : null;
+  if (wanted === '1') startOnboarding({ resume: snap ?? saved });
+  else if (saved) startOnboarding({ resume: saved });
   else if (wanted !== '0' && auto && !kiosk && !local?.getItem(DONE_KEY)) startOnboarding();
 
   globalThis.__firstRun = api; // 試験と開発の確かめ用(main.js の window.__app と同じ考え)

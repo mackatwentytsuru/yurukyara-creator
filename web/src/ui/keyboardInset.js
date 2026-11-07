@@ -5,8 +5,11 @@
 //   --kb  : ページの下端から、見える範囲の下端までの差(px)。キーボードが無ければ 0
 //   --kbt : 見える範囲の上端のずれ(px。iOS が入力欄を見せようとページごとずらした分)
 //   --vvh : 見える範囲の高さ(px)
+// 見える高さが低い間は、html に kb-tight(640px 未満)・kb-short(400px 未満)も付ける(style.css が、字幕を 1 行にし、余分な札を隠す)
 // キーボードが出ている間だけ html に kb-open が付く。PC・テレビ・VR・Chrome の Android(キーボードで画面ごと縮む)では差が 0 で、何も変わらない。
 const MIN_KB = 80; // これより小さい差は、アドレスバーの出入りとみなして、キーボードとは数えない
+const TIGHT_VVH = 640; // 見える高さがこれ未満(px)なら kb-tight(縦持ちの iPhone 全般)
+const SHORT_VVH = 400; // 見える高さがこれ未満(px)なら kb-short(横向きの iPhone・高さの低い縦持ちのキーボード。上の段が見える範囲の半分を占めて、キャラが入力欄の下に隠れた)
 const SETTLE_MS = [60, 250, 600]; // iOS はキーボードのアニメーションの後に見える範囲を確定するので、あとから測り直す
 
 /** 文字を打つ欄か */
@@ -48,6 +51,8 @@ export function installKeyboardInset(doc = globalThis.document, win = globalThis
     root.style.setProperty('--kbt', `${m.top}px`);
     root.style.setProperty('--vvh', `${m.height}px`);
     root.classList.toggle('kb-open', m.kb > 0);
+    root.classList.toggle('kb-tight', m.kb > 0 && m.height < TIGHT_VVH); // 縦持ちのキーボード: 字幕は入力欄の上の 1 行・余分な札を隠す
+    root.classList.toggle('kb-short', m.kb > 0 && m.height < SHORT_VVH); // 横向きのキーボード: さらに上の段も隠す
     win.dispatchEvent(new Event('yc-kb')); // main.js が下の帯の高さを測り直す
   };
   const keepFocusVisible = () => {

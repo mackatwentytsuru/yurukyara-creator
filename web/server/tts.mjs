@@ -130,7 +130,7 @@ export async function streamSpeech(text, res, signal, voice = {}) {
     return;
   }
   if (!reserveChars(clean.length)) {
-    res.writeHead(429, { 'content-type': 'application/json' }).end('{"error":"今日の読み上げの上限に達しました"}');
+    res.writeHead(429, { 'content-type': 'application/json' }).end('{"error":"今日の声は使い切りました。あしたまた声で話せるよ","reason":"cap"}');
     return;
   }
   const url = speechUrl(voiceId);

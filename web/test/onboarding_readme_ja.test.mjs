@@ -19,8 +19,8 @@ test('日本語の README(README.md)に、作り方の節の見出しがある(s
     .filter((l) => /^#{1,6}\s/.test(l))
     .map((l) => l.replace(/^#+\s+/, '').trim());
   assert.ok(headings.includes(README_SECTION), `${README_JA_FILE} の見出しに「${README_SECTION}」が無い: ${headings.join(' / ')}`);
-  assert.ok(MAKE_STEPS.includes(README_JA_FILE) && MAKE_STEPS.includes(`「${README_SECTION}」`), MAKE_STEPS);
-  assert.ok(!MAKE_STEPS.includes('README.ja.md'), `手順の文が前の名前(README.ja.md)を指している: ${MAKE_STEPS}`);
+  // 第 12c 波(QF4 中 9): 子どもの画面の文には、README・コマンド・節の名前を書かない。くわしい手順は「つくりかたを見る」のリンクが README の節を開く
+  assert.ok(!/README|serve_review|yuru-next|--/.test(MAKE_STEPS) && MAKE_STEPS.includes('Claude Code'), MAKE_STEPS);
 });
 
 test('GitHub の節の印の作り方: 英字は小文字・記号(、など)を消す・空白は「-」。日本語の字はそのまま', () => {

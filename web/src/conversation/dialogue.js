@@ -6,6 +6,7 @@ import { streamChat } from './brainClient.js';
 import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
+import { VOICE_CAP_NOTICE } from './speaker.js';
 
 /** 店の入口の画面(LED・テレビ表示)か。夜に動く画面なので、時間帯の休むすすめは付けない(BSFf) */
 function inShopScreen() {
@@ -14,6 +15,15 @@ function inShopScreen() {
 }
 
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
+
+export const TEXT_MAX_CHARS = 500; // 1 回の発言の長さの上限(サーバーの validate と同じ 500 字)
+export const OFFLINE_NOTICE = 'いま つながらないよ。もう一度ためしてね';
+export const TOO_LONG_NOTICE = `ながすぎるよ。${TEXT_MAX_CHARS} 字までで言ってね`;
+
+/** 通信の失敗を、子どもに読める言葉にする(英語の Failed to fetch などは出さない)。送った言葉が長すぎた(413)時は、その言葉 */
+export function friendlyChatError(err) {
+  return Number(err?.status) === 413 ? TOO_LONG_NOTICE : OFFLINE_NOTICE;
+}
 
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
 const FILLER_FRESH_MS = 4000; // 話し終わりの合図で先に出したあいづちは、この間なら、送るときに出し直さない
@@ -126,8 +136,16 @@ export class Dialogue {
    */
   async send({ text: raw = '', trigger = null, t0 = performance.now(), mode = 'text' } = {}) {
     // 鍵らしい文字は、画面にもサーバーにも出さない(声の鍵を会話の欄に貼ってしまったとき)
-    const { text, count: secrets } = redactSecrets(raw);
+    let { text, count: secrets } = redactSecrets(raw);
     if (secrets) this.ui.notice?.(SECRET_NOTICE);
+    // 長すぎる言葉: 文字では断る(送らない・履歴にも残さない)。声は聞き取った最後の 500 字にする
+    if (Array.from(text).length > TEXT_MAX_CHARS) {
+      if (mode === 'text') {
+        this.ui.caption(TOO_LONG_NOTICE, 6000);
+        return;
+      }
+      text = Array.from(text).slice(-TEXT_MAX_CHARS).join('');
+    }
     const pre = this.pre;
     this.pre = null;
     // 先に出したあいづちは、止めずに続ける(cancel は、前の返事とタイマーだけを止める)
@@ -199,6 +217,7 @@ export class Dialogue {
       ...(this.interview ? { interview: true } : {}),
     };
 
+    let failed = false; // つながらない・断られた回(返事が 1 つも無い)は、履歴に残さない(長すぎる言葉の 413 が、以後ずっと続かないように)
     try {
       await streamChat(
         body,
@@ -240,18 +259,34 @@ export class Dialogue {
               })
               .then(() => {
                 if (id === this.turnId && spoken.length === sayCount && this.speaker.pending === 0) this.ui.caption(null, 1200);
+                // 今日の声の上限に当たった: 字幕だけで話している理由を、1 回だけ言う
+                if (this.speaker.capReached && !this.capNoticed) {
+                  this.capNoticed = true;
+                  this.ui.notice?.(VOICE_CAP_NOTICE);
+                }
               });
           } else if (ev.type === 'error') {
+            failed = true;
             this.ui.error(ev.message);
           }
         },
         ac.signal,
       );
     } catch (err) {
-      if (!ac.signal.aborted) this.ui.error(err.message);
+      if (!ac.signal.aborted) {
+        failed = true;
+        // 字幕の所に、やさしい日本語で(英語の文が、隠れた考えの箱にだけ出ていた。QA6)
+        const msg = friendlyChatError(err);
+        this.ui.error(msg);
+        this.ui.caption(msg, 6000);
+      }
     }
     if (id !== this.turnId) return;
     this.cur = null;
+    if (failed && !sayEvents.length) {
+      this.busy = false;
+      return;
+    }
     this.history.push({ role: 'user', content: trigger === 'approach' ? '(使う人が近づいてきた)' : askText });
     // 前の返事は、指示で決めた形(1 行 1 つの JSON。最初の行に用件と段階)のまま履歴に戻す。
     // ふつうの文で戻すと、モデルがそれをまねて、JSON でなく文章で答える回が出た(2026-11-02)

@@ -15,6 +15,8 @@ function harness({ creator = createSampleCreator({ main: MAIN }), guide = MAIN, 
   const steps = [];
   const stored = new Map();
   const snaps = [];
+  const progress = [];
+  let begun = 0;
   const talks = [];
   const personas = [];
   let offered = [];
@@ -43,12 +45,17 @@ function harness({ creator = createSampleCreator({ main: MAIN }), guide = MAIN, 
     onStep: (n) => steps.push(n),
     onPersona: (s, c) => personas.push({ s, c }),
     save: (s) => snaps.push(s),
+    progress: (s) => progress.push(s),
+    onBegin: () => {
+      begun += 1;
+    },
     onDone: () => {
       done = true;
     },
   });
   return {
-    fr, said, steps, stored, snaps, talks, personas, pins, shown,
+    fr, said, steps, stored, snaps, progress,
+    get begun() { return begun; }, talks, personas, pins, shown,
     get offered() { return offered.map((a) => a.id); },
     get offeredAll() { return offered; },
     get labels() { return offered.map((a) => a.label); },
@@ -194,7 +201,7 @@ test('鍵が違う → もう一度。あとで → 文字で話す。鍵の受�
   await h.fr.act('key', { key: 'bad-key' });
   assert.equal(h.texts('char').at(-1), 'うまくいかなかったみたい。');
   assert.deepEqual(h.offered, ['key', 'later']);
-  assert.equal(h.labels[1], '鍵なしで続ける', '札の右上の「あとで」(会話ごと閉じる)と同じ名前にしない');
+  assert.equal(h.labels[1], 'かぎなしで つづける', '札の右上の「あとで」(会話ごと閉じる)と同じ名前にしない');
   await h.fr.act('later');
   assert.equal(h.texts('char').at(-1), 'じゃあ、文字とレトロな音で話そうね。');
 
@@ -297,8 +304,10 @@ test('D1: 当たらない言葉は、だまって見本を出さない。正直�
   assert.deepEqual(h.shown, [], '舞台を替えない');
   assert.ok(h.texts('guide').includes('ごめんね。見本の中に、近い子がいないんだ。'));
   assert.ok(!h.texts('guide').some((t) => t.includes('連れてきたよ')), '「近い子を連れてきたよ」と言わない');
-  const steps = h.texts('note').find((t) => t.startsWith('PC での作り方'));
-  assert.ok(steps.includes('serve_review.py --make') && steps.includes('/yuru-next') && steps.includes(README_SECTION), steps);
+  const steps = h.texts('note').find((t) => t.startsWith('あたらしい子は'));
+  assert.equal(steps, MAKE_STEPS);
+  assert.ok(steps.includes('パソコンの Claude Code で つくれるよ'), steps);
+  assert.ok(!/serve_review|yuru-next|README|スキル|make-character|--/.test(steps), '子どもの画面に開発の言葉を出さない(中 9)');
   assert.ok(!/https?:\/\//.test(steps), '画面のコードに外の住所を書かない');
   assert.deepEqual(h.offered, ['use_guide', 'choose_sample', 'readme', 'again']);
   const readme = h.offeredAll.find((a) => a.id === 'readme');
@@ -371,7 +380,8 @@ test('D4: 終わる時、見本の子なら「舞台は主役に戻る」と言�
   await h.fr.act('to_voice');
   await h.fr.act('close');
   assert.equal(h.done, true);
-  assert.ok(h.texts('note').includes(`舞台は${MAIN.name}に戻ります。ロボくんには、また「はじめての会話」から会えます。`));
+  assert.ok(h.texts('note').includes(`ロボくんは、舞台に立ったままだよ。${MAIN.name}にもどしたい時は、「${MAIN.name}にもどす」を押してね。`), 'Q-0111: 選んだ子は舞台に残る');
+  assert.deepEqual(h.offered, ['begin'], '自動で閉じず、「はじめる」を出す(中 5)');
   const g = harness({ voice: { canTakeKey: () => false } });
   await g.fr.start();
   await g.fr.act('words', { text: 'ねこ' });
@@ -413,4 +423,56 @@ test('?character=<id> の子が案内役: 名乗り・「〜で続きを試す�
   await h.fr.act('later');
   await h.fr.act('close');
   assert.ok(!h.texts('note').some((t) => t.startsWith('舞台は')), '案内役の子のまま終わる時は「舞台は〜に戻ります」と言わない');
+});
+
+// ---- QF4: 途中経過・続き・終わり ----
+test('QF4 高 1: 歩みごとに途中経過を残し、読み込み直した後は、その歩みから続く(1 歩目に戻らない)', async () => {
+  const h = harness();
+  await h.fr.start();
+  await h.fr.act('words', { text: 'ロボ' });
+  await h.fr.act('keep');
+  await h.fr.act('persona_ok');
+  assert.deepEqual([...new Set(h.progress.map((p) => p.step))], [1, 3, 4, 5], '歩みごとに残す');
+  const last = h.progress.at(-1);
+  assert.equal(last.character.id, 'robo');
+  assert.ok(last.settings, '性格も残す');
+  // 読み込み直した後(別の台本が、残した途中経過から続ける)
+  const g = harness();
+  await g.fr.resume({ ...last, reload: true });
+  assert.equal(g.fr.step, 5, '5 歩目から続く');
+  assert.equal(g.fr.character.id, 'robo');
+  assert.ok(g.texts('guide').includes('おかえり! さっきの つづきからだよ。'));
+  assert.ok(!g.texts('guide').includes('どんな子を生み出そうか?'), '1 歩目に戻さない');
+  assert.deepEqual(g.offered, ['to_retro']);
+});
+
+test('QF4 中 5: 最後まで行っても札を自動で閉じない。決めたことと「はじめる」を出し、押した時だけ閉じる', async () => {
+  const h = harness({ voice: { canTakeKey: () => false } });
+  await h.fr.start();
+  await h.fr.act('words', { text: 'ロボ' });
+  await h.fr.act('keep');
+  await h.fr.act('persona_ok');
+  await h.fr.act('to_retro');
+  await h.fr.act('to_voice');
+  await h.fr.act('close');
+  assert.equal(h.done, true);
+  assert.equal(h.begun, 0, 'まだ閉じない');
+  assert.ok(h.texts('note').some((t) => t.startsWith('きめたこと: ロボくん・性格「')), '決めたこと(子・性格)を見せる');
+  assert.deepEqual(h.offered, ['begin']);
+  assert.equal(await h.fr.act('begin'), true);
+  assert.equal(h.begun, 1, '「はじめる」で閉じる');
+});
+
+test('QF4 低 14: 空の鍵は「かぎが からっぽだよ」と言う。ことばから作る時は、チェックをとばす理由を言う', async () => {
+  const h = harness();
+  await h.fr.start();
+  await h.fr.act('words', { text: 'ねこ' });
+  assert.ok(h.texts('note').some((t) => t.includes('2 つ目の「チェック」は とばすよ')));
+  await h.fr.act('use_guide');
+  await h.fr.act('persona_ok');
+  await h.fr.act('to_retro');
+  await h.fr.act('to_voice');
+  await h.fr.act('key', { key: '   ' });
+  assert.ok(h.texts('note').includes('かぎが からっぽだよ。かぎを入れてね。'));
+  assert.deepEqual(h.offered, ['key', 'later'], 'もう一度入れられる');
 });

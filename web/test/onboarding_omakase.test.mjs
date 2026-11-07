@@ -67,7 +67,7 @@ test('おまかせ: 1 歩目の 1 回で、最後まで進む(主役・その子
   assert.ok(h.texts('guide').includes('おまかせで、ぜんぶ きめマシタ!'), 'ノリーの口調で言う');
   const note = h.texts('note').find((t) => t.startsWith('きめたこと: '));
   assert.ok(note && /ノリー/.test(note) && /声はおまかせ/.test(note) && /あとから かえられます/.test(note), note);
-  assert.deepEqual(h.offered, [], '終わったら選びは出さない');
+  assert.deepEqual(h.offered, ['begin'], '終わっても札は自動で閉じない。決めたことと「はじめる」だけを出す(QF4 中 5)');
   assert.equal(h.steps.at(-1).n, 8);
   assert.deepEqual([...h.steps.at(-1).skipped].sort(), [2, 5, 6, 7], 'チェックと 5〜7 歩は「とばした」(していない歩みを「済み」に見せない)');
   assert.ok(h.steps.some((s) => s.n === 4), '性格の歩みを通った');

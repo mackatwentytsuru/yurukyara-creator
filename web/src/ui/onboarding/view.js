@@ -41,7 +41,7 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
     steps.append(li);
     return li;
   });
-  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで' });
+  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで', ariaLabel: 'あとで(はじめての会話をとじる)' });
   // あと いくつ・あと 何分 で おわるか(本人 11/7)。上の段の右、「あとで」の左に 2 行で(札の高さは変えない)
   const leftMain = el('b');
   const leftTime = el('span');
@@ -59,7 +59,45 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
     live,
     actions,
   );
+  // 選ぶ所が札の中で巻ける(下に続きがある)時だけ出す、小さな「まだ あるよ」の印(影だけでは気づかない。中 8)
+  const more = el('p', { className: 'fr-more', ariaHidden: 'true', hidden: true, textContent: '▼ したに まだ あるよ' });
+  sheet.append(more);
   parent.append(sheet);
+  function checkMore() {
+    const room = actions.scrollHeight - actions.clientHeight;
+    const scrolls = room > 3 && getComputedStyle(actions).overflowY !== 'visible';
+    more.hidden = !(scrolls && actions.scrollTop < room - 3);
+  }
+  actions.addEventListener('scroll', checkMore, { passive: true });
+  globalThis.addEventListener?.('resize', checkMore);
+
+  /**
+   * キーボードが出た時: iPhone の Safari・Chrome は「見える範囲(visualViewport)」だけが縮み、画面の元の大きさは変わらない。
+   * 札が見える範囲の下に付き、見える範囲の中に収まり(高さを見える範囲に合わせる)、入力欄と「これで作る」が見えるようにする(高 3)。
+   * 入力欄に入ったら、その欄を札の中で見える所へ動かす
+   */
+  const vv = globalThis.visualViewport ?? null;
+  function fitKeyboard() {
+    if (!vv || closed) return;
+    const kb = Math.max(0, Math.round((globalThis.innerHeight ?? 0) - vv.height - (vv.offsetTop ?? 0)));
+    const open = kb > 80;
+    sheet.classList.toggle('fr-kb', open);
+    sheet.style.setProperty('--fr-vvh', `${Math.round(vv.height)}px`);
+    sheet.style.bottom = open ? `${kb}px` : '';
+    if (open) revealField();
+  }
+  function revealField() {
+    const f = sheet.contains(sheet.ownerDocument.activeElement) ? sheet.ownerDocument.activeElement : null;
+    if (f && /^(INPUT|TEXTAREA)$/.test(f.tagName)) f.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }
+  vv?.addEventListener('resize', fitKeyboard);
+  vv?.addEventListener('scroll', fitKeyboard);
+  sheet.addEventListener('focusin', () => {
+    setTimeout(() => {
+      fitKeyboard();
+      revealField();
+    }, 320); // キーボードが上がり切るのを待つ
+  });
   closeBtn.addEventListener('click', () => close('later'));
   log.addEventListener('click', () => skip?.abort()); // 押すと、文字送りを飛ばす
 
@@ -221,7 +259,7 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
   }
 
   function button(a) {
-    const b = el('button', { type: 'button', className: `fr-btn${a.primary ? ' primary' : ''}`, textContent: a.label });
+    const b = el('button', { type: 'button', className: `fr-btn${a.primary ? ' primary' : ''}`, textContent: a.label, ariaLabel: a.label });
     b.dataset.act = a.id;
     b.addEventListener('click', () => {
       voice.unlock();
@@ -237,6 +275,7 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
   function fileAction(a) {
     const input = el('input', { type: 'file', accept: 'image/*', className: 'fr-file' });
     if (a.capture) input.setAttribute('capture', 'environment');
+    input.setAttribute('aria-label', a.label);
     const label = el('label', { className: `fr-btn${a.primary ? ' primary' : ''}` }, input, a.label);
     label.dataset.act = a.id;
     label.addEventListener('click', () => voice.unlock());
@@ -268,7 +307,7 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
 
   /** 押すと別のタブで開くだけのリンク(README の作り方の節など)。台本は進まない */
   function linkAction(a) {
-    const link = el('a', { className: `fr-btn fr-link${a.primary ? ' primary' : ''}`, href: a.url, target: '_blank', rel: 'noopener noreferrer', textContent: a.label });
+    const link = el('a', { className: `fr-btn fr-link${a.primary ? ' primary' : ''}`, href: a.url, target: '_blank', rel: 'noopener noreferrer', textContent: a.label, ariaLabel: `${a.label}(べつのタブでひらきます)` });
     link.dataset.act = a.id;
     return link;
   }
@@ -301,7 +340,7 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
   function textAction(a) {
     const input = el('input', { type: 'text', placeholder: a.placeholder ?? '', autocomplete: 'off', enterKeyHint: 'send', ariaLabel: a.label });
     const count = el('p', { className: 'fr-count', textContent: a.max ? `0 / ${a.max}` : '' });
-    const submit = el('button', { type: 'submit', className: 'fr-btn primary', textContent: a.submit ?? '送る' });
+    const submit = el('button', { type: 'submit', className: 'fr-btn primary', textContent: a.submit ?? '送る', ariaLabel: a.submit ?? '送る' });
     const form = el('form', { className: 'fr-field', autocomplete: 'off' }, input, submit);
     form.dataset.act = a.id;
     const over = () => a.max && countChars(input.value.trim()) > a.max;
@@ -324,12 +363,12 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
   }
 
   function keyAction(a) {
-    const input = el('input', { type: 'password', autocomplete: 'off', spellcheck: false, placeholder: 'ElevenLabs の鍵', ariaLabel: 'ElevenLabs の鍵' });
+    const input = el('input', { type: 'password', autocomplete: 'off', spellcheck: false, placeholder: 'こえの かぎ', ariaLabel: 'こえの かぎ' });
     input.setAttribute('autocapitalize', 'off');
     input.setAttribute('data-1p-ignore', '');
     input.setAttribute('data-lpignore', 'true');
     const remember = el('input', { type: 'checkbox' });
-    const submit = el('button', { type: 'submit', className: 'fr-btn primary', textContent: a.label });
+    const submit = el('button', { type: 'submit', className: 'fr-btn primary', textContent: a.label, ariaLabel: a.label });
     const form = el('form', { className: 'fr-field', autocomplete: 'off' }, input, submit);
     form.dataset.act = a.id;
     form.addEventListener('submit', (e) => {
@@ -337,15 +376,14 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
       voice.unlock();
       const key = input.value;
       input.value = ''; // 鍵の文字は、すぐ画面から消す
-      if (!key.trim()) return;
-      onAct(a.id, { key, remember: a.remember ? remember.checked : false });
+      onAct(a.id, { key, remember: a.remember ? remember.checked : false }); // からっぽでも渡す(台本が「かぎが からっぽだよ」と言う)
     });
     return el(
       'div',
       { className: 'fr-wide' },
-      el('p', { className: 'fr-field-label', textContent: '鍵(この欄の文字は、押したらすぐ消えます)' }),
+      el('p', { className: 'fr-field-label', textContent: 'かぎ(この欄の文字は、押したらすぐ消えます)' }),
       form,
-      a.remember ? el('label', { className: 'fr-remember' }, remember, 'この端末に覚えておく(しない方が安全)') : null,
+      a.remember ? el('label', { className: 'fr-remember' }, remember, 'この端末に おぼえておく(しない方が あんぜん)') : null,
     );
   }
 
@@ -354,9 +392,10 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
    * 出さない時: 選びが無い・最後の「はじめる」だけ・手元の PC の作る画面(枠の中に、作る画面のおまかせがある)
    */
   function autoButton(list) {
-    if (!onAuto || !list.length || list.every((a) => a.id === 'close') || list.some((a) => a.kind === 'frame')) return null;
+    if (!onAuto || !list.length || list.every((a) => a.id === 'close' || a.id === 'begin') || list.some((a) => a.kind === 'frame')) return null;
     const b = el('button', { type: 'button', className: 'fr-btn fr-auto fr-wide', textContent: OMAKASE_LABEL });
     b.dataset.act = 'omakase';
+    b.setAttribute('aria-label', 'おまかせ(ぜんぶ じどう)。のこりを ぜんぶ おすすめで きめて、さいごまで すすみます');
     b.title = 'のこりを ぜんぶ おすすめで きめて、さいごまで すすみます。あとから かえられます';
     b.addEventListener('click', () => {
       voice.unlock();
@@ -375,6 +414,7 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
     );
     if (list.length) stats.actionsShown += 1;
     sheet.dataset.actions = list.map((a) => a.id).join(' ');
+    requestAnimationFrame?.(checkMore);
     scroll(); // 選択肢の高さが変わると、会話の欄の見える高さも変わる。いつも最後の文が見えるようにする
   }
 
@@ -382,6 +422,9 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
     if (closed) return;
     closed = true;
     skip?.abort();
+    globalThis.removeEventListener?.('resize', checkMore);
+    vv?.removeEventListener('resize', fitKeyboard);
+    vv?.removeEventListener('scroll', fitKeyboard);
     sheet.remove();
     for (const u of urls) URL.revokeObjectURL(u);
     urls.clear();

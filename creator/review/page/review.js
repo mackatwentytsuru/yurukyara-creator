@@ -318,7 +318,9 @@ function renderBar() {
   if (redoLimit && !reason && !app.error) { msg.textContent = "直しは 3 回までです。この絵で OK にするか、PC で別の子を作ってください"; msg.className = "bar-msg"; msg.hidden = false; }
   const armed = Date.now() < app.armedUntil;
   $("okBtn").classList.toggle("armed", armed);
-  $("okBtn").textContent = armed ? `${GATE_LABEL[app.gate]}を OK にする(もう一度)` : "OK";
+  $("okBtn").textContent = armed ? `もう一度 押すと きまるよ(${GATE_LABEL[app.gate]}を OK)` : "OK";
+  $("okBtn").setAttribute("aria-label", armed ? `もう一度 押すと ${GATE_LABEL[app.gate]}が OK に きまるよ` : "OK にする");
+  $("redoBtn").setAttribute("aria-label", "やり直し。一言を添えて、直してもらう");
 }
 
 async function send(decision, note, tags) {
@@ -357,9 +359,9 @@ $("okBtn").addEventListener("click", async () => {
     await send("ok", null, []);
     return;
   }
-  app.armedUntil = Date.now() + 3000;
+  app.armedUntil = Date.now() + 6000; // もう一度押す待ちは 6 秒(3 秒では、読んでいる間に消えた。低 15)
   renderBar();
-  setTimeout(renderBar, 3100);
+  setTimeout(renderBar, 6100);
 });
 
 $("cancelBtn").addEventListener("click", async () => {

@@ -114,6 +114,7 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
   let timer = null;
 
   const say = (t) => (status.textContent = t);
+  let forgottenSaid = false; // 「全部わすれました」を出している間 true。新しく覚えたら消す(覚えているのに「全部わすれました」が残らないように)
   // QR は番号と同じ時に出し、同じ時に消す(番号が切れた・全部わすれた・出し直した)。作っている間に消えたら出さない
   let qrTurn = 0;
   const hideQr = () => {
@@ -150,6 +151,10 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
     hideQr();
   };
   const render = (data) => {
+    if (data.items?.length && forgottenSaid) {
+      forgottenSaid = false;
+      say('');
+    }
     notice.textContent = data.notice || emptyMemory().notice; // 合鍵が無い時も「7 日で消えます」を出す
     list.replaceChildren(
       ...(data.items ?? []).map((it) => {
@@ -185,6 +190,7 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
     clearCode();
     show(emptyMemory());
     say(text);
+    forgottenSaid = Boolean(text);
   };
   // 番号で受け取る(打った時も、QR で開いた時の確かめの「はじめる」も、この 1 つ)
   const claimWith = async (code, passValue = pass.value) => {

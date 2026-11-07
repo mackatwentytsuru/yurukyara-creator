@@ -334,6 +334,12 @@ async function walkWords(page, label, { full }) {
   assert.deepEqual(calls.map((c) => c.len), [BAD_KEY.length, GOOD_KEY.length]);
 
   await page.click('.fr-actions [data-act="close"]');
+  // QF4 中 5: 終わっても札は自動で閉じない。決めたことと「はじめる」を出し、押した時だけ閉じる
+  await waitAct(page, 'begin');
+  await page.waitForTimeout(2200);
+  assert.ok(await page.$('.fr-sheet'), '2.2 秒たっても札は閉じない(昔は 1.6 秒で閉じた)');
+  assert.match(await logText(page), /きめたこと: /);
+  await page.click('.fr-actions [data-act="begin"]');
   await page.waitForSelector('.fr-sheet', { state: 'detached', timeout: 15_000 });
   // 閉じたら: 入口を出し直さない(カメラなしで始める)・アドレスから onboard=1 を消す・読み込み直しても 7 歩を始めない(D4)
   await page.waitForFunction(() => document.getElementById('gate').classList.contains('hidden'), null, { timeout: 5000 });
@@ -415,7 +421,8 @@ test('絵の入口(幅 390): 人の絵 →「ゆるキャラにしてみる?」�
       await page.click('.fr-actions [data-act="yurufy"]');
       await waitAct(page, 'use_guide');
       assert.match(await logText(page), /この画面では、絵から新しい子を作れないんだ/, 'だまって見本を「できた子」にしない(D1)');
-      assert.match(await logText(page), /serve_review\.py --make/);
+      assert.match(await logText(page), /あたらしい子は、パソコンの Claude Code で つくれるよ/);
+      assert.doesNotMatch(await logText(page), /serve_review|yuru-next|README|make-character/, '子どもの画面に開発の言葉を出さない(QF4 中 9)');
       const readme = await page.$eval('.fr-actions a[data-act="readme"]', (a) => ({ href: a.href, target: a.target, rel: a.rel, h: a.getBoundingClientRect().height }));
       assert.equal(readme.href, 'https://example.org/readme#make-your-own-character-on-your-pc-with-claude-code', 'README の作り方の節へ 1 回で飛ぶ(頁の link rel="help")');
       assert.deepEqual([readme.target, readme.rel], ['_blank', 'noopener noreferrer']);
