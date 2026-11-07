@@ -95,6 +95,14 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
   padding: 10px 16px; border-radius: 16px; background: rgba(12, 10, 22, 0.78); border: 1px solid var(--lav); color: var(--text);
 }
 .align.bad { border-color: var(--warn); color: var(--warn); }
+/* ヘッドセットの 2D の画面(Quest のブラウザ 1280×670): 「VR で見る」の案内は、上の段のすぐ下の左(押すボタンの下)に。
+   真ん中に出すとキャラの顔に重なった。幅は画面の 4 割まで(キャラの左の端より左) */
+html.is-headset .align {
+  left: 12px; transform: none; width: auto; max-width: min(40vw, 500px); text-align: left; font-size: 20px;
+  top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 96px) + 8px);
+}
+/* VR・AR を頼んでいる間(入るか断られるまで)は押せない。押せないと分かる見た目に */
+.place-mode-button:disabled { opacity: 0.55; cursor: progress; }
 /* VR・AR を頼んだ後、入るか断られるまで、画面の真ん中に出す(実機の Quest: ブラウザの下に「許可する」の帯が出て、答えるまで何も起きなかった)。
    押す所は無い(読むだけ)。下の帯・上の段より手前 */
 .xr-wait {

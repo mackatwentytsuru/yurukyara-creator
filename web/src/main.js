@@ -322,7 +322,9 @@ async function toggleMic() {
     updatePrivacy();
   } catch (err) {
     listener = null;
-    ui.error(err.message);
+    // マイクの許可の窓で断られた時は、英語の「Permission denied」でなく日本語で(実機の Quest で、断ると英語が出た)
+    const denied = err?.name === 'NotAllowedError' || err?.name === 'SecurityError';
+    ui.error(denied ? 'マイクを使えませんでした(ブラウザで許可されませんでした)。文字で話しかけられます' : err.message);
   }
 }
 
