@@ -95,7 +95,7 @@ export function createStage(canvas) {
     }
     // 横: 全身で、遠近で手前に出た羽・腕の角が画面の横の端より外へ出る時は、見込みの幅を広げて置き直す(小さくなるだけなので、頭のすき間は広がる)
     if (view === 'full' && !state.immersive && viewW > 0) {
-      const edge = Math.max(6, viewW * 0.015);
+      const edge = Math.max(8, viewW * 0.05); // 羽は話す・跳ねる間に箱の外へ振れる(430×932 のちょうちんくんで、止まった箱は収まっても羽が両端で切れた)ので、片側 5% 空ける
       for (let k = 0; k < 3; k++) {
         const sp = screenSpan(box, viewW, viewH);
         if (sp.left >= edge && sp.right <= viewW - edge) break;

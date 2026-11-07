@@ -773,7 +773,7 @@ function fitBottom() {
     stage.state.bottomInset = h + tvBottomReserve(window.innerHeight);
   } else {
     // 帯の上に出る字幕と札の分(足に重ならないように)。字幕は 2 行 + 知らせで画面の高さの 14〜16% ほど(L1: 80px 固定では、字幕がキャラの足元・体に 12 場面でかかった)
-    stage.state.bottomInset = Math.max(h + 8 + Math.round(Math.min(140, Math.max(96, window.innerHeight * 0.16))), cardInset());
+    stage.state.bottomInset = Math.max(h + 8 + Math.round(Math.min(140, Math.max(96, window.innerHeight * 0.16)) + (window.innerHeight < 720 ? 14 : 0)), cardInset());
   }
   reframe();
 }
