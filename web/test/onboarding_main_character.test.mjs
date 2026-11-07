@@ -47,7 +47,7 @@ test('案内役を渡さない時は主役になり、主役の口調で名乗�
   assert.equal(fr.guide, MAIN_CHARACTER);
   assert.equal(fr.guideName, MAIN_CHARACTER.name);
   await fr.start();
-  assert.ok(lines[0].text.includes(MAIN_CHARACTER.name) && lines[0].text.includes('ノリー、がんばりマス'), lines[0].text);
+  assert.ok(lines[0].text.includes(MAIN_CHARACTER.name) && lines[0].text.includes('ノリーデス'), lines[0].text);
 });
 
 test('ほかの子を案内役に渡すと、その子の名前でふつうに名乗る(主役の口調にしない)', async () => {

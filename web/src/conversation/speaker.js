@@ -16,6 +16,7 @@ import { toSpeechText } from './speechReading.js';
 import { VOICE_MODEL_ID, isVoiceId, normalizeVoiceChoice, resolveVoice } from './voiceRole.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const PCM_CACHE_SAMPLES = 2_400_000; // 画面の中にためておく声の長さの上限(24kHz で 100 秒ぶん。Float32 で約 10MB)
 const SERVER_TTS_OFF = new Set([404, 405, 429, 501, 503]); // サーバーに声が無い・上限: この画面の間は聞きに行かない
 // サーバーが 204 と印(x-tts-reason)で「声なし」と返した時の理由(11-07 CRITux 25: 鍵が無い時の 503 を 204 にした)
 const SERVER_TTS_REASON = { 'no-key': '読み上げの鍵がありません' };
@@ -54,6 +55,8 @@ export class Speaker {
     this.serverTtsOff = null; // サーバーに声が無いと分かった理由(分かったら、この画面の間は聞きに行かない)
     this.voiceKeyStatus = null; // 声の鍵で頼んだときの、最後の失敗の番号
     this.capReached = false; // 今日の声の上限(サーバー)に当たった(字幕だけで話している理由を、画面が言うため)
+    this.pcmCache = new Map(); // 取れた声(新しい順。ck → { chunks, samples })。同じ文をもう一度話す時に、取りに行かない
+    this.prefetching = new Map(); // 前もって取っている最中の声(ck → Promise)
     this.deviceVoice = null; // この端末の声で読むか(true/false。null = 性格の画面の「声の出し方」に従う)
   }
 
@@ -300,7 +303,82 @@ export class Speaker {
     };
   }
 
+  /** この画面でおぼえておく声の置き場所の名前。声が取れない(サーバーに声が無い・この端末の声)時は null。鍵そのものは入れない */
+  _cacheKey(text) {
+    if (this._deviceVoiceOn()) return null;
+    const key = getVoiceKey();
+    if (!key && this.serverTtsOff) return null;
+    const v = this.currentVoice();
+    return `${key ? 'k' : 's'}|${v.voiceId}|${v.role}|${v.ownVoiceId ?? ''}|${toSpeechText(text)}`;
+  }
+
+  _store(ck, chunks) {
+    const samples = chunks.reduce((n, c) => n + c.length, 0);
+    if (!samples || samples > PCM_CACHE_SAMPLES) return;
+    this.pcmCache.delete(ck);
+    this.pcmCache.set(ck, { chunks, samples });
+    let total = 0;
+    for (const e of this.pcmCache.values()) total += e.samples;
+    for (const [k, e] of this.pcmCache) {
+      if (total <= PCM_CACHE_SAMPLES || this.pcmCache.size <= 1) break;
+      this.pcmCache.delete(k);
+      total -= e.samples;
+    }
+  }
+
+  /**
+   * これから話す文の声を、前もって取っておく(話す時は、すぐ出る)。画面に出す前に、文が決まった時点で呼ぶ。
+   * 同じ文(同じ声・同じ役)を enqueue すると、取れていればそれを使い、取っている最中ならそれを待つ。
+   * 声が取れない時(サーバーに声が無い・この端末の声)は何もしない。
+   * @returns {Promise<void>|undefined}
+   */
+  prefetch(text) {
+    const ck = this._cacheKey(text);
+    if (!ck || this.pcmCache.has(ck) || this.prefetching.has(ck)) return undefined;
+    const ac = new AbortController();
+    const p = (async () => {
+      const state = { complete: false };
+      const chunks = [];
+      try {
+        for await (const c of this._fetchPcmRaw(text, ac.signal, null, state)) chunks.push(c);
+      } catch {
+        // 取れなかった(話す時に、もう一度取りに行く)
+      }
+      if (state.complete) this._store(ck, chunks);
+    })().finally(() => this.prefetching.delete(ck));
+    this.prefetching.set(ck, p);
+    return p;
+  }
+
   async *_fetchPcm(text, signal, onFirstByte) {
+    // 性格の画面で「この端末の声」を選んでいる時は、声の鍵・サーバーの声を使わない(_play が、この端末の声で読む)
+    if (this._deviceVoiceOn()) return;
+    const ck = this._cacheKey(text);
+    if (ck) {
+      const pending = this.prefetching.get(ck);
+      if (pending) await Promise.race([pending, new Promise((r) => signal.addEventListener('abort', r, { once: true }))]);
+      const hit = signal.aborted ? null : this.pcmCache.get(ck);
+      if (hit) {
+        this.pcmCache.delete(ck); // 新しい順に入れ直す
+        this.pcmCache.set(ck, hit);
+        this.ttsError = null;
+        this.fetchLog.push(0);
+        onFirstByte?.(0);
+        for (const c of hit.chunks) yield c;
+        return;
+      }
+    }
+    const state = { complete: false };
+    const chunks = [];
+    for await (const c of this._fetchPcmRaw(text, signal, onFirstByte, state)) {
+      chunks.push(c);
+      yield c;
+    }
+    if (ck && state.complete) this._store(ck, chunks);
+  }
+
+  /** 声のサービスから 1 文の音を取る(おぼえ書きは通さない)。state.complete は、最後まで取れた時だけ true */
+  async *_fetchPcmRaw(text, signal, onFirstByte, state = {}) {
     const t0 = performance.now();
     // 性格の画面で「この端末の声」を選んでいる時は、声の鍵・サーバーの声を使わない(_play が、この端末の声で読む)
     if (this._deviceVoiceOn()) return;
@@ -360,8 +438,11 @@ export class Speaker {
     let first = true;
     let rest = null;
     while (true) {
-      const { value, done } = await reader.read().catch(() => ({ done: true }));
-      if (done) break;
+      const { value, done, failed } = await reader.read().catch(() => ({ done: true, failed: true }));
+      if (done) {
+        state.complete = !failed && !signal.aborted;
+        break;
+      }
       if (first) {
         first = false;
         const ms = performance.now() - t0;

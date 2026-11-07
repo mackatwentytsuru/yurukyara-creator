@@ -197,14 +197,15 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       const frame = await frameOf(page);
       assert.equal(new URL(page.url()).hash, '', '合言葉をアドレスの欄に残さない');
       assert.equal(new URL(frame.url()).hash, '', '枠の中でも消す');
-      assert.match(await logText(page), /ノリー、がんばりマス/);
-      assert.match(await logText(page), /Anthropic に送られます/);
+      assert.match(await logText(page), /ノリーデス/);
+      assert.match(await logText(page), /Anthropic\)に 送られるよ/);
       await fits(page, frame, '1 歩目');
       await shot(page, 'make390_1_input');
       await frame.fill('#words', '赤い提灯の子');
       await frame.click('#wordsBtn');
       await frame.waitForSelector('#waiting:not([hidden])');
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('/yuru-next'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('パソコンの Claude Code に わたしたよ'));
+      assert.doesNotMatch(await logText(page), /\/yuru-next/, '子どもの画面にパソコンのコマンドを出さない(動かし方は作る画面の中。OL1)');
       assert.equal(await page.$eval('.fr-sheet', (e) => e.dataset.step), '3', '言葉のときは 2 歩目(チェック)をとばす');
       const pc1 = await pcNext(work, '--fake-draw');
       assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
@@ -216,14 +217,14 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       // PC の 3 本目と同じく、読み終わるのを待ってから同じ文で確かめる(読めなければ「描いた絵が出る」で落ちる)
       await frame.waitForFunction(() => document.getElementById('pic').naturalWidth > 0, null, { timeout: 10_000 }).catch(() => {});
       assert.ok(await frame.$eval('#pic', (e) => e.naturalWidth > 0), '描いた絵が出る');
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子ができたよ。どうかな?'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子が できたよ。どうかな?'));
       await fits(page, frame, '3 歩目');
       await shot(page, 'make390_3_c0');
 
       // G1: 会話の画面の中で、文字で頼む → request.json → PC の /yuru-next が描き直す
       await frame.fill('#note', '帽子を青にして');
       await frame.click('#noteBtn');
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直ったら、また見せるね'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('なおったら 見せるね'));
       const req = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
       assert.deepEqual([req.gate, req.decision, req.note.text], ['C0', 'redo', '帽子を青にして']);
       // 試験の絵は、頼んでいない体の色まで変える(drift)。PC の決まった確かめが 1 回だけ自動で描き直し、それでも違うので、
@@ -232,13 +233,14 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       assert.equal(pc2.did, 'redrew', JSON.stringify(pc2));
       assert.equal(pc2.identity?.passes, 2, `決まった確かめの後に 1 回だけ描き直す ${JSON.stringify(pc2.identity)}`);
       await frame.waitForFunction(() => document.querySelector('#picCap')?.textContent.includes('2 回目'), null, { timeout: 20_000 });
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直してみたよ。どうかな?'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('なおしてみたよ。どうかな?'));
       const drift = await frame.$eval('#drift', (e) => ({ hidden: e.hidden, text: e.textContent }));
       assert.ok(!drift.hidden && /^頼んでいない所も変わりました: .*体の色/.test(drift.text), `作る画面に頼んでいない変化の一言が無い ${JSON.stringify(drift)}`);
       // QF4 中 11: 知らせは 2 つの列の外(絵と「この子にする」の上)に置く。列が左の細い列に崩れない
       const pos = await frame.evaluate(() => ({ d: document.getElementById('drift').getBoundingClientRect(), f: document.querySelector('#c0 .mk-fig').getBoundingClientRect(), ok: document.getElementById('okBtn').getBoundingClientRect(), w: innerWidth }));
       assert.ok(pos.d.bottom <= pos.f.top + 1, `知らせは絵の上 ${JSON.stringify(pos)}`);
       assert.ok(pos.ok.width > pos.w * 0.35, `「この子にする」の列が細く崩れない ${JSON.stringify(pos)}`);
+      await page.waitForFunction(() => /頼んでいない所も変わりました: .*体の色/.test(document.querySelector('.fr-log').innerText), null, { timeout: 10_000 }).catch(() => {});
       assert.match(await logText(page), /頼んでいない所も変わりました: .*体の色/, '札にも頼んでいない変化の一言');
       await fits(page, frame, '3 歩目(2 回目・頼んでいない変化の一言つき)');
       await shot(page, 'make390_3_c0_r2');
@@ -246,8 +248,8 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       await frame.click('#okBtn');
       await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
       assert.equal(await page.$('.fr-actions iframe.fr-frame'), null, '決めたら作る画面の枠を閉じる');
-      assert.match(await logText(page), /けってい! OK を PC に伝えたよ/);
-      assert.match(await logText(page), /それまでは、ノリーがかわりに舞台に立って/, '主役が代わりに立つと言う(D5)');
+      assert.match(await logText(page), /けってい! パソコンに つたえたよ/);
+      assert.match(await logText(page), /それまでは、ノリーが かわりに 舞台に立って/, '主役が代わりに立つと言う(D5)');
       assert.doesNotMatch(await logText(page), /段 \d|C0/, '札に内部の言葉(段 0・C0)を出さない(D7)');
       // 描いた絵は、札の上の小さな枠(絵だけ)に出したまま。話している間も見える(D5)
       const pic = await page.waitForSelector('.fr-pin iframe.fr-frame', { timeout: 10_000 });
@@ -255,7 +257,7 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       const picFrame = await pic.contentFrame();
       await picFrame.waitForFunction(() => (document.getElementById('donePic')?.naturalWidth ?? 0) > 0, null, { timeout: 15_000 });
       assert.equal(await picFrame.$eval('#okBtn', (e) => e.offsetParent === null), true, '絵だけの枠にボタンを出さない');
-      assert.match(await page.$eval('.fr-pin-cap', (e) => e.textContent), /PC の Claude Code が描いた絵。3D はまだ/);
+      assert.match(await page.$eval('.fr-pin-cap', (e) => e.textContent), /パソコンの Claude Code が描いた絵。3D はまだ/);
       const box = await page.$eval('.fr-pin', (e) => e.getBoundingClientRect().height);
       assert.ok(box > 0 && box < 140, `絵の欄は小さく ${box}`);
       await shot(page, 'make390_4_persona');
@@ -286,20 +288,20 @@ test('作る道(幅 400): 絵 → ゆるキャラチェック(人の絵)→ ゆ�
       const frame = await frameOf(page);
       await frame.setInputFiles('#pick', { name: 'drawing.png', mimeType: 'image/png', buffer: readFileSync(PICTURE) });
       await frame.waitForSelector('#waiting:not([hidden])');
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('(絵を渡した)'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('(絵を わたした)'));
       const pc1 = await pcNext(work, '--fake-check', 'human', '--fake-draw');
       assert.equal(pc1.did, 'checked', JSON.stringify(pc1));
       await frame.waitForSelector('#check:not([hidden])', { timeout: 20_000 });
       assert.equal(await frame.$eval('#chooseBtn', (e) => e.textContent), 'ゆるキャラにしてみる');
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('ゆるキャラにしてみる?'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('ゆるキャラに してみる?'));
       await fits(page, frame, '2 歩目');
       await shot(page, 'make400_2_check');
       await frame.click('#chooseBtn');
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('描けたら見せるね'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('描けたら 見せるね'));
       const pc2 = await pcNext(work, '--fake-check', 'human', '--fake-draw');
       assert.equal(pc2.did, 'drew', JSON.stringify(pc2));
       await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子ができたよ。どうかな?'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子が できたよ。どうかな?'));
       const orig = readFileSync(join(work, pc1.id, 'review', 'original.png'));
       assert.ok(orig.length > 0 && orig.subarray(0, 4).toString('latin1') === '\x89PNG', '絵は PC の作業場所にだけ届く(png に描き直して)');
       await shot(page, 'make400_3_c0');
@@ -398,15 +400,15 @@ test('作る道(幅 390): SVG の絵 → ゆるキャラチェック(ゆるキ�
       await frame.setInputFiles('#pick', { name: 'drawing.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(TEST_SVG) });
       await frame.waitForSelector('#waiting:not([hidden])', { timeout: 15_000 });
       assert.equal(await frame.$eval('#err', (e) => e.hidden), true, `SVG を断った: ${await frame.$eval('#err', (e) => e.textContent)}`);
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('(絵を渡した)'));
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('(絵を わたした)'));
       const pc1 = await pcNext(work, '--fake-check', 'yuru', '--fake-draw');
       assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
       const orig = readFileSync(join(work, pc1.id, 'review', 'original.png'));
       assert.ok(orig.subarray(0, 4).toString('latin1') === '\x89PNG', 'SVG はこの画面の中で絵にして、PC の作業場所にだけ届く(png に描き直して)');
       await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子ができたよ。どうかな?'), null, { timeout: 15_000 });
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('こんな子が できたよ。どうかな?'), null, { timeout: 15_000 });
       const log = await logText(page);
-      const check = log.indexOf('ゆるキャラにぴったりの絵だね。');
+      const check = log.indexOf('ゆるキャラに ぴったりの絵だね。');
       const drawing = Math.min(...['絵を描いています', '絵ができました'].map((w) => log.indexOf(w)).filter((i) => i >= 0));
       assert.ok(check >= 0, `チェックの言葉が無い: ${log}`);
       assert.ok(Number.isFinite(drawing) && check < drawing, `チェックの言葉が、描く知らせより後に出た: ${log}`);
@@ -510,7 +512,7 @@ for (const [w, h] of [[390, 844], [390, 670], [1280, 720]]) {
         if (w >= 720) await page.evaluate(() => { document.documentElement.style.setProperty('--top-h', '96px'); document.documentElement.style.setProperty('--bottom-h', '110px'); });
         const frame = await frameOf(page);
         const left = await page.$eval('.fr-left', (e) => e.innerText.replace(/\s+/g, ' '));
-        assert.match(left, /あと 6 ステップで できあがり あと \d+ 分くらい/, `上の段に、あと いくつ・あと 何分 ${left}`);
+        assert.match(left, /あと 6 つ\s*\d+ 分くらい/, `上の段に、あと いくつ・あと 何分 ${left}`);
         await frame.fill('#words', 'みかんの子。頭に葉っぱ');
         await frame.click('#wordsBtn');
         await frame.waitForSelector('#waiting:not([hidden])');
@@ -531,7 +533,8 @@ for (const [w, h] of [[390, 844], [390, 670], [1280, 720]]) {
         // 第 12 波: よく頼む直しの列とおまかせ(と「別の子に」)も、枠の中を巻かずに見える(眉の札の下で隠れていた)
         if (w >= 720) assert.ok(L.chipRow.bottom <= L.vh && L.again.bottom <= L.vh && L.auto.bottom <= L.vh, `PC 1280×720 でも、よく頼む直し・おまかせは巻かずに見える ${JSON.stringify(L)}`);
         await fits(page, frame, `眉の札(${w}×${h})`);
-        assert.match(await logText(page), /眉を足すと/, '札にも、眉のおすすめの一言');
+        await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('眉を 足すと'), null, { timeout: 10_000 });
+        assert.match(await logText(page), /眉を 足すと/, '札にも、眉のおすすめの一言');
         await shot(page, `brow${w}x${h}_1_card`);
         // よく頼む直し: 押すと一言の欄に入り、送る前に書き直せる
         await frame.click('#quick .sg-chip:nth-child(2)');
@@ -541,7 +544,7 @@ for (const [w, h] of [[390, 844], [390, 670], [1280, 720]]) {
         // キーボード: 札のボタンに Tab で届き、Enter で押せる(足す(ふつう))
         await frame.focus('#browSlot .sg-btn.primary');
         await frame.press('#browSlot .sg-btn.primary', 'Enter');
-        await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直ったら、また見せるね'));
+        await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('なおったら 見せるね'));
         const req = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
         assert.deepEqual([req.gate, req.decision, req.note.text], ['C0', 'redo', BROW_NORMAL], '決まった一言で、ふつうのやり直し');
         const pc2 = await pcNextEnv(work, { YC_FAKE_REDO: 'brows' }, '--fake-draw');
@@ -623,16 +626,17 @@ test('おまかせ(ぜんぶ じどう、幅 390): 1 回押すと、言葉・眉
       assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
       // 眉の無い絵 → おまかせは眉を足す(ふつう)を選んで、ふつうのやり直し
       const reqPath = join(work, pc1.id, 'review', 'request.json');
-      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('直ったら、また見せるね'), null, { timeout: 20_000 });
+      await page.waitForFunction(() => document.querySelector('.fr-log').innerText.includes('なおったら 見せるね'), null, { timeout: 20_000 });
       const req = JSON.parse(readFileSync(reqPath, 'utf8'));
       assert.deepEqual([req.decision, req.note.text], ['redo', BROW_NORMAL]);
       const pc2 = await pcNextEnv(work, { YC_FAKE_REDO: 'brows' }, '--fake-draw');
       assert.equal(pc2.did, 'redrew', JSON.stringify(pc2));
       // 眉のある絵 → おまかせは「この子にする」→ 会話の札も性格から後をおすすめで決めて、最後まで
       await page.waitForFunction(() => document.querySelector('.fr-log')?.innerText.includes('おまかせで、ぜんぶ きめマシタ!'), null, { timeout: 25_000 });
+      await page.waitForFunction(() => document.querySelector('.fr-log')?.innerText.includes('ぜんぶ、あとから かえられるよ。'), null, { timeout: 10_000 });
       const log = await logText(page);
-      assert.match(log, /きめたこと: .*声はおまかせ.*あとから かえられます/);
-      assert.match(log, /けってい! OK を PC に伝えたよ/);
+      assert.match(log, /きめたこと: .*文字と おと[\s\S]*あとから かえられるよ/);
+      assert.match(log, /けってい! パソコンに つたえたよ/);
       const ok = JSON.parse(readFileSync(join(work, pc1.id, 'review', 'request.json'), 'utf8'));
       assert.equal(ok.decision, 'ok');
       // QF4 中 5: 終わっても札を自動で閉じない。決めたことと「はじめる」を出し、押した時だけ閉じる
