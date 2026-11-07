@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { createGltfLoader } from '../../web/src/character/gltfLoader.js'; // meshopt で縮めた GLB も読める
 import { CharacterBase } from '../../web/src/character/characterBase.js';
 import { applyFur } from './furShell.js';
+// B5G かわいい仕草の層: 決まった名前の骨(root・body・head・腕・耳・しっぽ)に、仕草の数字を動き(clip)の上から足す
+import { CuteRig } from '../../web/src/character/cuteRig.js';
+import { CUTE_RISE } from '../../web/src/character/cuteLayer.js';
+
+/** キャラの動き(clip)があれば clip で動かす仕草(腕と体の形を、そのキャラの作り手が確かめてある)。greet は wave の clip を使う */
+const CLIP_GESTURES = { bow: 'bow', wave: 'wave', greet: 'wave', jump: 'jump' };
 
 /**
  * 人型でないキャラ(type: "rig")を動かす。キャラの柱が決めた形で character.json を読む。
@@ -100,6 +106,9 @@ export class RigCharacterV2 extends CharacterBase {
     this.motionNames = [...this.actions.keys()];
     this.emotion = 'neutral';
     this.shot = null;
+    // B5G: 仕草の層の骨(腕を上げた時に脇が持ちこたえる角度も、ここで測る)
+    this.cuteRig = new CuteRig(gltf.scene, clips, json, this.lookBone);
+    this.cute.caps = { ...this.cute.caps, ...this.cuteRig.caps, clipArm: Object.keys(CLIP_GESTURES).filter((n) => this.actions.has(CLIP_GESTURES[n])) };
     this._startLoop('idle', 1);
     this._startLoop('talk', 0);
     this._talkW = 0;
@@ -122,17 +131,21 @@ export class RigCharacterV2 extends CharacterBase {
     return out.set(0, h / sy, 0).applyMatrix4(this.object3d.matrixWorld);
   }
 
-  /** 一回きりの動きを重ねる。ない名前は false */
-  play(name) {
-    const a = this.actions.get(name);
-    if (!a || name === 'idle') return false;
-    if (name === 'talk') return true; // しゃべりは口の大きさで自動
+  /** 一回きりの動きを重ねる。ない名前は false。仕草の層の名前(happy・shy・think・nod …)は骨で動かす(B5G) */
+  play(name, opts = {}) {
+    const key = String(name ?? '').trim().toLowerCase();
+    if (!key || key === 'none' || key === 'idle') return false;
+    if (key === 'talk') return true; // しゃべりは口の大きさで自動
+    const clipName = CLIP_GESTURES[key];
+    const a = clipName ? this.actions.get(clipName) : null;
+    if (!a) return this.cute.trigger(key, { intensity: opts.intensity, pointSide: opts.dx });
+    this.cute.trigger(key, { clipArm: true, intensity: opts.intensity }); // 腕は clip、顔と体の添え物は仕草の層
     if (this.shot) this.shot.fadeOut(0.15);
     a.setLoop(THREE.LoopOnce, 1);
     a.clampWhenFinished = false;
     a.reset().setEffectiveWeight(1).fadeIn(0.12).play();
     this.shot = a;
-    this.active = { name, t: 0, def: { duration: a.getClip().duration + 0.1, apply() {} } };
+    this.active = { name: key, t: 0, def: { duration: a.getClip().duration + 0.1, apply() {} } };
     return true;
   }
 
@@ -161,7 +174,9 @@ export class RigCharacterV2 extends CharacterBase {
     // ミキサーは値が前と同じだと骨に書き直さない。視線を重ねたままにすると、毎コマ積み上がる。
     // 先に「動きだけの値」へ戻す(動きが骨を動かすコマは、下の update が上書きする)
     if (this.lookBone) this.lookBone.quaternion.copy(this.lookBase);
+    this.cuteRig.beforeMixer(); // B5G: 仕草で足した分も外す(戻さないと毎コマ積み上がる)
     this.mixer.update(s.dt);
+    this.cuteRig.captureBase();
 
     // 体を視線の向きへ(遅れて追う)。回転はキャラの向きの軸で作り、骨の局所の軸へ直して重ねる
     if (this.lookBone) {
@@ -174,6 +189,7 @@ export class RigCharacterV2 extends CharacterBase {
       const qd = pq.clone().invert().multiply(oq).multiply(qc).multiply(oq.clone().invert()).multiply(pq);
       this.lookBone.quaternion.premultiply(qd);
     }
+    this.cuteRig.apply(s.cute); // B5G: 仕草(息・ゆれ・弾み・首かしげ・腕・耳・しっぽ)。脇が持ちこたえる角度より上に腕を上げない
 
     // シェイプキー: 口の開き・まばたき・表情ごとの口の形
     if (this.morphMeshes.length) {
@@ -186,6 +202,8 @@ export class RigCharacterV2 extends CharacterBase {
         if (!m) continue;
         for (const [key, k] of Object.entries(m)) w.set(key, Math.max(w.get(key) ?? 0, v * k));
       }
+      // B5G: 仕草の笑顔(うれしい・あいさつ・てれる)は、笑う目のモーフ(eye_smile)があるキャラだけ
+      if (s.cute?.smile > 0.01) w.set('eye_smile', Math.max(w.get('eye_smile') ?? 0, s.cute.smile));
       for (const mesh of this.morphMeshes) {
         for (const [key, idx] of Object.entries(mesh.morphTargetDictionary)) mesh.morphTargetInfluences[idx] = w.get(key) ?? 0;
       }
@@ -257,8 +275,37 @@ export async function loadRigCharacter(url, options = {}) {
   // 画面の見せ方(web/src/scene.js)が、頭の上の余白(web/src/stage/framing.js の topPad)と、遠近で上へ出る分の確かめに使う
   c.motionRise = measureMotionRise(gltf.scene, clips, { topPoints });
   c.topPoints = topPoints.length ? topPoints : null; // 止まった形のいちばん上の点(キャラの座標)
+  // B5G: 仕草の層の弾み(根元が上へ CUTE_RISE まで)と、首をかしげた時に耳が上へ出る分も、頭の上の余白に入れる
+  if (Number.isFinite(c.motionRise)) {
+    c.cuteRise = CUTE_RISE + cuteTiltRise(topPoints, c.cuteRig.head, gltf.scene);
+    c.motionRise += c.cuteRise;
+  }
   c.motionRiseMs = Math.round(performance.now() - t0); // 測るのにかかった時間(確かめ用)
   return c;
+}
+
+/**
+ * B5G: 仕草で首をかしげる・上を向く(左右 0.25・上 0.1 ラジアンまで)と、止まった形のいちばん上の点がどれだけ上へ出るか(高さに対する割合)。
+ * いちばん上の点(耳など)は頭に付いているとして、頭の骨のまわりに回して測る。頭の骨が無いキャラは 0(体ごと傾くので上へは出にくい)。
+ */
+export function cuteTiltRise(points, head, scene) {
+  if (!head || !Array.isArray(points) || !points.length) return 0;
+  scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(scene);
+  const h = box.max.y - box.min.y;
+  if (!(h > 0)) return 0;
+  const pivot = head.getWorldPosition(new THREE.Vector3());
+  const top0 = Math.max(...points.map((p) => p[1]));
+  let top = top0;
+  const v = new THREE.Vector3();
+  for (const [x, z] of [[0, 0.25], [0, -0.25], [-0.1, 0.18], [-0.1, -0.18]]) {
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(x, 0, z, 'YXZ'));
+    for (const p of points) {
+      v.set(p[0], p[1], p[2]).sub(pivot).applyQuaternion(q).add(pivot);
+      if (v.y > top) top = v.y;
+    }
+  }
+  return Math.max(0, (top - top0) / h);
 }
 
 /**
