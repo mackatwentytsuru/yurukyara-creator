@@ -252,7 +252,134 @@ export async function loadRigCharacter(url, options = {}) {
     // 大きさは gltf.scene に掛ける。object3d の座標はメートルのまま(場所に立たせる側が、そのまま使える)
     if (h > 0) gltf.scene.scale.setScalar(json.height_m / h);
   }
+  const t0 = performance.now();
+  const topPoints = [];
+  // 画面の見せ方(web/src/scene.js)が、頭の上の余白(web/src/stage/framing.js の topPad)と、遠近で上へ出る分の確かめに使う
+  c.motionRise = measureMotionRise(gltf.scene, clips, { topPoints });
+  c.topPoints = topPoints.length ? topPoints : null; // 止まった形のいちばん上の点(キャラの座標)
+  c.motionRiseMs = Math.round(performance.now() - t0); // 測るのにかかった時間(確かめ用)
   return c;
+}
+
+/**
+ * 動き(idle・talk・一回きりの動き)の間に、止まった形のいちばん上より上へ出る分(止まった形の高さに対する割合。0 以上)。
+ * 画面の見せ方(web/src/scene.js)が、上の段の下に頭を置く時の頭の上の余白に使う(S5w11c: 跳ねる動き jump で頭が上の段より上へ出た)。
+ * 読み込みの直後(まだ動かしていない骨)に、動きごとに 12 の時刻を骨へ当て、形の点(止まった形の上の側の点と、全体から間引いた点)の高さを測る。
+ * 測った後は骨と節を元の値に戻す(別の AnimationMixer を使い、終わったら止めて捨てる)。測れない時は null(見せ方は前の余白のまま)。
+ */
+export function measureMotionRise(root, clips, { samples = 12, topShare = 0.15, maxTop = 900, spread = 300, topPoints = null } = {}) {
+  if (!root || !clips?.size) return null;
+  const meshes = [];
+  root.traverse((o) => {
+    if (o.isMesh && o.geometry?.attributes?.position) meshes.push(o);
+  });
+  if (!meshes.length) return null;
+  const saved = [];
+  root.traverse((o) => saved.push([o, o.position.clone(), o.quaternion.clone(), o.scale.clone()]));
+  // 骨の行列(骨の世界の行列 × 骨の逆の行列)は、時刻ごとに骨の数だけ作り、点ごとには作らない(getVertexPosition より速い)。形の鍵(口など)は小さいので見ない
+  const boneMats = new Map();
+  const refresh = () => {
+    root.updateMatrixWorld(true);
+    for (const m of meshes) {
+      if (!m.isSkinnedMesh) continue;
+      const sk = m.skeleton;
+      let arr = boneMats.get(m);
+      if (!arr) boneMats.set(m, (arr = sk.bones.map(() => new THREE.Matrix4())));
+      sk.bones.forEach((bone, i) => arr[i].multiplyMatrices(bone.matrixWorld, sk.boneInverses[i]));
+    }
+  };
+  const v = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const acc = new THREE.Vector3();
+  const si = new THREE.Vector4();
+  const sw = new THREE.Vector4();
+  const heightOf = (m, i) => {
+    v.fromBufferAttribute(m.geometry.attributes.position, i);
+    if (m.isSkinnedMesh) {
+      const arr = boneMats.get(m);
+      si.fromBufferAttribute(m.geometry.attributes.skinIndex, i);
+      sw.fromBufferAttribute(m.geometry.attributes.skinWeight, i);
+      b.copy(v).applyMatrix4(m.bindMatrix);
+      acc.set(0, 0, 0);
+      for (let k = 0; k < 4; k++) {
+        const w = sw.getComponent(k);
+        if (w) acc.addScaledVector(v.copy(b).applyMatrix4(arr[si.getComponent(k)]), w);
+      }
+      v.copy(acc).applyMatrix4(m.bindMatrixInverse);
+    }
+    return v.applyMatrix4(m.matrixWorld).y;
+  };
+  // 測る点: 止まった形で高い方の topShare(多ければ maxTop 点に間引く)と、全体から間引いた spread 点(腕を上げる動きの手の先も拾う)
+  refresh();
+  const all = [];
+  let restTop = -Infinity;
+  let restBottom = Infinity;
+  for (const m of meshes) {
+    const n = m.geometry.attributes.position.count;
+    const step = Math.max(1, Math.floor(n / 4000));
+    for (let i = 0; i < n; i += step) {
+      const y = heightOf(m, i);
+      all.push([m, i, y]);
+      if (y > restTop) restTop = y;
+      if (y < restBottom) restBottom = y;
+    }
+  }
+  const restH = restTop - restBottom;
+  if (!(restH > 0)) return null;
+  const cut = restBottom + restH * (1 - topShare);
+  const high = all.filter(([, , y]) => y >= cut).sort((p, q) => q[2] - p[2]); // 高い順(いちばん上の点は必ず測る)
+  // 止まった形のいちばん上の点(高い順に 40)の位置を返す(キャラの座標。見せ方が遠近の分まで画面へ写して確かめる)
+  if (Array.isArray(topPoints)) {
+    for (const [m, i] of high.slice(0, 40)) {
+      heightOf(m, i);
+      topPoints.push([v.x, v.y, v.z]);
+    }
+  }
+  const highEvery = Math.max(1, Math.ceil(high.length / maxTop));
+  const every = Math.max(1, Math.floor(all.length / spread));
+  const probe = [...high.slice(0, 60), ...high.filter((_, k) => k % highEvery === 0), ...all.filter((_, k) => k % every === 0)];
+  const mixer = new THREE.AnimationMixer(root);
+  const topAt = (t) => {
+    mixer.setTime(t);
+    refresh();
+    let best = -Infinity;
+    for (const [m, i] of probe) {
+      const y = heightOf(m, i);
+      if (y > best) best = y;
+    }
+    return best;
+  };
+  let top = restTop;
+  try {
+    for (const clip of clips.values()) {
+      const action = mixer.clipAction(clip);
+      action.play();
+      const step = clip.duration / samples;
+      let bestT = 0;
+      let bestY = -Infinity;
+      for (let k = 0; k < samples; k++) {
+        const y = topAt(step * k); // 0 から終わりの手前まで等しい間で(終わり = 始めに戻る)
+        if (y > bestY) [bestY, bestT] = [y, step * k];
+      }
+      // いちばん高かった時刻のまわりを細かく(跳ねる動きは空中にいる間が短く、12 の時刻では頂点を外す。1 回目の確かめで 8px ほど低く出た)
+      for (const f of [-0.75, -0.5, -0.25, 0.25, 0.5, 0.75]) {
+        const t = bestT + f * step;
+        if (t >= 0 && t < clip.duration) bestY = Math.max(bestY, topAt(t));
+      }
+      if (bestY > top) top = bestY;
+      action.stop();
+    }
+  } finally {
+    mixer.stopAllAction();
+    mixer.uncacheRoot(root);
+    for (const [o, p, q, s] of saved) {
+      o.position.copy(p);
+      o.quaternion.copy(q);
+      o.scale.copy(s);
+    }
+    root.updateMatrixWorld(true);
+  }
+  return Math.max(0, (top - restTop) / restH);
 }
 
 
