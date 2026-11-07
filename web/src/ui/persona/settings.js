@@ -100,7 +100,7 @@ export const LENGTH_ORDER = ['short', 'normal', 'long'];
 export const VOICES = {
   none: { label: '文字とレトロ音', hint: '鍵なし・無料。文字送りと効果音' },
   browser: { label: 'この端末の声', hint: '無料。声は端末やブラウザで変わる' },
-  elevenlabs: { label: 'ElevenLabs の声', hint: '鍵が要る。使った分の料金がかかる' },
+  elevenlabs: { label: 'ElevenLabs の声', hint: 'きれいな声。おうちの人の じゅんびが いるよ' },
 };
 export const VOICE_ORDER = ['none', 'browser', 'elevenlabs'];
 /** 声の高さと速さ(K1 の voice.pitch・voice.rate は 0.5〜2.0 の数) */

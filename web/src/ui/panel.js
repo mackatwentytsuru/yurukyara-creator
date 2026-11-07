@@ -332,6 +332,17 @@ export function createUi() {
       els.act.replaceChildren(...actParts.flatMap((t, i) => (i ? [document.createElement('br'), document.createTextNode(t)] : [document.createTextNode(t)])));
     },
     caption: setCaption,
+    /** UW5(UIR 14): ほかの子に替わった時、前の子の字幕・「あたまの なか」・知らせの札を空にする */
+    clearTalk() {
+      replyParts = [];
+      actParts = [];
+      setCaption(null);
+      for (const el of [els.seen, els.intent, els.reply, els.act, els.shop]) if (el) el.textContent = '—';
+      els.seen.dataset.claude = '';
+      if (els.foot) els.foot.textContent = '';
+      badge.hidden = true;
+      mirror?.({ user: '', reply: '', error: '' });
+    },
     /** よくある質問のボタン。押すと onPick に言葉が渡る。emphasis で目立たせる(聞き取れなかったとき) */
     choices(items, onPick, emphasis = false) {
       const box = $('choices');
