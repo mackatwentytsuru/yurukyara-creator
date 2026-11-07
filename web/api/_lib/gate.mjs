@@ -92,6 +92,20 @@ export async function decideBrain(request, { cfg, store, now = Date.now, limits 
   return { brain: 'real', reason: '' };
 }
 
+/**
+ * BCV: 本物の頭脳へカメラの絵を送ってよいか(1 日の枚数。日本時間の日付ごと)。数えられない時は送らない方へ倒す。
+ * 本物の頭脳と決めた回で、絵がついている時だけ呼ぶ(仮の頭脳の回は数えない)
+ * @returns {Promise<boolean>}
+ */
+export async function takeImageSlot({ cfg, store, now = Date.now }) {
+  try {
+    const used = await store.incr(`img:${dayKey(now())}`, { ttlSeconds: 2 * 86400 });
+    return used <= cfg.dailyImageCap;
+  } catch {
+    return false;
+  }
+}
+
 /** 本文を上限つきで読む。大きすぎる・JSON でない物は null */
 export async function readJson(request, maxBytes) {
   const len = Number(request.headers.get('content-length') || 0);
@@ -99,7 +113,7 @@ export async function readJson(request, maxBytes) {
   const buf = await request.arrayBuffer();
   if (buf.byteLength > maxBytes) return { error: 'too-large' };
   try {
-    return { body: JSON.parse(new TextDecoder().decode(buf)) };
+    return { body: JSON.parse(new TextDecoder().decode(buf)), bytes: buf.byteLength }; // bytes: BCV(絵の無い本文は、元の上限で見る)
   } catch {
     return { error: 'not-json' };
   }

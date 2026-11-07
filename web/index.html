@@ -42,6 +42,8 @@
         <button type="button" data-look="3d" aria-pressed="true" aria-label="3D(立体)で見る" title="3D(立体)で見る">3D</button>
         <button type="button" data-look="2d" aria-pressed="false" aria-label="2D(絵)で見る" title="2D(絵)で見る">2D</button>
       </div>
+      <!-- B5M: しつかん(3D の材質: いつもの・ぬの・け・つるつる)。3D の子の時だけ main.js の B5M の塊が出す。中のボタンは stage/shitsukanSwitch.js が作る -->
+      <div class="shitsukan" id="shitsukan" data-hide-in-ar hidden></div>
     </div>
   </header>
 
@@ -54,7 +56,11 @@
     <p id="uiNotice" class="ui-notice" role="status" hidden></p>
     <p id="shopBadge" class="shop-badge" role="status" hidden></p>
     <section id="caption" class="caption" aria-live="polite" hidden></section>
+    <!-- BSF(11-08 安全): いつも見える 1 行。字幕の列のいちばん下(下の帯のすぐ上)。下の帯の高さを変えないので、キャラは小さくならない。
+         はじめての会話の間(下を札が覆う)は、下の #aiNoticeTop が上の段のすぐ下に出す。置き場所は style.css の BSF の段 -->
+    <p class="ai-notice" id="aiNotice" role="note">AI のキャラクターと話しています</p>
   </div>
+  <p class="ai-notice ai-notice-top" id="aiNoticeTop" aria-hidden="true">AI のキャラクターと話しています</p>
 
   <aside id="thought" class="thought" aria-label="Claude の考え">
     <button class="thought-head" id="thoughtToggle" type="button" aria-expanded="true">
@@ -81,6 +87,11 @@
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
         <span id="micLabel">声で話す</span>
       </button>
+      <!-- BCV: カメラの入・切(いつでも)。押すと入れる前に 1 行の知らせ。入っている間は赤い点(stage/cameraUse.js と cameraSwitch.js)。この端末のカメラを使わない入口では隠したまま -->
+      <button type="button" id="camBtn" class="cam" aria-pressed="false" title="カメラを つかう(いまは きっています)" aria-label="カメラを つかう(いまは きっています)" hidden>
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M9 4 7.2 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2L15 4H9Zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"/></svg>
+        <span class="cam-dot" aria-hidden="true"></span><span class="cam-label">カメラ</span>
+      </button>
       <input id="textInput" type="text" placeholder="文字で話しかける" enterkeyhint="send" />
       <button type="submit" class="send">送る</button>
     </form>
@@ -88,6 +99,23 @@
 
   <!-- テレビ表示の間だけ出す(style.css): 隅の小さな「もどる」と、指で触る端末を縦に持っている時の一言 -->
   <button type="button" id="tvExit" class="tv-exit" aria-label="テレビ表示をやめる" title="テレビ表示をやめる">もどる</button>
+  <!-- BCV: テレビ表示の間のカメラの入・切(隅の「もどる」の左。テレビ表示の時だけ見える)。入っている間は赤い点。知らせの窓は下の #camAsk -->
+  <button type="button" id="tvCam" class="tv-cam" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M9 4 7.2 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2L15 4H9Zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"/></svg><span class="cam-dot" aria-hidden="true"></span></button>
+  <!-- BCV: カメラを入れる前の 1 行の知らせ(文は stage/cameraSwitch.js が入れる)。「カメラを つかう」を押した時だけ入る -->
+  <div id="camAsk" class="cam-ask" role="dialog" aria-modal="true" aria-labelledby="camAskTitle" aria-describedby="camAskText" hidden>
+    <div class="cam-ask-card">
+      <h2 id="camAskTitle">カメラを つかう?</h2>
+      <p id="camAskText" class="cam-ask-text"></p>
+      <p id="camAskMock" class="cam-ask-mock" hidden></p>
+      <div class="cam-ask-buttons">
+        <button type="button" id="camAskYes" class="cam-ask-yes">カメラを つかう</button>
+        <button type="button" id="camAskNo" class="cam-ask-no">やめる</button>
+      </div>
+      <!-- 指で触る端末だけ: うしろのカメラで、前の景色や看板を見せる(道案内など)。ふだんは まえのカメラ(顔の向きも見る) -->
+      <button type="button" id="camAskBack" class="cam-ask-back" hidden><span class="btn-main">うしろの カメラを つかう</span><small class="btn-sub">まえの けしきや かんばんを みせる</small></button>
+      <p id="camAskStatus" class="cam-ask-status" role="status" aria-live="polite"></p>
+    </div>
+  </div>
   <p id="tvRotate" class="tv-rotate" role="note">よこむきにすると、テレビに大きくうつります</p>
   <!-- iPhone・iPad の「テレビに映す」: 画面ミラーリングの 3 つの手順と「テレビ表示にする」。文は main.js が stage/tvMode.js から入れる(外の住所は書かない) -->
   <div id="tvCast" class="tv-cast" role="dialog" aria-modal="true" aria-labelledby="tvCastTitle" hidden>
@@ -105,6 +133,8 @@
   <div id="gate" class="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
     <div class="gate-card">
       <h1 id="gateTitle">ゆるキャラクリエイター</h1>
+      <!-- BSF(11-08 安全): 入口で、AI と話すことと、子どもの使い方を 1 行で -->
+      <p class="gate-ai" id="gateAi" role="note">AI のキャラクターと話します。小学生以下は、おうちの人といっしょに使ってね。</p>
       <!-- B4(12b): 入口の約束は、この版で本当にできることだけ(UIR 3)。主役は「カメラなしで試す」、カメラは 2 つ目(UIR 22)。ノリーの見た目の手がかり(UIR 21) -->
       <p class="gate-what" id="gateWhat">ノリーや 見本の子と 話そう。ことばや 絵から、にた子を えらべるよ。話したことを 覚えるよ。</p>
       <p class="gate-guide" id="gateGuide">案内するのは主役の<b>ノリー</b>。木の上に すむ カンガルーの子で、ながい しっぽと 緑の ちょうネクタイが 目じるし。協力者が手で描いた、セスジキノボリカンガルーの執事見習いです。</p>
@@ -117,7 +147,8 @@
         <span>合言葉(あれば。無くても仮の頭脳で話せます)</span>
         <input id="passInput" type="password" autocomplete="off" maxlength="200" />
       </label>
-      <p class="fine" id="gateFine">カメラの映像は端末の外に出ません。人の位置を調べるだけで、保存もしません。マイクは「声で話す」を押した時だけ使います。</p>
+      <!-- BCV: カメラを使うと、話しかけた時の絵が答えを作るために Claude に送られる(保存しない)。使うかは使う人が決める。あとから入・切できる -->
+      <p class="fine" id="gateFine">カメラの えは、こたえを つくるために Claude に おくられます(ほぞんしません)。つかうかは あなたが きめてね。カメラは あとから いつでも きりかえられます。マイクは「声で話す」を押した時だけ使います。</p>
       <p class="status" id="gateStatus" aria-live="polite"></p>
     </div>
   </div>

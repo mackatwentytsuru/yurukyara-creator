@@ -20,6 +20,9 @@ export function readConfig(env = process.env) {
     perMinute: num(env.DEMO_PER_MINUTE, 10, { min: 1, max: 600 }),
     // 本文の大きさの上限(バイト)。これより大きい物は読まずに断る
     maxBodyBytes: num(env.DEMO_MAX_BODY_BYTES, 32768, { min: 1024, max: 262144 }),
+    // BCV: カメラの絵 1 枚の分として、本文の上限に足してよい大きさ(バイト。絵のついた本文だけ)と、1 日に本物の頭脳へ送る絵の枚数
+    maxImageBytes: num(env.DEMO_MAX_IMAGE_BYTES, 163840, { min: 0, max: 262144 }),
+    dailyImageCap: num(env.DEMO_DAILY_IMAGE_CAP, 100, { min: 0, max: 100000 }),
     // 数を数える置き場(Upstash の Redis の REST)。Vercel の画面からつなぐと KV_REST_API_* の名前で入る
     redisUrl: text(env.UPSTASH_REDIS_REST_URL ?? env.KV_REST_API_URL),
     redisToken: text(env.UPSTASH_REDIS_REST_TOKEN ?? env.KV_REST_API_TOKEN),

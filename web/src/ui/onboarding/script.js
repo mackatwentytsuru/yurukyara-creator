@@ -349,7 +349,7 @@ export class FirstRun {
     const sample = this.d.creator.mode === 'sample';
     await this._say(
       { who: 'guide', text: WHAT_ASK },
-      sample ? { who: 'note', text: 'ここでは、にた 見本の子を 出して ためせるよ。' } : null,
+      sample ? { who: 'note', text: this.d.creator.canDraw ? 'ことばと 絵は、この サーバーから Claude(Anthropic)に 送って、ゆるキャラの 絵に するよ。' : 'ここでは、にた 見本の子を 出して ためせるよ。' } : null,
       this.local ? { who: 'note', text: '下の 作る画面に、ことばか 絵を 入れてね。' } : null,
       this.local ? { who: 'note', text: 'パソコンの Claude Code が 描くよ。ことばと絵は Claude(Anthropic)に 送られるよ。' } : null,
     );
@@ -1018,7 +1018,7 @@ export class FirstRun {
       return undefined;
     }
     const at3 = this.step <= 3;
-    await this._say({ who: 'guide', text: `${this.character.name}が 舞台に でたよ! まばたきも するよ。` });
+    await this._say({ who: 'guide', text: stay === 'failed' ? `${this.character.name}は 舞台に まだ 出られないよ。ここで 先に すすめるね。` : `${this.character.name}が 舞台に でたよ! まばたきも するよ。` });
     this.waiting2d = false;
     if (this.auto) {
       // おまかせ: 2D のまま進む(3D は あとから えらべる)

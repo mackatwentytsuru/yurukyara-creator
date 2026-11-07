@@ -48,11 +48,14 @@ test('画面の試しの場所(?place= が無い時に、画面が送る物)は�
   assert.equal(hasPlaceInfo({ landmarks: [{ name: 'お手洗い' }] }), true);
   assert.equal(hasPlaceInfo({ info: '広場です。' }), true);
   assert.equal(hasPlaceInfo({ landmarks: [{ name: '   ' }, {}] }), false, '名前の無い目印は数えない');
+  // 第 12 波 b: ノリーはおうちの子。場所の節は出るが、係の人へつなぐ案内は出ない(役目ごとの試験は talk_b3_role.test.mjs)
   const prompt = buildSystemPrompt({ character: NORRIE, place: KITCHEN, motions: NORRIE_MOTIONS });
   assert.match(prompt, /# 場所の情報/);
   assert.match(prompt, /- お手洗い: 左奥、約 3.0m/);
-  assert.match(prompt, /handoff を true にして、分からないと正直に言う/);
+  assert.doesNotMatch(prompt, /handoff を true/);
   assert.match(prompt, /landmark:<名前>/);
+  const shop = buildSystemPrompt({ character: { ...NORRIE, role: 'shop' }, place: KITCHEN, motions: NORRIE_MOTIONS });
+  assert.match(shop, /handoff を true にして、分からないと正直に言い、お店のスタッフに聞くようにすすめる/);
 });
 
 test('残っていた店の言い回し(受付・スタッフ)が、指示文の部品と、名残の見本にも無い', () => {
@@ -66,9 +69,10 @@ test('動きの説明: ノリーが持つ動き(うなずく・おじぎ・手�
   assert.deepEqual([...NORRIE_MOTIONS].sort(), ['bow', 'nod', 'wave'], 'ノリーの動きのファイル');
   for (const place of [undefined, KITCHEN]) {
     const prompt = buildSystemPrompt({ character: NORRIE, place, motions: ['none', ...NORRIE_MOTIONS] });
+    // 説明の言葉は、かわいい仕草の層の約束の「何をする」と「どんな返事の時」(第 12 波 b)
     assert.match(prompt, /- nod: うなずく/);
     assert.match(prompt, /- bow: おじぎをする/);
-    assert.match(prompt, /- wave: 片手を上げてふる/);
+    assert.match(prompt, /- wave: 片手をふる/);
     assert.doesNotMatch(prompt, /- (tilt|point|shake|shrug|think):/, 'ない動きは説明しない');
     assert.match(prompt, /まだできないデス/);
     // 例(と、案内の文)に出てくる動きは、持っている動きの中だけ

@@ -360,7 +360,8 @@ async function toggleMic() {
 
 function updatePrivacy() {
   const texts = {
-    camera: 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
+    // BCV: 使う人がカメラを選んだ時は、話しかけた回に絵を 1 枚 Claude へ送る(保存しない)。自動で始める画面は今までどおり追従だけ
+    camera: app.camera?.seeing?.() ? app.camera.privacy : 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
     pose: 'カメラの映像は使っていません。この端末の位置だけで、あなたのいる方向を知っています。',
     sim: TOUCH ? 'カメラは使っていません(画面を指でなぞった向きに、人がいることにしています)。' : 'カメラは使っていません(マウスの向きに、人がいることにしています)。',
     bridge: '床のカメラの機械が、あなたのいる向き(数字)だけをこの画面に送ります。映像は保存も、送信もしません。',
@@ -372,6 +373,7 @@ function updatePrivacy() {
   ui.privacy(text, app.mode !== 'camera');
   // テレビ表示はカメラを使わない時の注意書きを隠すが、マイクで聞いている間は残す(style.css の .privacy.off:not(.mic))
   $('privacy')?.classList.toggle('mic', Boolean(listener?.listening));
+  app.camera?.sync?.(); // BCV: カメラの入・切のボタンの見た目を、今の入力に合わせる
 }
 
 /* ---------- 画面の状態 ---------- */
@@ -397,7 +399,9 @@ function updateChips() {
   const info = app.source?.info() ?? { label: 'なし', ok: false };
   const noCamera = app.mode === 'sim' || !app.source;
   const camera = app.mode === 'camera' ? (info.ok ? 'オン' : '準備中') : noCamera ? 'なし' : info.label;
-  chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
+  // BCV: 絵を送るカメラが入っている間は、いちばん前に赤い点の札(小さな印。高さ 500 未満でもこの札だけ残す = style.css)
+  if (app.camera?.seeing?.()) chips.unshift(['', 'カメラ オン', 'cam-rec']);
+  else chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
   chips.push(['見えている人', `${app.lastAttention.tracks.length} 人`, '']);
   if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'この PC' : 'ブラウザ', 'ok']);
   if (stereoMic) {
@@ -501,6 +505,10 @@ function frame(rawMs) {
 
   // 5. 口・描画
   c.setMouth(speaker.level());
+  // ── B5G かわいい仕草の層(character/cuteLayer.js): いまの状態を渡す(話す > 聞く > 考える > 待つ)。文字を打っている間も「聞く」 ──
+  const typing = document.activeElement?.id === 'textInput' && Boolean(document.activeElement.value.trim());
+  c.setActivity?.(speaker.speaking ? 'talking' : listener?.voiceActive || listener?.transcribing || typing ? 'listening' : dialogue.busy ? 'thinking' : 'idle');
+  // ── B5G ここまで ──
   c.update(dt);
   if (vrPanel?.mesh.visible) {
     vrPanel.set({ state: vrState() });
@@ -722,7 +730,7 @@ const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getB
 /** キャラの頭を置いてよいいちばん上の線(px)。[left, right] はキャラの横の範囲。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
 function topGuard(left, right) {
   // テレビ表示: 上の段は隠すので、画面の上の端から画面の高さの 6%(隅の「もどる」・縦持ちの一言がキャラの横に重なる時だけ、その下から)
-  if (tvActive()) return tvTopLimit({ corner: rectsOf('#tvExit, #tvRotate'), left, right, clear: topClearance(window.innerHeight, TOP_GAP_PX) });
+  if (tvActive()) return tvTopLimit({ corner: rectsOf('#tvExit, #tvRotate, #tvCam:not([hidden])'), left, right, clear: topClearance(window.innerHeight, TOP_GAP_PX) }); // #tvCam: BCV
   return topLimit({
     bar: rectsOf(TOP_BAR),
     side: rectsOf(TOP_SIDE),
@@ -1094,6 +1102,78 @@ function swapCharacter(next) {
   void refreshLookSwitch(next); // 見た目の切り替えを、今の子に合わせて作り直す(両方ある子だけ出す・押された方を合わせる)
 }
 
+/* ---------- B5M: しつかん(3D の材質: いつもの・ぬの・け・つるつる)と光。ここから下の 1 塊だけが B5M(合わせ 12b) ----------
+   決まりと数字は stage/shitsukan.js、描き方は stage/shitsukanLook.js、上の段の切り替えは stage/shitsukanSwitch.js。
+   既定は全部の端末で「ぬの」(端末の段で変えない。本人 11/7 22:1x・22:5x)。GLB は作り直さず、描く直前に材質を差しかえる
+   (舞台の子が替わった次のコマで当たる: 見た目の切り替え・見本の子・案内役に戻す、のどれでも)。選んだ物はこのブラウザでキャラごとに覚える。
+   どれを当てるか: ?shitsukan=(試しと撮影。覚えない)→ このページで押した物 → このブラウザで覚えた物 → character.json の looks.3d.material → ぬの */
+import { createShitsukanLook } from './stage/shitsukanLook.js'; // (B5M)
+import { mountShitsukanSwitch } from './stage/shitsukanSwitch.js'; // (B5M)
+import { pickShitsukan, readStored, writeStored, heavyNoteWanted, normalizeShitsukan, HEAVY_NOTICE } from './stage/shitsukan.js'; // (B5M)
+app.shitsukan = (() => {
+  const urlPick = normalizeShitsukan(params.get('shitsukan'));
+  // キャラの id → 当てる物(このページで押した物か、初めて舞台に出た時に決めた物)。毎コマ保存先を読まない
+  const chosen = new Map();
+  const heavyNote = heavyNoteWanted(app.tier?.name);
+  const idOf = (c) => characterKey(c) || app.characterId || '';
+  const can = (c) => Boolean(c) && c.kind === 'rig' && c.look !== '2d';
+  const wanted = (c) => {
+    if (urlPick) return urlPick;
+    const id = idOf(c);
+    if (!chosen.has(id)) chosen.set(id, pickShitsukan({ stored: readStored(siteMemory, id), json: c?.lookSource?.json }).id);
+    return chosen.get(id);
+  };
+  const look = createShitsukanLook(stage, {
+    onFurReady: (_c, ok) => {
+      if (!ok) ui.notice('け の じゅんびが できませんでした。ほかの しつかん を えらんでね');
+    },
+  });
+  const root = $('shitsukan');
+  const box = root && !LOOK_SWITCH_OFF
+    ? mountShitsukanSwitch({
+        root,
+        heavyNote,
+        onPick: (id) => {
+          const c = app.character;
+          if (!can(c)) return;
+          chosen.set(idOf(c), id);
+          writeStored(siteMemory, idOf(c), id);
+          if (id === 'fur' && heavyNote) ui.notice(HEAVY_NOTICE);
+        },
+        onToggle: () => reframe(), // 開いた札の下へキャラを置き直す(閉じたら戻す)
+      })
+    : null;
+  // 開いた札(せまい画面)も、上の段の線に数える(キャラの頭を札の下へ。札が横に重なる時だけ)
+  const baseGuard = stage.state.topGuard;
+  stage.state.topGuard = (left, right) => {
+    const line = baseGuard(left, right);
+    const r = box?.openRect();
+    return r && r.right > left && r.left < right ? Math.max(line, r.bottom + TOP_GAP_PX) : line;
+  };
+  let shown = { character: null, id: null, visible: null };
+  const plainRender = stage.render;
+  stage.render = () => {
+    const c = app.character;
+    if (c) {
+      const want = can(c) ? wanted(c) : 'drawn';
+      if (shown.character !== c || shown.id !== want) {
+        const got = look.apply(c, want); // 毛の準備中は前の見た目のまま(できた次のコマで替わる)
+        if (got === want || look.failed(c, want)) shown = { ...shown, character: c, id: want };
+        box?.set(want);
+      }
+      const visible = can(c);
+      if (box && shown.visible !== visible) {
+        box.show(visible);
+        shown.visible = visible;
+      }
+      look.update(c, stage.camera);
+    }
+    plainRender();
+  };
+  return { look, wanted, current: () => shown.id, box };
+})();
+/* ---------- B5M ここまで ---------- */
+
 /**
  * キャラの人格の文(persona.md)を読む。無い(404・頁の代わり・JSON)時は空(届いた 404 の文や頁を、人格として頭脳に渡さない)。
  * 初めての会話(S4)が、見本の子を読み込み直しなしで舞台に出す時にも使う(app.readPersona)
@@ -1276,6 +1356,24 @@ function installPanelHistory() {
   opt(document.documentElement, ['class']);
 }
 
+/* ---------- BCV: カメラは使う人が決める・カメラの中身にも答える(11-08 本人)。中身は stage/cameraUse.js(部品は cameraSwitch.js・絵の 1 枚は conversation/cameraFrame.js) ---------- */
+// どの端末でも、いつでも入・切。入れる前に 1 行の知らせ。入っている間は小さな印。使う人が選んだカメラで話しかけた回だけ、同じ流れから絵を 1 枚頭脳へ
+import { createCameraUse } from './stage/cameraUse.js';
+app.camera = createCameraUse({
+  app,
+  ui,
+  dialogue,
+  $,
+  params,
+  headset: IS_HEADSET,
+  touch: TOUCH,
+  sourceOptions: () => ({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV }),
+  inXr: () => Boolean(modes && modes.mode !== 'screen'),
+  updatePrivacy: () => updatePrivacy(),
+  isMock: () => currentBrain() === 'mock',
+});
+/* ---------- BCV ここまで ---------- */
+
 async function boot() {
   const status = $('gateStatus');
   const buttons = [$('startCam'), $('startSim')];
@@ -1363,6 +1461,7 @@ async function boot() {
   setupMemory();
   setupQuestLink(); // 見せ方を調べた後(Quest の中なら出さない)
   setupTvMode(); // テレビ表示の入口(iPhone・iPad は「テレビに映す」。ヘッドセットの中では出さない)
+  app.camera.setup(); // BCV: カメラの入・切(いつでも。入口だけでなく)
   void refreshLookSwitch(app.character); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない。舞台の子が替わるたびにも作り直す)
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
@@ -1448,6 +1547,23 @@ async function boot() {
 }
 
 boot();
+// ---- BUX(第 12 波 b): 「マイクと スピーカー」の窓(声で話すの横の歯車)と、画面のアップデート(この PC の中で開いた時だけ、上の段に小さな印)。
+// 中身は ui/audioPanel.js・ui/updatePanel.js。ここではつなぐだけ(ほかの所は変えない) ----
+import { mountAudioPicker } from './ui/audioPanel.js';
+import { mountUpdate, startUpdateCheck } from './ui/updatePanel.js';
+import { setSheetLayoutHook, setSheetRoom, sheetGuard } from './ui/sheet.js';
+import { MIN_USABLE as YC_MIN_USABLE } from './stage/framing.js';
+// 窓を開いている間は、頭の線に窓の下の端を足す(キャラを窓の下へ置き直す。窓が開いた・閉じた・大きさが変わった時に置き直す)。
+// 窓の下の端は、キャラに画面の高さの MIN_USABLE が残る所まで(それより下だと、キャラが窓と下の帯にはみ出す)、かつ下の帯の高さまで
+// (それより下だと、キャラが画面の真ん中より下へずれて写り、遠近で縦横の比が PC から 3% を超えた。390x844)
+const ycBaseGuard = stage.state.topGuard;
+stage.state.topGuard = (left, right) => Math.max(ycBaseGuard(left, right), sheetGuard(left, right));
+setSheetRoom(() => Math.min(window.innerHeight * (1 - YC_MIN_USABLE) - (stage.state.bottomInset || 0), stage.state.bottomInset || Infinity));
+setSheetLayoutHook(() => reframe());
+const ycUpdate = mountUpdate({ app });
+startUpdateCheck(ycUpdate, app);
+mountAudioPicker({ app, update: ycUpdate });
+// ---- BUX ここまで ----
 // 初めての会話(7 歩)と性格の画面(S4)。#modes に「性格」「はじめての会話」を出す。?onboard=1 で初めての会話を出す。案内役は主役ノリー。
 // 初めての訪問なら、入口を閉じた後に main.js が出す(gateClosed)。印の名前は S4 の DONE_KEY を使う
 firstRunReady = import('./ui/onboarding/index.js')

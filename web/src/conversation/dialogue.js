@@ -2,10 +2,18 @@
 // サーバーから thought / say が順に届く。say が届くたびに読み上げを始め、
 // その文が話し始める瞬間に、表情・動き・視線・字幕を合わせる。
 // 返事が来るまでの間は、うなずきでつなぐ。割り込まれたら cancel() で全部止める。
+import { roleOf } from './role.js'; // B3(第 12 波 b): 役目を会話に付けて送る
 import { streamChat } from './brainClient.js';
+import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
 import { VOICE_CAP_NOTICE } from './speaker.js';
+
+/** 店の入口の画面(LED・テレビ表示)か。夜に動く画面なので、時間帯の休むすすめは付けない(BSFf) */
+function inShopScreen() {
+  const cl = globalThis.document?.documentElement?.classList;
+  return Boolean(cl && (cl.contains('is-led') || cl.contains('tv-mode')));
+}
 
 export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声の鍵は「声の鍵」の欄に入れてね';
 
@@ -83,6 +91,7 @@ export class Dialogue {
       // キャラがまだ決まっていない
     }
     this.pre = null; // 話し終わりの合図(声が止まった)で先に出した、あいづち { at, t0, fillerMs, fillerEndMs, text }
+    this.talk = createTalkSession({ hourOf: (ms) => (inShopScreen() ? null : new Date(ms).getHours()) }); // 店の入口の画面(LED・テレビ表示)は夜に動くので、時間帯のすすめは使わない(BSFf) // BSF: 往復の数・分・端末の時・すすめた後か(このタブの中だけ)
   }
 
   /**
@@ -107,6 +116,12 @@ export class Dialogue {
     // 返事が 1 文も来ないまま止める回の言葉は、捨てずに、次の言葉の頭につなげる(言い直しや割り込みで、前の言葉を取りこぼさない)
     const cur = this.cur;
     if (this.busy && cur && cur.said === 0 && cur.trigger !== 'approach' && cur.text) this.carry = { text: cur.text, at: Date.now() };
+    // B3(第 12 波 b): 返事が途中まで届いた回を止める時は、その言葉と届いた返事を履歴に残す(続けて送っても、前の話を落とさない)
+    if (this.busy && cur && cur.said > 0 && cur.sayEvents?.length) {
+      this.history.push({ role: 'user', content: cur.trigger === 'approach' ? '(使う人が近づいてきた)' : cur.text });
+      this.history.push({ role: 'assistant', content: assistantLines(cur.sayEvents, cur.thought) });
+      this.history = trimHistory(this.history);
+    }
     this.cur = null;
     this.turnId += 1;
     this.abort?.abort();
@@ -149,7 +164,8 @@ export class Dialogue {
       this.carry = null;
     }
     const id = this.turnId;
-    const cur = { text: askText, trigger, said: 0 };
+    const sayEvents = []; // 履歴に、指示どおりの JSON の形で戻すため(止めた回も、届いた分を履歴に残す)
+    const cur = { text: askText, trigger, said: 0, sayEvents, thought: null };
     this.cur = cur;
     this.busy = true;
     const ac = new AbortController();
@@ -181,9 +197,9 @@ export class Dialogue {
     }
     let sayCount = 0;
     const spoken = [];
-    const sayEvents = []; // 履歴に、指示どおりの JSON の形で戻すため
     let thoughtEv = null;
-    if (trigger !== 'approach') this.ui.userSaid(text);
+    // 前の言葉をつないで送る時は、つないだ言葉を見せる(2 回目の言葉だけが出て、前の言葉が消えたように見えないように。第 12 波 b)
+    if (trigger !== 'approach') this.ui.userSaid(askText);
 
     // 返事が来るまでの、うなずき
     for (const at of fillerPlayed ? NOD_AT_MS.slice(1) : NOD_AT_MS) {
@@ -195,17 +211,23 @@ export class Dialogue {
       );
     }
 
+    // BCV: 使う人がカメラを入れて話しかけた回だけ、その時の絵を 1 枚(決めるのは main.js の getImage。cameraFrame.js が作る)。
+    // 近づいた合図の回は送らない。履歴には入れない(次の回に前の絵を送り直さない)
+    const cameraImage = trigger === 'approach' ? null : (this.getImage?.({ mode, trigger }) ?? null);
     const body = {
+      session: this.talk.snapshot(), // BSF: 1 回の会話の長さ(休むすすめ。すすめるかはサーバーが決める)
       history: this.history,
       text: askText,
       trigger,
       scene: ctx.scene,
-      character: ctx.character,
+      // 役目(第 12 波 b): 使う人が選んだ値 > character.json の role > 人格の文の行 > おうち(src/conversation/role.js)
+      character: { ...ctx.character, role: roleOf({ settings: ctx.character?.role ? { role: ctx.character.role } : null, character: this.character, persona: ctx.character?.persona }) },
       place: ctx.place,
       expressions: this.character.expressions,
       expressionHints: this.character.expressionHints,
       motions: this.motionChoices?.(this.character),
       ...(this.interview ? { interview: true } : {}),
+      ...(cameraImage ? { image: cameraImage } : {}),
     };
 
     let failed = false; // つながらない・断られた回(返事が 1 つも無い)は、履歴に残さない(長すぎる言葉の 413 が、以後ずっと続かないように)
@@ -222,8 +244,10 @@ export class Dialogue {
               m.brain = ev.brain;
             }
             if (ev.notice) this.ui.notice?.(ev.notice); // 「仮の頭脳です(…)」
+            if (ev.rest) this.talk.markRested(); // BSF: 休むことをすすめた(この 1 回の会話では、もうすすめない)
           } else if (ev.type === 'thought') {
             thoughtEv = ev;
+            cur.thought = ev;
             this.ui.thought(ev);
           } else if (ev.type === 'say') {
             if (m.tFirstSay === null) m.tFirstSay = performance.now();
@@ -232,6 +256,8 @@ export class Dialogue {
             const isFirst = sayCount === 1;
             spoken.push(ev.text);
             sayEvents.push(ev);
+            // B3(第 12 波 b): 届いた文は、話し始める前から字幕に薄く出す(返事の全部が早く読める。声は今までどおり 1 文ずつ)
+            this.ui.sayAhead?.(ev);
             this.speaker
               .enqueue(ev.text, {
                 onFirstByte: (ms) => {
@@ -282,6 +308,7 @@ export class Dialogue {
     // ふつうの文で戻すと、モデルがそれをまねて、JSON でなく文章で答える回が出た(2026-11-02)
     if (sayEvents.length) this.history.push({ role: 'assistant', content: assistantLines(sayEvents, thoughtEv) });
     this.history = trimHistory(this.history);
+    if (trigger !== 'approach' && sayEvents.length) this.talk.countTurn(); // BSF: 1 往復(近づいた時の声かけは数えない)
     this.busy = false;
     // 音が出た瞬間を待って記録する
     const waitStart = () => {

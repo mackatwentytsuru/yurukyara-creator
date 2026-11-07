@@ -6,6 +6,7 @@ import { loadRigCharacter } from '../../../creator/viewer/rigRuntime.js';
 import { DEFAULT_CHARACTERS, MAIN_CHARACTER, loadFirstOf } from './defaults.js';
 // 見た目の方式(3D と 2D)の決まりと、このタブで選んだ見た目の覚え方(three を読まない小さな部品)
 import { LOOKS, pickLook, partsPath, twoDHint, readRemembered } from './looks.js';
+import { cuteChoices } from './cuteLayer.js'; // B5G: どのキャラでも使える仕草の名前
 
 export { DEFAULT_CHARACTERS, MAIN_CHARACTER, pickLook };
 
@@ -137,8 +138,12 @@ export async function availableLooks(character) {
   return LOOKS.filter((l) => found.has(l));
 }
 
-/** そのキャラが実際に使える動きの名前(Claude に選ばせる一覧)。idle と talk は自動なので外す。2D の板は 3D と同じ手続きの動きが全部動く */
+/**
+ * そのキャラが実際に使える動きの名前(Claude に選ばせる一覧)。idle と talk は自動なので外す。
+ * B5G: かわいい仕草の層(cuteLayer.js)の名前は、どのキャラでも骨や板で動く(腕の無いキャラは腕の仕草を外す)。rig の動きのファイル(bow・wave など)も残す
+ */
 export function motionChoices(character) {
-  if (character.kind === 'rig') return ['none', ...character.motionNames.filter((n) => n !== 'idle' && n !== 'talk')];
-  return ['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point'];
+  const cute = cuteChoices(character.cute?.caps ?? {});
+  if (character.kind === 'rig') return [...new Set(['none', ...character.motionNames.filter((n) => n !== 'idle' && n !== 'talk'), ...cute])];
+  return [...new Set(['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point', ...cute])];
 }

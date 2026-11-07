@@ -3,8 +3,9 @@
 // 順番: 本文の点検 → 頭脳を選ぶ(合言葉・回数。記憶の置き場を使う前に見る。CRITsec2 N3)→
 //       記憶(接続元ごとの数えの後。「わすれて」はここで、その子の言葉で答える)→
 //       本物の頭脳、または仮の頭脳(どちらも runTurn。安全の層・人格・記憶を同じ道で通す)
-import { decideBrain, readJson } from './gate.mjs';
+import { decideBrain, readJson, takeImageSlot } from './gate.mjs';
 import { json } from './http.mjs';
+import { CAMERA_CAP_NOTICE } from '../../server/camera.mjs'; // BCV: カメラの絵の 1 日の枚数に届いた時の知らせ
 
 // 仮の頭脳にした理由を、画面に出す一言にする
 export const FALLBACK_NOTICE = {
@@ -33,9 +34,11 @@ const NO_MEMORY = async () => ({ handled: false, events: [], memory: null, learn
 export async function handleChat(request, { cfg, store, runTurn, sanitize, remember = NO_MEMORY, now = Date.now }) {
   const started = now();
   if (request.method !== 'POST') return json(405, { error: 'POST だけを受けます' });
-  const read = await readJson(request, cfg.maxBodyBytes);
+  // BCV: カメラの絵がついた本文だけ、絵 1 枚の分(maxImageBytes)まで大きくてよい。絵の無い本文は、元の上限(maxBodyBytes)のまま
+  const read = await readJson(request, cfg.maxBodyBytes + (cfg.maxImageBytes ?? 0));
   if (read.error === 'too-large') return json(413, { error: '本文が大きすぎます' });
   if (read.error) return json(400, { error: '本文が JSON ではありません' });
+  if (read.bytes > cfg.maxBodyBytes && !read.body?.image) return json(413, { error: '本文が大きすぎます' });
   let body;
   try {
     body = { ...sanitize(read.body), useShop: false };
@@ -53,6 +56,12 @@ export async function handleChat(request, { cfg, store, runTurn, sanitize, remem
   const onEvent = (ev) => events.push(ev);
   const recall = { memory: mem.memory, learned: mem.learned };
   let { brain, reason } = pick;
+  // BCV: 本物の頭脳へ絵を送る回は、絵の枚数も 1 日の上限で数える。届いたら絵を外して言葉だけで話す(仮の頭脳は絵を見ないので数えない)
+  if (brain === 'real' && body.image && !(await takeImageSlot({ cfg, store, now }))) {
+    const { image: _notSent, ...rest } = body;
+    body = rest;
+    events.push({ type: 'meta', camera: 'capped', cameraNotice: CAMERA_CAP_NOTICE });
+  }
   if (brain === 'real') {
     try {
       await runTurn(body, { onEvent, signal: request.signal, ...recall });

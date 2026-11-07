@@ -9,6 +9,7 @@ import {
 } from '../src/character/intent.js';
 import { CharacterBase } from '../src/character/characterBase.js';
 import { GESTURES } from '../src/character/gestures.js';
+import { CUTE_GESTURES } from '../src/character/cuteLayer.js';
 import { Svg2DCharacter } from '../src/char2d/svg2dCharacter.js';
 
 /** 呼ばれた順を記録する受け手。canShow と play できる名前を決められる */
@@ -36,7 +37,8 @@ const RIG = { expressions: ['neutral', 'happy', 'surprised', 'sad', 'think'], mo
 test('版と 7 つの表情・動きの言葉・5 つの呼び方', () => {
   assert.equal(INTENT_VERSION, 1);
   assert.deepEqual([...EMOTIONS], ['neutral', 'happy', 'surprised', 'sad', 'angry', 'relaxed', 'think']);
-  for (const g of INTENT_GESTURES.filter((n) => n !== 'none' && n !== 'jump')) assert.ok(GESTURES[g], `${g} は 3D の手続きの動きにある`);
+  // 動きの言葉は、3D の手続きの動き(gestures.js)か、かわいい仕草の層(cuteLayer.js。11/8 B5G で足した名前)のどちらかで必ず動く
+  for (const g of INTENT_GESTURES.filter((n) => n !== 'none' && n !== 'jump')) assert.ok(GESTURES[g] || CUTE_GESTURES.includes(g), `${g} は 3D の手続きの動きか仕草の層にある`);
   assert.deepEqual([...RECEIVER_METHODS], ['lookAt', 'setExpression', 'setMouth', 'play', 'update']);
 });
 

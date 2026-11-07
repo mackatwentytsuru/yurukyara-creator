@@ -73,6 +73,16 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
 .caption .cap-prev { display: block; font-size: 0.7em; font-weight: 600; line-height: 1.5; opacity: 0.8; margin-bottom: 2px; }
 .caption .cap-now { display: block; }
 .caption.settled { font-size: clamp(17px, 2.4vw, 28px); }
+/* ---- B3(第 12 波 b・会話): まだ話していない返事の文は、今の文の続きに薄く(返事の全部が早く読める)。
+   先に見せた返事(.ahead)は、話し終わり(.settled)と同じ大きさの 1 つの段落にする(字幕の箱が、話し終わりより高くならない = キャラにかからない)。
+   前の文は少し薄く、今の文は濃く、まだの文は薄く。テレビ表示と、キーボードで画面が低い時(1 行の字幕)は、今の文だけ ---- */
+.caption .cap-next { opacity: 0.5; font-weight: 600; }
+.caption.ahead { font-size: clamp(17px, 2.4vw, 28px); }
+.caption.ahead .cap-prev { display: inline; font-size: 1em; font-weight: 700; line-height: inherit; opacity: 0.72; margin: 0; }
+.caption.ahead .cap-now { display: inline; }
+@media (max-width: 640px) { .caption.ahead { font-size: clamp(16px, 4.4vw, 21px); } }
+@media (max-height: 500px) { .caption.ahead { font-size: clamp(14px, 3.8vh, 20px); } }
+html.tv-mode .caption .cap-next, html.kb-tight .caption .cap-next { display: none; }
 
 /* 字幕の上: Claude が店のデータを見て答えている札(どの情報を、いつの更新として使ったか) */
 .shop-badge {
@@ -192,6 +202,30 @@ html:not(.guide-ready) .gate-guide { visibility: hidden; }
 .fine { margin: 4px 0 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
 .status { margin: 0; min-height: 1.4em; font-size: 14px; color: var(--warn); }
 
+/* ---------- BSF(11-08 安全): 「AI のキャラクターと話しています」をいつも見せる(使う人と話すチャットは、AI だと知らせる決まり) ----------
+   ふだん・入口の LED・テレビ表示: 字幕の列(.subs)のいちばん下 = 下の帯のすぐ上の 1 行。下の帯の高さ(--bottom-h)を変えないので、キャラは小さくならない
+   (字幕が出ている間は、字幕の列の高さに入るので、長い返事の字幕も足にかからない。main.js の subsHeight)。
+   はじめての会話(下を札が覆う間): #aiNoticeTop を上の段のすぐ下の左に(その間は隠れている「Claude の考え」の場所)。入口: 入口の札の中の 1 行(#gateAi。子どもの使い方も)。
+   画面のキーボードが出ている間だけは、入力の 1 行と字幕を先に見せるため隠す(注意書きと同じ。入る前と閉じた後は見える) */
+.ai-notice { margin: 0; padding: 2px 10px; border-radius: 999px; background: rgba(12, 10, 22, 0.5); font-size: 13px; line-height: 1.3; color: var(--muted); text-align: center; letter-spacing: 0.02em; pointer-events: none; }
+html.tv-mode .ai-notice { font-size: max(12px, 1.6vh); opacity: 0.85; }
+html.kb-open .ai-notice, html.fr-open #aiNotice { display: none; }
+.ai-notice-top { display: none; }
+html.fr-open:not(.kb-open) .ai-notice-top {
+  display: block; position: fixed; z-index: 31; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left));
+  max-width: calc(100vw - 180px); padding: 5px 10px; background: rgba(12, 10, 22, 0.62); text-align: left; font-size: 12px; letter-spacing: 0;
+}
+/* BSFf: 「はじめての会話」の札が右に出る PC の幅では、長い決まった返事の字幕(相談先の電話番号を含む)が札の下に入って切れていた。字幕は札の左に収める */
+@media (min-width: 912px) {
+  html.fr-open .subs { left: 16px; transform: none; width: calc(100vw - min(460px, calc(100vw - 32px)) - 48px); }
+}
+@media (min-width: 720px) and (max-width: 911px) {
+  html.fr-open:has(.fr-sheet[data-actions="frame"]) .subs { left: 16px; transform: none; width: calc(100vw - min(460px, calc(100vw - 32px)) - 48px); }
+}
+.gate-ai { margin: -2px 0 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
+/* 入口の札が画面より高い時(はじめての訪問の 1 行も出る低い画面)は、札を巻いて読める(上も下も切らない) */
+.gate { overflow-y: auto; place-items: safe center; }
+
 /* 「Claude の考え」は、上の段(札とボタン。高さ --top-h は main.js が測る)のすぐ下に置く。
    札が 2 行になる・ボタンが増えると段が高くなり、決め打ちの位置では「覚えていること」などに重なって押せなかった(幅 390)。
    幅 960 まで: 上の段のボタンが右へ伸びると、右上の窓とも重なるので、同じく段の下へ */
@@ -273,6 +307,54 @@ html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origi
 .look-switch button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .look-switch button:disabled { cursor: wait; opacity: 0.6; }
 html.is-led .look-switch { display: none !important; }
+/* ---------- B5M: しつかん(3D の材質: いつもの・ぬの・け・つるつる)。見た目の 3D・2D の となり(main.js の B5M の塊・stage/shitsukanSwitch.js) ----------
+   押す所は 44px 以上・字は 14px 以上。幅 1600 未満: 「しつかん」のボタン 1 つ(スマホの上の段の行を増やさない幅。PC 1280 では 4 つを並べると
+   右上の「Claude の考え」に重なった)。押すと、ボタンのすぐ下に 4 つの札(画面からはみ出す時は stage/shitsukanSwitch.js が横へずらす。
+   選ぶと閉じる・外を押す・Esc でも閉じる。開いている間は main.js がキャラを札の下へ)。幅 1600 以上: 「しつかん」の字と 4 つのボタンを並べる */
+.shitsukan { position: relative; pointer-events: auto; }
+.shitsukan[hidden] { display: none; }
+/* 長く押しても文字を選ばない(iPhone のシミュレーターで、押した所が文字の選択になって青い印が出た) */
+.shitsukan button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
+.sk-open {
+  font: inherit; font-size: 14px; display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0 10px;
+  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.sk-open[aria-expanded="true"] { border-color: var(--lav); }
+.sk-open:focus-visible, .sk-list button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.sk-list { display: none; }
+.sk-title { display: none; }
+.sk-list button {
+  font: inherit; display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 56px; min-width: 44px; padding: 6px 4px;
+  border-radius: 14px; cursor: pointer; color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+}
+.sk-list button[aria-pressed="true"] { color: var(--ink); background: var(--lav); border-color: var(--lav); }
+.sk-main { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.sk-sub { font-size: 14px; line-height: 1.2; opacity: 0.85; white-space: nowrap; }
+@media (max-width: 1599px) {
+  .shitsukan.open .sk-list {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; position: absolute; top: calc(100% + 6px); right: 0; z-index: 6;
+    width: min(380px, calc(100vw - 24px)); padding: 8px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+}
+/* 低い画面(横向きのスマホ)では上の段の行が横に巻く(overflow-x)ので、札を上の段の全体(.top)の右にそろえて、巻く行で切れないようにする */
+@media (max-height: 500px) {
+  .shitsukan { position: static; }
+}
+@media (min-width: 1600px) {
+  .sk-open { display: none; }
+  .sk-list {
+    display: inline-flex; align-items: center; gap: 2px; padding: 0 1px 0 12px; border-radius: 999px;
+    background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .sk-title { display: inline; font-size: 14px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+  .sk-list button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); transition: background 0.2s ease, color 0.2s ease; }
+  .sk-list .sk-sub { display: none; }
+  .sk-list .sk-main { font-size: 14px; }
+  .sk-list button[aria-pressed="true"] { color: var(--ink); background: var(--lav); }
+}
+/* ---------- B5M ここまで ---------- */
 .thought-body .row[hidden] { display: none; }
 
 /* 仮の頭脳の知らせ(契約 K5)。字幕の上に 1 行、黄色で */
@@ -533,6 +615,102 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
   .tv-enter { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
   .tv-cast-close { grid-column: 2; grid-row: 4; align-self: start; }
 }
+/* ---- BUX(第 12 波 b): 「マイクと スピーカー」の窓・画面のアップデートの印と窓。ほかの規則は変えない ----
+   窓(.yc-sheet)は body の直下で浮かせる。幅 1200 未満は画面の上(上の段にかぶせる)、幅 1200 以上は左(右には「Claude の考え」)。開いている間は main.js の頭の線に
+   窓の下の端が足され(ui/sheet.js の sheetGuard)、キャラは窓の下へ置き直される(重ならない・形は変えない)。下の帯は動かさない。字は 14px 以上 */
+.yc-update-badge {
+  pointer-events: auto; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 999px;
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--warn); border: 1px solid rgba(255, 255, 255, 0.4); cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.yc-update-badge[hidden] { display: none; }
+.yc-update-badge:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.yc-update-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); flex: none; }
+.yc-update-short { display: none; }
+@media (max-width: 640px) {
+  .yc-update-long { display: none; }
+  .yc-update-short { display: inline; }
+  .yc-update-badge { padding: 0 12px; }
+}
+.yc-audio-btn {
+  flex: none; width: 44px; min-height: 44px; padding: 0 !important; display: grid; place-items: center;
+  background: var(--glass) !important; border: 1px solid var(--line) !important; color: var(--text);
+}
+.yc-audio-btn[aria-expanded="true"] { border-color: var(--lav) !important; color: var(--lav); }
+.yc-sheet {
+  position: fixed; z-index: 8; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; margin: 0 auto;
+  width: min(calc(100% - 24px), 560px); max-height: min(40vh, 400px); max-height: min(40dvh, 400px); overflow: auto; overscroll-behavior: contain;
+  padding: 12px 14px 14px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); /* 不透明(上の段の字が透けて見えないように) */
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  display: grid; gap: 10px; align-content: start; font-size: 15px; line-height: 1.55; color: var(--text);
+}
+.yc-sheet[hidden] { display: none; }
+.yc-sheet:focus { outline: none; }
+@media (min-width: 641px) {
+  .yc-sheet { max-height: min(46vh, 430px); max-height: min(46dvh, 430px); }
+}
+@media (min-width: 1200px) {
+  /* 左に浮かせる(右には「Claude の考え」がある。キャラは真ん中) */
+  .yc-sheet {
+    left: max(12px, env(safe-area-inset-left)); right: auto; margin: 0; width: 380px; z-index: 6;
+    top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px);
+    max-height: calc(100vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - var(--bottom-h, 120px) - 24px);
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - var(--bottom-h, 120px) - 24px);
+  }
+}
+.yc-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.yc-sheet-head h2 { margin: 0; font-size: 17px; letter-spacing: 0.04em; }
+.yc-sheet-close, .yc-btn, .yc-link-btn {
+  font: inherit; font-size: 14px; min-height: 44px; padding: 8px 14px; border-radius: 14px; cursor: pointer; color: var(--text);
+  background: transparent; border: 1px solid var(--line);
+}
+.yc-sheet-close:focus-visible, .yc-btn:focus-visible, .yc-link-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.yc-btn:disabled { opacity: 0.55; cursor: wait; }
+.yc-btn[hidden], .yc-link-btn[hidden] { display: none; }
+.yc-btn-main { border: 0; font-weight: 700; background: linear-gradient(135deg, #7d62ff, #c15bff); }
+.yc-btn-small { min-height: 40px; padding: 6px 12px; justify-self: start; }
+.yc-link-btn { justify-self: start; border-style: dashed; color: var(--muted); }
+.yc-sheet p, .yc-sheet ul, .yc-sheet ol, .yc-sheet h3 { margin: 0; }
+.yc-sheet h3 { font-size: 15px; color: var(--muted); font-weight: 700; }
+.yc-sheet [hidden] { display: none !important; }
+.yc-field { display: grid; gap: 4px; }
+.yc-field > span { font-size: 14px; color: var(--muted); }
+.yc-select {
+  font: inherit; font-size: 15px; min-height: 44px; width: 100%; min-width: 0; padding: 0 10px; border-radius: 12px;
+  color: var(--text); background: var(--ink); border: 1px solid var(--line);
+}
+.yc-select:focus-visible { outline: 2px solid var(--lav); outline-offset: 1px; }
+.yc-meter-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.yc-meter-label { font-size: 14px; color: var(--muted); }
+.yc-meter { height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.yc-meter-bar { display: block; height: 100%; width: 100%; transform: scaleX(0); transform-origin: left center; background: linear-gradient(90deg, var(--mint), var(--lav)); transition: transform 0.06s linear; }
+.yc-au-actions, .yc-up-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.yc-au-route, .yc-au-foot, .yc-au-lead, .yc-up-keep { font-size: 14px; color: var(--muted); }
+.yc-au-heard { min-height: 1.55em; font-size: 15px; }
+.yc-au-msg, .yc-up-msg { font-size: 14px; color: var(--warn); }
+.yc-up-version { font-size: 16px; font-weight: 700; }
+.yc-up-news { padding-left: 1.2em; display: grid; gap: 2px; }
+.yc-up-steps { padding-left: 1.4em; display: grid; gap: 2px; font-size: 15px; }
+.yc-up-steps li::marker { color: var(--mint); font-weight: 700; }
+.yc-up-details summary { cursor: pointer; font-size: 14px; color: var(--muted); min-height: 32px; }
+.yc-up-raw { margin: 6px 0 0; max-height: 9em; overflow: auto; white-space: pre-wrap; word-break: break-all; font: inherit; font-size: 14px; color: var(--muted); }
+.yc-up-offer-list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.yc-up-offer { display: grid; gap: 4px; padding: 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+.yc-up-offer > span { font-size: 14px; color: var(--muted); }
+.yc-up-asked { font-size: 14px; color: var(--mint); }
+/* 知らせは低く(ボタンを横に並べる。字幕の場所の高さに収め、キャラの足元へ伸びない) */
+.yc-note { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; text-align: left; border-radius: 16px; padding: 6px 8px 6px 14px; }
+.yc-note[hidden] { display: none; }
+.yc-note-text { flex: 1 1 auto; min-width: 0; }
+.yc-note-action { flex: none; font: inherit; font-size: 14px; min-height: 40px; padding: 4px 12px; border-radius: 999px; cursor: pointer; color: var(--ink); background: var(--lav); border: 0; pointer-events: auto; }
+@media (max-width: 640px) {
+  .yc-au-lead { display: none; } /* 電話の幅: 窓の名前で分かるので、押す所を先に見せる */
+}
+.yc-note-action[hidden] { display: none; }
+.yc-gate-update { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 15px; line-height: 1.5; background: rgba(123, 224, 195, 0.14); border: 1px solid var(--mint); }
+html.tv-mode .yc-update-badge, html.tv-mode .yc-sheet, html.tv-mode .yc-note { display: none !important; }
+/* ---- BUX ここまで ---- */
+
 /* 画面のキーボード(ui/keyboardInset.js が --kb・--kbt・--vvh を入れ、出ている間だけ html.kb-open を付ける)。
    iOS の Safari は、キーボードでページの高さを変えず見える範囲だけ縮めるので、下に貼り付いた帯は、そのままだとキーボードの下に残る。
    translate は transform と別の指定なので、.subs の translateX(-50%) と重なっても壊れない。
@@ -557,3 +735,68 @@ html.kb-tight .caption, html.kb-tight .caption.settled {
 }
 html.kb-tight .caption .cap-now { display: inline; }
 html.kb-short .top, html.kb-short .look-switch, html.kb-short .tv-btn, html.kb-short .quest-link-box { display: none !important; }
+
+
+/* ---------- BCV: カメラは使う人が決める(入力の列のボタン・テレビ表示の隅のボタン・入れる前の知らせ・入っている間の赤い点の札) ---------- */
+.cam { background: var(--glass); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; position: relative; min-width: 44px; }
+.cam[hidden], .tv-cam[hidden] { display: none !important; }
+.cam.on { background: rgba(255, 90, 90, 0.2); border-color: #ff6b6b; color: #ffd9d9; }
+.cam-dot { display: none; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #ff5a5a; box-shadow: 0 0 0 3px rgba(255, 90, 90, 0.28); }
+.cam.on .cam-dot, .tv-cam.on .cam-dot { display: inline-block; }
+@media (max-width: 640px) {
+  .cam .cam-label { display: none; } /* マイクと同じく、狭い画面は印だけ(赤い点は右上に重ねる) */
+  .cam.on .cam-dot { position: absolute; top: 5px; right: 5px; }
+}
+/* 上の札の先頭の印(絵を送るカメラが入っている間だけ。main.js の updateChips が出す)。高さ 500 未満で札の列を隠す時も、この札だけ残す。
+   名前は cam-rec(.rec は下の注意書きの 8px の点の名前で、同じ名前だと札が点の大きさにつぶれた) */
+.chip.cam-rec { color: #ffd9d9; background: rgba(255, 70, 70, 0.2); border-color: rgba(255, 107, 107, 0.65); }
+.chip.cam-rec b { color: #ffe9e9; }
+.chip.cam-rec::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 2px; border-radius: 50%; background: #ff5a5a; }
+@media (max-height: 500px) {
+  .chips:has(.chip.cam-rec) { display: flex; }
+  .chips:has(.chip.cam-rec) .chip:not(.cam-rec) { display: none; }
+}
+/* テレビ表示の隅(「もどる」の左)。押せる大きさ 44px。入っている間は赤い点 */
+.tv-cam { display: none; }
+html.tv-mode .tv-cam {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; position: fixed; z-index: 9;
+  top: max(10px, env(safe-area-inset-top)); right: calc(max(10px, env(safe-area-inset-right)) + 92px);
+  min-height: 44px; min-width: 44px; padding: 0 12px; font: inherit; color: var(--text); cursor: pointer;
+  border-radius: 999px; background: rgba(12, 10, 22, 0.55); border: 1px solid var(--line); opacity: 0.6; transition: opacity 0.2s ease;
+}
+html.tv-mode .tv-cam.on { opacity: 0.9; border-color: #ff6b6b; color: #ffd9d9; }
+html.tv-mode .tv-cam:hover, html.tv-mode .tv-cam:focus-visible { opacity: 1; }
+html.tv-mode .tv-cam:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+/* 縦持ちの一言(左上)は、カメラの隅のボタンの左で止める。ボタンは入れている間、赤い点の分だけ広い(幅 約 60px)。重ならないよう 10px あける */
+@media (orientation: portrait) and (pointer: coarse) {
+  html.tv-mode body:has(#tvCam:not([hidden])) .tv-rotate { right: calc(max(10px, env(safe-area-inset-right)) + 162px); }
+}
+/* 入れる前の知らせ(入口・「テレビに映す」と同じ形の真ん中の札。子どもにも読める大きな字) */
+.cam-ask {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+  background: rgba(12, 10, 22, 0.66); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); overflow: auto;
+}
+.cam-ask[hidden] { display: none; }
+.cam-ask-card { width: min(420px, 100%); max-height: 100%; overflow: auto; padding: 20px; border-radius: 22px; background: var(--ink-2); border: 1px solid var(--line); display: grid; gap: 12px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5); }
+.cam-ask-card h2 { margin: 0; font-size: 20px; line-height: 1.3; }
+.cam-ask-text { margin: 0; font-size: 16px; line-height: 1.7; color: var(--text); }
+.cam-ask-mock { margin: 0; font-size: 14px; line-height: 1.6; color: var(--warn); }
+.cam-ask-mock[hidden] { display: none; }
+.cam-ask-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cam-ask button { font: inherit; font-size: 16px; min-height: 48px; padding: 8px 12px; border-radius: 14px; cursor: pointer; color: var(--text); border: 1px solid var(--line); }
+.cam-ask .cam-ask-yes { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 0; font-weight: 700; }
+.cam-ask .cam-ask-no { background: transparent; }
+.cam-ask .cam-ask-back { display: grid; gap: 2px; justify-items: center; background: rgba(123, 224, 195, 0.12); border-color: rgba(123, 224, 195, 0.45); }
+.cam-ask .cam-ask-back[hidden] { display: none; }
+.cam-ask-back .btn-sub { font-size: 14px; opacity: 0.85; }
+.cam-ask button:disabled { opacity: 0.55; cursor: wait; }
+.cam-ask button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.cam-ask-status { margin: 0; font-size: 14px; line-height: 1.5; color: var(--warn); }
+.cam-ask-status:empty { display: none; }
+/* テレビ表示の間は、知らせの窓も 3 m 先から読める大きさ(画面の高さに合わせる。テレビの字幕と同じ考え) */
+html.tv-mode .cam-ask-card { width: min(72vw, 1100px); padding: max(20px, 3vh); gap: max(12px, 1.6vh); border-radius: max(22px, 2.4vh); }
+html.tv-mode .cam-ask-card h2 { font-size: max(20px, 4.2vh); }
+html.tv-mode .cam-ask-text { font-size: max(16px, 3.2vh); }
+html.tv-mode .cam-ask-mock, html.tv-mode .cam-ask-status { font-size: max(14px, 2.4vh); }
+html.tv-mode .cam-ask button { font-size: max(16px, 3vh); min-height: max(48px, 7vh); border-radius: max(14px, 1.8vh); }
+/* ---------- BCV ここまで ---------- */

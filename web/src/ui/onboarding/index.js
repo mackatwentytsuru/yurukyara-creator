@@ -403,10 +403,14 @@ export function mountFirstRun({
     if (c.local && !c.twod) return true;
     try {
       const ok = await putOnStage(c.id);
-      if (!ok && stageId() !== c.id) await sheet?.present([{ who: 'note', text: `${c.name}は、いま舞台に出せません。札の中で続けます。` }], {});
+      if (!ok && stageId() !== c.id) {
+        await sheet?.present([{ who: 'note', text: `${c.name}は、いま舞台に出せません。札の中で続けます。` }], {});
+        return 'failed'; // 出せなかった印(true と同じく続けるが、「舞台に でたよ」とは言わせない。B4 直し)
+      }
     } catch (err) {
       console.warn('見本の子を舞台に出せませんでした:', err?.message ?? err);
       await sheet?.present([{ who: 'note', text: `${c.name}を舞台に出せませんでした。札の中で続けます。` }], {});
+      return 'failed';
     }
     return true;
   }

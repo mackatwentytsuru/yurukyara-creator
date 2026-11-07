@@ -78,6 +78,9 @@ export class Svg2DCharacter extends CharacterBase {
     this.unit = this.heightM / vh; // 元の座標 1 → メートル
     this.origin = { x: vx + vw / 2, y: vy + vh }; // 足もとの真ん中を原点にする
     this._build(svg, rasterize, pxPerUnit);
+    // B5G: 仕草の層に、この板にある部位を知らせる(腕・しっぽ・耳の板があれば動かす)
+    const gp = this.groups;
+    this.cute.caps = { ...this.cute.caps, arms: Boolean(gp.arm_r || gp.arm_l), head: Boolean(gp.head), tail: Boolean(gp.tail), ears: Boolean(gp.ear_l || gp.ear_r) };
   }
 
   /** 元の SVG の座標 → この板の親の中の座標(メートル) */
@@ -256,9 +259,14 @@ export class Svg2DCharacter extends CharacterBase {
     if (this.slotGroups.eyes) this.slotGroups.eyes.scale.y = eyesScaleY;
     this.state2d.eyesScaleY = eyesScaleY;
 
-    // 体の動き
-    const m = pose2d(s.pose, { headYaw: s.headYaw, headPitch: s.headPitch, time: this.time }, this.gains);
+    // 体の動き(B5G: かわいい仕草の層 s.cute も渡す。3D と同じ名前・同じ数字で、弾み・ゆれ・しっぽ・耳が動く)
+    const m = pose2d(s.pose, { headYaw: s.headYaw, headPitch: s.headPitch, time: this.time, cute: s.cute }, this.gains);
     this.rig.position.y = m.rootY * this.heightM;
+    this.rig.position.x = m.rootX * this.heightM;
+    this.upper.rotation.z = m.bodyRot;
+    if (this.groups.tail) this.groups.tail.rotation.z = m.tailRot;
+    if (this.groups.ear_l) this.groups.ear_l.rotation.z = m.earRotL;
+    if (this.groups.ear_r) this.groups.ear_r.rotation.z = m.earRotR;
     this.upper.scale.y = m.upperSquash;
     const head = this.groups.head;
     head.position.set(head.userData.base.x + m.headX * this.headSize.w, head.userData.base.y + m.headY * this.headSize.h, head.userData.base.z);

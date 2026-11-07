@@ -10,7 +10,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
-export const DRAW_MODEL = 'claude-sonnet-5-5';
+import { DRAW_MODEL_DEFAULT } from '../src/conversation/models.js';
+
+export const DRAW_MODEL = DRAW_MODEL_DEFAULT;
 const SVG_MAX = 300 * 1024;
 const PIC_MAX = 4 * 1024 * 1024;
 const WORDS_MAX = 60;

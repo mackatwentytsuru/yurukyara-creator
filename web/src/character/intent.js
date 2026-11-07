@@ -10,8 +10,9 @@ export const INTENT_VERSION = 1;
 /** 表情(感情)は 7 つ。K1 の looks.2d.expressions の名前もこれに合わせる */
 export const EMOTIONS = Object.freeze([...STANDARD_EXPRESSIONS]); // neutral happy surprised sad angry relaxed think
 
-/** 動きの言葉。3D の手続きの動き(gestures.js)と、rig の動きのファイルの名前の共通部分+jump */
-export const INTENT_GESTURES = Object.freeze(['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point', 'jump']);
+/** 動きの言葉。3D の手続きの動き(gestures.js)と、rig の動きのファイルの名前の共通部分+jump。
+ *  11/8(B5G)かわいい仕草の層の名前を足した: greet・happy・cheer・shy・surprised・droop(cuteLayer.js。どのキャラでも動く) */
+export const INTENT_GESTURES = Object.freeze(['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point', 'jump', 'greet', 'happy', 'cheer', 'shy', 'surprised', 'droop']);
 
 /** 受け手が持つ 5 つの呼び方 */
 export const RECEIVER_METHODS = Object.freeze(['lookAt', 'setExpression', 'setMouth', 'play', 'update']);
@@ -37,7 +38,13 @@ export const GESTURE_NEAR = Object.freeze({
   shake: ['tilt'],
   shrug: ['tilt'],
   point: ['wave', 'nod'],
-  jump: ['wave', 'nod'],
+  jump: ['cheer', 'wave', 'nod'],
+  greet: ['wave', 'nod'],
+  cheer: ['greet', 'happy', 'nod'],
+  happy: ['nod'],
+  shy: ['tilt', 'nod'],
+  surprised: ['nod'],
+  droop: ['nod'],
 });
 
 // 別名(英語の言いかえ・日本語)→ 7 つの表情。ここに無い名前は expressionNames.js の近い物の表で落とす
@@ -47,7 +54,13 @@ const EMOTION_ALIAS = {
   ふつう: 'neutral', うれしい: 'happy', 嬉しい: 'happy', 喜び: 'happy', 楽しい: 'happy', 驚き: 'surprised', びっくり: 'surprised',
   悲しい: 'sad', かなしい: 'sad', 怒り: 'angry', ぷんぷん: 'angry', 落ち着き: 'relaxed', のんびり: 'relaxed', 考え中: 'think', 考える: 'think',
 };
-const GESTURE_ALIAS = { nodding: 'nod', うなずく: 'nod', bowing: 'bow', おじぎ: 'bow', 手を振る: 'wave', hello: 'wave', 首をかしげる: 'tilt', headshake: 'shake', 指さす: 'point', 跳ねる: 'jump' };
+const GESTURE_ALIAS = {
+  nodding: 'nod', うなずく: 'nod', bowing: 'bow', おじぎ: 'bow', 手を振る: 'wave', hello: 'wave', 首をかしげる: 'tilt', headshake: 'shake', 指さす: 'point', 跳ねる: 'jump',
+  // B5G かわいい仕草の名前の言いかえ
+  greeting: 'greet', あいさつ: 'greet', joy: 'happy', うれしい: 'happy', 喜ぶ: 'happy', banzai: 'cheer', ばんざい: 'cheer', yay: 'cheer',
+  embarrassed: 'shy', てれる: 'shy', 照れる: 'shy', surprise: 'surprised', びっくり: 'surprised', 驚く: 'surprised',
+  sad: 'droop', しょんぼり: 'droop', thinking: 'think', 考える: 'think',
+};
 
 const DEFAULT_USER = Object.freeze([0, 1.4, 2]); // 話し相手の位置が分からない時の既定(キャラの正面 2m、目の高さ)
 const DEFAULT_GAZE_MS = 2400;

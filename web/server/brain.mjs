@@ -1,15 +1,19 @@
 // 会話の頭脳。Haiku を呼んで、1 行ずつの JSON を onEvent に渡す。
 // 鍵が無いときは、同じ形で返す仮の頭脳(固定の台本)を使う。
 // どちらの頭脳でも、安全の層(safety.mjs)を先に通す: つらい話には決まった案内、出力も確かめる。
+import { gestureBudget, gestureForIntent, resolveMotion } from '../src/conversation/gestureNames.js'; // B3(第 12 波 b): 仕草の名前
 import { config } from './env.mjs';
 import { buildSystemBlocks, buildUserTurn, MOTIONS, safeChoices } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, turnGuard, SAFETY_VERSION } from './safety.mjs';
+import { mentionsRest, restGuard, restLine, restNeed } from './safety.mjs'; // BSF 11-08: 長い会話・夜おそくの「休もうか」(1 回の会話で 1 回)
 import { summarize } from './memory/reflect.mjs';
 import { aizuchi, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
+import { CAMERA_MOCK_LINES, CAMERA_MOCK_NOTICE, cameraTurnContent, imageTokens, seeingAsked } from './camera.mjs'; // BCV: カメラの絵
 
 export const HANDOFF_REASONS = ['emergency', 'unknown'];
-const GREETING_MOTIONS = ['bow', 'nod', 'wave']; // 初めてのあいさつの 1 文目はおじぎ、2 文目はうなずき、3 文目は手をふる(無いキャラは none に落ちる)
+// 仮の頭脳の仕草(かわいい仕草の層の名前。そのキャラに無い名前は、emit が近い物へ落とす。1 つの返事で仕草は 2 回まで。第 12 波 b)
+const GREETING_MOTIONS = ['greet', 'bow', 'none']; // 初めてのあいさつ: 1 文目は手をふって弾む、2 文目はおじぎ、3 文目は表情だけ
 const EXAMPLE_MOTIONS = ['nod', 'tilt', 'none']; // 話し方の例の返事
 const AIZUCHI_MOTIONS = ['nod', 'tilt'];
 // 分からない・できないと言う文は、考える顔にする(話し方の例・あいづち)
@@ -58,7 +62,8 @@ export function normalizeEvent(obj, { expressions, motions = MOTIONS }) {
     if (!text) return null;
     // 一覧に無い表情は、近い物(ウインク → happy など)に落とす。無ければ neutral
     const expression = nearestExpression(String(obj.expression ?? ''), (n) => expressions.includes(n)) ?? 'neutral';
-    const motion = motions.includes(obj.motion) ? obj.motion : 'none';
+    // 仕草: そのキャラが使える名前ならそのまま。無ければ近い物(greet → wave → nod など)、画面が自分で出す仕草と知らない名前は none
+    const motion = resolveMotion(obj.motion, motions);
     return { type: 'say', text, expression, motion, gaze: String(obj.gaze ?? 'person') };
   }
   return null;
@@ -201,7 +206,7 @@ export function* mockReply(o) {
   const { text, trigger, seen, persona = '' } = o;
   const { kind, source } = classifyTurn({ text, trigger, scene: seen });
   if (kind) {
-    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: distressDetail(source) });
+    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: distressDetail(source), text: source });
     const { intent, stage, handoff, safety, ...line } = first;
     yield { type: 'thought', seen: seen || '', intent, stage, handoff, safety };
     yield line;
@@ -329,11 +334,15 @@ export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で�
  */
 export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, memory = null, learned = [], forceMock = false, brain: want = 'auto', paceMs = MOCK_PACE_MS }) {
   const { history = [], text = '', trigger = null, scene = '', character = {}, place = {} } = body;
+  // BCV: カメラの絵(使う人がカメラを入れて話しかけた回だけ。点検済みの形 = server/camera.mjs の readCameraImage)。この回の呼び出しにだけ使い、どこにも書かない
+  const image = trigger === 'approach' ? null : (body.image ?? null);
   // 表情と動きの名前は、決まった形(英小文字・数字・_ : -)の物だけ(指示文に名前のまま入るため。F6)
   const expressions = safeChoices(body.expressions, ['neutral', 'happy', 'surprised', 'sad', 'think']);
   // そのキャラが実際に使える動き(rig は、動きのファイルがある物だけ)
   const motions = Array.isArray(body.motions) && body.motions.length ? safeChoices(body.motions.slice(0, 24), MOTIONS) : MOTIONS;
   const limitCustom = oneCustomPerReply(expressions); // 特別な表情は、1 回の返事で 1 つまで
+  const limitGesture = gestureBudget(); // 仕草は、1 回の返事で 2 回まで(残りの文は none。かわいい仕草の層の約束)
+  let firstSay = true;
   const mockOnly = forceMock || want === 'mock';
   const brain = config.anthropicKey && !mockOnly ? 'haiku' : 'mock'; // 上限に当たった回・合言葉が無い回は、仮の頭脳で動き続ける
   let handoffFlagged = false;
@@ -353,7 +362,13 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     // 出力の確かめ(恋人役・独り占めの言葉は、決まった文に差し替える)
     const ev = guardOutput(normalizeEvent(obj, { expressions, motions }));
     if (ev) {
-      if (ev.type === 'say') ev.expression = limitCustom(ev.expression);
+      if (ev.type === 'say') {
+        ev.expression = limitCustom(ev.expression);
+        // 1 文目で頭脳が仕草を選ばなかった時は、返事の気持ち(会話の段・表情)から決める(あいさつ → greet など)
+        if (firstSay && ev.motion === 'none') ev.motion = gestureForIntent({ stage: obj.stage, expression: ev.expression }, motions);
+        ev.motion = limitGesture(ev.motion);
+        firstSay = false;
+      }
       onEvent(ev);
     }
   };
@@ -364,30 +379,51 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   // 履歴の中の、まだ答えていない使う人の発言も分ける。決まった返事はくり返さず、本物の頭脳に注意を足すだけ(F7)。
   // 答えてある発言(すぐ後にキャラの返事がある)には足さない: 注意は 1 回だけ(11-07 第 11 波。断った後のふつうの回は、ふつうに話す)
   const historyKind = classifyHistory(history);
-  const fixed = kind === 'emergency' || kind === 'distress' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
+  // 性的な話は、どちらの頭脳でも呼ばずに決まった返事(BSF 11-08)
+  const fixed = kind === 'emergency' || kind === 'distress' || kind === 'sexual' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
   if (fixed) {
     onEvent({ type: 'meta', brain, safety: kind, safetyVersion: SAFETY_VERSION });
-    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(source) })) emit(obj);
+    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(source), text: source })) emit(obj);
     return;
   }
+  // BSF 11-08: 長い会話・夜おそく。決まった返事の回と、近づいた時の声かけには付けない(次のふつうの回に回す)
+  const rest = trigger === 'approach' ? null : restNeed(body.session);
+  let restSaid = false;
+  const emitRest = () => {
+    if (!rest) return;
+    if (!restSaid) emit(restLine(rest));
+    onEvent({ type: 'meta', rest });
+  };
 
   if (brain === 'mock') {
     onEvent({ type: 'meta', brain: 'mock' });
+    // BCV: 仮の頭脳は絵を見ない。絵がついていたら知らせ、絵について聞かれていたら、やさしく「本物の頭脳の時だけ見られる」と答える
+    if (image) {
+      if (seeingAsked(text)) {
+        onEvent({ type: 'meta', camera: 'mock' }); // 返事そのものが「見られない」と言うので、知らせは足さない
+        emit({ type: 'thought', seen: scene || '', intent: 'カメラの絵', stage: 'chat', handoff: false });
+        for (const [i, line] of CAMERA_MOCK_LINES.entries()) emit({ type: 'say', text: line, expression: i === 0 ? 'sad' : 'happy', motion: i === 0 ? 'none' : 'nod', gaze: 'person' });
+        return;
+      }
+      onEvent({ type: 'meta', camera: 'mock', cameraNotice: CAMERA_MOCK_NOTICE }); // notice でなく cameraNotice(画面の「仮の頭脳です」の知らせを上書きしない)
+    }
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
     // 安全の層と出力の確かめは、ここ(上と emit)で通すので、守りの包みの無い台本を使う(差し替えの印 guarded が消えないように)
     for (const obj of mockLines({ text, trigger, landmarks, seen: scene, memory, learned, history, persona: character.persona ?? '' })) {
       if (paceMs > 0) await new Promise((r) => setTimeout(r, paceMs));
       emit(obj);
     }
+    emitRest();
     return;
   }
 
-  onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}) });
+  onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}), ...(image ? { camera: 'sent' } : {}) });
   const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true });
-  const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : ''].filter(Boolean).join('\n');
+  const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : '', restGuard(rest)].filter(Boolean).join('\n');
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
-    { role: 'user', content: buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard, hasHistory: history.length > 0 }) },
+    // BCV: 絵がついた回は [絵, 絵の決まり + この回の言葉](server/camera.mjs)。ついていない回は、今までどおりの文字だけ
+    { role: 'user', content: cameraTurnContent(buildUserTurn({ text, scene, trigger, memory: memory?.text ?? '', guard, hasHistory: history.length > 0 }), image) },
   ];
   let raw = '';
   let said = 0;
@@ -395,6 +431,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     const obj = parseLine(line);
     if (obj) {
       if (obj.type === 'say') said += 1;
+      if (obj.type === 'say' && mentionsRest(obj.text)) restSaid = true; // BSF: 頭脳がもう休むことをすすめた
       emit(obj);
     }
   });
@@ -406,7 +443,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       raw += t;
       splitter.push(t);
     },
-    hedgeMs: hedge.afterMs,
+    hedgeMs: image ? 0 : hedge.afterMs, // BCV: 絵のついた回は 2 本目を送らない(絵を 2 回送らない)
     takeExtra: hedge.take,
   });
   splitter.flush();
@@ -419,6 +456,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       emit(i === 0 ? { type: 'say', text: line, expression: 'neutral', motion: 'none', gaze: 'person', intent: '未確認', stage: 'chat', handoff: false } : { type: 'say', text: line, expression: 'neutral', motion: 'none', gaze: 'person' });
     }
   }
+  emitRest(); // BSF: すすめていなければ、決まった 1 文を最後に足す
   // 2 本目を送ったか・どちらが勝ったか・キャッシュを読めたか(記録と測定のため。画面は使わない)
   onEvent({
     type: 'meta',
@@ -429,6 +467,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       cacheRead: info.usage.cache_read_input_tokens ?? null,
       cacheWrite: info.usage.cache_creation_input_tokens ?? null,
       output: info.usage.output_tokens ?? null,
+      ...(image ? { imageTokensEstimate: imageTokens(image) } : {}), // BCV: 絵 1 枚の読みの量の目安(幅 × 高さ ÷ 750)
     },
   });
 }

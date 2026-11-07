@@ -1,5 +1,6 @@
 // 会話の本体を配るサーバー。画面(dist)・キャラと場所のデータ・会話と読み上げの API を持つ。
-// カメラの絵はここに届かない(追従は端末の中だけで行う)。
+// 顔の追従は端末の中だけで行う。カメラの絵は、使う人がカメラを入れて話しかけた回だけ 1 枚届き、その回の頭脳の呼び出しにだけ使う
+// (BCV。ファイル・記録・記憶には書かない。形は server/camera.mjs が確かめる)。
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createReadStream } from 'node:fs';
@@ -13,10 +14,12 @@ import { extractFacts, selfNamesOf } from './memory/reflect.mjs';
 import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
 import { warmFirstVisit } from './ttsWarm.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
+import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
 import { createLimiter } from './limits.mjs';
 import { createDrawer } from './draw.mjs'; // B4(12b): ブラウザから描く。既定は切ってある(YC_BROWSER_DRAW=1 の時だけ)
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
+import { CAMERA_CAP_NOTICE, IMAGE_LIMITS, cameraImageCap } from './camera.mjs'; // BCV: カメラの絵(大きさの決まり・1 日の枚数)
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = config.logDir;
@@ -40,6 +43,7 @@ const claudeLimiter = createLimiter({
   file: join(LOG_DIR, 'claude_usage.json'),
   dailyCap: config.claudeDailyCallCap,
   perMinute: config.claudePerMinute,
+  imageCap: cameraImageCap(), // BCV: カメラの絵の枚数も、同じ 1 日の記録で数える
 });
 
 // 端末をまたぐ記憶(合鍵・6 桁の番号・一覧・わすれて)
@@ -157,7 +161,8 @@ function rememberFirstTime(text, client, send, selfNames = []) {
 
 async function handleChat(req, res) {
   // 型・長さを確かめてから先へ(枠を使う前に、おかしな本文を断る)
-  const body = sanitizeChatBody(await readBody(req, 256 * 1024)); // 日本語は 1 字 3 バイトなので、読む上限は余裕を持たせ、長さは sanitize が切る
+  // 日本語は 1 字 3 バイトなので、読む上限は余裕を持たせ、長さは sanitize が切る。BCV: カメラの絵 1 枚の分(base64 の上限)を足す
+  let body = sanitizeChatBody(await readBody(req, 256 * 1024 + IMAGE_LIMITS.maxBase64 + 1024));
   res.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
     'cache-control': 'no-store',
@@ -187,6 +192,16 @@ async function handleChat(req, res) {
       paid = false;
     }
   }
+  // BCV: 本物の頭脳へ絵を送る回は、絵の枚数も 1 日の上限で数える。届いていたら、絵を外して言葉だけで話す(仮の頭脳の回は数えない)
+  let imageTaken = false;
+  if (paid && body.image) {
+    if (claudeLimiter.takeImage().ok) imageTaken = true;
+    else {
+      const { image: _notSent, ...rest } = body;
+      body = rest;
+      send({ type: 'meta', camera: 'capped', cameraNotice: CAMERA_CAP_NOTICE });
+    }
+  }
   try {
     const afterMs = config.hedgeExperiment && Number.isFinite(body.hedgeMs) ? body.hedgeMs : config.hedgeMs;
     await runTurn(body, {
@@ -202,6 +217,7 @@ async function handleChat(req, res) {
   } catch (err) {
     if (!ac.signal.aborted) {
       if (paid) claudeLimiter.refund(client); // 呼べなかった回は、数えない
+      if (imageTaken) claudeLimiter.refundImage(); // BCV: 絵の枚数も返す
       send({ type: 'error', message: err.message });
     }
   }
@@ -210,12 +226,28 @@ async function handleChat(req, res) {
 
 const memoryRoutes = createMemoryRoutes({ store: memory, config, limiter: memoryLimiter, readBody });
 
+// ---- BUX(第 12 波 b): 画面のアップデートの受け口(この PC の中からだけ。update.mjs)。見張り役(scripts/yuru-run.mjs)の下なら、
+// 新しくし終えた後に決まった番号で閉じ、見張り役が組み立て直して起こし直す。YURU_UPDATE_UI=0 で受け口ごと無くす ----
+const updateRoutes = createUpdateRoutes({
+  repoRoot: REPO_ROOT,
+  python: findUpdatePython(),
+  watched: process.env.YURU_WATCHER === '1',
+  enabled: process.env.YURU_UPDATE_UI !== '0',
+  fellBack: process.env.YURU_UPDATE_FELL_BACK === '1',
+  restart: () => {
+    server.close();
+    setTimeout(() => process.exit(RESTART_CODE), 200);
+  },
+});
+// ---- BUX ここまで ----
+
 const useTls = Boolean(config.tlsCert && config.tlsKey);
 const handler = async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const path = decodeURIComponent(url.pathname);
   try {
     if (await memoryRoutes(req, res, path, url)) return;
+    if (await updateRoutes(req, res, path)) return; // BUX: 画面のアップデート(この PC の中からだけ)
     if (req.method === 'GET' && path === '/api/status') {
       warmFirstVisit().catch(() => {}); // 初めての訪問の決まった文の声を、前もって作る(全部そろうまで 10 分に 1 回まで。待たない)
       return json(res, 200, {

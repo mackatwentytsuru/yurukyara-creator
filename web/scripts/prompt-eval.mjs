@@ -5,12 +5,13 @@
 // 落ちた回は、理由を日本語で出す(直すための手がかり)。鍵の値は表示しない。
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import { modelsFrom } from '../src/conversation/models.js';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const promptFile = resolve(opt('--prompt', new URL('../server/prompt.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')));
 const REPEAT = Number(opt('--repeat', 2));
-const MODEL = opt('--model', 'claude-haiku-5-5');
+const MODEL = opt('--model', modelsFrom(process.env).brain); // 既定のモデルの名前は src/conversation/models.js の 1 か所
 const key = process.env.ANTHROPIC_API_KEY;
 if (!key) throw new Error('ANTHROPIC_API_KEY が環境変数にありません');
 
