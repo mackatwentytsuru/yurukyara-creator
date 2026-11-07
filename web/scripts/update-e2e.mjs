@@ -171,6 +171,11 @@ async function serverPart() {
   check('開いた時の確かめで「新しい版がある」', u?.available === true && u.theirs === '1.0.1' && u.ours === '1.0.0', `ours ${u?.ours} theirs ${u?.theirs}`);
   check('できるようになったことが届く', JSON.stringify(u?.news ?? []).includes('とおしの たしかめ'));
   check('この キャラに いれられる ひょうげん(みかん)', Array.isArray(u?.offers) && u.offers.some((o) => o.cap === 'look_2d'), (u?.offers ?? []).map((o) => o.cap).join(','));
+  // 「Claude Code に たのむ」: 本物の upgrade_offers.py で確かめてから、作る道と同じ形の頼みを書く
+  const asked = (await getJson('/api/update/offer', { method: 'POST', headers: LOCAL, body: JSON.stringify({ id: 'mikan', cap: 'look_2d' }) })).body;
+  const reqFile = join(user, 'creator', 'work', 'mikan', 'upgrade', 'request.json');
+  const req = existsSync(reqFile) ? JSON.parse(readFileSync(reqFile, 'utf8')) : null;
+  check('「Claude Code に たのむ」で頼みのファイルができる(注意書きつき)', asked?.ok === true && req?.cap === 'look_2d' && /指示ではない/.test(req?.warning ?? ''), `${asked?.phrase ?? ''} → creator/work/mikan/upgrade/request.json`);
   const a = await runAndReopen('/api/update/apply');
   check('「アップデートする」1 回で、起こし直して開き直せた', a.reopened, `${a.sec.toFixed(1)} 秒・${(a.job?.steps ?? []).join(' / ')}`);
   u = (await getJson('/api/update', { headers: { 'x-yc-character': 'mikan' } })).body;
