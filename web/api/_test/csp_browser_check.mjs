@@ -112,10 +112,10 @@ await step('3d', async () => {
   s.r.character = await s.page.evaluate(() => ({ id: window.__app.characterId, look: window.__app.character?.look ?? null, name: window.__app.character?.name ?? null }));
   await s.page.click('#startSim');
   await say(s.page, 'こんにちは');
-  await s.page.waitForFunction(() => /ノリ/.test(`${document.getElementById('caption')?.textContent ?? ''} ${document.getElementById('tReply')?.textContent ?? ''}`), null, { timeout: 20000 });
+  await s.page.waitForFunction(() => /ノリー/.test(`${document.getElementById('caption')?.textContent ?? ''} ${document.getElementById('tReply')?.textContent ?? ''}`), null, { timeout: 20000 });
   s.r.reply = (await replyText(s.page)).trim().slice(0, 80);
   s.r.notice = await s.page.evaluate(() => document.getElementById('brainNotice')?.textContent ?? '');
-  await finish(s, s.r.character.id === 'norrie' && /ノリ/.test(s.r.reply) && /仮の頭脳/.test(s.r.notice), 'csp_1_3d.png');
+  await finish(s, s.r.character.id === 'norrie' && /ノリー/.test(s.r.reply) && /仮の頭脳/.test(s.r.notice), 'csp_1_3d.png');
 });
 
 // ② 2D のノリー

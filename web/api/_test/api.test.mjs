@@ -221,7 +221,7 @@ test('仮の頭脳は人格の言葉で話す(ノリーが名乗る)', async () 
   const body = { text: 'こんにちは', history: [], character: { name: 'ノリー', persona: NORRIE_PERSONA } };
   const r = await read(await handleChat(req(body), d));
   assert.equal(r.data.brain, 'fallback');
-  assert.deepEqual(said(r.data), ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリ、がんばりマス! なにをお手伝いしまショウ?']);
+  assert.deepEqual(said(r.data), ['はじめまして! ノリーと申しマス。', 'セスジキノボリカンガルーの、執事見習いデス。', 'ノリー、がんばりマス! なにをお手伝いしまショウ?']);
 });
 
 test('仮の頭脳でも安全の層が先: つらい話は決まった案内(あいづちにしない)', async () => {
@@ -394,7 +394,7 @@ test('公開の「わすれて」は、その子の人格の言い方で答え�
   assert.equal(forget.data.brain, 'none');
   assert.deepEqual(said(forget.data), ['わかりマシタ。覚えていたことは、全部わすれマシタ。']);
   const again = await read(await handleChat(req({ text: 'わすれて', character: norrie }, { key, ip: '198.51.100.120' }), d));
-  assert.deepEqual(said(again.data), ['ノリ、まだなにも覚えていなかったデス。']);
+  assert.deepEqual(said(again.data), ['ノリー、まだなにも覚えていなかったデス。']);
 });
 
 test('形の悪い本文・大きすぎる本文・POST 以外は断る', async () => {
