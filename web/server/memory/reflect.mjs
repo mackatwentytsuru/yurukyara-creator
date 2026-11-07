@@ -3,8 +3,10 @@
 // 本物の頭脳で要点を書かせる道は、後で足す(試験は、この決まった取り出しで通す)。
 import { classifyInput } from '../safety.mjs';
 
-const NAME_RE = /(?:わたしの名前は|私の名前は|ぼくの名前は|僕の名前は|名前は|わたしは|私は|ぼくは|僕は|おれは|俺は)\s*([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z]{1,10}?)(?:です|だよ|だ|って言います|っていいます|と言います|といいます|って呼んで|と呼んで|[。、!！?？\s]|$)/u;
+const NAME_RE = /(?:わたしの名前は|私の名前は|ぼくの名前は|僕の名前は|わたしは|私は|ぼくは|僕は|おれは|俺は)\s*([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z]{1,10}?)(?:です|だよ|だ|って言います|っていいます|と言います|といいます|って呼んで|と呼んで|[。、!！?？\s]|$)/u;
 const CALL_RE = /([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z]{1,10}?)(?:って呼んで|と呼んで)/u;
+// 「好きな食べ物はカレーです」の形(好きな + 名前 + は + 好きなもの)。「好きなものは何?」のような問いは QUESTION_RE が先に外す
+const FAVORITE_RE = /好きな([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー]{1,8}?)(?:は|が)\s*([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー0-9A-Za-z]{1,12}?)(?:です|だよ|だね|だ|[。、!！\s]|$)/u;
 const LIKE_RE = /([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー0-9A-Za-z]{1,12}?)(?:が|も)(?:大好き|だいすき|好き|すき)/u;
 // 名前に見えても、名前でない言葉
 const NOT_NAME = new Set(['今日', 'きょう', '元気', 'げんき', '学生', '大人', '子ども', 'ここ', 'それ', 'あれ', 'これ', '何', 'なに', '大丈夫', 'だいじょうぶ', '好き', 'すき', '人間', 'AI']);
@@ -38,6 +40,12 @@ export function extractFacts(text, { selfNames = [] } = {}) {
     const call = s.match(CALL_RE);
     const name = call ?? s.match(NAME_RE);
     if (name && !NOT_NAME.has(name[1]) && !selves.has(name[1]) && !/好き|すき/.test(name[1]) && !out.some((f) => f.kind === 'name')) out.push({ kind: 'name', text: `名前: ${name[1]}` });
+    const fav = s.match(FAVORITE_RE);
+    if (fav && !NOT_NAME.has(fav[2]) && !selves.has(fav[2]) && !out.some((f) => f.kind === 'like')) {
+      out.push({ kind: 'like', text: `好きなもの: ${fav[2]}` });
+      out.push({ kind: 'topic', text: `前に話したこと: ${fav[2]}の話` });
+      continue;
+    }
     const like = s.match(LIKE_RE);
     if (!like || out.some((f) => f.kind === 'like')) continue;
     const liked = like[1].replace(/^.*(?:は|を|、|って)/u, '');
