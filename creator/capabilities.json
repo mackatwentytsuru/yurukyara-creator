@@ -1,0 +1,331 @@
+{
+  "schema": "yc-capabilities/1",
+  "about": "作る道(creator)がキャラにあげられる表現の一覧。新しい版で表現が増えたら、ここに 1 つ足し、since に版を書く。creator/review/upgrade_offers.py がこの表とキャラのフォルダを見くらべて、「あなたのキャラにも入れられます」を出す。見分け方(detect)は、この表に書いた決まりだけで決める(コードに同じ表を書かない)。",
+  "about_en": "What the creator can give a character. When a new version adds an expression, add one entry here with its version in since. creator/review/upgrade_offers.py compares this list with each character folder and offers what is missing.",
+  "words_note": "人に見せる文(title・why・preview・undo)は、子どもと親が読める言葉だけで書く(命令・ファイルの名前・英語の言葉を入れない)。Claude が流す手順は apply・preview_steps・undo_steps に書く。<名前> は人に見せる文でも使える(キャラの名前に替わる)。",
+  "words_note_en": "Text shown to people (title, why, preview, undo) uses plain words only, no commands or file names. Steps for Claude go in apply, preview_steps and undo_steps.",
+  "samples": ["norrie", "yokoso", "mikan", "robo", "f_led", "d_lantern", "_test"],
+  "samples_note": "プログラムと一緒に配る見本のキャラ。git が無い写し(zip など)でも見本と分かるように書く。git があれば、git が覚えているキャラも見本とみなす。character.json の origin.sample が true なら見本、false なら使う人のキャラ(自分のキャラを git に入れた時)。",
+  "placeholders": {
+    "<id>": "キャラの id(フォルダの名前)",
+    "<名前>": "キャラの名前(character.json の name)",
+    "<作業フォルダ>": "creator/work/<id>/upgrade/<表現の id>(git に入らない。入れるたびに作り直してよい)",
+    "<pack>": "<作業フォルダ>/pack(pk01_package.py の出力)",
+    "<出力>": "<作業フォルダ>/talk(t07_talk.py の出力)",
+    "<元の絵.png>": "creator/samples/<id>_元の絵_noshadow.png か creator/samples/<id>_元の絵.png。どちらも無ければ <作業フォルダ>/元の絵.png(使う人にもらう)",
+    "<元の絵.svg>": "looks.2d.svg・creator/work/<id>/draw/r<回>/drawing.svg(いちばん新しい回)・creator/samples/<id>_元の絵.svg のうち最初にある物。無ければ <作業フォルダ>/drawing.svg(使う人に絵をもらって作る)",
+    "<2D の SVG>": "characters/<id>/ の 2D の SVG(parts.json の svg。ふつうは 2d/body.svg)"
+  },
+  "before_steps": ["python creator/review/upgrade_offers.py --backup <id>"],
+  "undo_steps": ["python creator/review/upgrade_offers.py --restore <id>"],
+  "step_sets": {
+    "rebuild_groups": [
+      "creator/builders/<id>.py の頭の使い方を読み、builder が work= から読む物(sash.png など)があれば、先に <作業フォルダ> に作る",
+      "sh creator/pipeline/run_groups.sh <id> <作業フォルダ> <元の絵.png>",
+      "<作業フォルダ>/rig2 を <作業フォルダ>/pkin/rig に写す",
+      "python creator/pipeline/pk01_package.py <作業フォルダ>/pkin <pack> --id <id> --name \"<名前>\"",
+      "python creator/pipeline/pk02_check_character.py <pack>"
+    ],
+    "rebuild_built": [
+      "creator/builders/<id>.py の頭の使い方を読み、builder に足す引数があれば、次の命令の後ろに足す",
+      "sh creator/pipeline/run_built.sh <id> <作業フォルダ> <元の絵.png>",
+      "<作業フォルダ>/rig2 を <作業フォルダ>/pkin/rig に、<作業フォルダ>/face2 を <作業フォルダ>/pkin/face に写す",
+      "python creator/pipeline/pk01_package.py <作業フォルダ>/pkin <pack> --id <id> --name \"<名前>\""
+    ],
+    "install": [
+      "preview_steps のとおり前と後を使う人に見せ、「入れる」と言われてから次へ進む(言われなければ、ここでやめる。characters/<id> はまだ変わっていない)",
+      "python creator/pipeline/t07_talk.py <pack> <id> --name \"<名前>\" --out <出力> --force"
+    ],
+    "check_2d": [
+      "node creator/d2/check_parts.mjs characters/<id>/2d",
+      "python creator/specs/validate_character.py characters/<id>/character.json"
+    ]
+  },
+  "steps_note": "apply の種類ごとの手順は並び。\"@名前\" は step_sets のその並びに替わる。upgrade_offers.py --json が before_steps を先頭に足し、<…> をそのキャラの場所に替えて steps に出す。GPU を使う段(Blender・t07 の会話の確かめ)の前に、大きな PC では機械の札を取る。描くのは GPU だけ(CPU の描画はしない)。",
+  "kinds": {
+    "rig_morph": {
+      "title": "手組みの 3D(目と口は形の鍵)",
+      "detect": "type が \"rig\" で、mouth.kind が \"atlas\" でない(Blender の builder で組み、目と口を形の鍵=シェイプキーで動かす)",
+      "made_by": "creator/builders/<id>.py → sh creator/pipeline/run_groups.sh"
+    },
+    "rig_atlas": {
+      "title": "手組みの 3D(顔は顔の表)",
+      "detect": "type が \"rig\" で、mouth.kind が \"atlas\"(光る点・紙の顔。顔の表の絵を体の面に貼る)",
+      "made_by": "creator/builders/<id>.py → sh creator/pipeline/run_built.sh"
+    },
+    "vrm": {
+      "title": "外から持ってきた VRM",
+      "detect": "type が \"vrm\" か、model が .vrm(作る道では作らない。表情とまばたきは VRM の中にある)",
+      "made_by": "なし(作る道の外)"
+    },
+    "2d": {
+      "title": "2D の板(SVG の部品)",
+      "detect": "looks.2d.parts が parts.json の場所の文字か、looks に 2d が無く 2d/parts.json がある(web/src/character/looks.js の twoDHint と同じ決まり)",
+      "made_by": "yc-2d のスキル(characters/<id>/2d/body.svg と parts.json)"
+    }
+  },
+  "rules": {
+    "json": "character.json のその場所に、空でない値がある",
+    "json_has": "その場所の並びに、values が全部ある",
+    "json_keys": "その場所の表に、values のキーが全部ある",
+    "num_min": "その場所の数(並びなら長さ)が min 以上",
+    "glb_morph_of": "その場所に書いた名前が、model.glb の形の鍵(モーフ)にある",
+    "glb_morphs": "model.glb に、その形の鍵が全部ある",
+    "glb_nodes_of": "その場所の並びの名前が、全部 model.glb の骨(ノード)にある",
+    "motion_files": "motions にその名前があり、ファイルもある",
+    "svg_ids": "2D の SVG に、その id が全部ある",
+    "svg_faces": "2D の SVG に、表情ごとに face.<表情>. で始まる id が 1 つ以上ある",
+    "parts_json": "2D の parts.json に、そのキーがある",
+    "parts_ids": "2D の parts.json の parts に、その部品が全部ある",
+    "look": "その見た目(\"2d\" か \"3d\")で出せる。3d は model のファイルがある、2d は parts.json がある",
+    "made_with_min": "ファイルから見分けられない作り方の改良に使う。character.json の origin.made_with が、その版以上(版が無い・dev なら、まだ無いとみなす)"
+  },
+  "capabilities": [
+    {
+      "id": "blink",
+      "since": "1.0.0",
+      "title": "まばたき",
+      "title_en": "Blinking",
+      "why": "ときどき目をとじて、生きているように見えます。",
+      "why_en": "The eyes close now and then, so the character feels alive.",
+      "kinds": ["rig_morph", "rig_atlas", "2d"],
+      "detect": {
+        "rig_morph": [{"glb_morph_of": "blink.morph"}],
+        "rig_atlas": [{"json": "face.blink_row"}, {"json_has": "face.rows", "values_of": "face.blink_row"}],
+        "2d": [{"svg_ids": ["face.neutral.eyes"]}]
+      },
+      "apply": {
+        "picture": "no",
+        "skill": ".claude/skills/make-character/SKILL.md の「あとから新しい表現を入れる」",
+        "rig_morph": ["creator/builders/<id>.py の目に形の鍵 eye_blink を足す(hand-built-character の「目と口がシェイプキーのキャラ」)", "@rebuild_groups", "@install"],
+        "rig_atlas": ["顔の表に blink の行を足す(creator/pipeline/f01_face_atlas.py の行の並び)", "@rebuild_built", "@install"],
+        "2d": ["<2D の SVG> を <作業フォルダ>/before.svg に写す", "<2D の SVG> の face.neutral.eyes の目を、部品の名前どおりの <g> にする(yc-2d の「形」。まばたきは画面が目をつぶして作る)", "node creator/d2/check_parts.mjs characters/<id>/2d --base <作業フォルダ>/before.svg", "@check_2d"]
+      },
+      "preview": "入れた後のすがたを動かして、前のすがたと並べて見せます。",
+      "preview_en": "Shows the character before and after, side by side.",
+      "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、http://127.0.0.1:8777/creator/viewer/index.html?c=/trial/character.json(後)と ?c=../../characters/<id>/character.json(前)を並べて見せる"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります(性格と思い出は変わりません)。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\". Personality and memories stay."
+    },
+    {
+      "id": "mouth3",
+      "since": "1.0.0",
+      "title": "口の形 3 つ",
+      "title_en": "Three mouth shapes",
+      "why": "話すときに、口が 3 つの形に変わって、本当に話しているように見えます。",
+      "why_en": "The mouth moves in three shapes while talking.",
+      "kinds": ["rig_morph", "rig_atlas", "2d"],
+      "detect": {
+        "rig_morph": [{"glb_morph_of": "mouth.morph"}, {"glb_morphs": ["mouth_open", "mouth_wide", "mouth_o"]}],
+        "rig_atlas": [{"num_min": "face.cols", "min": 4}],
+        "2d": [{"svg_ids": ["face.neutral.mouth_closed", "face.neutral.mouth_half", "face.neutral.mouth_open"]}]
+      },
+      "apply": {
+        "picture": "no",
+        "skill": ".claude/skills/make-character/SKILL.md の「あとから新しい表現を入れる」",
+        "rig_morph": ["creator/builders/<id>.py の口に形の鍵 mouth_open・mouth_wide・mouth_o を足す(hand-built-character の「口のシェイプキー」)", "@rebuild_groups", "@install"],
+        "rig_atlas": ["顔の表の列を 4 つ(閉じ+開き 3 段)にする(creator/pipeline/f01_face_atlas.py)", "@rebuild_built", "@install"],
+        "2d": ["<2D の SVG> を <作業フォルダ>/before.svg に写す", "<2D の SVG> に face.neutral.mouth_closed・face.neutral.mouth_half・face.neutral.mouth_open を描き足す(yc-2d の「形」。顔の <g> だけを足す)", "node creator/d2/check_parts.mjs characters/<id>/2d --base <作業フォルダ>/before.svg", "@check_2d"]
+      },
+      "preview": "入れた後に話させて、前と後の口の動きを並べて見せます。",
+      "preview_en": "Makes it talk, and shows the mouth before and after.",
+      "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、?c=/trial/character.json(後)と ?c=../../characters/<id>/character.json(前)で話させて、口の動きを並べる。2D は node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/talk_2d.svg --plan '[{\"emotion\":\"happy\",\"mouth\":0.6,\"seconds\":0.6}]'"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\"."
+    },
+    {
+      "id": "expressions5",
+      "since": "1.0.0",
+      "title": "表情 5 つ",
+      "title_en": "Five expressions",
+      "why": "ふつう・にこにこ・びっくり・しょんぼり・考え中の顔ができます。",
+      "why_en": "Neutral, happy, surprised, sad and thinking faces.",
+      "kinds": ["rig_morph", "rig_atlas", "2d"],
+      "detect": {
+        "rig_morph": [{"json_has": "expressions", "values": ["neutral", "happy", "surprised", "sad", "think"]}, {"json_keys": "morphs", "values": ["happy", "surprised", "sad", "think"]}],
+        "rig_atlas": [{"json_has": "face.rows", "values": ["neutral", "happy", "surprised", "sad", "think"]}],
+        "2d": [{"svg_faces": ["happy", "surprised", "sad", "think"]}]
+      },
+      "apply": {
+        "picture": "no",
+        "skill": ".claude/skills/make-character/SKILL.md の「あとから新しい表現を入れる」",
+        "rig_morph": ["creator/builders/<id>.py の目と口の形の鍵(happy・surprised・sad・think に使う物)がそろっているかを見て、足りない鍵を足す(pk01_package.py が morphs を自動で書く)", "@rebuild_groups", "@install"],
+        "rig_atlas": ["顔の表の行を neutral・happy・surprised・sad・think・blink にする(creator/pipeline/f01_face_atlas.py)", "@rebuild_built", "@install"],
+        "2d": ["<2D の SVG> を <作業フォルダ>/before.svg に写す", "<2D の SVG> に face.<表情>.eyes・face.<表情>.brows・face.<表情>.mouth_* を描き足す(yc-2d の「形」。目・眉・口だけを、元の絵の線と色で)", "node creator/d2/check_parts.mjs characters/<id>/2d --base <作業フォルダ>/before.svg", "@check_2d"]
+      },
+      "preview": "表情を 1 つずつ出して、前と後を並べて見せます。",
+      "preview_en": "Shows each face one by one, before and after.",
+      "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、表情のボタンで 1 つずつ出して前(characters/<id>)と並べる。2D は node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/faces_2d.svg --plan '[{\"emotion\":\"happy\",\"seconds\":0.6},{\"emotion\":\"sad\",\"seconds\":0.6}]'"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\"."
+    },
+    {
+      "id": "wave_bow",
+      "since": "1.0.0",
+      "title": "手をふる・おじぎ",
+      "title_en": "Wave and bow",
+      "why": "あいさつのときに、手をふったり、おじぎをしたりします。",
+      "why_en": "Waves and bows when saying hello.",
+      "kinds": ["rig_morph", "rig_atlas", "2d"],
+      "detect": {
+        "rig_morph": [{"motion_files": ["wave", "bow"]}],
+        "rig_atlas": [{"motion_files": ["wave", "bow"]}],
+        "2d": [{"parts_ids": ["arm_r", "arm_l"]}]
+      },
+      "apply": {
+        "picture": "no",
+        "skill": ".claude/skills/make-character/SKILL.md の「あとから新しい表現を入れる」",
+        "rig_morph": ["creator/specs/<id>_built.json の腕の骨を決める(b07_rig_groups.py が wave・bow を焼く)", "@rebuild_groups", "@install"],
+        "rig_atlas": ["creator/specs/<id>_built.json の腕の骨を決める(b03_rig.py と b04_motions.py が wave・bow を焼く)", "@rebuild_built", "@install"],
+        "2d": ["characters/<id>/2d/parts.json に腕の部品 arm_r・arm_l を分ける(yc-2d の「SVG の決まり」。動きは 3D と同じ名前で画面が作る)", "@check_2d"]
+      },
+      "preview": "手をふる・おじぎを、前と後で並べて見せます。",
+      "preview_en": "Shows the wave and the bow, before and after.",
+      "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、動きのボタン(wave・bow)で前(characters/<id>)と並べる。2D は node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/wave_2d.svg --plan '[{\"gesture\":\"wave\",\"seconds\":0.75}]'"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\"."
+    },
+    {
+      "id": "nod",
+      "since": "1.0.0",
+      "title": "うなずく",
+      "title_en": "Nodding",
+      "why": "話を聞きながら、うんうんとうなずきます。",
+      "why_en": "Nods while listening.",
+      "kinds": ["rig_morph", "rig_atlas", "2d"],
+      "detect": {
+        "rig_morph": [{"motion_files": ["nod"]}],
+        "rig_atlas": [{"motion_files": ["nod"]}],
+        "2d": [{"parts_ids": ["head"]}]
+      },
+      "apply": {
+        "picture": "no",
+        "skill": ".claude/skills/make-character/SKILL.md の「あとから新しい表現を入れる」",
+        "rig_morph": ["creator/specs/<id>_built.json に頭の骨があるかを見る(b07_rig_groups.py が nod を焼く。頭の骨が要る)", "@rebuild_groups", "@install"],
+        "rig_atlas": ["@rebuild_built", "@install"],
+        "2d": ["characters/<id>/2d/parts.json に頭の部品 head を分ける(yc-2d の「SVG の決まり」。head は必ず要る)", "@check_2d"]
+      },
+      "preview": "うなずく動きを、前と後で並べて見せます。",
+      "preview_en": "Shows the nod, before and after.",
+      "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、動きのボタン(nod)で前(characters/<id>)と並べる"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\"."
+    },
+    {
+      "id": "eyes_follow",
+      "since": "1.0.0",
+      "title": "目で人を追う",
+      "title_en": "Eyes follow you",
+      "why": "前にいる人のほうへ、目と顔を向けます。",
+      "why_en": "Turns its eyes and face toward the person in front of it.",
+      "kinds": ["rig_morph", "rig_atlas"],
+      "detect": {
+        "rig_morph": [{"json": "look.eyes"}, {"glb_nodes_of": "look.eyes"}],
+        "rig_atlas": [{"json": "look.face_shift"}]
+      },
+      "apply": {
+        "picture": "no",
+        "skill": ".claude/skills/make-character/SKILL.md の「あとから新しい表現を入れる」",
+        "rig_morph": ["creator/builders/<id>.py で黒目を別の部品にし、creator/specs/<id>_built.json に骨 eye_L・eye_R を足す(b07_rig_groups.py。pk01_package.py が look.eyes を書く)", "@rebuild_groups", "@install"],
+        "rig_atlas": ["@rebuild_built", "pk01_package.py が look.face_shift を書いたかを <pack>/character.json で見る", "@install"]
+      },
+      "preview": "画面の上で、目と顔がついてくるかを、前と後で見せます。",
+      "preview_en": "Shows whether the eyes and face follow, before and after.",
+      "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、マウスを動かして、目と顔がついてくるかを前(characters/<id>)と並べる"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\"."
+    },
+    {
+      "id": "extra_moves",
+      "since": "1.0.0",
+      "title": "はねる・考える・しょんぼり",
+      "title_en": "Jump, think and droop",
+      "why": "うれしい時ははねて、考える時や悲しい時は体ごと表します。",
+      "why_en": "Jumps when happy, and shows thinking or sadness with the whole body.",
+      "kinds": ["rig_atlas"],
+      "detect": {
+        "rig_atlas": [{"motion_files": ["jump", "think", "sad"]}]
+      },
+      "apply": {
+        "picture": "no",
+        "skill": ".claude/skills/make-character/SKILL.md の「あとから新しい表現を入れる」",
+        "rig_atlas": ["@rebuild_built", "<pack>/motions に jump・think・sad があるかを見る(b04_motions.py が焼く)", "@install"]
+      },
+      "preview": "はねる・考える・しょんぼりの動きを、前と後で見せます。",
+      "preview_en": "Shows the jump, think and droop moves, before and after.",
+      "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、動きのボタン(jump・think・sad)で前(characters/<id>)と並べる"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\"."
+    },
+    {
+      "id": "look_2d",
+      "since": "1.0.0",
+      "title": "2D の見た目",
+      "title_en": "2D look",
+      "why": "絵のままのすがた(2D)でも出られます。3D と 2D をボタンで切りかえられます。",
+      "why_en": "Can also appear as a flat drawing (2D), switched with the 3D/2D button.",
+      "adds_look": "2d",
+      "kinds": ["rig_morph", "rig_atlas"],
+      "detect": {
+        "*": [{"look": "2d"}]
+      },
+      "apply": {
+        "picture": "if_no_svg",
+        "skill": ".claude/skills/yc-2d/SKILL.md と make-character の「あとから新しい表現を入れる」",
+        "rig_morph": ["<元の絵.svg> を部品に分け、characters/<id>/2d/body.svg と characters/<id>/2d/parts.json を書く(yc-2d)", "characters/<id>/character.json の looks を {\"default\": \"3d\", \"3d\": {\"at\": \"top\"}, \"2d\": {\"parts\": \"2d/parts.json\"}} にする(ほかの項目は変えない)", "@check_2d"],
+        "rig_atlas": ["<元の絵.svg> を部品に分け、characters/<id>/2d/body.svg と characters/<id>/2d/parts.json を書く(yc-2d。光る点・紙の顔は、顔の表の目と口を SVG の face.<表情>.<枠> に描き直す)", "characters/<id>/character.json の looks を {\"default\": \"3d\", \"3d\": {\"at\": \"top\"}, \"2d\": {\"parts\": \"2d/parts.json\"}} にする(ほかの項目は変えない)", "@check_2d"]
+      },
+      "preview": "2D のすがたを 1 枚の絵にして、今の 3D のすがたと並べて見せます。",
+      "preview_en": "Draws the 2D look as one picture, next to the current 3D look.",
+      "preview_steps": ["node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/look_2d.svg --plan '[{\"emotion\":\"happy\",\"mouth\":0.6,\"seconds\":0.6}]' で 2D を 1 枚にし(WebGL を使わない)、3D の正面(creator/samples/<id>_8方向.png があればそれ、無ければ確かめ画面の正面)と並べる"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、2D を入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\". The 2D look is taken out again."
+    },
+    {
+      "id": "look_3d",
+      "since": "1.0.0",
+      "title": "3D の形",
+      "title_en": "3D shape",
+      "why": "絵の子が、まわりから見られる立体のすがたにもなれます。",
+      "why_en": "The drawn character can also become a 3D figure you can walk around.",
+      "adds_look": "3d",
+      "kinds": ["2d"],
+      "detect": {
+        "*": [{"look": "3d"}]
+      },
+      "apply": {
+        "picture": "no",
+        "skill": ".claude/skills/make-character/SKILL.md(段 ①〜⑦)と「あとから新しい表現を入れる」",
+        "2d": ["<2D の SVG> を元の絵にする。<元の絵.png> が無ければ、<2D の SVG> を PNG にして <元の絵.png> に置く", "make-character の段 ① 見る〜⑤ を流し、creator/builders/<id>.py と creator/specs/<id>_built.json を書く(hand-built-character)", "@rebuild_groups", "@install"]
+      },
+      "preview": "できた 3D をまわして、2D のすがたと並べて見せます。",
+      "preview_en": "Turns the new 3D figure around, next to the 2D look.",
+      "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、?c=/trial/character.json の 3D を回して、2D(node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/now_2d.svg --plan '[{\"emotion\":\"happy\",\"seconds\":0.6}]')と並べる"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、3D を入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\"."
+    },
+    {
+      "id": "back_2d",
+      "since": "1.0.0",
+      "title": "うしろ姿(2D)",
+      "title_en": "Back view (2D)",
+      "why": "2D でも、うしろから見ると背中が見えます。",
+      "why_en": "Seen from behind, the 2D character shows its back.",
+      "kinds": ["2d"],
+      "detect": {
+        "2d": [{"parts_json": "back"}]
+      },
+      "apply": {
+        "picture": "yes",
+        "picture_note": "うしろ姿の絵がもう 1 枚いります(正面と同じ大きさ・同じ高さ)",
+        "skill": ".claude/skills/yc-2d/SKILL.md の「判定の直し」(後ろ姿の板)",
+        "2d": ["使う人に、うしろ姿の絵(正面と同じ大きさ・同じ高さ)をもらい、<作業フォルダ>/back.png に置く", "<2D の SVG> を <作業フォルダ>/before.svg に写す", "うしろ姿の絵から <2D の SVG> に <g id=\"back\"> を作り、characters/<id>/2d/parts.json に back: {id, box} を足す(yc-2d)", "@check_2d"]
+      },
+      "preview": "うしろを向いたすがたを、1 枚の絵にして見せます。",
+      "preview_en": "Shows the character turned around, as one picture.",
+      "preview_steps": ["node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/back_2d.svg で、向こうを向いた姿を 1 枚にする(向こう向きの出し方は pose_svg.mjs の頭の説明を読む)"],
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo_en": "To undo, ask \"put <名前> back the way it was\"."
+    }
+  ]
+}

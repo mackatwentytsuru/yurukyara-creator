@@ -26,7 +26,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.append(str(Path(__file__).resolve().parents[1] / "review"))
 import review_gate as RG  # noqa: E402
+import upgrade_offers as UO  # noqa: E402
 
 PY = sys.executable
 SAMPLES = REPO / "creator" / "samples"
@@ -58,8 +60,15 @@ def add_k1(char_path, cid, words, old_origin=None):
         char = [c for c in root if c.tag.endswith("g") and c.get("id") == "char"]
         parts = [g.get("id") for g in char[0]] if char else []
         looks["2d"] = {"svg": os.path.relpath(svg, char_path.parent).replace(os.sep, "/"), "parts": parts}
+    old = d.get("looks") if isinstance(d.get("looks"), dict) else {}
+    old2d = old.get("2d")
+    if isinstance(old2d, dict) and (isinstance(old2d.get("parts"), str) or "2d" not in looks):
+        looks["2d"] = old2d           # あとから入れた 2D の見た目(画面で出せる 2d/parts.json)を、3D の作り直しで消さない
+    if old.get("default") == "2d" and "2d" in looks:
+        looks["default"] = "2d"       # 使う人が 2D を先に出すと決めた子は、そのまま
     d["looks"] = looks
     char_path.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    UO.stamp(char_path.parent)        # 作った時の版と、今もっている表現の印(origin を前の記録に戻した後に書き直す)
 
 
 def stop(proc):
