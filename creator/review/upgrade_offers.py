@@ -16,6 +16,7 @@
 """
 import argparse
 import json
+import posixpath
 import re
 import shutil
 import struct
@@ -131,8 +132,8 @@ class Folder:
     def svg_source(self, cid, repo):
         """2D を作るのに使える元の SVG の場所(リポジトリからの相対)。looks.2d.svg → 段 0 のいちばん新しい絵 → 見本の絵。無ければ None。"""
         own = get(self.cj, "looks.2d.svg")
-        if self.file(own):
-            return f"characters/{cid}/{own}"
+        if self.file(own):    # 見本の絵を指す「../../creator/samples/…」も、リポジトリからの場所にそろえる
+            return posixpath.normpath(f"characters/{cid}/{own.split('#')[0]}")
         draws = Path(repo) / "creator" / "work" / cid / "draw"
         rounds = [p for p in draws.glob("r*/drawing.svg") if p.parent.name[1:].isdigit()]
         if rounds:

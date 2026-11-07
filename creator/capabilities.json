@@ -104,7 +104,7 @@
       "preview": "入れた後のすがたを動かして、前のすがたと並べて見せます。",
       "preview_en": "Shows the character before and after, side by side.",
       "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、http://127.0.0.1:8777/creator/viewer/index.html?c=/trial/character.json(後)と ?c=../../characters/<id>/character.json(前)を並べて見せる"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります(性格と思い出は変わりません)。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります(性格と思い出は変わりません)。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\". Personality and memories stay."
     },
     {
@@ -130,7 +130,7 @@
       "preview": "入れた後に話させて、前と後の口の動きを並べて見せます。",
       "preview_en": "Makes it talk, and shows the mouth before and after.",
       "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、?c=/trial/character.json(後)と ?c=../../characters/<id>/character.json(前)で話させて、口の動きを並べる。2D は node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/talk_2d.svg --plan '[{\"emotion\":\"happy\",\"mouth\":0.6,\"seconds\":0.6}]'"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\"."
     },
     {
@@ -156,7 +156,7 @@
       "preview": "表情を 1 つずつ出して、前と後を並べて見せます。",
       "preview_en": "Shows each face one by one, before and after.",
       "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、表情のボタンで 1 つずつ出して前(characters/<id>)と並べる。2D は node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/faces_2d.svg --plan '[{\"emotion\":\"happy\",\"seconds\":0.6},{\"emotion\":\"sad\",\"seconds\":0.6}]'"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\"."
     },
     {
@@ -182,7 +182,7 @@
       "preview": "手をふる・おじぎを、前と後で並べて見せます。",
       "preview_en": "Shows the wave and the bow, before and after.",
       "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、動きのボタン(wave・bow)で前(characters/<id>)と並べる。2D は node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/wave_2d.svg --plan '[{\"gesture\":\"wave\",\"seconds\":0.75}]'"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\"."
     },
     {
@@ -208,7 +208,7 @@
       "preview": "うなずく動きを、前と後で並べて見せます。",
       "preview_en": "Shows the nod, before and after.",
       "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、動きのボタン(nod)で前(characters/<id>)と並べる"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\"."
     },
     {
@@ -232,7 +232,7 @@
       "preview": "画面の上で、目と顔がついてくるかを、前と後で見せます。",
       "preview_en": "Shows whether the eyes and face follow, before and after.",
       "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、マウスを動かして、目と顔がついてくるかを前(characters/<id>)と並べる"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\"."
     },
     {
@@ -254,7 +254,7 @@
       "preview": "はねる・考える・しょんぼりの動きを、前と後で見せます。",
       "preview_en": "Shows the jump, think and droop moves, before and after.",
       "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、動きのボタン(jump・think・sad)で前(characters/<id>)と並べる"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\"."
     },
     {
@@ -278,7 +278,7 @@
       "preview": "2D のすがたを 1 枚の絵にして、今の 3D のすがたと並べて見せます。",
       "preview_en": "Draws the 2D look as one picture, next to the current 3D look.",
       "preview_steps": ["node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/look_2d.svg --plan '[{\"emotion\":\"happy\",\"mouth\":0.6,\"seconds\":0.6}]' で 2D を 1 枚にし(WebGL を使わない)、3D の正面(creator/samples/<id>_8方向.png があればそれ、無ければ確かめ画面の正面)と並べる"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、2D を入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、2D を入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\". The 2D look is taken out again."
     },
     {
@@ -301,7 +301,7 @@
       "preview": "できた 3D をまわして、2D のすがたと並べて見せます。",
       "preview_en": "Turns the new 3D figure around, next to the 2D look.",
       "preview_steps": ["python creator/viewer/serve.py --mount=/trial=<pack> を起こし、?c=/trial/character.json の 3D を回して、2D(node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/now_2d.svg --plan '[{\"emotion\":\"happy\",\"seconds\":0.6}]')と並べる"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、3D を入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、3D を入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\"."
     },
     {
@@ -324,7 +324,7 @@
       "preview": "うしろを向いたすがたを、1 枚の絵にして見せます。",
       "preview_en": "Shows the character turned around, as one picture.",
       "preview_steps": ["node creator/d2/pose_svg.mjs --parts characters/<id>/2d/parts.json --out <作業フォルダ>/back_2d.svg で、向こうを向いた姿を 1 枚にする(向こう向きの出し方は pose_svg.mjs の頭の説明を読む)"],
-      "undo": "やめたくなったら「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
+      "undo": "「<名前>を、入れる前に戻して」と頼むと、入れる前にもどります。",
       "undo_en": "To undo, ask \"put <名前> back the way it was\"."
     }
   ]
