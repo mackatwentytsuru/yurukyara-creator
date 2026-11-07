@@ -311,6 +311,7 @@ export function createUi() {
         ...items.map(([label, value, tone]) => {
           const s = document.createElement('span');
           s.className = `chip ${tone ?? ''}`.trim();
+          s.dataset.chip = label; // 狭い画面で、優先の低い札を隠す目印(style.css)
           const b = document.createElement('b');
           b.textContent = value;
           s.append(`${label} `, b);

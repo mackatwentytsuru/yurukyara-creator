@@ -184,7 +184,30 @@ export class CharacterBase {
     throw new Error('_apply は子クラスで書く');
   }
 
+  /**
+   * GPU に上げた物(形・材質・絵)を捨てる。舞台から外れた子が、スマホのメモリを持ち続けないように(QA 高 1)。
+   * 中の形のデータは残すので、あとで舞台へ戻せば次の描画で作り直される(控えの子を切り替えで戻しても壊れない)。
+   * 何度呼んでも大丈夫。
+   */
+  releaseGpu() {
+    const seen = new Set();
+    const drop = (m) => {
+      if (!m || seen.has(m)) return;
+      seen.add(m);
+      for (const v of Object.values(m)) if (v && v.isTexture) v.dispose();
+      m.dispose?.();
+    };
+    this.object3d.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh && !o.isPoints && !o.isLine) return;
+      o.geometry?.dispose();
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach(drop);
+      o.skeleton?.boneTexture?.dispose?.();
+    });
+  }
+
+  /** もう使わない子の後片づけ(GPU の物を捨て、舞台から外す)。使い回す子には使わず、releaseGpu を使う */
   dispose() {
+    this.releaseGpu();
     this.object3d.removeFromParent();
   }
 }

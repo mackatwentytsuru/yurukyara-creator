@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  tvPlan, appleMobile, wantsTv, tvCaptionPx, tvBottomReserve, castSteps, castLead, castNote,
+  tvPlan, appleMobile, wantsTv, tvCaptionPx, tvCaptionRows, tvBottomReserve, TV_PORTRAIT_ROWS, castSteps, castLead, castNote,
   TV_CAPTION_FRACTION, TV_CAPTION_MIN_PX, TV_CAPTION_ROWS, TV_CAPTION_LINE, TV_LABEL, TV_SHORT, CAST_LABEL, TV_ENTER_LABEL, TV_EXIT_LABEL, TV_EXIT_NAME, TV_CLASS,
 } from '../src/stage/tvMode.js';
 import { tvTopLimit, topClearance, TOP_CLEAR_FRACTION } from '../src/stage/framing.js';
@@ -160,8 +160,9 @@ test('style.css: テレビ表示は小さな窓を隠し、字幕を画面の高
 test('main.js: テレビ表示の線・下の余白・入口・全画面は押した時だけ', () => {
   const js = read('src/main.js');
   assert.match(js, /if \(tvActive\(\)\) return tvTopLimit\(\{ corner: rectsOf\('#tvExit, #tvRotate'\), left, right, clear: topClearance\(window\.innerHeight, TOP_GAP_PX\) \}\);/);
-  assert.match(js, /stage\.state\.bottomInset = h \+ tvBottomReserve\(window\.innerHeight\);/);
-  assert.match(js, /--tv-cap', `\$\{tvCaptionPx\(window\.innerHeight\)\}px`/);
+  assert.match(js, /stage\.state\.bottomInset = Math\.max\(h \+ tvBottomReserve\(window\.innerHeight, window\.innerWidth\), h \+ subsHeight\(\) \+ 10\);/);
+  assert.match(js, /--tv-cap', `\$\{tvCaptionPx\(window\.innerHeight, window\.innerWidth\)\}px`/);
+  assert.match(js, /--tv-rows', String\(tvCaptionRows\(window\.innerHeight, window\.innerWidth\)\)/);
   assert.match(js, /const TV = tvPlan\(\{ params, nav: navigator, headset: IS_HEADSET \}\);/);
   assert.match(js, /if \(TV\.start\) document\.documentElement\.classList\.add\(TV_CLASS\);/);
   assert.match(js, /setupTvMode\(\);/);
@@ -175,4 +176,30 @@ test('main.js: テレビ表示の線・下の余白・入口・全画面は押�
   // 幅 640 までの置き場所: 見た目の切り替えの幅を測って --tv-right に(切り替えが無ければ 12px)。出る・隠れる時も置き直す
   assert.match(js, /document\.documentElement\.style\.setProperty\('--tv-right', `\$\{12 \+ \(w > 0 \? w \+ 8 : 0\)\}px`\);/);
   assert.match(js, /new ResizeObserver\(placeTvButton\)\.observe\(look\);/);
+});
+
+test('縦長の画面(縦持ちのスマホ)のテレビ表示: 字は幅で抑え、行を増やし、キャラの下の余白も行の分だけ(QA 中 12)', () => {
+  // 横長は今のまま
+  assert.equal(tvCaptionPx(1080, 1920), 65);
+  assert.equal(tvCaptionRows(1080, 1920), 3);
+  assert.equal(tvBottomReserve(720, 1280), tvBottomReserve(720));
+  // 縦長(390×844): 字は画面の幅の 8% = 31px 以下・5 行・余白は 5 行分
+  const cap = tvCaptionPx(844, 390);
+  assert.ok(cap <= 390 * 0.08 && cap >= 20, `${cap}px`);
+  assert.equal(tvCaptionRows(844, 390), TV_PORTRAIT_ROWS);
+  assert.ok(tvBottomReserve(844, 390) >= TV_PORTRAIT_ROWS * TV_CAPTION_LINE * cap);
+  assert.ok(tvBottomReserve(844, 390) <= 844 * 0.45, 'キャラの帯を狭めすぎない');
+  // 1 行の字数 × 行数で、ふつうの返事(約 40 字)が入る: 字幕の幅 = 画面の幅の 92% - 左右の余白
+  const lineChars = Math.floor((390 * 0.92 - 2 * Math.max(14, 844 * 0.022)) / cap);
+  assert.ok(lineChars * TV_PORTRAIT_ROWS >= 40, `1 行 ${lineChars} 字 × ${TV_PORTRAIT_ROWS} 行`);
+  assert.match(read('src/ui/style.css'), /max-height: calc\(var\(--tv-cap, 6vh\) \* 1\.3 \* var\(--tv-rows, 3\)/);
+});
+
+test('Esc: 全画面でも、テレビ表示を一緒にやめる(全画面の Escape はページに届かない)。窓を開くと履歴を 1 つ積み、戻るで窓を閉じる(QA 低 14)', () => {
+  const js = read('src/main.js');
+  assert.match(js, /document\.addEventListener\('fullscreenchange', onFullscreenChange\);/);
+  assert.match(js, /if \(tvFull && tvActive\(\) && !document\.fullscreenElement && !document\.webkitFullscreenElement\) setTvMode\(false\);/);
+  assert.match(js, /history\.pushState\(\{ \.\.\.\(history\.state \?\? \{\}\), ycPanel: true \}, ''\);/);
+  assert.match(js, /window\.addEventListener\('popstate'/);
+  assert.match(js, /installPanelHistory\(\);/);
 });
