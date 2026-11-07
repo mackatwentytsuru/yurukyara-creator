@@ -301,6 +301,7 @@ export function mountAudioPicker({ app, update = null } = {}) {
     unavailable.textContent = unav ?? '';
     heard.textContent = '';
     void refreshUpdateLink();
+    if (update && !update.report()) void update.refresh().then(() => refreshUpdateLink()); // まだ確かめていなければ、答えを待って出す
     // マイクが使えない頁(http など)では、マイクの一覧・メーター・「はなしてみてね」を出さない(押しても動かないので)
     meterRow.hidden = Boolean(unav);
     testRow.hidden = Boolean(unav);
