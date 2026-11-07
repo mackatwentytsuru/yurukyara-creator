@@ -297,6 +297,11 @@ html.fr-open .thought { display: none !important; }
    CRITux2 低 13)。札の左の端 = 右から 16px + 札の幅 min(460px, 100% - 32px)、そこからさらに 16px 空ける。index.js の fitStage が付け外しする */
 @media (min-width: 720px) { html.fr-side #stage { width: calc(100% - 32px - min(460px, 100% - 32px)); } }
 @media (prefers-reduced-motion: reduce) { .fr-sheet *, .yp-panel * { transition: none !important; animation: none !important; } }
+/* 画面のキーボード(ui/keyboardInset.js)。札も性格の画面も、見える範囲の下端へ持ち上げ(translate)、見える高さに収める。答えの欄は札の中の巻く所で、フォーカスで見える所へ寄る */
+html.kb-open .fr-sheet, html.kb-open .yp-panel { translate: 0 calc(var(--kb, 0px) * -1); } /* キーボードが無い間は付けない(0 でも中の fixed の基準が変わる) */
+html.kb-open .fr-sheet, html.kb-open .fr-sheet[data-step], html.kb-open .fr-sheet[data-actions="frame"], html.kb-open .fr-sheet[data-actions="frame"][data-step] {
+  max-height: calc(var(--vvh, 100dvh) - 12px) !important; padding-bottom: 0; }
+html.kb-open .yp-panel { max-height: calc(var(--vvh, 100dvh) - 8px) !important; padding-bottom: 14px; }
 `;
 
 /** <style> を 1 回だけ入れる */
