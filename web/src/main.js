@@ -34,6 +34,7 @@ import { createAlignFlow } from './stage/alignFlow.js'; // 撮った部屋を現
 import { createPresentation } from './stage/modes.js';
 import { mountModeButtons, XR_WAIT_TEXT } from './stage/modeButtons.js';
 import { detectTierInBrowser, applyTier } from './stage/tiers.js'; // 端末の段(軽いのにきれい)
+import { installKeyboardInset } from './ui/keyboardInset.js'; // 画面のキーボードで入力窓が隠れない(11/7 本人の iPhone)
 
 const params = new URLSearchParams(location.search);
 const GAIN = Number(params.get('gain') ?? 2); // 視線の振れ幅の倍率
@@ -1167,6 +1168,7 @@ async function boot() {
   const buttons = [$('startCam'), $('startSim')];
   buttons.forEach((b) => (b.disabled = true));
   status.textContent = 'キャラを読み込んでいます…';
+  installKeyboardInset();
   stage.resize();
   window.addEventListener('resize', () => {
     stage.resize();
