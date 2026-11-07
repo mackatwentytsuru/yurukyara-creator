@@ -1192,10 +1192,28 @@ const cameraUse = {
   privacy: CAMERA_PRIVACY,
   /** 絵を送るカメラが入っているか(使う人が選んだ・顔の追従のカメラが動いている) */
   seeing: () => cameraUse.consent && app.mode === 'camera' && app.source?.kind === 'mediapipe',
-  /** 入・切の見た目を今に合わせる(updatePrivacy から呼ばれる) */
-  sync: () => cameraUse.ui?.set(app.mode === 'camera' && app.source?.kind === 'mediapipe'),
+  /** 入・切の見た目を今に合わせる(updatePrivacy から呼ばれる)。カメラが入っていれば、勝手に止まった時の見張りも付ける */
+  sync: () => {
+    const on = app.mode === 'camera' && app.source?.kind === 'mediapipe';
+    cameraUse.ui?.set(on);
+    if (on) watchCameraEnd(app.source);
+  },
 };
 app.camera = cameraUse;
+const CAMERA_ENDED = 'カメラが とまりました。また つかう ときは、カメラの ボタンを おしてね';
+const watchedSources = new WeakSet();
+/** カメラが勝手に止まった(許可を取り消した・カメラを抜いた)ら、切った形にそろえて知らせる(絵も送らない) */
+function watchCameraEnd(source) {
+  const track = source?.tracker?.stream?.getVideoTracks?.()[0];
+  if (!track || watchedSources.has(source)) return;
+  watchedSources.add(source);
+  track.addEventListener('ended', () => {
+    if (app.source !== source || !cameraUse.ui) return;
+    void cameraOff()
+      .then(() => ui.notice(CAMERA_ENDED))
+      .catch((err) => console.warn('止まったカメラを片づけられませんでした:', err.message));
+  });
+}
 // 入口の「カメラを使って始める」を、人が押した時だけ「選んだ」にする(?autostart=1 の click() は人の押しではない = 絵は送らない)
 $('startCam')?.addEventListener('click', (e) => {
   if (e.isTrusted && cameraUse.plan.show) cameraUse.consent = true;
