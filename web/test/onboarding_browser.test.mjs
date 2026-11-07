@@ -586,7 +586,7 @@ test('性格の画面(幅 390): 上の「おまかせ(ぜんぶ じどう)」1 �
       const top = await page.$eval('.yp-auto', (e) => ({ text: e.textContent, h: Math.round(e.getBoundingClientRect().height) }));
       assert.equal(top.text, 'おまかせ(ぜんぶ じどう)');
       assert.ok(top.h >= 44, `おまかせは大きなボタン ${top.h}px`);
-      assert.match(await page.$eval('.yp-auto-note', (e) => e.textContent), /^えらぶ所は 5 つ.*おまかせなら 1 回で おわります/);
+      assert.match(await page.$eval('.yp-auto-note', (e) => e.textContent), /^えらぶ所は 6 つ.*おまかせなら 1 回で おわります/);
       assert.equal(await page.$eval('.yp-random', (e) => e.textContent), 'くじびき', '下のくじ(画面は閉じない)は、上のおまかせと名前が違う');
       await checkLayout(page, '性格の画面(おまかせつき)');
       await page.click('.yp-auto'); // 押すのは、この 1 回だけ

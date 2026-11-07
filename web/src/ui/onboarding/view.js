@@ -89,7 +89,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     steps.append(li);
     return li;
   });
-  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで', ariaLabel: 'あとで(はじめての会話をとじる)' });
+  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで', ariaLabel: 'あとで(あたらしい子を つくるを とじる)' });
   const leftMain = el('b');
   const leftTime = el('span');
   const left = el('p', { className: 'fr-left', ariaLive: 'polite' }, leftMain, leftTime);
@@ -105,8 +105,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   const actions = el('div', { className: 'fr-actions' }, chips, fieldRow);
   const sheet = el(
     'section',
-    { className: 'fr-sheet', role: 'dialog', ariaLabel: 'はじめての会話' },
-    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, pinBox, el('h2', { textContent: 'はじめての会話' }), left, closeBtn), bar, steps),
+    { className: 'fr-sheet', role: 'dialog', ariaLabel: 'あたらしい子を つくる' },
+    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, pinBox, el('h2', { textContent: 'あたらしい子を つくる' }), left, closeBtn), bar, steps),
     log,
     live,
     actions,

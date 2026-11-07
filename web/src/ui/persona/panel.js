@@ -7,6 +7,7 @@ import {
   applyPreset, cleanEnding, normalize, personaBlock, pitchKey, rateKey,
 } from './settings.js';
 import { VOICE_ROLE_ORDER, VOICE_ROLES, voiceRoleNote } from './voiceChoice.js';
+import { ROLES, ROLE_CHIPS } from '../onboarding/roles.js';
 
 const el = (tag, props = {}, ...children) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -91,6 +92,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   const energyOut = el('output', { textContent: `${s.energy} ${ENERGY_LABELS[s.energy]}` });
   energyIn.addEventListener('input', () => update({ ...s, energy: Number(energyIn.value) }));
   const length = segmented('返事の長さ', LENGTH_ORDER.map((k) => [k, LENGTHS[k]]), s.length, (k) => update({ ...s, length: k }));
+  // 役目(この子は、どこで だれと。B4 12b): 作る道の最初に選んだ物を、あとからここで替えられる
+  const where = segmented('どこで だれと', ROLES.map((k) => [k, { label: ROLE_CHIPS[k] }]), s.role, (k) => update({ ...s, role: k }), { className: 'yp-seg yp-where' });
   let roleResult = null;
   const showRoleNote = (k) => { roleNote.textContent = voiceRoleNote(roleResult, k, s.voice.provider); };
   const voices = segmented('声の出し方', VOICE_ORDER.map((k) => [k, VOICES[k]]), s.voice.provider, (k) => { update({ ...s, voice: { ...s.voice, provider: k } }); showRoleNote(s.voice.role); }, { className: 'yp-voices', withHint: true });
@@ -118,7 +121,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   const cancelBtn = el('button', { type: 'button', className: 'yp-cancel', textContent: 'もどす(閉じる)' });
   // おまかせ(ぜんぶ じどう): この子のおすすめの性格と、声の役「おまかせ」で決めて、すぐ閉じる(本人 11/7。あとから変えられる)
   const autoBtn = el('button', { type: 'button', className: 'yp-auto', textContent: 'おまかせ(ぜんぶ じどう)' });
-  const autoNote = el('p', { className: 'yp-note yp-auto-note', textContent: 'えらぶ所は 5 つ(性格・口調・元気さ・長さ・声)。ぜんぶ えらばなくても だいじょうぶ。おまかせなら 1 回で おわります(あとから いつでも かえられます)。' });
+  const autoNote = el('p', { className: 'yp-note yp-auto-note', textContent: 'えらぶ所は 6 つ(性格・口調・元気さ・長さ・どこで だれと・声)。ぜんぶ えらばなくても だいじょうぶ。おまかせなら 1 回で おわります(あとから いつでも かえられます)。' });
 
   // 返事の試しは上に置き、下の設定を選んでいる間も見えるようにする(スマホでは上に貼りつく)
   panel.append(
@@ -130,6 +133,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '口調' }), tone.box, toneLock, endingRow, endingMsg),
     el('div', { className: 'yp-group' }, el('div', { className: 'yp-label yp-energy-head' }, el('span', { textContent: '元気さ' }), energyOut), el('div', { className: 'yp-energy' }, energyIn)),
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '返事の長さ' }), length.box),
+    el('fieldset', { className: 'yp-group' }, el('legend', { textContent: 'どこで だれと' }), where.box),
     el(
       'fieldset',
       { className: 'yp-group' },
@@ -153,6 +157,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
     energyIn.value = String(s.energy);
     energyOut.textContent = `${s.energy} ${ENERGY_LABELS[s.energy]}`;
     length.sync(s.length);
+    where.sync(s.role);
     voices.sync(s.voice.provider);
     pitch.sync(pitchKey(s));
     rate.sync(rateKey(s));
