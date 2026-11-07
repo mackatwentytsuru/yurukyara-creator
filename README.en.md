@@ -184,6 +184,18 @@ Model names are kept in settings. When a newer model comes out, change the name 
 - The voice: the environment variable `ELEVEN_MODEL_ID`, or `VOICE_MODEL_ID` in [web/src/conversation/voiceRole.js](web/src/conversation/voiceRole.js). The path that talks to ElevenLabs straight from the browser ([elevenDirect.js](web/src/conversation/elevenDirect.js)) has one more default with the same name.
 
 <!-- UPDATE-SYSTEM-ANCHOR: the section about the update system goes here, between these two markers. The merge lead places it so README does not conflict; S6 writes nothing here. -->
+
+<a name="updating"></a>
+
+## Updating (your characters are kept)
+
+- Just tell Claude Code 「アップデートして」 ("update"). It checks for a new version, tells you what is new, and asks for your OK before updating (skill `yuru-update`).
+- Kept: the characters you made, personalities, voices, memories and settings (your own folders in `characters/`, the files named after your character in `creator/builders/` and `creator/specs/`, `web/logs/`, `creator/work/`, `web/.env` and so on).
+- Before updating, your things are copied to `backups/<date-time>/` (key files are not copied; they stay where they are). Say 「元に戻して」 ("go back") to return to the previous version.
+- After updating, new expressions your characters can use are shown one character at a time. You can look at a sample before deciding, and undo them later.
+- Without Claude Code, from the repository root: `python tools/yuru_update.py check` (look), `apply` (update), `undo` (go back), `status` (current version). It needs Python 3 (standard library only).
+- What's new: [docs/WHATS_NEW.en.md](docs/WHATS_NEW.en.md). The current version is in `VERSION` at the repository root.
+- Automatic updates work only for a `git clone`. A ZIP download cannot update itself yet (copy your characters out, then download again). A real update from the public repository: 【確かめ待ち】 (checked with local tests).
 <!-- /UPDATE-SYSTEM-ANCHOR -->
 
 ## Parts used while it runs

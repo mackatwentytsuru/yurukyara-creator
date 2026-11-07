@@ -24,3 +24,7 @@ creator/viewer/assets_local/
 
 # 作る段の作業フォルダ(段の記録・確認の状態・フックの記録。コミットしない)
 creator/work/
+
+# アップデートの控えと、最後に確かめた時(tools/yuru_update.py。使う人の手元だけの物)
+backups/
+.yuru_update.json
