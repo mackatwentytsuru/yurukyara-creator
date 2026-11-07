@@ -24,7 +24,7 @@ test('作る道のサーバーの場所は、この PC の中(127.0.0.1・localh
   }
   for (const bad of [
     `http://${ip(192, 168, 1, 20)}:8796`, 'http://10.0.0.5:8796', `http://${ip(100, 101, 1, 2)}:8796`,
-    'https://pc.example-tail.ts.net:8445', 'https://<端末名>.<tailnet>.ts.net', 'http://printer.local',
+    'https://pc.example-tail.ts.net:8445', `https://${tsName('anyone', 'tail0000')}`, 'http://printer.local',
     'https://evil.example', 'http://8.8.8.8:8796', 'http://127.0.0.1:8796/x', 'http://u:p@127.0.0.1:8796', 'javascript:alert(1)', 'http://127.0.0.1.evil.example', '', null,
   ]) {
     assert.equal(isLocalBase(bad), false, String(bad));
@@ -58,7 +58,7 @@ test('# の合言葉は読んだらアドレスの欄から消し、このタブ
 });
 
 test('公開の URL・*.ts.net で開いた画面は、# の作る道を読まない(細工したリンクで、よその作る画面を出させない。CRITsec F4)', () => {
-  for (const hostname of ['yurukyara.example.app', '<端末名>.<tailnet>.ts.net']) {
+  for (const hostname of ['yurukyara.example.app', tsName('anyone', 'tail0000')]) {
     const store = new Map();
     const session = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
     const replaced = [];
@@ -175,8 +175,10 @@ test('言葉 → PC の絵 → 直したい(一言)= G1 → 2 回目 → この�
   await h.send({ ev: 'decided', decision: 'ok', id: 'yc1106_2201_ab12', name: 'ちょうちんちゃん', round: 2 });
   assert.equal(h.fr.step, 4);
   assert.ok(h.texts('guide').includes('ちょうちんちゃんにけってい! OK を PC に伝えたよ。'));
-  const told = h.texts('note').find((t) => t.includes('3D ができるまでは'));
-  assert.ok(told, 'できていない所(3D)を正直に言う');
+  const told = h.texts('note').find((t) => t.includes('この画面からはまだ始まりません'));
+  assert.ok(told, 'できていない所(3D)を正直に言う: この画面からは始まらない・make-character で作る');
+  assert.match(told, /make-character のスキル/);
+  assert.ok(!/これから作ります|続けて作ります/.test(told), '始まっていない物を「作っています」と言わない(CRITux3 M2)');
   assert.match(told, /ノリーがかわりに舞台に立って、ちょうちんちゃんの言葉を話します/, '主役が代わりに立つと言う(D5)');
   assert.ok(!/段 \d|C0/.test(told), '内部の言葉(段 1〜6・C0)を出さない(D7)');
   assert.equal(h.pins.at(-1)?.frame, 'http://127.0.0.1:8796/m/#k=test-key&p=http%3A%2F%2Flocalhost%3A5173&view=pic', '描いた絵だけの枠を、札の上に出したままにする(D5)');

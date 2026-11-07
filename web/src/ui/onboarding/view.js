@@ -34,7 +34,7 @@ export function createSheet({ guideName, voice, onAct, onAuto = null, openPerson
   let skip = null;
   let closed = false;
 
-  const steps = el('ol', { className: 'fr-steps', ariaLabel: '7 つの歩み' });
+  const steps = el('ol', { className: 'fr-steps', ariaLabel: '7 つのステップ' });
   const stepItems = STEPS.map((s) => {
     const li = el('li', {}, el('span', { textContent: String(s.n) }), el('b', { textContent: s.label }));
     li.dataset.n = String(s.n);

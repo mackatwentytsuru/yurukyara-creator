@@ -209,7 +209,7 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       const pc1 = await pcNext(work, '--fake-draw');
       assert.equal(pc1.did, 'drew', JSON.stringify(pc1));
       await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
-      assert.match(await frame.$eval('#picCap', (e) => e.textContent), /1 回目の絵。この PC の Claude Code が描きました/);
+      assert.match(await frame.$eval('#picCap', (e) => e.textContent), /1 回目の試しの絵です。Claude は呼んでいません/);
       assert.doesNotMatch(await frame.$eval('#picCap', (e) => e.textContent), /C0|段 \d/, '内部の言葉を出さない(D7)');
       // 作る画面は img の src(blob:)と #c0 を同じ時に出し、絵はその後に読み込まれる(ふだん 2〜8ms)。#c0 だけを待って
       // すぐ読むと、絵の読み込みが詰まった時に naturalWidth 0 で落ちる(順の揺れ。絵を 60ms 遅らせると必ず落ちた)。
@@ -243,7 +243,7 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
       assert.equal(await page.$('.fr-actions iframe.fr-frame'), null, '決めたら作る画面の枠を閉じる');
       assert.match(await logText(page), /けってい! OK を PC に伝えたよ/);
-      assert.match(await logText(page), /3D ができるまでは、ノリーがかわりに舞台に立って/, '主役が代わりに立つと言う(D5)');
+      assert.match(await logText(page), /それまでは、ノリーがかわりに舞台に立って/, '主役が代わりに立つと言う(D5)');
       assert.doesNotMatch(await logText(page), /段 \d|C0/, '札に内部の言葉(段 0・C0)を出さない(D7)');
       // 描いた絵は、札の上の小さな枠(絵だけ)に出したまま。話している間も見える(D5)
       const pic = await page.waitForSelector('.fr-pin iframe.fr-frame', { timeout: 10_000 });
@@ -251,7 +251,7 @@ test('作る道(幅 390): 言葉 → PC の絵 → 直したい(一言)= G1 → 
       const picFrame = await pic.contentFrame();
       await picFrame.waitForFunction(() => (document.getElementById('donePic')?.naturalWidth ?? 0) > 0, null, { timeout: 15_000 });
       assert.equal(await picFrame.$eval('#okBtn', (e) => e.offsetParent === null), true, '絵だけの枠にボタンを出さない');
-      assert.match(await page.$eval('.fr-pin-cap', (e) => e.textContent), /PC の Claude Code が描いた絵。3D はこれから/);
+      assert.match(await page.$eval('.fr-pin-cap', (e) => e.textContent), /PC の Claude Code が描いた絵。3D はまだ/);
       const box = await page.$eval('.fr-pin', (e) => e.getBoundingClientRect().height);
       assert.ok(box > 0 && box < 140, `絵の欄は小さく ${box}`);
       await shot(page, 'make390_4_persona');
@@ -433,8 +433,57 @@ const browLayout = (frame) =>
       pic: box(document.getElementById('pic')),
       ok: box(document.getElementById('okBtn')),
       note: box(document.getElementById('noteBtn')),
+      chipRow: box(document.getElementById('quick')),
+      again: box(document.getElementById('againBtn')),
+      auto: box(document.getElementById('autoPick')),
     };
   });
+// 直しは 3 回まで(第 12 波・CRITux3 D1): 4 枚目の絵の後は、一言の欄(直したい)が畳まれて理由が出る。画面と PC が互いを待たない。
+// 「この子にする」は通る。サーバーが 4 回目の直しを断る事は creator/review/tests/test_make.py が見る。
+test('作る道(幅 390): 直しは 3 回まで。4 枚目の絵の後は「直したい」が畳まれ、「この子にする」で進める', { skip: SLOW || (!HAS_PY && 'python と Pillow が無い'), timeout: 240_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const work = mkdtempSync(join(tmpdir(), 'fr-limit-'));
+  const token = randomBytes(16).toString('hex');
+  const web = await startWeb();
+  const make = await startMake(work, token, web.base);
+  try {
+    const { ctx, page, errors } = await openPage(browser, web.base, make.base, token, 390, 844);
+    try {
+      const frame = await frameOf(page);
+      await frame.fill('#words', '青い雲の子');
+      await frame.click('#wordsBtn');
+      await frame.waitForSelector('#waiting:not([hidden])');
+      assert.equal((await pcNext(work, '--fake-draw')).did, 'drew');
+      await frame.waitForSelector('#c0:not([hidden])', { timeout: 20_000 });
+      for (const n of [2, 3, 4]) {
+        assert.equal(await frame.$eval('#noteForm', (e) => e.hidden), false, `${n - 1} 枚目の絵では、まだ直せる`);
+        await frame.fill('#note', '帽子を青にして');
+        await frame.click('#noteBtn');
+        await frame.waitForSelector('#waiting:not([hidden])');
+        const pc = await pcNext(work, '--fake-draw');
+        assert.equal(pc.did, 'redrew', JSON.stringify(pc));
+        await frame.waitForFunction((k) => document.querySelector('#picCap')?.textContent.includes(`${k} 回目`) && !document.getElementById('c0').hidden, n, { timeout: 20_000 });
+      }
+      const lim = await frame.evaluate(() => ({ form: document.getElementById('noteForm').hidden, limit: !document.getElementById('limit').hidden, text: document.getElementById('limit').textContent, ok: !document.getElementById('okBtn').disabled, again: !document.getElementById('againBtn').hidden }));
+      assert.deepEqual([lim.form, lim.limit, lim.ok, lim.again], [true, true, true, true], `4 枚目の絵の後の画面 ${JSON.stringify(lim)}`);
+      assert.match(lim.text, /直しは 3 回までです。この子にするか/);
+      await fits(page, frame, '4 枚目の絵(直しの上限)');
+      await shot(page, 'make390_3_c0_limit');
+      await frame.click('#okBtn');
+      await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 15_000 });
+      assert.equal((await pcNext(work, '--fake-draw')).did, 'claimed_ok');
+      assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+    } finally {
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    make.proc.kill();
+    web.proc.kill();
+  }
+});
+
 const overlap = (a, b) => Boolean(a && b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom);
 
 for (const [w, h] of [[390, 844], [390, 670], [1280, 720]]) {
@@ -451,7 +500,7 @@ for (const [w, h] of [[390, 844], [390, 670], [1280, 720]]) {
         if (w >= 720) await page.evaluate(() => { document.documentElement.style.setProperty('--top-h', '96px'); document.documentElement.style.setProperty('--bottom-h', '110px'); });
         const frame = await frameOf(page);
         const left = await page.$eval('.fr-left', (e) => e.innerText.replace(/\s+/g, ' '));
-        assert.match(left, /あと 6 つで できあがり あと \d+ 分くらい/, `上の段に、あと いくつ・あと 何分 ${left}`);
+        assert.match(left, /あと 6 ステップで できあがり あと \d+ 分くらい/, `上の段に、あと いくつ・あと 何分 ${left}`);
         await frame.fill('#words', 'みかんの子。頭に葉っぱ');
         await frame.click('#wordsBtn');
         await frame.waitForSelector('#waiting:not([hidden])');
@@ -469,6 +518,8 @@ for (const [w, h] of [[390, 844], [390, 670], [1280, 720]]) {
         assert.ok(!overlap(L.card, L.pic), `札が絵に重ならない ${JSON.stringify(L)}`);
         assert.ok(L.card.bottom <= L.ok.top, `札は「この子にする」の上 ${JSON.stringify(L)}`);
         if (w >= 720) assert.ok(L.card.bottom <= L.vh && L.ok.bottom <= L.vh && L.note.bottom <= L.vh, `PC の背の低い枠でも、札・「この子にする」「直したい」は巻かずに見える ${JSON.stringify(L)}`);
+        // 第 12 波: よく頼む直しの列とおまかせ(と「別の子に」)も、枠の中を巻かずに見える(眉の札の下で隠れていた)
+        if (w >= 720) assert.ok(L.chipRow.bottom <= L.vh && L.again.bottom <= L.vh && L.auto.bottom <= L.vh, `PC 1280×720 でも、よく頼む直し・おまかせは巻かずに見える ${JSON.stringify(L)}`);
         await fits(page, frame, `眉の札(${w}×${h})`);
         assert.match(await logText(page), /眉を足すと/, '札にも、眉のおすすめの一言');
         await shot(page, `brow${w}x${h}_1_card`);
