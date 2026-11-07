@@ -163,7 +163,7 @@ export const CSS = `
   .fr-sheet:not([data-actions="frame"]) .fr-steps li.now b { font-size: 14px; font-weight: 700; line-height: 1.4; }
   .fr-sheet:not([data-actions="frame"]) .fr-steps li:not(.now) b { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .fr-sheet:not([data-actions="frame"]) .fr-log { flex: 1 1 auto; min-height: 72px; padding: 8px 12px; gap: 8px; }
-  .fr-sheet:not([data-actions="frame"]) .fr-actions { flex: 0 0.001 auto; overflow-y: auto; overscroll-behavior: contain; min-height: 56px; padding: 6px 12px 8px; gap: 6px;
+  .fr-sheet:not([data-actions="frame"]) .fr-actions { flex: 0 1 auto; overflow-y: auto; overscroll-behavior: contain; min-height: 56px; padding: 6px 12px 8px; gap: 6px;
     grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fr-sheet:where(:not([data-actions="frame"])) .fr-actions > .fr-wide, .fr-sheet:where(:not([data-actions="frame"])) .fr-actions > form { grid-column: 1 / -1; }
   /* 言葉の欄の名前と「0 / 60」は、札を低くするため見た目だけ隠す(入力欄の名前は aria-label に残る。字数をこえた時だけ「N / 60」を出す) */
@@ -183,6 +183,52 @@ export const CSS = `
   .fr-sheet:not([data-actions="frame"]) .fr-steps { display: none; }
   .fr-sheet:not([data-actions="frame"]) .fr-log { min-height: 130px; }
 }
+
+/* 選ぶ所が札の中で巻ける時は、上と下に「まだ ある」の影を出す(高さ 911px までのスマホ。巻ける印が無く、おまかせの列が半分切れて見えた。中 8)。
+   端まで巻くと影が消える(local の覆いが影を隠す) */
+@media (max-width: 911px) {
+  .fr-sheet:not([data-actions="frame"]) .fr-actions {
+    background:
+      linear-gradient(#171426 30%, rgba(23,20,38,0)) 0 0 / 100% 16px no-repeat local,
+      linear-gradient(rgba(23,20,38,0), #171426 70%) 0 100% / 100% 16px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgba(255,255,255,0.32), rgba(255,255,255,0)) 0 0 / 100% 9px no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgba(255,255,255,0.32), rgba(255,255,255,0)) 0 100% / 100% 9px no-repeat scroll;
+  }
+}
+/* 背の低い画面(高さ 500px まで。スマホの横向き): 札ごと巻けるようにする(会話の欄の最小で札が埋まり、ボタンが札の外に切れていた。高 2)。
+   札は画面の 80% まで・札ぜんたいが巻ける・会話の欄の最小は 56px。巻ける時は上下に影 */
+@media (max-height: 500px) {
+  html .fr-sheet.fr-sheet.fr-sheet {
+    display: block; overflow-y: auto; overscroll-behavior: contain; max-height: 80vh;
+    background:
+      linear-gradient(#171426 30%, rgba(23,20,38,0)) 0 0 / 100% 22px no-repeat local,
+      linear-gradient(rgba(23,20,38,0), #171426 70%) 0 100% / 100% 22px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgba(255,255,255,0.32), rgba(255,255,255,0)) 0 0 / 100% 10px no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgba(255,255,255,0.32), rgba(255,255,255,0)) 0 100% / 100% 10px no-repeat scroll,
+      #171426;
+  }
+  @supports (height: 1dvh) { html .fr-sheet.fr-sheet.fr-sheet { max-height: 80dvh; } }
+  html .fr-sheet.fr-sheet .fr-log { min-height: 56px; max-height: 36vh; }
+  html .fr-sheet.fr-sheet .fr-actions { overflow: visible; background: none; }
+  html .fr-sheet.fr-sheet .fr-frame { height: min(300px, 60vh); }
+}
+/* キーボードが出ている間(iPhone: 見える範囲だけが縮む。view.js の fitKeyboard が fr-kb と --fr-vvh を付ける)。
+   札は見える範囲の中に収まり、札ぜんたいが巻ける。丸の段と絵の欄は畳んで、入力欄と「これで作る」を見せる(高 3) */
+html .fr-sheet.fr-sheet.fr-kb { display: block; overflow-y: auto; overscroll-behavior: contain; max-height: calc(var(--fr-vvh, 100vh) - 8px); }
+html .fr-sheet.fr-sheet.fr-kb .fr-steps, html .fr-sheet.fr-sheet.fr-kb .fr-pin { display: none; }
+html .fr-sheet.fr-sheet.fr-kb .fr-log { min-height: 48px; max-height: 24vh; }
+html .fr-sheet.fr-sheet.fr-kb .fr-actions { overflow: visible; background: none; }
+/* 最後まで行った後に、選んだ子が舞台に立っている間だけ出る、小さな「〜にもどす」(Q-0111) */
+/* 選ぶ所が巻ける時の「まだ あるよ」(view.js の checkMore)。札の下の右。押しても邪魔にならない。札ごと巻ける低い画面では出さない(影が出る) */
+.fr-more { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 3px); z-index: 2; margin: 0; padding: 1px 10px; border-radius: 999px;
+  white-space: nowrap; font-size: 11px; font-weight: 700; line-height: 1.4; color: #12301f; background: var(--fr-mint, #7be0c3); pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.fr-more[hidden] { display: none; }
+@media (max-height: 500px) { .fr-more { display: none; } }
+.fr-return { position: fixed; left: 12px; bottom: calc(var(--bottom-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); z-index: 6; font: inherit; font-size: 14px;
+  min-height: 44px; padding: 0 16px; border-radius: 999px; cursor: pointer; color: #fff; background: linear-gradient(135deg, #7d62ff, #c15bff); border: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.fr-return:disabled { opacity: 0.5; cursor: wait; }
+.fr-return:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 /* 性格の画面 */
 .yp-back { position: fixed; inset: 0; z-index: 40; background: rgba(12, 10, 22, 0.6); display: grid; place-items: end center; }
