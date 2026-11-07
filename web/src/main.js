@@ -1102,6 +1102,78 @@ function swapCharacter(next) {
   void refreshLookSwitch(next); // 見た目の切り替えを、今の子に合わせて作り直す(両方ある子だけ出す・押された方を合わせる)
 }
 
+/* ---------- B5M: しつかん(3D の材質: いつもの・ぬの・け・つるつる)と光。ここから下の 1 塊だけが B5M(合わせ 12b) ----------
+   決まりと数字は stage/shitsukan.js、描き方は stage/shitsukanLook.js、上の段の切り替えは stage/shitsukanSwitch.js。
+   既定は全部の端末で「ぬの」(端末の段で変えない。本人 11/7 22:1x・22:5x)。GLB は作り直さず、描く直前に材質を差しかえる
+   (舞台の子が替わった次のコマで当たる: 見た目の切り替え・見本の子・案内役に戻す、のどれでも)。選んだ物はこのブラウザでキャラごとに覚える。
+   どれを当てるか: ?shitsukan=(試しと撮影。覚えない)→ このページで押した物 → このブラウザで覚えた物 → character.json の looks.3d.material → ぬの */
+import { createShitsukanLook } from './stage/shitsukanLook.js'; // (B5M)
+import { mountShitsukanSwitch } from './stage/shitsukanSwitch.js'; // (B5M)
+import { pickShitsukan, readStored, writeStored, heavyNoteWanted, normalizeShitsukan, HEAVY_NOTICE } from './stage/shitsukan.js'; // (B5M)
+app.shitsukan = (() => {
+  const urlPick = normalizeShitsukan(params.get('shitsukan'));
+  // キャラの id → 当てる物(このページで押した物か、初めて舞台に出た時に決めた物)。毎コマ保存先を読まない
+  const chosen = new Map();
+  const heavyNote = heavyNoteWanted(app.tier?.name);
+  const idOf = (c) => characterKey(c) || app.characterId || '';
+  const can = (c) => Boolean(c) && c.kind === 'rig' && c.look !== '2d';
+  const wanted = (c) => {
+    if (urlPick) return urlPick;
+    const id = idOf(c);
+    if (!chosen.has(id)) chosen.set(id, pickShitsukan({ stored: readStored(siteMemory, id), json: c?.lookSource?.json }).id);
+    return chosen.get(id);
+  };
+  const look = createShitsukanLook(stage, {
+    onFurReady: (_c, ok) => {
+      if (!ok) ui.notice('け の じゅんびが できませんでした。ほかの しつかん を えらんでね');
+    },
+  });
+  const root = $('shitsukan');
+  const box = root && !LOOK_SWITCH_OFF
+    ? mountShitsukanSwitch({
+        root,
+        heavyNote,
+        onPick: (id) => {
+          const c = app.character;
+          if (!can(c)) return;
+          chosen.set(idOf(c), id);
+          writeStored(siteMemory, idOf(c), id);
+          if (id === 'fur' && heavyNote) ui.notice(HEAVY_NOTICE);
+        },
+        onToggle: () => reframe(), // 開いた札の下へキャラを置き直す(閉じたら戻す)
+      })
+    : null;
+  // 開いた札(せまい画面)も、上の段の線に数える(キャラの頭を札の下へ。札が横に重なる時だけ)
+  const baseGuard = stage.state.topGuard;
+  stage.state.topGuard = (left, right) => {
+    const line = baseGuard(left, right);
+    const r = box?.openRect();
+    return r && r.right > left && r.left < right ? Math.max(line, r.bottom + TOP_GAP_PX) : line;
+  };
+  let shown = { character: null, id: null, visible: null };
+  const plainRender = stage.render;
+  stage.render = () => {
+    const c = app.character;
+    if (c) {
+      const want = can(c) ? wanted(c) : 'drawn';
+      if (shown.character !== c || shown.id !== want) {
+        const got = look.apply(c, want); // 毛の準備中は前の見た目のまま(できた次のコマで替わる)
+        if (got === want || look.failed(c, want)) shown = { ...shown, character: c, id: want };
+        box?.set(want);
+      }
+      const visible = can(c);
+      if (box && shown.visible !== visible) {
+        box.show(visible);
+        shown.visible = visible;
+      }
+      look.update(c, stage.camera);
+    }
+    plainRender();
+  };
+  return { look, wanted, current: () => shown.id, box };
+})();
+/* ---------- B5M ここまで ---------- */
+
 /**
  * キャラの人格の文(persona.md)を読む。無い(404・頁の代わり・JSON)時は空(届いた 404 の文や頁を、人格として頭脳に渡さない)。
  * 初めての会話(S4)が、見本の子を読み込み直しなしで舞台に出す時にも使う(app.readPersona)
