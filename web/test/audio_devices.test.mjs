@@ -131,6 +131,7 @@ test('画面のアップデートは、この PC の中で開いた時だけ(公
   assert.equal(versionLine({ available: true, newer: true, ours: '1.0.0', theirs: '1.1.0' }), 'いまの はん 1.0.0 → あたらしい はん 1.1.0');
   assert.equal(versionLine({ available: true, newer: false, ours: '1.0.0', ahead: 2 }), 'いまの はん 1.0.0(ちいさな なおしが 2 こ あります)');
   assert.equal(versionLine({ available: false, ours: '1.0.0' }), `${UPDATE_WORDS.newest}(1.0.0)`);
+  assert.equal(versionLine({ ok: false, available: false, ours: '1.0.0' }), 'いまの はん 1.0.0', '確かめられなかった時は「いちばん あたらしい」と言わない');
   for (const w of Object.values(UPDATE_WORDS)) assert.ok(!/7 歩/.test(w));
 });
 

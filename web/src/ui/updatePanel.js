@@ -58,6 +58,7 @@ function writeSession(key, value) {
 /** 窓に出す今の版の 1 行 */
 export function versionLine(r) {
   if (!r) return '';
+  if (r.ok === false) return r.ours ? `いまの はん ${r.ours}` : ''; // 確かめられなかった時は「いちばん あたらしい」と言わない
   if (r.available && r.newer) return `いまの はん ${r.ours} → あたらしい はん ${r.theirs}`;
   if (r.available) return `いまの はん ${r.ours}(ちいさな なおしが ${r.ahead} こ あります)`;
   return `${UPDATE_WORDS.newest}(${r.ours})`;
@@ -267,6 +268,7 @@ export function mountUpdate({ app, loc = globalThis.location } = {}) {
   const done = readSession(DONE_KEY);
   if (done) {
     writeSession(DONE_KEY, null);
+    writeSession('yc.update.fellback.shown', '1'); // 戻した知らせは、下の 1 つにまとめる
     void refresh().then((r) => {
       if (!r) return;
       let kind = 'apply';
@@ -275,7 +277,9 @@ export function mountUpdate({ app, loc = globalThis.location } = {}) {
       } catch {
         // 形が違えば、ふつうの知らせ
       }
-      const text = kind === 'undo' ? `まえの はんに もどったよ(いまの はん ${r.ours})` : `アップデートが おわったよ(いまの はん ${r.ours})`;
+      const text = r.fellBack
+        ? `${UPDATE_WORDS.fellBack}(いまの はん ${r.ours})`
+        : kind === 'undo' ? `まえの はんに もどったよ(いまの はん ${r.ours})` : `アップデートが おわったよ(いまの はん ${r.ours})`;
       const card = document.querySelector('.gate-card');
       const html = document.documentElement;
       if (card && html.classList.contains('gate-up')) {
