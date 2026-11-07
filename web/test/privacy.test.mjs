@@ -1,5 +1,7 @@
-// カメラの絵が端末の外に出ない、という約束を、コードの形で守る試験。
-// 画面に出している注意書き(「保存も、送信もしません」)が、作りと食い違わないようにするためのもの。
+// カメラの絵の約束を、コードの形で守る試験。
+// 画面に出している注意書きが、作りと食い違わないようにするためのもの。
+// BCV(11-08 本人「カメラは使う人が決める・カメラの中身にも答える」)で約束を変えた: カメラの絵は、使う人がカメラを入れて(知らせを読んで)
+// 話しかけた回だけ、その時の 1 枚を答えを作るために Claude へ送る(保存しない)。絵にできるのは conversation/cameraFrame.js の 1 か所だけ。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -29,13 +31,37 @@ const IMAGE_EXFIL = [
   'EventSource', 'ImageCapture', 'grabFrame', 'takePhoto', 'getDisplayMedia', 'OffscreenCanvas', 'new Image(', 'new Worker', 'SharedWorker',
 ];
 
-test('画像を取り出す・記録する・外へ送る道具を、画面のコードのどこでも使っていない', () => {
+// BCV: カメラの絵を 1 枚の JPEG にしてよいのは、このファイルだけ。使ってよいのは drawImage と toDataURL だけ(ほかの道具は、ここでも使わない)
+const CAMERA_FRAME = join('conversation', 'cameraFrame.js');
+const CAMERA_FRAME_OK = ['toDataURL'];
+
+test('画像を取り出す・記録する・外へ送る道具を、画面のコードのどこでも使っていない(例外は cameraFrame.js の toDataURL だけ)', () => {
   for (const f of files) {
     const text = code(f);
+    const allowed = relative(SRC, f) === CAMERA_FRAME ? CAMERA_FRAME_OK : [];
     for (const word of IMAGE_EXFIL) {
+      if (allowed.includes(word)) continue;
       assert.ok(!text.includes(word), `${relative(SRC, f)} に ${word} があります`);
     }
   }
+});
+
+test('BCV: 絵の 1 枚(cameraFrame.js)は通信・保存をせず、JPEG を 1 回作るだけ。使うのは main.js だけ', () => {
+  const frame = code(join(SRC, CAMERA_FRAME));
+  for (const word of ['fetch', 'localStorage', 'sessionStorage', 'indexedDB', 'caches.', 'createObjectURL', 'FileReader', 'Blob(', 'postMessage', 'import ', 'import(']) {
+    assert.ok(!frame.includes(word), `cameraFrame.js に ${word} があります`);
+  }
+  assert.match(frame, /toDataURL\('image\/jpeg', q\)/, 'JPEG だけを作る');
+  assert.match(frame, /clearRect\(/, '下書きの絵を消す');
+  const users = files.filter((p) => /from '\.\/conversation\/cameraFrame\.js'|from '\.\.\/conversation\/cameraFrame\.js'|from '\.\/cameraFrame\.js'/.test(read(p))).map((p) => relative(SRC, p).split('\\').join('/'));
+  assert.deepEqual(users, ['stage/cameraUse.js'], 'カメラの絵を作れるのは stage/cameraUse.js の getImage だけ(main.js が 1 回作る)');
+  // cameraUse.js: 絵を送るのは、使う人が選んだカメラ(consent)が動いていて、近づいた合図でない回だけ
+  const use = code(join(SRC, 'stage', 'cameraUse.js'));
+  assert.match(use, /dialogue\.getImage = \(\{ trigger \} = \{\}\) => \(trigger !== 'approach' && use\.seeing\(\) \? takeFrame\(app\.source\.video\) : null\);/);
+  assert.match(use, /seeing: \(\) => use\.consent && app\.mode === 'camera' && app\.source\?\.kind === 'mediapipe'/);
+  assert.match(use, /if \(e\.isTrusted && use\.plan\.show\) use\.consent = true;/, '入口は人が押した時だけ(自動で始める画面の click() では選んだことにしない)');
+  assert.ok(!/\bfetch\s*\(/.test(use), 'cameraUse.js は通信しない(送るのは会話の側)');
+  assert.match(code(join(SRC, 'main.js')), /app\.camera = createCameraUse\(\{/, 'main.js は 1 回作るだけ');
 });
 
 test('カメラの追従(tracking/)は、通信をいっさいしない', () => {
@@ -198,8 +224,9 @@ test('声の鍵(BYOK)の読み上げ: 送るのは読み上げる文・モデル
   }
 });
 
-test('カメラの映像を、描画や保存の先へ渡していない(video は MediaPipe にだけ渡す)', () => {
+test('カメラの映像を、描画や保存の先へ渡していない(video は MediaPipe と、話しかけた回の 1 枚 = cameraFrame.js にだけ渡す)', () => {
   for (const f of files) {
+    if (relative(SRC, f) === CAMERA_FRAME) continue; // BCV: 絵の 1 枚を作る、ただ 1 つの場所
     const text = code(f);
     assert.ok(!/drawImage\s*\(/.test(text), `${relative(SRC, f)} が drawImage を使っています`);
   }
@@ -208,13 +235,17 @@ test('カメラの映像を、描画や保存の先へ渡していない(video �
   assert.ok(!/srcObject\s*=.*(upload|post|send)/i.test(tracker));
 });
 
-test('サーバーに届くのは「言葉」と「見えている様子の言葉」だけ(画像のフィールドが無い)', () => {
+test('サーバーに届くのは「言葉」と「見えている様子の言葉」と、BCV の絵 1 枚(使う人がカメラを入れて話しかけた回だけ)', () => {
   const dialogue = code(join(SRC, 'conversation', 'dialogue.js'));
   const body = dialogue.slice(dialogue.indexOf('const body = {'), dialogue.indexOf('};', dialogue.indexOf('const body = {')));
   for (const key of ['history', 'text', 'trigger', 'scene', 'character', 'place', 'expressions']) {
     assert.ok(body.includes(key), `送る内容に ${key} がありません`);
   }
-  assert.ok(!/image|frame|video|photo|jpeg|png/i.test(body), '送る内容に画像らしい名前があります');
+  // BCV: 画像の名前は、getImage が返した 1 枚を入れる 1 行だけ(近づいた合図の回は getImage を呼ばない)
+  const withoutCamera = body.replace('...(cameraImage ? { image: cameraImage } : {}),', '');
+  assert.ok(!/image|frame|video|photo|jpeg|png/i.test(withoutCamera), '送る内容に画像らしい名前があります');
+  assert.match(dialogue, /const cameraImage = trigger === 'approach' \? null : \(this\.getImage\?\.\(\{ mode, trigger \}\) \?\? null\);/);
+  assert.ok(!/history\.push\([^)]*cameraImage/.test(dialogue), '絵を履歴に入れない(次の回に送り直さない)');
 });
 
 // ---- 声の向き(ステレオのマイク): 音も、端末の中で数字にするだけ ----

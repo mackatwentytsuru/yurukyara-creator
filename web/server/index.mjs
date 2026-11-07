@@ -1,5 +1,6 @@
 // 会話の本体を配るサーバー。画面(dist)・キャラと場所のデータ・会話と読み上げの API を持つ。
-// カメラの絵はここに届かない(追従は端末の中だけで行う)。
+// 顔の追従は端末の中だけで行う。カメラの絵は、使う人がカメラを入れて話しかけた回だけ 1 枚届き、その回の頭脳の呼び出しにだけ使う
+// (BCV。ファイル・記録・記憶には書かない。形は server/camera.mjs が確かめる)。
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createReadStream } from 'node:fs';
@@ -16,6 +17,7 @@ import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
+import { CAMERA_CAP_NOTICE, IMAGE_LIMITS, cameraImageCap } from './camera.mjs'; // BCV: カメラの絵(大きさの決まり・1 日の枚数)
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = config.logDir;
@@ -39,6 +41,7 @@ const claudeLimiter = createLimiter({
   file: join(LOG_DIR, 'claude_usage.json'),
   dailyCap: config.claudeDailyCallCap,
   perMinute: config.claudePerMinute,
+  imageCap: cameraImageCap(), // BCV: カメラの絵の枚数も、同じ 1 日の記録で数える
 });
 
 // 端末をまたぐ記憶(合鍵・6 桁の番号・一覧・わすれて)
@@ -154,7 +157,8 @@ function rememberFirstTime(text, client, send, selfNames = []) {
 
 async function handleChat(req, res) {
   // 型・長さを確かめてから先へ(枠を使う前に、おかしな本文を断る)
-  const body = sanitizeChatBody(await readBody(req, 256 * 1024)); // 日本語は 1 字 3 バイトなので、読む上限は余裕を持たせ、長さは sanitize が切る
+  // 日本語は 1 字 3 バイトなので、読む上限は余裕を持たせ、長さは sanitize が切る。BCV: カメラの絵 1 枚の分(base64 の上限)を足す
+  let body = sanitizeChatBody(await readBody(req, 256 * 1024 + IMAGE_LIMITS.maxBase64 + 1024));
   res.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
     'cache-control': 'no-store',
@@ -184,6 +188,16 @@ async function handleChat(req, res) {
       paid = false;
     }
   }
+  // BCV: 本物の頭脳へ絵を送る回は、絵の枚数も 1 日の上限で数える。届いていたら、絵を外して言葉だけで話す(仮の頭脳の回は数えない)
+  let imageTaken = false;
+  if (paid && body.image) {
+    if (claudeLimiter.takeImage().ok) imageTaken = true;
+    else {
+      const { image: _notSent, ...rest } = body;
+      body = rest;
+      send({ type: 'meta', camera: 'capped', cameraNotice: CAMERA_CAP_NOTICE });
+    }
+  }
   try {
     const afterMs = config.hedgeExperiment && Number.isFinite(body.hedgeMs) ? body.hedgeMs : config.hedgeMs;
     await runTurn(body, {
@@ -199,6 +213,7 @@ async function handleChat(req, res) {
   } catch (err) {
     if (!ac.signal.aborted) {
       if (paid) claudeLimiter.refund(client); // 呼べなかった回は、数えない
+      if (imageTaken) claudeLimiter.refundImage(); // BCV: 絵の枚数も返す
       send({ type: 'error', message: err.message });
     }
   }

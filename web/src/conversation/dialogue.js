@@ -211,6 +211,9 @@ export class Dialogue {
       );
     }
 
+    // BCV: 使う人がカメラを入れて話しかけた回だけ、その時の絵を 1 枚(決めるのは main.js の getImage。cameraFrame.js が作る)。
+    // 近づいた合図の回は送らない。履歴には入れない(次の回に前の絵を送り直さない)
+    const cameraImage = trigger === 'approach' ? null : (this.getImage?.({ mode, trigger }) ?? null);
     const body = {
       session: this.talk.snapshot(), // BSF: 1 回の会話の長さ(休むすすめ。すすめるかはサーバーが決める)
       history: this.history,
@@ -224,6 +227,7 @@ export class Dialogue {
       expressionHints: this.character.expressionHints,
       motions: this.motionChoices?.(this.character),
       ...(this.interview ? { interview: true } : {}),
+      ...(cameraImage ? { image: cameraImage } : {}),
     };
 
     let failed = false; // つながらない・断られた回(返事が 1 つも無い)は、履歴に残さない(長すぎる言葉の 413 が、以後ずっと続かないように)

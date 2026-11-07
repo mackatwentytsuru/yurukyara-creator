@@ -360,7 +360,8 @@ async function toggleMic() {
 
 function updatePrivacy() {
   const texts = {
-    camera: 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
+    // BCV: 使う人がカメラを選んだ時は、話しかけた回に絵を 1 枚 Claude へ送る(保存しない)。自動で始める画面は今までどおり追従だけ
+    camera: app.camera?.seeing?.() ? app.camera.privacy : 'カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。',
     pose: 'カメラの映像は使っていません。この端末の位置だけで、あなたのいる方向を知っています。',
     sim: TOUCH ? 'カメラは使っていません(画面を指でなぞった向きに、人がいることにしています)。' : 'カメラは使っていません(マウスの向きに、人がいることにしています)。',
     bridge: '床のカメラの機械が、あなたのいる向き(数字)だけをこの画面に送ります。映像は保存も、送信もしません。',
@@ -372,6 +373,7 @@ function updatePrivacy() {
   ui.privacy(text, app.mode !== 'camera');
   // テレビ表示はカメラを使わない時の注意書きを隠すが、マイクで聞いている間は残す(style.css の .privacy.off:not(.mic))
   $('privacy')?.classList.toggle('mic', Boolean(listener?.listening));
+  app.camera?.sync?.(); // BCV: カメラの入・切のボタンの見た目を、今の入力に合わせる
 }
 
 /* ---------- 画面の状態 ---------- */
@@ -397,7 +399,9 @@ function updateChips() {
   const info = app.source?.info() ?? { label: 'なし', ok: false };
   const noCamera = app.mode === 'sim' || !app.source;
   const camera = app.mode === 'camera' ? (info.ok ? 'オン' : '準備中') : noCamera ? 'なし' : info.label;
-  chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
+  // BCV: 絵を送るカメラが入っている間は、いちばん前に赤い点の札(小さな印。高さ 500 未満でもこの札だけ残す = style.css)
+  if (app.camera?.seeing?.()) chips.unshift(['', 'カメラ オン', 'cam-rec']);
+  else chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
   chips.push(['見えている人', `${app.lastAttention.tracks.length} 人`, '']);
   if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'この PC' : 'ブラウザ', 'ok']);
   if (stereoMic) {
@@ -722,7 +726,7 @@ const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getB
 /** キャラの頭を置いてよいいちばん上の線(px)。[left, right] はキャラの横の範囲。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
 function topGuard(left, right) {
   // テレビ表示: 上の段は隠すので、画面の上の端から画面の高さの 6%(隅の「もどる」・縦持ちの一言がキャラの横に重なる時だけ、その下から)
-  if (tvActive()) return tvTopLimit({ corner: rectsOf('#tvExit, #tvRotate'), left, right, clear: topClearance(window.innerHeight, TOP_GAP_PX) });
+  if (tvActive()) return tvTopLimit({ corner: rectsOf('#tvExit, #tvRotate, #tvCam:not([hidden])'), left, right, clear: topClearance(window.innerHeight, TOP_GAP_PX) }); // #tvCam: BCV
   return topLimit({
     bar: rectsOf(TOP_BAR),
     side: rectsOf(TOP_SIDE),
@@ -1276,6 +1280,24 @@ function installPanelHistory() {
   opt(document.documentElement, ['class']);
 }
 
+/* ---------- BCV: カメラは使う人が決める・カメラの中身にも答える(11-08 本人)。中身は stage/cameraUse.js(部品は cameraSwitch.js・絵の 1 枚は conversation/cameraFrame.js) ---------- */
+// どの端末でも、いつでも入・切。入れる前に 1 行の知らせ。入っている間は小さな印。使う人が選んだカメラで話しかけた回だけ、同じ流れから絵を 1 枚頭脳へ
+import { createCameraUse } from './stage/cameraUse.js';
+app.camera = createCameraUse({
+  app,
+  ui,
+  dialogue,
+  $,
+  params,
+  headset: IS_HEADSET,
+  touch: TOUCH,
+  sourceOptions: () => ({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV }),
+  inXr: () => Boolean(modes && modes.mode !== 'screen'),
+  updatePrivacy: () => updatePrivacy(),
+  isMock: () => currentBrain() === 'mock',
+});
+/* ---------- BCV ここまで ---------- */
+
 async function boot() {
   const status = $('gateStatus');
   const buttons = [$('startCam'), $('startSim')];
@@ -1363,6 +1385,7 @@ async function boot() {
   setupMemory();
   setupQuestLink(); // 見せ方を調べた後(Quest の中なら出さない)
   setupTvMode(); // テレビ表示の入口(iPhone・iPad は「テレビに映す」。ヘッドセットの中では出さない)
+  app.camera.setup(); // BCV: カメラの入・切(いつでも。入口だけでなく)
   void refreshLookSwitch(app.character); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない。舞台の子が替わるたびにも作り直す)
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));

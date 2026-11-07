@@ -9,6 +9,7 @@ import { redactSecrets } from '../src/conversation/secrets.js';
 import { isUnsafeOutput, oneLine, sanitizeBlock, sanitizeLine } from './safety.mjs';
 import { cleanSession } from './safety.mjs'; // BSF 11-08: 1 回の会話の長さ(休むすすめ)
 import { STAGES, isChoiceName } from './prompt.mjs';
+import { readCameraImage } from './camera.mjs'; // BCV: カメラの絵の形と大きさ
 
 const clean = (s) => redactSecrets(s).text;
 
@@ -153,6 +154,9 @@ export function sanitizeChatBody(raw, { publicPath = isPublicRuntime() } = {}) {
   const session = cleanSession(raw.session);
   if (session) out.session = session;
   out.expressionHints = hintMap(raw.expressionHints, out.expressions);
+  // BCV: カメラの絵(使う人がカメラを入れて話しかけた回だけ。近づいた合図の回は受けない)。JPEG の頭と大きさを、枠を使う前に確かめる(server/camera.mjs)
+  const image = trigger === 'approach' ? null : readCameraImage(raw.image, (m) => new ValidationError(m));
+  if (image) out.image = image;
   // 試験用の遅延の指定は、有限の数で範囲内の物だけ
   if (Number.isFinite(raw.hedgeMs)) out.hedgeMs = Math.min(Math.max(raw.hedgeMs, 0), 10_000);
   return out;
