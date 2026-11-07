@@ -188,22 +188,37 @@ export function mostSevere(...kinds) {
 }
 
 /**
- * 履歴の中の、使う人の発言を分ける(CRITsec F7)。いちばん重い物を 1 つ返す。
+ * 履歴の中の、まだ答えていない使う人の発言を分ける(CRITsec F7)。いちばん重い物を 1 つ返す。
  * 履歴の言葉には、決まった返事をくり返さない(その時に返してある。くり返すと、話が先へ進まない)。
  * 本物の頭脳には、この回だけ注意を足す(historyGuard)。
+ *
+ * 注意は 1 回だけ(11-07 第 11 波): 発言のすぐ後にキャラの返事がある物は、その発言の回に安全の層(決まった返事・turnGuard の注意)を
+ * 通って、もう答えてある(断りも案内も 1 回伝えてある)ので数えない。鍵なしの中継の本物の頭脳で、「恋人になって」を断った次の
+ * ふつうの「やあ!」にも、毎回付く注意のせいで断りをくり返した(板の real_brain_1107.md の S7 の回 #32)。
+ * 数えるのは、まだ答えていない発言だけ: 返事が恋人役・独り占めの言葉で外された(validate.mjs の F7。外すと前後の発言が改行で 1 つに
+ * まとまるので、まとまった発言の最後の行より前の行)・返事が無いまま次の発言が来た・履歴が使う人の発言で終わる。
+ * 新しく同じ頼みをされた時は、その回の言葉の分け方(classifyTurn → turnGuard・決まった返事)が、また断る。
  * @param {{role:string, content:string}[]} history
  */
 export function classifyHistory(history = []) {
-  return mostSevere(...(Array.isArray(history) ? history : []).filter((m) => m?.role === 'user').map((m) => classifyInput(m.content)));
+  const items = Array.isArray(history) ? history : [];
+  const kinds = [];
+  items.forEach((m, i) => {
+    if (m?.role !== 'user') return;
+    const lines = String(m.content ?? '').split('\n');
+    const answered = items[i + 1]?.role === 'assistant';
+    for (const line of answered ? lines.slice(0, -1) : lines) kinds.push(classifyInput(line));
+  });
+  return mostSevere(...kinds);
 }
 
-/** 本物の頭脳に、この回だけ足す注意(履歴の中に、つらい話・恋人役・依存の言葉があった時) */
+/** 本物の頭脳に、この回だけ足す注意(履歴の中に、まだ答えていない、つらい話・恋人役・依存の言葉があった時) */
 export function historyGuard(kind) {
   if (kind === 'emergency' || kind === 'distress') {
     return '【安全の層】少し前の会話に、つらい気持ちや危ない話に聞こえる言葉があった。その話が続いているなら、安全の決まり 3 を守り、ひとりで抱えないよう、身近な信頼できる人や公的な相談窓口をすすめる。ちがう話なら、ふつうに短く話す。';
   }
   if (kind === 'romance' || kind === 'dependency') {
-    return '【安全の層】少し前の会話に、恋人役や依存・独り占めを求める言葉があった。安全の決まり 1・2 を守り、恋人役にならず、身近な人との時間も大事だと伝える。';
+    return '【安全の層】少し前の会話に、恋人役や依存・独り占めを求める言葉があり、まだ答えていない。その話が続いているなら、安全の決まり 1・2 を守り、恋人役にならず、身近な人との時間も大事だと伝える。ちがう話なら、断りをくり返さず、ふつうに短く話す。';
   }
   return '';
 }

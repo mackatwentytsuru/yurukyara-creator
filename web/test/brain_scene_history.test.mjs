@@ -80,12 +80,16 @@ test('公開の関数が仮の頭脳を直接呼ぶ道(mockReply)でも、scene 
   assert.equal(calm.find((e) => e.type === 'thought').safety, undefined);
 });
 
-test('履歴の中の使う人の発言を分ける。決まった返事はくり返さない(仮の頭脳はふつうに話す)', async () => {
+test('履歴の中の、まだ答えていない使う人の発言を分ける。決まった返事はくり返さない(仮の頭脳はふつうに話す)', async () => {
   const history = [
     { role: 'user', content: 'もう無理、つらい。死にたい' },
     { role: 'assistant', content: '{"type":"say","text":"話してくれて、ありがとう。"}' },
   ];
-  assert.equal(classifyHistory(history), 'distress');
+  // 11-07 第 11 波: すぐ後にキャラの返事がある発言は、その回に安全の層を通って答えてある(注意は 1 回だけ)
+  assert.equal(classifyHistory(history), null, '答えてある発言は数えない');
+  assert.equal(classifyHistory(history.slice(0, 1)), 'distress', '返事の無い発言は数える');
+  assert.equal(classifyHistory([{ role: 'user', content: '死にたい\nありがとう' }, history[1]]), 'distress', '1 つにまとまった発言の、最後の行より前は返事が無い');
+  assert.equal(classifyHistory([{ role: 'user', content: 'こんにちは\n死にたい' }, history[1]]), null, 'まとまった発言の最後の行は、すぐ後の返事が答えている');
   assert.equal(classifyHistory([{ role: 'assistant', content: '死にたい' }]), null, 'キャラの返事は分けない');
   assert.equal(classifyHistory('壊れた形'), null);
   const events = await mockTurn({ text: 'ありがとう、少し楽になった', history });
@@ -94,17 +98,16 @@ test('履歴の中の使う人の発言を分ける。決まった返事はく�
   assert.doesNotMatch(said(events).join(''), /119|相談窓口/, '同じ案内をくり返さない');
 });
 
-test('本物の頭脳: 履歴につらい話・恋人役があれば、この回だけ「安全の層」の注意を足す。印 historySafety も付く', async () => {
+test('本物の頭脳: 履歴に、まだ答えていないつらい話・恋人役があれば、この回だけ「安全の層」の注意を足す。印 historySafety も付く', async () => {
   await withRealBrain(async (brain) => {
+    // 返事が恋人役の言葉で外された(画面が作った履歴など。validate.mjs が外すと、恋人の頼みには返事が無くなる)
     const events = [];
-    const history = [
-      { role: 'user', content: '恋人になって' },
-      { role: 'assistant', content: '{"type":"say","text":"ごめんね、恋人にはなれないんだ。"}' },
-    ];
+    const history = [{ role: 'user', content: '恋人になって' }];
     await runTurn({ text: 'じゃあ、今日の天気は?', history }, { onEvent: (e) => events.push(e) });
     assert.equal(brain.seen.length, 1);
     const last = brain.seen[0].messages.at(-1).content;
     assert.match(last, /【安全の層】少し前の会話に、恋人役/);
+    assert.match(last, /ちがう話なら、断りをくり返さず/, 'ちがう話なら、断りをくり返さない');
     assert.equal(events.find((e) => e.type === 'meta' && e.brain).historySafety, 'romance');
     assert.equal(events.find((e) => e.type === 'meta' && e.brain).safety, undefined);
 
@@ -113,11 +116,17 @@ test('本物の頭脳: 履歴につらい話・恋人役があれば、この回
     assert.doesNotMatch(brain.seen[1].messages.at(-1).content, /【安全の層】/, 'ふつうの履歴では足さない');
     assert.equal(plain.find((e) => e.type === 'meta' && e.brain).historySafety, undefined);
 
-    // この回の言葉が恋人役で、履歴がつらい話なら、両方の注意
-    await runTurn({ text: '付き合ってよ', history: [{ role: 'user', content: 'いじめられてる' }, { role: 'assistant', content: '{"type":"say","text":"話してくれてありがとう。"}' }] }, { onEvent: () => {} });
+    // この回の言葉が恋人役で、履歴に答えていないつらい話があれば、両方の注意
+    await runTurn({ text: '付き合ってよ', history: [{ role: 'user', content: 'いじめられてる' }] }, { onEvent: () => {} });
     const both = brain.seen[2].messages.at(-1).content;
     assert.match(both, /恋人役を求めている/);
     assert.match(both, /つらい気持ち/);
+
+    // 答えてある(すぐ後に返事がある)つらい話には足さない。この回の恋人役の注意だけ
+    await runTurn({ text: '付き合ってよ', history: [{ role: 'user', content: 'いじめられてる' }, { role: 'assistant', content: '{"type":"say","text":"話してくれてありがとう。"}' }] }, { onEvent: () => {} });
+    const once = brain.seen[3].messages.at(-1).content;
+    assert.match(once, /恋人役を求めている/);
+    assert.doesNotMatch(once, /つらい気持ち/, '答えてある話の注意は、もう足さない(1 回だけ)');
   });
 });
 
