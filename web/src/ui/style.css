@@ -346,7 +346,19 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
 }
 .ql-phone { display: none; }
 /* スマホ(幅 640 まで)では「Quest で開く」と書く(本人: 「VR」だけでは何のボタンか分からない。PC は幅を保つため「VR」のまま) */
-@media (max-width: 640px) { .ql-short { display: none; } .ql-phone { display: inline; } }
+@media (max-width: 640px) {
+  .ql-short { display: none; }
+  .ql-phone { display: inline; }
+  /* 上の段を 1 行も増やさない(L1: 字を 14px にして「Quest で開く」と書くと、幅 390 で行が 1 つ増えキャラが 16% 小さくなった)。
+     札の列は 1 行で流し(はみ出す分は横に巻く)、ボタンの横の余白と間を詰める */
+  .chips { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; pointer-events: auto; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; padding: 7px 9px; white-space: nowrap; }
+  .top-row { gap: 6px; }
+  .top .place-mode-button, .top .drawer > summary { padding-left: 10px; padding-right: 10px; }
+  .top .quest-link-btn { padding: 0 10px; gap: 4px; }
+  .top .tv-btn { padding: 0 10px; }
+}
 .quest-link-btn[aria-expanded="true"] { border-color: var(--lav); }
 .quest-link-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .quest-link-box {
