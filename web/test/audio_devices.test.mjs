@@ -135,6 +135,17 @@ test('画面のアップデートは、この PC の中で開いた時だけ(公
   for (const w of Object.values(UPDATE_WORDS)) assert.ok(!/7 歩/.test(w));
 });
 
+test('窓を開いている間の頭の線: キャラの横の範囲に重なる窓の下の端 + 14px(右に浮かせた PC の窓・隠れた窓は数えない)', async () => {
+  const { sheetGuard } = await import('../src/ui/sheet.js');
+  const top = { left: 12, right: 378, top: 12, bottom: 212, width: 366, height: 200 }; // スマホ: 上に浮かぶ窓
+  const side = { left: 888, right: 1268, top: 80, bottom: 600, width: 380, height: 520 }; // PC: 右に浮かぶ窓
+  assert.equal(sheetGuard(150, 257, [top]), 226, 'スマホ: 窓の下の端 212 + 14');
+  assert.equal(sheetGuard(490, 790, [side]), 0, 'PC: キャラの横の範囲に重ならない');
+  assert.equal(sheetGuard(150, 257, [{ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }]), 0, '隠れた窓');
+  assert.equal(sheetGuard(150, 257, []), 0);
+  assert.equal(sheetGuard(), 0, '開いた窓が無い');
+});
+
 test('始める命令の住所の行: アプリ・作る道・(--lan の時)スマホ。家の中の住所を先に選ぶ', () => {
   const lines = addressLines({ port: 8787, makePort: 8796, makeUp: true, lan: '192.168.x.x' }).join('\n');
   assert.match(lines, /http:\/\/127\.0\.0\.1:8787\//);

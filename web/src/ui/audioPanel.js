@@ -121,14 +121,16 @@ export function mountAudioPicker({ app, update = null } = {}) {
   const updateBtn = el('button', { type: 'button', class: 'yc-link-btn', id: 'ycAudioUpdate', hidden: true });
   const micField = el('label', { class: 'yc-field' }, el('span', { text: PICKER_WORDS.mic }), micSelect);
   const speakerField = el('label', { class: 'yc-field' }, el('span', { text: PICKER_WORDS.speaker }), speakerSelect);
+  const meterRow = el('div', { class: 'yc-meter-row' }, el('span', { class: 'yc-meter-label', text: PICKER_WORDS.meter }), meter);
+  const testRow = el('div', { class: 'yc-au-actions' }, testBtn);
   sheet.body.append(
     el('p', { class: 'yc-au-lead', text: PICKER_WORDS.lead }),
     unavailable,
     allowBtn,
     micField,
-    el('div', { class: 'yc-meter-row' }, el('span', { class: 'yc-meter-label', text: PICKER_WORDS.meter }), meter),
+    meterRow,
     route,
-    el('div', { class: 'yc-au-actions' }, testBtn),
+    testRow,
     heard,
     speakerField,
     speakerNote,
@@ -298,6 +300,9 @@ export function mountAudioPicker({ app, update = null } = {}) {
     unavailable.textContent = unav ?? '';
     heard.textContent = '';
     void refreshUpdateLink();
+    // マイクが使えない頁(http など)では、マイクの一覧・メーター・「はなしてみてね」を出さない(押しても動かないので)
+    meterRow.hidden = Boolean(unav);
+    testRow.hidden = Boolean(unav);
     if (unav) {
       micField.hidden = true;
       allowBtn.hidden = true;
