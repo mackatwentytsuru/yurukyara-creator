@@ -88,6 +88,8 @@ export function mountShitsukanSwitch({ root, heavyNote = false, onPick, onToggle
       open.focus({ preventScroll: true });
     }
   });
+  // 画面の大きさが変わったら閉じる(開いたまま幅 1600 以上になると、ずらした札が並べた形に残る)
+  doc.defaultView?.addEventListener('resize', () => setOpen(false));
 
   return {
     set(id) {
