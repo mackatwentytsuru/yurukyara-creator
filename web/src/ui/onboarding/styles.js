@@ -82,8 +82,8 @@ export const CSS = `
   text-align: center; line-height: 1.3; font-weight: 600; overflow-wrap: anywhere; text-decoration: none; -webkit-tap-highlight-color: transparent; }
 .fr-chip { flex: 0 1 auto; max-width: 100%; font-size: 15px; padding: 6px 14px; }
 /* 小さな絵つきの札(見本の子・ゆるキャラの形・しつかん。B4 12b)。絵の上に名前。押す所は 44px 以上 */
-.fr-chip.fr-card { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 10px; min-width: 64px; line-height: 1.2; }
-.fr-card-img { width: 40px; height: 40px; display: block; pointer-events: none; }
+.fr-chip.fr-card { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; padding: 4px 8px; min-width: 64px; line-height: 1.2; border-radius: 16px; font-size: 14px; }
+.fr-card-img { width: 34px; height: 34px; display: block; pointer-events: none; }
 .fr-pic.fr-pic-small { width: 56px; height: 56px; object-fit: contain; }
 .fr-btn.primary, .yp-save { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 1.5px solid transparent; font-weight: 800; color: #fff; }
 .fr-btn.fr-auto { border: 2px solid var(--fr-mint); background: rgba(123,224,195,0.12); color: var(--fr-text); }
@@ -128,9 +128,9 @@ export const CSS = `
   .fr-sheet[data-layout="overlay"] .fr-line.char .fr-bubble { background: rgba(28,58,54,0.92); }
   .fr-sheet[data-layout="overlay"] .fr-line.note .fr-bubble { background: rgba(34,31,56,0.92); }
   .fr-sheet[data-layout="overlay"] .fr-actions { border-radius: 18px 18px 0 0; border: 1px solid var(--fr-line); border-bottom: 0; box-shadow: 0 -6px 20px rgba(0,0,0,0.35); }
-  /* 手元の PC の作る画面の枠を出している間(この PC の中で開いた時だけ)は、札を高くして枠を入れる(前の作りと同じ 88%) */
-  .fr-sheet[data-input="frame"] { height: min(88vh, 760px); }
-  @supports (height: 1dvh) { .fr-sheet[data-input="frame"] { height: min(88dvh, 760px); } }
+  /* 手元の PC の作る画面の枠を出している間(この PC の中で開いた時だけ)は、札を高くして枠を入れる。78% まで(B4 12b: 88% だと舞台の子の足が札に 8〜10px かかった) */
+  .fr-sheet[data-input="frame"] { height: min(78vh, 760px); }
+  @supports (height: 1dvh) { .fr-sheet[data-input="frame"] { height: min(78dvh, 760px); } }
   .fr-sheet[data-input="frame"] .fr-log { min-height: 72px; }
   /* 形 A: 舞台の絵は札の上だけ(キャラが札の上に全身で立つ。高さは index.js の fitStage が測って入れる) */
   html.fr-stack #stage { height: var(--fr-stage-h, 100%); }

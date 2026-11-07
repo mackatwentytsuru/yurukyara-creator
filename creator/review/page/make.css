@@ -111,3 +111,10 @@ html.mk-pic .mk-fig, html.mk-pic .mk-fig img { width: 100%; height: 100%; border
 /* 直しは 3 回まで(4 枚目の絵の後)。「この子にする」の下に 1 行で言う */
 .mk-limit { margin: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; color: var(--muted); }
 .mk-limit[hidden] { display: none; }
+
+/* B4(12b): スマホだけで作る時の、形・しつかんの見本の札(絵の上に名前。押す所 48px 以上) */
+.mk-p3 { display: grid; gap: 8px; }
+.mk-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.mk-cards .mk-btn { width: auto; flex: 1 1 96px; }
+.mk-btn.mk-card { flex-direction: column; gap: 2px; padding: 6px 10px; }
+.mk-btn.mk-card img { width: 40px; height: 40px; }

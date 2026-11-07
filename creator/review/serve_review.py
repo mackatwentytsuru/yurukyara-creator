@@ -357,12 +357,26 @@ def make_handler(cur, gate, write_lock, hosts, bind_public, port, allow=(), web=
                          "<p>開くと、初めての会話の 1〜3 つ目のステップの中に、この PC の作る画面が出ます。言葉か絵を入れたら、"
                          + ("この PC が自分で Claude Code を動かして描きます(/yuru-next を打たなくてよい)。</p>" if runner and runner.on
                             else "Claude Code で /yuru-next と打ってください。</p>"))
+            phone = ""
+            if cur.make and bind_public:
+                # スマホだけで作る(B4 12b): スマホで作る画面を開く QR。押した頼みは、この PC が自分で /yuru-next を流す(--auto-next)
+                from html import escape
+                murl = f"http://{addr}:{port}/m/#k={gate.token}"
+                try:
+                    import segno
+                    mqr = segno.make(murl, error="m").svg_inline(scale=5)
+                except ImportError:
+                    mqr = ""
+                phone = ("<h2 style='font-size:18px'>スマホで作る(言葉か絵 1 枚)</h2>" + mqr
+                         + f"<p style='word-break:break-all'><a href='{escape(murl, quote=True)}'>{escape(murl.replace(gate.token, '••••••'))}</a></p>"
+                         + ("<p>スマホで「これで作る」を押すと、この PC が自分で Claude Code を動かします。</p>" if runner and runner.on
+                            else "<p>スマホで押したら、この PC の Claude Code で /yuru-next と打ってください。</p>"))
             html = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                     "<title>確認画面の入口</title><body style='font:16px sans-serif;margin:24px'>"
                     f"<h1 style='font-size:20px'>スマホで読む QR({cur.id or '作る道'})</h1>{qr}"
                     f"<p style='word-break:break-all'><a href='{url}'>{url.replace(gate.token, '••••••')}</a></p>"
                     "<p>合言葉は伏せて出しています(リンクと QR には入っています)。</p>"
-                    f"{first}"
+                    f"{first}{phone}"
                     "<p>この画面は人にだけ見せてください。使い終わったら serve_review.py を止めて、合言葉を捨ててください。</p></body>")
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8",
                        csp="default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'")

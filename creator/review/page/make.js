@@ -6,6 +6,7 @@
 // - 眉の無い絵には、眉を足すおすすめの札を出す。一言の欄の横に、よく頼む直しの列(押すと欄に入る)。おまかせ(ぜんぶ じどう)は、
 //   残りの選びを全部おすすめで決めて最後まで進む(言葉はおまかせの一言・チェックはおすすめ・眉は足す(ふつう)・絵は OK。本人 11/7)
 import { BROW_AUTO, browCard, quickChips, wantBrow } from "/r/assets/suggest.js";
+import { MATERIALS, SHAPES } from "/r/assets/shapes.js";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.hash.slice(1));
@@ -242,6 +243,8 @@ async function decide(decision, note) {
       $("donePic").src = $("pic").src; // 決めた絵は、決めた後も見せる
       show("done");
       tell("decided", { decision: "ok", id: S.id, name: S.name, round: S.drawn, ...auto });
+      // スマホだけで作る時(会話の画面の枠の外で開いた時): この画面の中で 2D の知らせと「3D にもする?」を出す(B4 12b)
+      if (!PARENT || window.parent === window) phoneAfterOk();
     } else {
       $("note").value = "";
       updateNote();
@@ -429,14 +432,79 @@ async function picOnly() {
   tick();
 }
 
+/**
+ * スマホだけで作る時の続き(会話の画面の枠の外): パソコンが 2D を組んだら知らせ、「3D にもする?」→ 形 → しつかん → 変換の絵(B4 12b)。
+ * 選ぶ札は見本の絵つき。選んだ物は、この PC のサーバーへ(会話の画面の札と同じ頼み)
+ */
+function phoneAfterOk() {
+  const box = $("phone3d");
+  const msg = $("p3Msg");
+  const pick = $("p3Choices");
+  const btn = (label, onClick, { img = null, primary = false } = {}) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `mk-btn${primary ? " primary" : ""}${img ? " mk-card" : ""}`;
+    if (img) {
+      const i = document.createElement("img");
+      i.src = img;
+      i.alt = "";
+      b.append(i);
+    }
+    b.append(document.createTextNode(label));
+    b.addEventListener("click", onClick);
+    return b;
+  };
+  const choose = (list, onPick, auto) => {
+    pick.replaceChildren(...list.map((x, k) => btn(x.label, () => onPick(x.id), { img: x.img, primary: k === 0 })), btn("おまかせ", auto));
+  };
+  const askShape = () => {
+    box.hidden = false;
+    msg.textContent = "どんな かたちに する?(3D は、ゆるキャラの かたちに ととのえて つくるよ)";
+    choose(SHAPES, (shape) => askMaterial(shape), () => go({ shape: "atama", material: "fabric" }));
+  };
+  const askMaterial = (shape) => {
+    msg.textContent = "さわった かんじ(しつかん)は?";
+    choose(MATERIALS, (material) => go({ shape, material }), () => go({ shape, material: "fabric" }));
+  };
+  const go = (c) => {
+    box.hidden = true;
+    convertView({ ...c, cid: S.id }, { onAgain: () => { show("done"); askShape(); }, onDone: () => { $("doneMsg").textContent = "3D は パソコンで つくるよ(やく 20 ぷん)。それまで 2D で 話せるよ。"; } });
+  };
+  const tick = async () => {
+    try {
+      const j = await api("/api/review/state");
+      if (j.state?.make?.twod === "ready") {
+        $("doneMsg").textContent = `${S.name}を うごく 2D に したよ。パソコンの 舞台に 出ているよ。`;
+        box.hidden = false;
+        msg.textContent = "3D にもする?(やく 20 ぷん)";
+        pick.replaceChildren(btn("3D にも する", askShape, { primary: true }), btn("いまは 2D だけ", () => { box.hidden = true; }));
+        return;
+      }
+      if (j.state?.make?.twod === "failed") {
+        $("doneMsg").textContent = "2D に できなかったよ。3D は パソコンで つくれるよ。";
+        return;
+      }
+    } catch (e) {
+      error(e.message);
+    }
+    setTimeout(tick, 1500);
+  };
+  $("doneMsg").textContent = `${S.name}に きまったよ。いま、うごく 2D に しているよ。`;
+  tick();
+}
+
 /** 変換の絵の枠: 形と しつかんを PC に渡し、描けたら絵と「この かたちで 3D に する」「ちがう かたちに する」を出す(B4 12b) */
-async function convertView() {
+async function convertView(c = CONVERT, { onAgain = null, onDone = null } = {}) {
   show("convert");
+  $("convFig").hidden = true;
+  $("convOk").hidden = true;
+  $("convAgain").hidden = true;
+  $("convOk").disabled = false;
   const act = $("convAct");
   let rnd = 0;
   let told = false;
   try {
-    const r = await api("/api/review/make/convert", { method: "POST", body: { shape: CONVERT.shape, material: CONVERT.material } });
+    const r = await api("/api/review/make/convert", { method: "POST", body: { shape: c.shape, material: c.material } });
     rnd = r.round;
     act.textContent = "パソコンに たのんだよ。描けるまで 少し まってね。";
   } catch (e) {
@@ -444,20 +512,21 @@ async function convertView() {
     $("convAgain").hidden = false;
     return;
   }
-  $("convOk").addEventListener("click", async () => {
+  $("convOk").onclick = async () => {
     $("convOk").disabled = true;
     try {
       await api("/api/review/make/convert_ok", { method: "POST", body: { round: rnd } });
       act.textContent = "この かたちで 3D に するね。パソコンで つくるよ(やく 20 ぷん)。";
       $("convOk").hidden = true;
       $("convAgain").hidden = true;
-      tell("converted", { id: CONVERT.cid });
+      tell("converted", { id: c.cid });
+      onDone?.();
     } catch (e) {
       $("convOk").disabled = false;
       error(e.message);
     }
-  });
-  $("convAgain").addEventListener("click", () => tell("converted", { id: CONVERT.cid, again: true }));
+  };
+  $("convAgain").onclick = () => (onAgain ? onAgain() : tell("converted", { id: c.cid, again: true }));
   const tick = async () => {
     try {
       const j = await api("/api/review/state");

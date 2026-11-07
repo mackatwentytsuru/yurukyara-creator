@@ -26,6 +26,8 @@ const PREFETCH_MAX = 4; // 1 回の台本で前もって声を取る吹き出し
 export const BUBBLE_CHARS = 34;
 /** すぐに押せる札は、この段数まで(越える時は 2 段のまま横に巻く) */
 export const CHIP_ROWS = 2;
+/** 絵つきの札(見本の子・形・しつかん)の時の段の数 */
+export const CARD_ROWS = 3;
 const KB_MIN = 80; // これより小さい見える範囲の差は、アドレスバーの出入り
 
 /**
@@ -120,7 +122,9 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     if (closed) return;
     chips.classList.remove('fr-chips-scroll');
     const tops = new Set([...chips.children].filter((c) => c.offsetParent !== null).map((c) => Math.round(c.offsetTop)));
-    if (tops.size > CHIP_ROWS) chips.classList.add('fr-chips-scroll');
+    // 見本の子の絵つきの札は、折り返して全部見せる(UIR 10。3 段まで)。ほかは 2 段まで(越えたら、2 段のまま横に巻く)
+    const rows = chips.querySelector('.fr-card') ? CARD_ROWS : CHIP_ROWS;
+    if (tops.size > rows) chips.classList.add('fr-chips-scroll');
   }
   globalThis.addEventListener?.('resize', fitChips);
 
