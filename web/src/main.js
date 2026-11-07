@@ -1182,14 +1182,18 @@ function setupQuestLink() {
 // 入っている間は小さな印(上の札の先頭の赤い点の札・ボタンの赤い点)。切ると、カメラの流れを止める(顔の追従は、カメラなしの入力へ)。
 // 使う人が入れたカメラ(入口の「カメラを使って始める」を押した・ここで知らせを読んで入れた)の時だけ、声か文字で話しかけた回に、
 // 同じカメラの流れから絵を 1 枚、頭脳へ送る。自動で始める画面(入口の LED など)は押す人がいないので、顔の追従だけ(絵は送らない)。
-import { cameraSwitchPlan, mountCameraSwitch, CAMERA_PRIVACY } from './stage/cameraSwitch.js';
+import { cameraSwitchPlan, mountCameraSwitch, CAMERA_PRIVACY, CAMERA_PRIVACY_BACK } from './stage/cameraSwitch.js';
 import { takeFrame } from './conversation/cameraFrame.js';
 const cameraUse = {
   plan: cameraSwitchPlan({ headset: IS_HEADSET, led: params.get('led') === '1', autostart: params.get('autostart') === '1', source: params.get('source') ?? '', perf: params.get('perf') === '1' }),
   consent: false, // 使う人がカメラを選んだか(入口の押し・知らせの「カメラを つかう」)
   ui: null,
   mockNoticeShown: false, // 「本物の頭脳の時だけ見られる」を、入れている間に 1 回だけ出す
-  privacy: CAMERA_PRIVACY,
+  facing: 'user', // 'user' = まえのカメラ / 'environment' = うしろのカメラ
+  /** 下の注意書きの文(うしろのカメラは顔の向きを調べない) */
+  get privacy() {
+    return cameraUse.facing === 'environment' ? CAMERA_PRIVACY_BACK : CAMERA_PRIVACY;
+  },
   /** 絵を送るカメラが入っているか(使う人が選んだ・顔の追従のカメラが動いている) */
   seeing: () => cameraUse.consent && app.mode === 'camera' && app.source?.kind === 'mediapipe',
   /** 入・切の見た目を今に合わせる(updatePrivacy から呼ばれる)。カメラが入っていれば、勝手に止まった時の見張りも付ける */
@@ -1201,12 +1205,12 @@ const cameraUse = {
 };
 app.camera = cameraUse;
 const CAMERA_ENDED = 'カメラが とまりました。また つかう ときは、カメラの ボタンを おしてね';
-const watchedSources = new WeakSet();
+const watchedTracks = new WeakSet(); // 流れ(track)ごとに 1 回(VR・AR から戻ると、同じ入力が新しい流れで始め直す)
 /** カメラが勝手に止まった(許可を取り消した・カメラを抜いた)ら、切った形にそろえて知らせる(絵も送らない) */
 function watchCameraEnd(source) {
   const track = source?.tracker?.stream?.getVideoTracks?.()[0];
-  if (!track || watchedSources.has(source)) return;
-  watchedSources.add(source);
+  if (!track || watchedTracks.has(track)) return;
+  watchedTracks.add(track);
   track.addEventListener('ended', () => {
     if (app.source !== source || !cameraUse.ui) return;
     void cameraOff()
@@ -1242,9 +1246,16 @@ async function cameraOn(facing = 'user') {
   const { MediapipeSource } = await import('./tracking/sources/mediapipeSource.js');
   const next = new MediapipeSource({ getFrame: frameInfo, gain: GAIN, hfovDeg: HFOV });
   if (facing === 'environment') {
-    await next.tracker.start({ facingMode: 'environment' }); // 顔の追従(FaceTracker)の向きの口を使う。絵は同じ流れから取る
+    // 顔の追従(FaceTracker)の向きの口を使う。絵は同じ流れから取る。VR・AR から戻って始め直す時も、うしろのまま
+    next.start = () => next.tracker.start({ facingMode: 'environment' });
     next.getPeople = () => []; // うしろのカメラでは顔の向きを追わない(左右が鏡でないので、写った人の逆を見てしまう。顔の部品も回さない)
-  } else await next.start();
+  }
+  try {
+    await next.start();
+  } catch (err) {
+    next.stop(); // 途中まで読んだ顔の部品を捨てる(許可しない・カメラが無い時)
+    throw err;
+  }
   cameraUse.facing = facing;
   const prev = app.source;
   app.source = next;

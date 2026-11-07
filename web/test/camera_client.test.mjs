@@ -211,7 +211,9 @@ test('切り替え: 指で触る端末だけ「うしろの カメラを つか�
   assert.equal(ph.sw.on, true);
   assert.equal(ph.ask.hidden, true);
   const main = read('src', 'main.js');
-  assert.match(main, /await next\.tracker\.start\(\{ facingMode: 'environment' \}\);/, 'うしろのカメラも、顔の追従と同じ部品の流れ(絵も同じ video から)');
+  assert.match(main, /next\.start = \(\) => next\.tracker\.start\(\{ facingMode: 'environment' \}\);/, 'うしろのカメラも、顔の追従と同じ部品の流れ(絵も同じ video から)。始め直しても、うしろのまま');
+  assert.match(main, /next\.stop\(\); \/\/ 途中まで読んだ顔の部品を捨てる/, '入れられなかった時は、途中まで読んだ顔の部品を捨てる');
+  assert.match(main, /const watchedTracks = new WeakSet\(\);/, '勝手に止まった時の見張りは、流れ(track)ごと');
   assert.match(main, /next\.getPeople = \(\) => \[\];/, 'うしろのカメラでは顔の向きを追わない(写った人の逆を見ない)');
   assert.match(main, /backCamera: TOUCH,/);
 });

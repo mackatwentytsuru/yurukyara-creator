@@ -19,6 +19,8 @@ export const CAMERA_TITLE_OFF = 'カメラを つかう(いまは きってい�
 export const CAMERA_TITLE_ON = 'カメラを きる(いまは つかっています)';
 /** 下の注意書き(絵を送るカメラが入っている間) */
 export const CAMERA_PRIVACY = 'カメラの映像で、この端末の中で人の位置を調べます。話しかけた時だけ、その時の絵を 1 枚、答えを作るために Claude に送ります(保存しません)。';
+/** 下の注意書き(うしろのカメラ。顔の向きは調べない) */
+export const CAMERA_PRIVACY_BACK = 'うしろのカメラを使っています。話しかけた時だけ、その時の絵を 1 枚、答えを作るために Claude に送ります(保存しません)。';
 /** 上の札の先頭に出す印(赤い点の札) */
 export const CAMERA_MARK = 'カメラ オン';
 
