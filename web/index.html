@@ -14,6 +14,14 @@
   <canvas id="stage" aria-label="話すキャラクター"></canvas>
 
   <header class="top">
+    <!-- UW5(画面の見直し): 来場者の上の段は 3 つだけ(はなす・かえる・もっと)。ほかの札とボタンは「かえる」「もっと」を開いた時だけ出す
+         (main.js の UW5 の塊が html.top-simple を付ける。ヘッドセット・入口の LED・自動で始める画面・重さを測る時は今までの段のまま) -->
+    <nav class="top-main" id="topMain" aria-label="おもな ボタン" hidden>
+      <button type="button" id="talkBtn" class="tm-btn tm-talk">はなす</button>
+      <button type="button" id="changeBtn" class="tm-btn" aria-expanded="false">かえる</button>
+      <button type="button" id="moreBtn" class="tm-btn" aria-expanded="false">もっと</button>
+    </nav>
+    <p class="grown-up" id="grownUp" hidden>おうちの人へ(声・あたま・カメラの ようす)</p>
     <div class="chips" id="chips" aria-live="polite"></div>
     <div class="top-row">
       <div class="modes" id="modes"></div>
@@ -63,8 +71,9 @@
   <p class="ai-notice ai-notice-top" id="aiNoticeTop" aria-hidden="true">AI のキャラクターと話しています</p>
 
   <aside id="thought" class="thought" aria-label="Claude の考え">
+    <!-- UW5: 来場者には「もっと」の中だけ。見出しは「(キャラの名前)の あたまの なか」(main.js が入れる)。赤い点は録画の印に見えるので、上の段が 3 つの時は出さない -->
     <button class="thought-head" id="thoughtToggle" type="button" aria-expanded="true">
-      <span class="dot"></span>Claude の考え
+      <span class="dot"></span><span id="thoughtLabel">Claude の考え</span>
     </button>
     <dl class="thought-body" id="thoughtBody">
       <div class="row"><dt>見えた様子</dt><dd id="tSeen">—</dd></div>
@@ -85,7 +94,7 @@
     <form id="composer" class="composer" autocomplete="off">
       <button type="button" id="micBtn" class="mic" aria-pressed="false" title="声で話す">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
-        <span id="micLabel">声で話す</span>
+        <span id="micLabel">はなす</span>
       </button>
       <!-- BCV: カメラの入・切(いつでも)。押すと入れる前に 1 行の知らせ。入っている間は赤い点(stage/cameraUse.js と cameraSwitch.js)。この端末のカメラを使わない入口では隠したまま -->
       <button type="button" id="camBtn" class="cam" aria-pressed="false" title="カメラを つかう(いまは きっています)" aria-label="カメラを つかう(いまは きっています)" hidden>

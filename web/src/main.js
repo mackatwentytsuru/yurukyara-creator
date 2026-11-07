@@ -392,7 +392,8 @@ function updateChips() {
   const s = app.status;
   const chips = [];
   const brain = currentBrain();
-  chips.push(['頭脳', brain === 'haiku' ? 'Claude Haiku' : brain === 'mock' ? '仮の頭脳' : '—', brain === 'haiku' ? 'ok' : 'warn']);
+  // UW5(UIR 12): 仮の頭脳の知らせは字幕の上の 1 か所だけ(札には出さない)
+  if (brain !== 'mock') chips.push(['頭脳', brain === 'haiku' ? 'Claude Haiku' : '—', brain === 'haiku' ? 'ok' : 'warn']);
   const ttsOk = s?.tts?.available && !speaker.ttsError;
   chips.push(['声', ttsOk ? `あり(今日の残り ${s.tts.remainingToday} 字)` : '字幕のみ', ttsOk ? 'ok' : 'warn']);
   // 分かる言葉で(CRITux 18): カメラの道は「GPU 60fps」でなく「オン」、カメラなしは「マウスで試し中」でなく「なし」。位置・床のカメラはその入力の言葉
@@ -402,7 +403,8 @@ function updateChips() {
   // BCV: 絵を送るカメラが入っている間は、いちばん前に赤い点の札(小さな印。高さ 500 未満でもこの札だけ残す = style.css)
   if (app.camera?.seeing?.()) chips.unshift(['', 'カメラ オン', 'cam-rec']);
   else chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
-  chips.push(['見えている人', `${app.lastAttention.tracks.length} 人`, '']);
+  // UW5(UIR 23): 「見えている人 0 人」は意味が分からないので、カメラを使っている時だけ
+  if (app.mode === 'camera') chips.push(['見えている人', `${app.lastAttention.tracks.length} 人`, '']);
   if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'この PC' : 'ブラウザ', 'ok']);
   if (stereoMic) {
     const sp = app.lastAttention?.speaker;
@@ -413,8 +415,8 @@ function updateChips() {
       : stereoMic.status === 'mono' ? 'モノ(向きは出せない)' : stereoMic.status === 'error' ? 'マイクなし' : '準備中';
     chips.push(['声の向き', label, stereoMic.status === 'stereo' ? 'ok' : 'warn']);
   }
-  if (speaker.fillers.length) chips.push(['あいづち', `${speaker.fillers.length} 種類`, 'ok']);
-  ui.chips(chips);
+  ui.chips(chips); // UW5(UIR 23): 「あいづち 5 種類」は意味が分からないので出さない
+  uw5VoiceRest(ttsOk, s);
 }
 
 /** VR の中の板に出す、いまの状態 */
@@ -724,6 +726,8 @@ async function setupPresentation() {
 const TOP_BAR = '.top .chip, .top .top-row > *:not(#tvBtn)'; // 上の段(横いっぱいに数える)
 const TOP_SIDE = '#thoughtToggle, #tvBtn'; // スマホで上の段の下に並ぶ畳んだ見出しと「テレビ」(キャラの横に重なる時だけ。同じすき間)
 const TOP_PANELS = '#thought:not(.collapsed), #questLinkBox:not([hidden])'; // 開いた窓(重なる時だけ)
+const TOP_PANELS_UW5 = '#memoryDrawer[open] > .drawer-body'; // UW5(UIR 20): 「覚えていること」の中身も数える(開くとキャラを覆っていた)
+const TOP_MAIN = '.top .top-main:not([hidden]) > *, .top .grown-up'; // UW5: 上の段の 3 つのボタン(と「おうちの人へ」の見出し)も横いっぱいに数える
 const TOP_GAP_PX = 14; // 幅 320 で耳が上の段に 6px かかった(P1 低)ので 8 → 14。開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
 const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
 
@@ -732,9 +736,9 @@ function topGuard(left, right) {
   // テレビ表示: 上の段は隠すので、画面の上の端から画面の高さの 6%(隅の「もどる」・縦持ちの一言がキャラの横に重なる時だけ、その下から)
   if (tvActive()) return tvTopLimit({ corner: rectsOf('#tvExit, #tvRotate, #tvCam:not([hidden])'), left, right, clear: topClearance(window.innerHeight, TOP_GAP_PX) }); // #tvCam: BCV
   return topLimit({
-    bar: rectsOf(TOP_BAR),
+    bar: [...rectsOf(TOP_BAR), ...rectsOf(TOP_MAIN)],
     side: rectsOf(TOP_SIDE),
-    panels: rectsOf(TOP_PANELS),
+    panels: [...rectsOf(TOP_PANELS), ...rectsOf(TOP_PANELS_UW5)],
     left,
     right,
     clear: topClearance(window.innerHeight, TOP_GAP_PX),
@@ -812,6 +816,10 @@ function fitBottom() {
   if (!bottomBar) return;
   const h = bottomBar.offsetHeight;
   document.documentElement.style.setProperty('--bottom-h', `${h}px`);
+  // UW5: 下から出る札の上に字幕を置く・横に出る札の時は字幕を札の左へ(style.css。class でなく data にするのは、class を見張る所を起こさないため)
+  const inset = cardInset();
+  document.documentElement.style.setProperty('--card-inset', `${inset}px`);
+  document.documentElement.dataset.card = inset > 0 ? 'bottom' : '';
   if (tvActive()) {
     document.documentElement.style.setProperty('--tv-cap', `${tvCaptionPx(window.innerHeight, window.innerWidth)}px`);
     document.documentElement.style.setProperty('--tv-rows', String(tvCaptionRows(window.innerHeight, window.innerWidth)));
@@ -820,7 +828,9 @@ function fitBottom() {
     stage.state.bottomInset = Math.max(h + tvBottomReserve(window.innerHeight, window.innerWidth), h + subsHeight() + 10);
   } else {
     // 帯の上に出る字幕と札の分(足に重ならないように)。字幕は 2 行 + 知らせで画面の高さの 14〜16% ほど(L1: 80px 固定では、字幕がキャラの足元・体に 12 場面でかかった)
-    const estimate = h + 8 + Math.round(Math.min(140, Math.max(96, window.innerHeight * 0.16)) + (window.innerHeight < 720 ? 14 : 0));
+    // UW5: せまい画面で上の段の「かえる」「もっと」を開いている間は、字幕をしまう(style.css)ので、その分を空けない(キャラが段と字幕にはさまれて隠れない)
+    const menuOpen = /\btop-(more|change)\b/.test(document.documentElement.className) && window.innerWidth <= 900;
+    const estimate = menuOpen ? h + 8 : h + 8 + Math.round(Math.min(140, Math.max(96, window.innerHeight * 0.16)) + (window.innerHeight < 720 ? 14 : 0));
     const kb = keyboardPx();
     stage.state.kbInset = kb;
     if (kb > 0) {
@@ -1100,6 +1110,9 @@ function swapCharacter(next) {
   document.documentElement.dataset.look = next.look ?? '3d';
   stage.frameCharacter(next, characterView(next), app.place?.loaded?.object3d);
   void refreshLookSwitch(next); // 見た目の切り替えを、今の子に合わせて作り直す(両方ある子だけ出す・押された方を合わせる)
+  // UW5(UIR 14): ほかの子に替わったら、前の子の字幕と「あたまの なか」を空にする(見た目だけの切り替えでは残す)
+  if (characterKey(prev) !== characterKey(next)) ui.clearTalk?.();
+  uw5ThoughtLabel();
 }
 
 /* ---------- B5M: しつかん(3D の材質: いつもの・ぬの・け・つるつる)と光。ここから下の 1 塊だけが B5M(合わせ 12b) ----------
@@ -1310,8 +1323,17 @@ function setupQuestLink() {
 // (積まないと、窓を開いたまま戻るを押すと、アプリごと前の頁へ出てしまった)。窓をボタンで閉じた時は、積んだ履歴を戻す
 let panelPushed = false; // 窓のために履歴を積んでいるか
 let panelPopQuiet = 0; // 自分で戻した時の popstate を、窓の閉じ直しに使わない回数
+// UW5(UIR 9): 全部の窓を数える。上の段の「かえる」「もっと」・カメラの知らせ・マイクとアップデートの窓・しつかんの札・性格の窓・はじめての会話の札も
+const openSheets = () => [...document.querySelectorAll('.yc-sheet:not([hidden])')];
+const openPersona = () => [...document.querySelectorAll('.yp-panel')].filter((p) => p.isConnected && p.getClientRects().length > 0);
+const frSheetOpen = () => document.documentElement.classList.contains('fr-open') && Boolean(document.querySelector('.fr-sheet .fr-close'));
 function anyPanelOpen() {
-  return Boolean($('memoryDrawer')?.open || ($('questLinkBox') && !$('questLinkBox').hidden) || ($('tvCast') && !$('tvCast').hidden) || tvActive());
+  const root = document.documentElement.classList;
+  return Boolean(
+    $('memoryDrawer')?.open || ($('questLinkBox') && !$('questLinkBox').hidden) || ($('tvCast') && !$('tvCast').hidden) || tvActive() ||
+      root.contains('top-more') || root.contains('top-change') || ($('camAsk') && !$('camAsk').hidden) || openSheets().length ||
+      app.shitsukan?.box?.isOpen?.() || openPersona().length || frSheetOpen(),
+  );
 }
 function closeAllPanels() {
   const drawer = $('memoryDrawer');
@@ -1319,6 +1341,13 @@ function closeAllPanels() {
   app.questLink?.close();
   closeTvCast();
   if (tvActive()) setTvMode(false);
+  if ($('camAsk') && !$('camAsk').hidden) $('camAskNo')?.click(); // カメラは入れない(「やめる」と同じ)
+  for (const s of openSheets()) s.querySelector('.yc-sheet-close')?.click();
+  app.shitsukan?.box?.close?.();
+  // 性格の窓(S4)は「もどす(閉じる)」と同じ(変えた所は戻す)。はじめての会話の札は「あとで」と同じ
+  for (const p of openPersona()) p.querySelector('.yp-cancel')?.click();
+  if (frSheetOpen()) document.querySelector('.fr-sheet .fr-close')?.click();
+  uw5SetTop(null);
 }
 function syncPanelHistory() {
   const open = anyPanelOpen();
@@ -1354,6 +1383,21 @@ function installPanelHistory() {
   opt($('questLinkBox'), ['hidden']);
   opt($('tvCast'), ['hidden']);
   opt(document.documentElement, ['class']);
+  // UW5: 後から body に足される窓(マイクとアップデートの窓・性格の窓)と、カメラの知らせ・しつかんの札も見る(まとめて 1 コマに 1 回)
+  let queued = false;
+  const later = () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      syncPanelHistory();
+    });
+  };
+  const bodyWatch = new MutationObserver(later);
+  bodyWatch.observe(document.body, { childList: true });
+  opt($('camAsk'), ['hidden']);
+  opt($('shitsukan'), ['class']);
+  new MutationObserver(later).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
 }
 
 /* ---------- BCV: カメラは使う人が決める・カメラの中身にも答える(11-08 本人)。中身は stage/cameraUse.js(部品は cameraSwitch.js・絵の 1 枚は conversation/cameraFrame.js) ---------- */
@@ -1508,7 +1552,15 @@ async function boot() {
       }
     } catch (err) {
       console.error(err);
-      status.textContent = `${kind === 'camera' ? 'カメラ' : '入力'}を使えませんでした(${err.message})。「カメラなしで試す」なら動かせます。`;
+      // UW5(UIR 11): 英語の err.message は出さない。カメラが使えなかった時は、やさしい 1 行を出して、カメラなしで自動で始める
+      if (kind === 'camera') {
+        status.textContent = UW5_CAMERA_FALLBACK;
+        setTimeout(() => {
+          void startSource('sim', UW5_CAMERA_FALLBACK).then(() => ui.notice(UW5_CAMERA_FALLBACK));
+        }, 900);
+        return;
+      }
+      status.textContent = 'うまく はじめられなかったよ。「カメラなしで試す」なら うごかせます。';
       buttons.forEach((b) => (b.disabled = false));
     }
   }
@@ -1575,3 +1627,125 @@ firstRunReady = import('./ui/onboarding/index.js')
     console.warn('初めての会話を用意できませんでした:', err.message);
     return null;
   });
+
+/* ---------- UW5(画面の見直し UIR 5・6・9・11・12・14・17・18): ここから下の 1 塊だけが UW5 ----------
+   来場者の上の段は 3 つ(はなす・かえる・もっと。紫は「はなす」)。ヘッドセット・入口の LED・自動で始める画面・重さを測る時は今までの段のまま。
+   開いたら(入口と はじめての会話が閉じたら)キャラが先に声をかけ、押すだけで話せる例を 2 つ出す。マイクのボタンは「はなす」、聞いている間は「きいているよ」。
+   声の今日の分を使い切ったら「こえは おやすみ。もじで はなせるよ」。「あたまの なか」の見出しはキャラの名前で */
+const UW5_CAMERA_FALLBACK = 'カメラが つかえなかったよ。カメラなしで はじめるね';
+const UW5_VOICE_REST = 'こえは おやすみ。もじで はなせるよ';
+const UW5_EXAMPLES = Object.freeze(['こんにちは!', 'なにが すき?']);
+const UW5_LISTENING = 'きいているよ';
+const UW5_TALK = 'はなす';
+const UW5_SIMPLE = !(IS_HEADSET || ['led', 'autostart'].some((k) => params.get(k) === '1') || params.get('perf') === '1');
+let uw5Greeted = false;
+let uw5Rested = false;
+
+/** 上の段の「かえる」「もっと」を開く('change' | 'more')・閉じる(null)。開いた段はキャラの頭の線に数える(topGuard) */
+function uw5SetTop(which) {
+  if (!UW5_SIMPLE) return;
+  const root = document.documentElement.classList;
+  root.toggle('top-more', which === 'more');
+  root.toggle('top-change', which === 'change');
+  $('moreBtn')?.setAttribute('aria-expanded', String(which === 'more'));
+  $('changeBtn')?.setAttribute('aria-expanded', String(which === 'change'));
+  if (which !== 'more') {
+    const drawer = $('memoryDrawer');
+    if (drawer?.open) drawer.open = false;
+    app.questLink?.close();
+  }
+  fitBottom(); // 字幕をしまう・戻す分も入れて、キャラを置き直す
+}
+
+/** 「あたまの なか」の見出し(UIR 18)。来場者の段では「(キャラの名前)の あたまの なか」 */
+function uw5ThoughtLabel() {
+  if (!UW5_SIMPLE) return;
+  const name = app.character?.name ?? 'この子';
+  const label = $('thoughtLabel');
+  if (label) label.textContent = `${name}の あたまの なか`;
+  $('thought')?.setAttribute('aria-label', `${name}の あたまの なか`);
+}
+
+/**
+ * 押すだけで話せる例(UIR 5)。店のデータの質問が出ている時は出さない。話した後も出したまま(よくある質問と同じ。
+ * 話した後に消すと下の帯が縮み、テレビ表示から戻った時にキャラの置き方が変わった)
+ */
+function uw5ShowExamples() {
+  if (app.status?.shop?.available) return;
+  ui.choices(UW5_EXAMPLES, (q) => {
+    speaker.unlock();
+    void talk({ text: q, mode: 'text' });
+  });
+  $('choices')?.classList.add('yc-examples');
+}
+
+/** 開いたら、キャラが先に声をかける(入口と はじめての会話が閉じた後に 1 回。?auto=0 では声をかけない) */
+function uw5GreetOnOpen() {
+  const root = document.documentElement.classList;
+  if (uw5Greeted || root.contains('gate-up') || root.contains('fr-open') || !app.source || !UW5_SIMPLE) return;
+  uw5Greeted = true;
+  uw5ShowExamples();
+  if (!app.autoGreet || dialogue.busy || speaker.speaking) return;
+  if (performance.now() / 1000 - presence.lastTalkAt < GREET_QUIET_S) return; // もう話している(はじめての会話の後など)
+  void talk({ trigger: 'approach', mode: 'text' });
+}
+
+/** マイクのボタンと上の「はなす」の言葉(UIR 17): 聞いている間は「きいているよ」 */
+function uw5SyncTalkLabels() {
+  const on = $('micBtn')?.getAttribute('aria-pressed') === 'true';
+  const label = $('micLabel');
+  if (label) label.textContent = on ? UW5_LISTENING : UW5_TALK;
+  const top = $('talkBtn');
+  if (top) {
+    top.textContent = on ? UW5_LISTENING : UW5_TALK;
+    top.classList.toggle('hearing', on);
+  }
+}
+
+/** 上の「はなす」: マイクが使える時はマイクのボタンと同じ。使えない時は文字の欄へ */
+function uw5Talk() {
+  uw5SetTop(null);
+  const mic = $('micBtn');
+  if (mic && !mic.disabled && window.isSecureContext && navigator.mediaDevices) {
+    mic.click();
+    return;
+  }
+  $('textInput')?.focus();
+}
+
+/** 声の今日の分を使い切った時の 1 回の知らせ(UIR 6)。残りの字数の札は「もっと」の中の「おうちの人へ」だけ */
+function uw5VoiceRest(ttsOk, s) {
+  const out = Boolean(s?.tts) && (Number(s.tts.remainingToday) <= 0 || /cap|limit|上限|429/i.test(String(speaker.ttsError ?? '')));
+  if (out && !uw5Rested) ui.notice(UW5_VOICE_REST);
+  uw5Rested = out;
+  return ttsOk;
+}
+
+(function uw5Setup() {
+  if (!UW5_SIMPLE) return;
+  document.documentElement.classList.add('top-simple');
+  const nav = $('topMain');
+  if (nav) nav.hidden = false;
+  const grown = $('grownUp');
+  if (grown) grown.hidden = false;
+  $('talkBtn')?.addEventListener('click', uw5Talk);
+  $('changeBtn')?.addEventListener('click', () => uw5SetTop(document.documentElement.classList.contains('top-change') ? null : 'change'));
+  $('moreBtn')?.addEventListener('click', () => uw5SetTop(document.documentElement.classList.contains('top-more') ? null : 'more'));
+  // 「かえる」の中で子を選ぶ・性格を開く(#modes のボタン)と、段を閉じる。見た目としつかんは、くらべられるように開いたまま(キャラは段の下に見えている)
+  $('modes')?.addEventListener('click', (e) => e.target.closest('button') && setTimeout(() => uw5SetTop(null), 0));
+  // Escape でも段を閉じる(ほかの窓が開いている時は、その窓が先に閉じる)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && /\btop-(more|change)\b/.test(document.documentElement.className) && !openSheets().length && !app.shitsukan?.box?.isOpen?.()) uw5SetTop(null);
+  });
+  const mic = $('micBtn');
+  if (mic) new MutationObserver(uw5SyncTalkLabels).observe(mic, { attributes: true, attributeFilter: ['aria-pressed'] });
+  uw5SyncTalkLabels();
+  new MutationObserver(() => uw5GreetOnOpen()).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  // キャラの名前が分かったら見出しを入れる(起動の後に 1 回。替わるたびは swapCharacter)
+  const nameWait = setInterval(() => {
+    if (!app.character) return;
+    clearInterval(nameWait);
+    uw5ThoughtLabel();
+  }, 200);
+})();
+/* ---------- UW5 ここまで ---------- */

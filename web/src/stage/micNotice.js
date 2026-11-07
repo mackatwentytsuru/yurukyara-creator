@@ -21,7 +21,8 @@ export function micUnavailableText({ secure = true, mediaDevices = {} } = {}) {
  */
 export function micFailureText(err) {
   const kind = err && typeof err === 'object' ? String(err.name ?? '') : '';
-  if (kind === 'NotAllowedError' || kind === 'SecurityError') return `マイクを使えませんでした(ブラウザで許可されませんでした)。ブラウザの設定で許可すると、声で話せます。${TEXT_OK}`;
+  // UW5(UIR 17): 短く(長い文が 3 行になり、キャラの足にかかっていた)
+  if (kind === 'NotAllowedError' || kind === 'SecurityError') return `マイクが ブラウザで許可されませんでした。${TEXT_OK}`;
   if (kind === 'NotFoundError' || kind === 'OverconstrainedError') return `マイクが見つかりません。つないでから、もう一度押してね。${TEXT_OK}`;
   if (kind === 'NotReadableError' || kind === 'AbortError') return `マイクを使えませんでした(ほかのアプリが使っているかも)。${TEXT_OK}`;
   const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';

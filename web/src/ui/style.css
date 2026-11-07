@@ -800,3 +800,93 @@ html.tv-mode .cam-ask-text { font-size: max(16px, 3.2vh); }
 html.tv-mode .cam-ask-mock, html.tv-mode .cam-ask-status { font-size: max(14px, 2.4vh); }
 html.tv-mode .cam-ask button { font-size: max(16px, 3vh); min-height: max(48px, 7vh); border-radius: max(14px, 1.8vh); }
 /* ---------- BCV ここまで ---------- */
+
+/* ---------- UW5(画面の見直し UIR 5・6・17・18・20・23、BUX・B5M・BSF の中くらい): ここから下の 1 塊だけが UW5 ----------
+   来場者の上の段(html.top-simple。main.js の UW5 の塊が付ける)は 3 つのボタンだけ: はなす(いちばん目立つ)・かえる・もっと。
+   かえる = 子と見た目(初めての会話・案内役にもどす・3D と 2D・しつかん)、もっと = ほか全部(性格・覚えていること・Quest・テレビ・あたまの なか・おうちの人へ の札)。
+   隠すのは入れ物だけ(中の [hidden] の決まりはそのまま)。開いた段はキャラの頭の線に数えるので、キャラは段の下へ置き直される(重ならない) */
+.top-main { display: flex; gap: 8px; pointer-events: auto; }
+.top-main[hidden] { display: none; }
+.tm-btn {
+  font: inherit; font-size: 16px; font-weight: 700; min-height: 48px; padding: 0 18px; border-radius: 999px; cursor: pointer;
+  color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  -webkit-user-select: none; user-select: none; touch-action: manipulation;
+}
+.tm-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.tm-btn[aria-expanded="true"] { border-color: var(--lav); color: var(--lav); }
+.tm-talk { border: 0; color: #fff; background: linear-gradient(135deg, #7d62ff, #c15bff); box-shadow: 0 6px 18px rgba(125, 98, 255, 0.35); padding: 0 24px; }
+.tm-talk.hearing { background: linear-gradient(135deg, #ff8f7a, #ff6fa8); }
+.grown-up { margin: 0; font-size: 14px; color: var(--muted); pointer-events: none; }
+.grown-up[hidden], html:not(.top-more) .grown-up { display: none; }
+html.top-simple:not(.top-more) .top .chips,
+html.top-simple:not(.top-more):not(.top-change) .top .top-row { display: none; }
+/* もっと: かえるの物(子・見た目・しつかん)は出さない(同じ物を 2 か所に出さない) */
+html.top-simple.top-more .top #lookSwitch, html.top-simple.top-more .top #shitsukan,
+html.top-simple.top-more #modes > .fr-launch, html.top-simple.top-more #modes > .fr-return { display: none; }
+/* せまい画面で段を開いている間は、字幕・注意書き・押すだけの例を一時しまい(閉じると戻る)、段は画面の 45% まで(中は巻く)。
+   キャラは段の下と入力の列の間に、隠れずに立つ(main.js の fitBottom が字幕の分を空けない) */
+@media (max-width: 900px) {
+  html.top-simple.top-more:not(.tv-mode) .subs, html.top-simple.top-change:not(.tv-mode) .subs,
+  html.top-simple.top-more:not(.tv-mode) .privacy, html.top-simple.top-change:not(.tv-mode) .privacy,
+  html.top-simple.top-more #choices, html.top-simple.top-change #choices { display: none !important; }
+  /* 段に overflow を付けない(付けると「覚えていること」の中身が段の中で切れて見えなかった) */
+  /* 「覚えていること」を開いた間(UIR 20): ほかの札をしまって札を上に寄せ、中身は画面の 45%(キャラの頭の線の上限)より上で止めて巻く。キャラは札の下に立つ */
+  html.top-simple.top-more:has(#memoryDrawer[open]) .top .chips, html.top-simple.top-more:has(#memoryDrawer[open]) .top .grown-up,
+  html.top-simple.top-more:has(#memoryDrawer[open]) #thought, html.top-simple.top-more:has(#memoryDrawer[open]) #questLink,
+  html.top-simple.top-more:has(#memoryDrawer[open]) #tvBtn { display: none !important; }
+  html.top-simple #memoryDrawer[open] > .drawer-body { max-height: max(120px, calc(45vh - 140px)); max-height: max(120px, calc(45dvh - 140px)); overflow-y: auto; }
+}
+/* カメラもマイクも使っていない時の注意書き(「カメラは使っていません…」)は、来場者の段では出さない(2 行が下の帯を高くし、字幕がキャラの足にかかった)。
+   カメラかマイクを使っている間は今までどおり出す(テレビ表示と同じ決まり) */
+html.top-simple .privacy.off:not(.mic) { display: none; }
+/* かえるだけの時: 子と見た目の物だけ出す */
+html.top-simple.top-change:not(.top-more) .top .top-row > :not(#modes):not(#lookSwitch):not(#shitsukan) { display: none; }
+html.top-simple.top-change:not(.top-more) #modes > :not(.fr-launch):not(.fr-return) { display: none; }
+/* あたまの なか(前の「Claude の考え」): 来場者には「もっと」の中だけ。赤い点(録画に見えた)は出さない */
+html.top-simple:not(.top-more) #thought { display: none !important; }
+html.top-simple .thought-head .dot { display: none; }
+/* 「ノリーにもどす」は紫にしない(いちばん目立つのは「はなす」) */
+html.top-simple .top .fr-return { background: var(--glass); color: var(--text); border: 1px solid var(--line); font-weight: 400; }
+/* しつかん(B5M の中くらい): 上の段の「かえる」の中では、どの幅でも 4 つを並べて出す(2 回押さない)。せまい画面は 1 行を使う */
+html.top-simple .top .shitsukan { position: static; }
+html.top-simple .top .sk-open { display: none; }
+html.top-simple .top .sk-list {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 0 1px 0 12px; border-radius: 999px; position: static; width: auto;
+  background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: none;
+}
+html.top-simple .top .sk-title { display: inline; font-size: 14px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+html.top-simple .top .sk-list button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); }
+html.top-simple .top .sk-list .sk-sub { display: none; }
+html.top-simple .top .sk-list .sk-main { font-size: 14px; }
+html.top-simple .top .sk-list button[aria-pressed="true"] { color: var(--ink); background: var(--lav); }
+/* マイク(UIR 17): スマホでも「はなす」の字を出す。聞いている間は「きいているよ」(main.js が入れる) */
+@media (max-width: 640px) {
+  html.top-simple .mic span#micLabel { display: inline; }
+  html.top-simple .composer .cam .cam-label { display: none; }
+  .tm-btn { padding: 0 14px; }
+  .tm-talk { padding: 0 20px; }
+}
+@media (max-width: 340px) {
+  .tm-btn { padding: 0 10px; font-size: 15px; }
+}
+/* 押すだけの話しかけ(開いた時の 2 つの例)は、ふつうの大きさで見やすく */
+html.top-simple .choices.yc-examples button { font-size: 16px; min-height: 44px; padding: 8px 16px; border-color: var(--lav); }
+/* 窓(マイクとスピーカー・アップデート。BUX の中くらい): 見出しと「とじる」は窓の上にいつも残し、中身だけを巻く。いちばん大事なボタンも窓の下にいつも見える */
+.yc-sheet-head { position: sticky; top: -12px; z-index: 1; margin: -12px -14px 0; padding: 12px 14px 8px; background: var(--ink-2); border-radius: var(--radius) var(--radius) 0 0; }
+.yc-sheet .yc-btn-main { position: sticky; bottom: -14px; z-index: 1; box-shadow: 0 -8px 16px var(--ink-2); }
+/* PC で入力の欄を 2 つ同時に出さない(UIR 20): はじめての会話の札に文字の欄がある間は、下の入力の列を隠す */
+html.fr-open:has(.fr-sheet input[type="text"]:not([hidden]), .fr-sheet textarea:not([hidden])) .composer { display: none; }
+/* はじめての会話の札が下に出る幅で、字幕が札の上の部分に重ならない(BSF の中くらい。札の覆う高さは main.js が --card-inset に入れる) */
+html.fr-open .subs { bottom: max(calc(var(--bottom-h, 112px) + 6px), calc(var(--card-inset, 0px) + 6px)); }
+/* 幅 720〜911 で札が右に出る時(下から出る札でない時)も、字幕と知らせは札の左に収める(幅 800 で「仮の頭脳です」が札の下に入っていた) */
+@media (min-width: 720px) and (max-width: 911px) {
+  html.fr-open:not([data-card="bottom"]) .subs { left: 16px; transform: none; width: calc(100vw - min(460px, calc(100vw - 32px)) - 48px); }
+}
+/* 1920 など大きな画面では、札とボタンの字を大きく(UIR 23: 13px は離れると読めない) */
+@media (min-width: 1600px) {
+  .tm-btn { font-size: 20px; min-height: 56px; padding: 0 26px; }
+  .chip, .ai-notice, .grown-up { font-size: 16px; }
+}
+/* テレビ表示の「もどる」をはっきり(UIR 23) */
+html.tv-mode .tv-exit { opacity: 1; }
+/* ---------- UW5 ここまで ---------- */

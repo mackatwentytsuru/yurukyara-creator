@@ -228,7 +228,16 @@ test('しつかん: 既定は ぬの・押すとすぐ替わり覚える・い�
       await go();
       return { ctx, page, errors, go };
     };
+    // UW5: 来場者の上の段は 3 つ(はなす・かえる・もっと)。しつかん は「かえる」の中で、どの幅でも 4 つ並ぶ(開く札は無い)。押す前に「かえる」を開く
+    const change = async (page) => {
+      const need = await page.evaluate(() => document.documentElement.classList.contains('top-simple') && !document.documentElement.classList.contains('top-change'));
+      if (need) {
+        await page.click('#changeBtn');
+        await sleep(400);
+      }
+    };
     const pick = async (page, id) => {
+      await change(page);
       const compact = await page.evaluate(() => getComputedStyle(document.getElementById('shitsukanOpen')).display !== 'none');
       if (compact) await page.click('#shitsukanOpen');
       await page.click(`#shitsukanList button[data-shitsukan="${id}"]`);
@@ -253,7 +262,7 @@ test('しつかん: 既定は ぬの・押すとすぐ替わり覚える・い�
     assert.equal(s.plainNormals, 0, '布ではならした法線');
     assert.equal(s.switchShown, true, '3D の時は しつかん を出す');
     // 2. 札を開くと、キャラの箱と重ならない(重なる時はキャラが札の下へ)
-    await pc.page.click('#shitsukanOpen');
+    await change(pc.page);
     await sleep(400);
     let rc = await pc.page.evaluate(RECTS);
     assert.ok(rc.list, 'PC 1280 では押すと札が開く');
@@ -300,12 +309,14 @@ test('しつかん: 既定は ぬの・押すとすぐ替わり覚える・い�
     // 5. 2D の時は出さない。3D に戻すと、前と同じ絵(舞台から外れた子の後片づけで、共有の部屋の光や毛羽の絵を捨てられても困らない)
     await pc.page.evaluate(FREEZE);
     const before2d = await pc.page.evaluate(PIXELS); // ここから描く輪は止まる(次の描きは PIXELS で)
+    await change(pc.page);
     await pc.page.click('#lookSwitch button[data-look="2d"]');
     await pc.page.waitForFunction(() => window.__app.character.look === '2d', null, { timeout: 30_000 });
     await pc.page.evaluate(PIXELS);
     s = await pc.page.evaluate(STATE);
     assert.equal(s.switchShown, false, '2D の時は しつかん を出さない');
     assert.equal(s.contact, false, '2D の時は足元の影なし');
+    await change(pc.page);
     await pc.page.click('#lookSwitch button[data-look="3d"]');
     await pc.page.waitForFunction(() => window.__app.character.look === '3d', null, { timeout: 30_000 });
     const after2d = await pc.page.evaluate(PIXELS);
@@ -352,7 +363,7 @@ test('しつかん: 既定は ぬの・押すとすぐ替わり覚える・い�
     s = await ph.page.evaluate(STATE);
     assert.equal(s.current, 'vinyl', 'character.json の looks.3d.material(日本語でも)が既定');
     assert.equal(s.tier, 'mid');
-    await ph.page.click('#shitsukanOpen');
+    await change(ph.page);
     await sleep(400);
     rc = await ph.page.evaluate(RECTS);
     assert.ok(rc.list && rc.list.l >= 0 && rc.list.r <= rc.vw, `スマホの札は画面の中: ${JSON.stringify(rc.list)}`);
@@ -362,6 +373,8 @@ test('しつかん: 既定は ぬの・押すとすぐ替わり覚える・い�
     const top = await ph.page.evaluate(() => [...document.querySelectorAll('#shitsukanList button')].map((b) => b.getBoundingClientRect().height));
     assert.ok(top.every((h) => h >= 44), `押す所は 44px 以上: ${top}`);
     await ph.page.keyboard.press('Escape');
+    // UW5: 「かえる」を閉じた形(来場者のふだんの上の段)で、行が増えないかを測る
+    await ph.page.evaluate(() => document.documentElement.classList.contains('top-change') && document.getElementById('changeBtn').click());
     // 「しつかん」のボタンで、スマホの上の段の行を増やさない(390x844 と 390x670。出す・隠すで上の段の高さが同じ)
     for (const size of [{ width: 390, height: 844 }, { width: 390, height: 670 }]) {
       await ph.page.setViewportSize(size);
