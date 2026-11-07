@@ -234,11 +234,14 @@ try {
     }
     // テレビ表示
     const tv = await openPage(browser, 1920, 1080, '&tv=1');
+    await tv.evaluate(() => window.dispatchEvent(new CustomEvent('yc-mic-silent'))); // 知らせも出してみる(テレビ表示では隠れるはず)
+    await tv.waitForTimeout(300);
+    // 描かれているか(親ごと隠れた物は getClientRects が空)で見る
     const shown = await tv.evaluate(() => ['ycAudioBtn', 'ycUpdateBadge', 'ycAudio', 'ycUpdate', 'ycAudioNote'].map((id) => {
       const e = document.getElementById(id);
-      return e ? `${id}:${getComputedStyle(e).display}` : `${id}:なし`;
+      return e ? `${id}:${e.getClientRects().length ? '見える' : '隠れる'}` : `${id}:なし`;
     }));
-    check('テレビ表示では、歯車・印・窓・知らせが出ない', shown.every((s) => /:none$|:なし$/.test(s)), shown.join(' '));
+    check('テレビ表示では、歯車・印・窓・知らせが出ない', shown.every((s) => /:隠れる$|:なし$/.test(s)), shown.join(' '));
     await tv.screenshot({ path: join(OUT, 'tv_1920.png') });
     await tv.close();
     // 本当に音が来ないマイク(無音の WAV)で「声で話す」を押す → 7 秒ほどで知らせ
