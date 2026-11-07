@@ -532,7 +532,7 @@ html.kb-open .gate { top: var(--kbt, 0px); bottom: var(--kb, 0px); height: auto;
 html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - var(--top-h, 64px) - 24px); overflow-y: auto; }
 
 /* ---- BUX(第 12 波 b): 「マイクと スピーカー」の窓・画面のアップデートの印と窓。ほかの規則は変えない ----
-   窓(.yc-sheet)は body の直下で浮かせる。幅 1100 未満は画面の上(上の段にかぶせる)、幅 1100 以上は右。開いている間は main.js の頭の線に
+   窓(.yc-sheet)は body の直下で浮かせる。幅 1200 未満は画面の上(上の段にかぶせる)、幅 1200 以上は左(右には「Claude の考え」)。開いている間は main.js の頭の線に
    窓の下の端が足され(ui/sheet.js の sheetGuard)、キャラは窓の下へ置き直される(重ならない・形は変えない)。下の帯は動かさない。字は 14px 以上 */
 .yc-update-badge {
   pointer-events: auto; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 999px;
@@ -556,8 +556,8 @@ html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - va
 .yc-sheet {
   position: fixed; z-index: 8; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; margin: 0 auto;
   width: min(calc(100% - 24px), 560px); max-height: min(40vh, 400px); max-height: min(40dvh, 400px); overflow: auto; overscroll-behavior: contain;
-  padding: 12px 14px 14px; border-radius: var(--radius); background: rgba(29, 26, 46, 0.96); border: 1px solid var(--line);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  padding: 12px 14px 14px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); /* 不透明(上の段の字が透けて見えないように) */
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
   display: grid; gap: 10px; align-content: start; font-size: 15px; line-height: 1.55; color: var(--text);
 }
 .yc-sheet[hidden] { display: none; }
@@ -565,9 +565,10 @@ html.kb-open .thought:not(.collapsed) { max-height: calc(var(--vvh, 100dvh) - va
 @media (min-width: 641px) {
   .yc-sheet { max-height: min(46vh, 430px); max-height: min(46dvh, 430px); }
 }
-@media (min-width: 1100px) {
+@media (min-width: 1200px) {
+  /* 左に浮かせる(右には「Claude の考え」がある。キャラは真ん中) */
   .yc-sheet {
-    left: auto; right: max(12px, env(safe-area-inset-right)); margin: 0; width: 380px; z-index: 6;
+    left: max(12px, env(safe-area-inset-left)); right: auto; margin: 0; width: 380px; z-index: 6;
     top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px);
     max-height: calc(100vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - var(--bottom-h, 120px) - 24px);
     max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - var(--bottom-h, 120px) - 24px);
