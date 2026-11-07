@@ -4,6 +4,7 @@
 // 11-07(CRITsec F6・F7): 指示文の 2 段目に入る欄(名前・場所の説明・目印・表情の説明)は、人格と同じ上書き止めを通して 1 行にする。
 // 表情と動きの名前は決まった形だけ。履歴の返事(assistant)に恋人役・独り占めの言葉があれば、その返事は受けない。
 // 公開の関数では、履歴の返事を「この画面が送る形」(1 行 1 つの say の JSON・4 行まで・1 文 60 字まで・合わせて 600 字まで)だけ受ける。
+import { normalizeRole } from '../src/conversation/role.js'; // B3(第 12 波 b): 役目
 import { redactSecrets } from '../src/conversation/secrets.js';
 import { isUnsafeOutput, oneLine, sanitizeBlock, sanitizeLine } from './safety.mjs';
 import { STAGES, isChoiceName } from './prompt.mjs';
@@ -141,7 +142,8 @@ export function sanitizeChatBody(raw, { publicPath = isPublicRuntime() } = {}) {
     trigger,
     interview: raw.interview === true,
     scene: clean(str(raw.scene, LIMITS.scene)),
-    character: { name: sanitizeLine(clean(str(character.name, LIMITS.name))) || undefined, persona: clean(str(lf(character.persona), LIMITS.persona)) },
+    // 役目(第 12 波 b): 4 つの id(画面の言葉も受ける)だけ。ほかの値は捨てる(指示文はおうちとして作る)
+    character: { name: sanitizeLine(clean(str(character.name, LIMITS.name))) || undefined, persona: clean(str(lf(character.persona), LIMITS.persona)), ...(normalizeRole(character.role) ? { role: normalizeRole(character.role) } : {}) },
     place: { name: sanitizeLine(clean(str(place.name, LIMITS.name))) || undefined, info: sanitizeBlock(clean(str(lf(place.info), LIMITS.placeInfo))).text, landmarks },
     expressions: choiceList(raw.expressions),
     motions: choiceList(raw.motions, 24),

@@ -4,6 +4,8 @@
 // - 役: 選んだ値(男の子・女の子)> 人格の文の「- 声: 男の子」「- 声: 女の子」の行 > 一人称などからの見当 > 女の子
 // - 声の id: 人格の文の「- 声の id: <id>」(話す役がその子の役と同じ時だけ)> 役の既定(サーバーは環境変数で替えられる)> ELEVEN_VOICE_ID
 
+import { MODEL_DEFAULTS } from './models.js';
+
 export const VOICE_CHOICES = Object.freeze(['auto', 'male', 'female']);
 export const VOICE_LABELS = Object.freeze({ auto: 'おまかせ', male: '男の子', female: '女の子' });
 
@@ -17,8 +19,8 @@ export const ROLE_DEFAULT_VOICES = Object.freeze({
   female: 'fUjY9K2nAIwlALOwSiwc', // Yui(11-07 までのサーバーの既定と同じ)
 });
 
-/** 声のモデル。ノリーの声の候補(11-07)を作ったのと同じモデル */
-export const VOICE_MODEL_ID = 'eleven_v4_turbo';
+/** 声のモデル(既定)。名前は models.js の 1 か所(サーバーは環境変数 ELEVEN_MODEL_ID で替わる。第 12 波 b) */
+export const VOICE_MODEL_ID = MODEL_DEFAULTS.voice;
 
 const VOICE_ID = /^[A-Za-z0-9]{8,40}$/;
 /** 声の id の形か(英数字 8〜40 字。URL の中に入るので、ほかの文字は通さない) */

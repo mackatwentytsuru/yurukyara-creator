@@ -6,7 +6,8 @@
 
 export const ELEVEN_TTS = 'https://api.elevenlabs.io/v1/text-to-speech/';
 export const DEFAULT_VOICE_ID = 'fUjY9K2nAIwlALOwSiwc'; // 手元のサーバーの女の子の役の既定と同じ声(役ごとの声は voiceRole.js。speaker.js が voiceId で渡す)
-// ノリーの声の候補(11-07)を作ったのと同じモデル(voiceRole.js の VOICE_MODEL_ID と同じ。この部品はほかの部品を読み込まない決まりなので、文字で持つ)。
+// 控えのモデル。名前の正本は models.js の MODEL_DEFAULTS.voice(この部品はほかの部品を読み込まない決まりなので、文字で持つ。
+// speaker.js はいつも modelId を渡す。同じ値かは test/model_names.test.mjs が見る)。
 // 前の既定 eleven_flash_v2_5 は最初の音が少し早い(2026-11-02 に測った: 約 290ms、v4 turbo は 290〜520ms)
 export const DEFAULT_MODEL_ID = 'eleven_v4_turbo';
 export const SAMPLE_RATE = 24000;

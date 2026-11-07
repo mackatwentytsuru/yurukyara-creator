@@ -8,8 +8,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path';
 import { config } from './env.mjs';
 import { SAMPLE_RATE, roleVoiceId, synthesizePcm } from './tts.mjs';
+import { FILLER_PHRASES } from '../src/conversation/nods.js';
 
-export const FILLER_PHRASES = ['はい。', 'ええ。', 'なるほど。', 'そうですね。', 'はい、はい。'];
+// 言葉は src/conversation/nods.js の 1 か所(指示文が教える相づちと、画面が録った声で話す相づちと同じ。第 12 波 b)
+export { FILLER_PHRASES };
 export const FILLER_ROLES = ['male', 'female'];
 const dir = () => config.fillerDir;
 

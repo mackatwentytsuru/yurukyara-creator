@@ -2,7 +2,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VOICE_MODEL_ID } from '../src/conversation/voiceRole.js';
+import { modelsFrom } from '../src/conversation/models.js';
 
 export const WEB_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const REPO_ROOT = join(WEB_ROOT, '..');
@@ -36,7 +36,11 @@ export const config = {
     return process.env.ANTHROPIC_API_KEY ?? '';
   },
   elevenKey: process.env.ELEVENLABS_API_KEY ?? '',
-  model: process.env.CLAUDE_MODEL ?? 'claude-haiku-5-5',
+  // 頭脳と声のモデルの名前は src/conversation/models.js の 1 か所(既定)。環境変数 CLAUDE_MODEL・ELEVEN_MODEL_ID で替わる。
+  // 空の値・形の違う値は既定(呼ぶたびに読む。試験と、起こし直さずに替えたい時のため)
+  get model() {
+    return modelsFrom(process.env).brain;
+  },
   // 声は役(男の子・女の子)ごと(11-07 第 11 波。src/conversation/voiceRole.js)。役の既定を環境変数で替えられる(無ければ voiceRole.js の既定)。
   // ELEVEN_VOICE_ID は最後の控え(役の既定がいつもあるので、ふつうは使われない。.env の例の Yui が男の子の役に付かないように後ろに置く)
   voiceMale: process.env.ELEVEN_VOICE_MALE ?? '',
@@ -44,7 +48,9 @@ export const config = {
   voiceId: process.env.ELEVEN_VOICE_ID ?? 'fUjY9K2nAIwlALOwSiwc',
   // 使ってよい声の id の追加分(カンマ区切り)。表は、役の既定・上の環境変数・characters/*/persona.md の「声の id」・これ(CRITsec3 L4)
   voiceIds: (process.env.ELEVEN_VOICE_IDS ?? '').split(',').map((v) => v.trim()).filter(Boolean),
-  ttsModel: process.env.ELEVEN_MODEL_ID || VOICE_MODEL_ID, // 空の値は「無い」と同じ(既定のモデル)
+  get ttsModel() {
+    return modelsFrom(process.env).voice;
+  },
   // 試験では偽の声のサーバーに向ける(呼ぶたびに読む)
   get elevenUrl() {
     return process.env.ELEVEN_API_URL ?? 'https://api.elevenlabs.io/v1/text-to-speech/';

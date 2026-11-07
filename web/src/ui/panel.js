@@ -53,6 +53,13 @@ const MOTION_WORDS = Object.freeze({
   point: '指さす',
   jump: 'はねる',
   sad: 'しょんぼり',
+  // B3(第 12 波 b): かわいい仕草の層の名前(B5G の約束 B12/K2_gesture_names.md の日本語)
+  greet: 'あいさつ',
+  happy: 'うれしい',
+  cheer: 'ばんざい',
+  shy: 'てれる',
+  surprised: 'びっくり',
+  droop: 'しょんぼり',
 });
 
 /** 視線の指定(person・away・landmark:<名前>)を、画面の言葉に */
@@ -93,6 +100,18 @@ export function latencyNote(entry = {}, { fakeBrain = false } = {}) {
   return brain === 'mock' || (brain !== 'haiku' && fakeBrain) ? FAKE_BRAIN_LATENCY_NOTE : '';
 }
 
+/**
+ * B3(第 12 波 b): 返事の字幕の描く物を決める(DOM は触らない)。onlyNow(テレビ表示・キーボードで低い画面の 1 行の字幕)の時は、
+ * まだ話していない文(next)を出さない。描く物が何も無ければ hide(字幕の箱ごと隠す。空の箱を出さない)
+ * @param {{prev?: string, current?: string, next?: string}} v createCaptionFlow の返す返事の形
+ * @param {{onlyNow?: boolean}} [o]
+ * @returns {{hide: boolean, next: string}}
+ */
+export function captionView(v, { onlyNow = false } = {}) {
+  const next = onlyNow ? '' : (v?.next ?? '');
+  return { hide: !v?.prev && !v?.current && !next, next };
+}
+
 /* ---------- 字幕の流れ(点検 CRITux 12: 話し終わった後も、返事の全部を読めるように) ---------- */
 /**
  * 字幕に出す物を決める(DOM は触らない。createUi が描く)。会話の側(Dialogue)の呼び方はそのまま受ける:
@@ -100,26 +119,51 @@ export function latencyNote(entry = {}, { fakeBrain = false } = {}) {
  * - 話している間: 前の文(小さく)+ 今の文。文が入れ替わっても、前の文は消えない
  * - 話し終わり(null と待つ時間): 返事の全部を残す(前は 1.2 秒で消え、最後の 1 文しか読めなかった)。次の会話が始まるまで消さない
  * - 取り消し(null だけ)・使う人の言葉・ほかの知らせ(聞き返しなど): 返事を片づけて、その文を出す
- * @returns {{say(text: string): void, caption(text: string|null|undefined, hideAfterMs?: number, kind?: string): object, readonly phase: string}}
- *   caption の返す物: { hide: true, afterMs } / { reply: true, prev, current, settled } / { text, kind }
+ * - B3(第 12 波 b): ahead(文) = 届いたけれど、まだ話していない文。next(薄く)で先に見せ、その返事の形に ahead: true を付ける
+ * @returns {{say(text: string): void, ahead(text: string): object|null, caption(text: string|null|undefined, hideAfterMs?: number, kind?: string): object, readonly phase: string}}
+ *   caption の返す物: { hide: true, afterMs } / { reply: true, prev, current, settled, ahead?, next? } / { text, kind }
  */
 export function createCaptionFlow() {
   let done = []; // この返事の、話し終えた文
   let full = null; // 話している文(全部)
+  let ahead = []; // B3(第 12 波 b): 届いたけれど、まだ話していない文。話し始める前から薄く見せる(返事の全部が早く読める)
+  let fullShown = false; // 今の文を、話す前に先に見せていたか(見せていた文は、文字送りの間も残りを薄く出したままにする)
+  let aheadUsed = false; // この返事で、文を先に見せたか(見せた返事は、話し終わりと同じ大きさの 1 つの段落で描く。字幕の箱が話し終わりより高くならない)
   let phase = 'idle'; // idle | reply | settled
   const reset = () => {
     done = [];
     full = null;
+    ahead = [];
+    fullShown = false;
+    aheadUsed = false;
     phase = 'idle';
+  };
+  /** 薄く見せる所: 先に見せていた今の文のまだ出ていない残りと、届いてまだ話していない文。無ければ欄を付けない */
+  const withNext = (view, shown) => {
+    const next = `${fullShown && full !== null ? full.slice(shown.length) : ''}${ahead.join('')}`;
+    const v = aheadUsed ? { ...view, ahead: true } : view;
+    return next ? { ...v, next } : v;
   };
   return {
     get phase() {
       return phase;
     },
+    /** B3: 返事の 1 文が届いた(まだ話していない)。返す物は caption と同じ形(描く所がそのまま使う) */
+    ahead(text) {
+      const t = String(text ?? '');
+      if (!t || phase === 'settled') return null;
+      ahead.push(t);
+      aheadUsed = true;
+      phase = 'reply';
+      return withNext({ reply: true, prev: done.join(''), current: full ?? '', settled: false }, full ?? '');
+    },
     /** 返事の 1 文を話し始めた(ui.say) */
     say(text) {
       if (full !== null) done.push(full);
       full = String(text ?? '');
+      const at = ahead.indexOf(full);
+      fullShown = at >= 0;
+      if (at >= 0) ahead.splice(0, at + 1); // 届いた順に話すので、話し始めた文までを先の列から外す
       phase = 'reply';
     },
     caption(text, hideAfterMs = 0, kind = '') {
@@ -132,13 +176,13 @@ export function createCaptionFlow() {
         // 話し終わり: 返事の全部を残す
         if (hideAfterMs > 0 && phase !== 'idle' && full !== null) {
           phase = 'settled';
-          return { reply: true, prev: '', current: [...done, full].join(''), settled: true };
+          return { reply: true, prev: '', current: [...done, full, ...ahead].join(''), settled: true };
         }
         reset();
         return { hide: true, afterMs: hideAfterMs };
       }
-      // 返事の文(全部か、文字送りの途中)。今の文の頭と同じなら返事の続き
-      if (phase === 'reply' && full !== null && full.startsWith(t)) return { reply: true, prev: done.join(''), current: t, settled: false };
+      // 返事の文(全部か、文字送りの途中)。今の文の頭と同じなら返事の続き。まだ話していない所は next(薄く)
+      if (phase === 'reply' && full !== null && full.startsWith(t)) return withNext({ reply: true, prev: done.join(''), current: t, settled: false }, t);
       // ほかの知らせ(聞き返しなど)
       reset();
       return { text: t, kind };
@@ -181,6 +225,26 @@ export function createUi() {
   };
   const flow = createCaptionFlow(); // 返事の文を足して見せ、話し終わった後も全部を残す
   const span = (className, text) => Object.assign(document.createElement('span'), { className, textContent: text });
+  /** 返事の字幕を描く(前の文は小さく、今の文は大きく、まだ話していない文は薄く。話し終わった後は全部を同じ大きさで) */
+  const renderReply = (v) => {
+    const root = document.documentElement.classList;
+    const onlyNow = root.contains('tv-mode') || root.contains('kb-tight');
+    const { hide, next } = captionView(v, { onlyNow });
+    if (hide) {
+      hideCaption(); // 1 文目の文字送りの始まり(まだ 1 字も無い)・まだ話していない文だけの時のテレビ表示
+      return;
+    }
+    // 文字は textContent だけで入れる
+    const now = v.current || next ? [span('cap-now', v.current ?? '')] : [];
+    if (next) now[0].append(span('cap-next', next)); // B3: 今の文の続きに、薄く並べる(同じ段落で読める)
+    caption.replaceChildren(...(v.prev ? [span('cap-prev', v.prev)] : []), ...now);
+    // 先に見せた返事(ahead)は、話し終わりと同じ大きさの 1 つの段落(style.css の B3 の印)。テレビ表示などの今の文だけの時は前の形
+    caption.className = `caption reply${v.settled ? ' settled' : ''}${v.ahead && !onlyNow && !v.settled ? ' ahead' : ''}`;
+    caption.hidden = false;
+    // 長い時は、今の文が見えるように(まだ話していない文は下に続く)
+    const cur = caption.querySelector('.cap-now');
+    caption.scrollTop = next && cur ? Math.max(0, cur.offsetTop - caption.offsetTop - 4) : caption.scrollHeight;
+  };
   const setCaption = (text, hideAfterMs = 0, kind = '') => {
     clearTimeout(captionTimer);
     const v = flow.caption(text, hideAfterMs, kind);
@@ -190,15 +254,7 @@ export function createUi() {
       return;
     }
     if (v.reply) {
-      if (!v.prev && !v.current) {
-        hideCaption(); // 1 文目の文字送りの始まり(まだ 1 字も無い)
-        return;
-      }
-      // 文字は textContent だけで入れる(前の文は小さく、今の文は大きく。話し終わった後は全部を同じ大きさで)
-      caption.replaceChildren(...(v.prev ? [span('cap-prev', v.prev)] : []), ...(v.current ? [span('cap-now', v.current)] : []));
-      caption.className = `caption reply${v.settled ? ' settled' : ''}`;
-      caption.hidden = false;
-      caption.scrollTop = caption.scrollHeight; // 長い時は、今の文が見えるように
+      renderReply(v);
       return;
     }
     caption.textContent = v.text;
@@ -259,6 +315,13 @@ export function createUi() {
       tag.textContent = ev.handoff ? `人へつなぐ${ev.reason ? `(${REASON_LABEL[ev.reason] ?? ev.reason})` : ''}` : (STAGE_LABEL[ev.stage] ?? ev.stage);
       els.intent.replaceChildren(tag, document.createTextNode(ev.intent || '未確認'));
       showShop(ev);
+    },
+    /** B3(第 12 波 b): 返事の文が届いた(まだ話していない)。字幕に薄く足す(声と口は、話し始めた時の say のまま) */
+    sayAhead(ev) {
+      const v = flow.ahead(ev?.text);
+      if (!v) return;
+      clearTimeout(captionTimer);
+      renderReply(v);
     },
     say(ev) {
       replyParts.push(ev.text);

@@ -9,6 +9,8 @@
 // - 声の役(男の子・女の子): 性格の画面で選んだ値(setVoiceChoice)か、その子の人格の文から決まる役で話す(voiceRole.js)。
 //   声の鍵の道は役の声で直接、サーバーの道は話す役(voice)と、その子自身の声の id(あれば)を送る。あいづちの声も役の組を使う
 // - 読み方の表(speechReading.js。例: 執事 → しつじ)は、声に渡す文だけに当てる。字幕と文字送りは、もとの文のまま(11-07 第 11b 波)
+import { recordedNod } from './nods.js'; // B3(第 12 波 b): 相づちは録ってある声で
+import { ROLE_DEFAULT_VOICES } from './voiceRole.js';
 import { getVoiceKey } from './voiceKey.js';
 import { describeElevenError, fetchElevenPcm } from './elevenDirect.js';
 import { RETRO, crawlSchedule, isPause, scheduleRetro, voiceFor } from './retroVoice.js';
@@ -258,7 +260,9 @@ export class Speaker {
     this.pending += 1;
     const abort = new AbortController();
     this.aborts.add(abort);
-    const chunks = this._pump(this._fetchPcm(text, abort.signal, onFirstByte));
+    // B3(第 12 波 b): 相づちだけの文(「はい。」など)は、録ってある声で話す(声のサービスに頼まない = 声の文字数を使わない・すぐ出る)
+    const clip = this._recordedNod(text);
+    const chunks = this._pump(clip ? recordedPcm(clip, onFirstByte) : this._fetchPcm(text, abort.signal, onFirstByte));
     const done = this.chain.then(() => (epoch === this.epoch ? this._play(text, chunks, epoch, onStart, onCrawl) : undefined));
     this.chain = done.catch(() => {}).finally(() => {
       this.aborts.delete(abort);
@@ -270,6 +274,18 @@ export class Speaker {
       .finally(() => {
         this.pending = Math.max(0, this.pending - 1);
       });
+  }
+
+  /**
+   * B3(第 12 波 b): この文が、録ってある相づちの声(今の役の組)と同じなら、その声 { text, samples }。違えば null。
+   * 端末の声で読む時・その子自身の声が役の既定と違う時は使わない(声がちがって聞こえるため)
+   */
+  _recordedNod(text) {
+    if (!this.fillers.length || this.deviceVoice === true || this._deviceVoiceOn?.()) return null;
+    const v = this.currentVoice();
+    if (v.ownVoiceId && v.ownVoiceId !== ROLE_DEFAULT_VOICES[v.role]) return null;
+    const said = recordedNod(text, this.fillers.map((f) => f.text));
+    return said ? (this.fillers.find((f) => f.text === said) ?? null) : null;
   }
 
   /** 取得をすぐ始めて、取れた分をためておく(順番が来る前に次の文を用意するため) */
@@ -600,4 +616,10 @@ export class Speaker {
     this.chain = Promise.resolve();
     this._level = 0;
   }
+}
+
+/** B3(第 12 波 b): 録ってある声を、取ってきた声と同じ流れ(1 かたまり)で渡す。最初のバイトは 0 ms */
+async function* recordedPcm(clip, onFirstByte) {
+  onFirstByte?.(0);
+  yield clip.samples;
 }
