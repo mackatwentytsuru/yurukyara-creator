@@ -159,6 +159,25 @@ test('/api/tts: 環境変数 ELEVEN_VOICE_MALE・ELEVEN_VOICE_FEMALE で役の�
   }
 });
 
+test('/api/tts: 読み方の表(執事 → しつじ)を当ててから声のサービスへ渡す。画面が先に当てた文でも同じ(11-07 第 11b 波)', async () => {
+  const voice = await fakeVoice();
+  const server = await startServer(voice.base);
+  try {
+    await waitFillers(server.base);
+    voice.asked.splice(0);
+    for (const text of ['執事見習いのノリーデス。', 'しつじ見習いのノリーデス。']) {
+      const res = await speak(server.base, { text, voice: 'male' });
+      assert.equal(res.status, 200, text);
+      assert.equal(voice.asked.at(-1).text, 'しつじ見習いのノリーデス。', text);
+    }
+    assert.equal(voice.asked.length, 2);
+    assert.ok(!voice.asked.some((a) => a.text.includes('執事')), '声のサービスには「執事」の字を渡さない');
+  } finally {
+    server.proc.kill();
+    voice.close();
+  }
+});
+
 test('声の鍵が無いサーバーは、今までどおり 204(役を送っても、声のサービスを呼ばない)', async () => {
   const voice = await fakeVoice();
   const server = await startServer(voice.base, { ELEVENLABS_API_KEY: '' });

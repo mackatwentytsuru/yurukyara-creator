@@ -8,9 +8,11 @@
 //   「ピッ」の音の大きさからは作らない: 小さい音なので、口が半分しか開かなかった(11-06 合わせ②の話す試験で 0.69 → 0.33)。
 // - 声の役(男の子・女の子): 性格の画面で選んだ値(setVoiceChoice)か、その子の人格の文から決まる役で話す(voiceRole.js)。
 //   声の鍵の道は役の声で直接、サーバーの道は話す役(voice)と、その子自身の声の id(あれば)を送る。あいづちの声も役の組を使う
+// - 読み方の表(speechReading.js。例: 執事 → しつじ)は、声に渡す文だけに当てる。字幕と文字送りは、もとの文のまま(11-07 第 11b 波)
 import { getVoiceKey } from './voiceKey.js';
 import { describeElevenError, fetchElevenPcm } from './elevenDirect.js';
 import { RETRO, crawlSchedule, isPause, scheduleRetro, voiceFor } from './retroVoice.js';
+import { toSpeechText } from './speechReading.js';
 import { VOICE_MODEL_ID, isVoiceId, normalizeVoiceChoice, resolveVoice } from './voiceRole.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -298,14 +300,16 @@ export class Speaker {
     }
     // 話す役と声(性格の画面の値 → その子の人格の文 → 女の子)。サーバーへは役と、その子自身の声の id だけを送る
     const voice = this.currentVoice();
+    // 声に渡す文だけ、読み方の表を当てる(字幕・文字送りは _play が、もとの text で出す)
+    const spoken = toSpeechText(text);
     let res;
     try {
       res = key
-        ? await fetchElevenPcm(text, { key, voiceId: voice.voiceId, modelId: VOICE_MODEL_ID, signal })
+        ? await fetchElevenPcm(spoken, { key, voiceId: voice.voiceId, modelId: VOICE_MODEL_ID, signal })
         : await fetch('/api/tts', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text, voice: voice.role, ...(voice.ownVoiceId ? { voiceId: voice.ownVoiceId } : {}) }),
+            body: JSON.stringify({ text: spoken, voice: voice.role, ...(voice.ownVoiceId ? { voiceId: voice.ownVoiceId } : {}) }),
             signal,
           });
     } catch (err) {

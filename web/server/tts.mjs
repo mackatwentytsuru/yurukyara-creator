@@ -1,9 +1,11 @@
 // 読み上げ(ElevenLabs)の中継。鍵はサーバーだけが持つ。
 // 月の枠を使い切らないよう、1 日あたりの文字数の上限をここで数えて守る。
 // 声はキャラの役(男の子・女の子)ごと(11-07 第 11 波): 画面(speaker.js)が、話す役と、その子自身の声の id を本文で送る。
+// 読み方の表(speechReading.js。例: 執事 → しつじ)を、声のサービスに渡す直前に当てる(画面も当ててから送る。2 回通しても同じ)。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './env.mjs';
+import { toSpeechText } from '../src/conversation/speechReading.js';
 import { ROLE_DEFAULT_VOICES, isVoiceId, normalizeVoiceChoice } from '../src/conversation/voiceRole.js';
 
 const LOG_DIR = config.logDir;
@@ -86,7 +88,7 @@ export function refundChars(n) {
  */
 export async function streamSpeech(text, res, signal, voice = {}) {
   const { role, voiceId } = isVoiceId(voice.voiceId) ? { role: voice.role === 'male' ? 'male' : 'female', voiceId: voice.voiceId } : voiceForRequest({ voice: voice.role });
-  const clean = String(text ?? '').trim().slice(0, 300);
+  const clean = toSpeechText(text).trim().slice(0, 300);
   if (!clean) {
     res.writeHead(400, { 'content-type': 'application/json' }).end('{"error":"text が空です"}');
     return;
@@ -135,7 +137,7 @@ export async function streamSpeech(text, res, signal, voice = {}) {
  * @param {{voiceId?: string}} [o] 声(無ければ女の子の既定)
  */
 export async function synthesizePcm(text, signal, { voiceId } = {}) {
-  const clean = String(text ?? '').trim().slice(0, 300);
+  const clean = toSpeechText(text).trim().slice(0, 300);
   if (!clean || !config.elevenKey) throw new Error('読み上げの鍵か文がありません');
   if (!reserveChars(clean.length)) throw new Error('今日の読み上げの上限に達しました');
   const url = speechUrl(isVoiceId(voiceId) ? voiceId : roleVoiceId('female'));
