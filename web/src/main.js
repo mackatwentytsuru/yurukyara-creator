@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { createStage } from './scene.js';
 import { loadFirstCharacter, loadCharacter, availableLooks, motionChoices, MAIN_CHARACTER } from './character/index.js';
 import { writeRemembered, characterKey, lookKey, hasBothLooks } from './character/looks.js'; // 見た目(3D・2D)の切り替えの決まり・このタブで選んだ見た目を覚える
-import { guardBottom } from './stage/framing.js'; // キャラを上の段の下に収める
+import { topLimit, topClearance } from './stage/framing.js'; // キャラを上の段の下に収める(すき間は画面の高さの 6%)
 import { pickSpec, isLoopbackPage, SPEC_NOTICE } from './character/urlSpec.js'; // ?character= ?place= は公開の URL では id だけ(CRITsec F5)
 import { shouldOpenFirstRun, FIRST_RUN_DONE_KEY } from './stage/firstVisit.js'; // 初めての訪問なら、入口の後に 7 歩を出す(CRITux 2)
 // 入力の差し替え口(tracking/sources/index.js の約束)。カメラの顔の部品(mediapipeSource.js)は重いので、ここでは読まず、
@@ -660,12 +660,25 @@ async function setupPresentation() {
 // 上の段: 上の札・見せ方のボタン・覚えていること・見た目の切り替え・「Claude の考え」の見出し。
 // 「Claude の考え」を開いている間は、窓の全体も数える(CRITux 21: スマホで開くと顔に重なった。キャラを窓の下へ置き直す)。
 // 「VR(Quest)で開く」の QR の箱も、開いている間は数える(キャラを箱の下へ。箱の下の端は style.css が画面の 45% より上で止める)
-const TOP_GUARD = '.top .chip, .top .top-row > *, #thoughtToggle, #thought:not(.collapsed), #questLinkBox:not([hidden])';
-const TOP_GAP_PX = 8; // 上の段とキャラの頭のすき間
+// 11/7 本人「頭が切れちゃってる」: PC では上の段がキャラの横に重ならず、耳が画面の上の端まで出ていた。
+// 上の段(札・ボタン・見た目の切り替え)は横の位置にかかわらず数え、下の端から画面の高さの 6% 下にキャラのいちばん上を置く(framing.js の topLimit)
+const TOP_BAR = '.top .chip, .top .top-row > *'; // 上の段(横いっぱいに数える)
+const TOP_SIDE = '#thoughtToggle'; // スマホで上の段の下に並ぶ畳んだ見出し(キャラの横に重なる時だけ。同じすき間)
+const TOP_PANELS = '#thought:not(.collapsed), #questLinkBox:not([hidden])'; // 開いた窓(重なる時だけ)
+const TOP_GAP_PX = 8; // 開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
+const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
 
-/** 画面の横の範囲 [left, right] に重なる上の段の、下の端(px)。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
+/** キャラの頭を置いてよいいちばん上の線(px)。[left, right] はキャラの横の範囲。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
 function topGuard(left, right) {
-  return guardBottom([...document.querySelectorAll(TOP_GUARD)].map((el) => el.getBoundingClientRect()), left, right, TOP_GAP_PX);
+  return topLimit({
+    bar: rectsOf(TOP_BAR),
+    side: rectsOf(TOP_SIDE),
+    panels: rectsOf(TOP_PANELS),
+    left,
+    right,
+    clear: topClearance(window.innerHeight, TOP_GAP_PX),
+    panelGap: TOP_GAP_PX,
+  });
 }
 stage.state.topGuard = topGuard;
 
