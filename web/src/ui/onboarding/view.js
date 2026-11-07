@@ -4,7 +4,7 @@
 // - 文字は textContent だけで入れる。鍵の欄の文字は、押したらすぐ消し、画面のどこにも残さない
 // - 選んだ絵(この端末の中の blob:)と、PC で描いた絵(作る画面の小さな枠)は、札の上の「絵の欄」に出したままにする(D3・D5)
 import { injectStyles } from './styles.js';
-import { STEPS, countChars } from './script.js';
+import { STEPS, countChars, progressText, OMAKASE_LABEL } from './script.js';
 import { crawl } from './voice.js';
 
 const el = (tag, props = {}, ...children) => {
@@ -25,8 +25,9 @@ const LATEST_GAP = 8;
  * @param {(onSave:(settings:object)=>void)=>void} o.openPersona 性格の画面を開く
  * @param {(reason:string)=>void} [o.onClose]
  * @param {()=>object|null} [o.stage] 舞台のキャラ(口と表情を動かす)。{ character, speaker, guideId }
+ * @param {()=>Promise<boolean>} [o.onAuto] おまかせ(ぜんぶ じどう)。あれば、どの歩みの選びの下にも大きなボタンで出す
  */
-export function createSheet({ guideName, voice, onAct, openPersona, onClose = () => {}, stage = () => null, parent = document.body }) {
+export function createSheet({ guideName, voice, onAct, onAuto = null, openPersona, onClose = () => {}, stage = () => null, parent = document.body }) {
   injectStyles(parent.ownerDocument);
   const urls = new Set();
   const stats = { lines: 0, crawled: 0, voiced: [], actionsShown: 0 };
@@ -41,6 +42,10 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     return li;
   });
   const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで' });
+  // あと いくつ・あと 何分 で おわるか(本人 11/7)。上の段の右、「あとで」の左に 2 行で(札の高さは変えない)
+  const leftMain = el('b');
+  const leftTime = el('span');
+  const left = el('p', { className: 'fr-left', ariaLive: 'polite' }, leftMain, leftTime);
   const pinBox = el('figure', { className: 'fr-pin', hidden: true });
   const log = el('div', { className: 'fr-log' });
   const live = el('p', { className: 'fr-sr', ariaLive: 'polite' });
@@ -48,7 +53,7 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
   const sheet = el(
     'section',
     { className: 'fr-sheet', role: 'dialog', ariaLabel: 'はじめての会話' },
-    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, el('h2', { textContent: 'はじめての会話' }), closeBtn), steps),
+    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, el('h2', { textContent: 'はじめての会話' }), left, closeBtn), steps),
     pinBox,
     log,
     live,
@@ -86,13 +91,16 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     log.scrollTop = Math.max(0, Math.min(end, start));
   };
 
-  function setStep(n, { skipped = [] } = {}) {
+  function setStep(n, { skipped = [], local = false } = {}) {
     sheet.dataset.step = String(n);
     for (const li of stepItems) {
       const k = Number(li.dataset.n);
       li.className = skipped.includes(k) && k < n ? 'skip' : k < n ? 'done' : k === n ? 'now' : '';
       li.ariaCurrent = k === n ? 'step' : null;
     }
+    const p = progressText(n, { skipped, local });
+    leftMain.textContent = p.main;
+    leftTime.textContent = p.time;
   }
 
   function row(who, name) {
@@ -341,12 +349,29 @@ export function createSheet({ guideName, voice, onAct, openPersona, onClose = ()
     );
   }
 
+  /**
+   * おまかせ(ぜんぶ じどう)の大きなボタン。残りの選びを全部おすすめで決めて、最後まで進む。
+   * 出さない時: 選びが無い・最後の「はじめる」だけ・手元の PC の作る画面(枠の中に、作る画面のおまかせがある)
+   */
+  function autoButton(list) {
+    if (!onAuto || !list.length || list.every((a) => a.id === 'close') || list.some((a) => a.kind === 'frame')) return null;
+    const b = el('button', { type: 'button', className: 'fr-btn fr-auto fr-wide', textContent: OMAKASE_LABEL });
+    b.dataset.act = 'omakase';
+    b.title = 'のこりを ぜんぶ おすすめで きめて、さいごまで すすみます。あとから かえられます';
+    b.addEventListener('click', () => {
+      voice.unlock();
+      onAuto();
+    });
+    return b;
+  }
+
   /** 台本の offer: 選べる物を出す(空なら消す) */
   function offer(list) {
     actions.replaceChildren(
       ...list.map((a) =>
         a.kind === 'file' ? fileAction(a) : a.kind === 'text' ? textAction(a) : a.kind === 'key' ? keyAction(a) : a.kind === 'frame' ? frameAction(a) : a.kind === 'link' ? linkAction(a) : button(a),
       ),
+      ...[autoButton(list)].filter(Boolean),
     );
     if (list.length) stats.actionsShown += 1;
     sheet.dataset.actions = list.map((a) => a.id).join(' ');
