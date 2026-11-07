@@ -9,10 +9,11 @@ export const VOICE_LABELS = Object.freeze({ auto: 'おまかせ', male: '男の�
 
 /**
  * 役ごとの既定の声(ElevenLabs の声の id。日本語の声)。あいづちの声も、この声で作る。
- * 男の子は、本人がノリーの声に選んだ声(司令室 Q-0103 = A、11-07)。替える時は、この表の 1 行と、ノリーの人格の文の「声の id」の行
+ * 男の子は、本人がノリーの声に選んだ声(司令室 Q-0103。11-07 に A を選んだ後、「ノリーの声は 4 番目がいい」と言い直した = D)。
+ * 替える時は、この表の 1 行と、ノリーの人格の文の「声の id」の行(あいづちの声は、声の id ごとに作り直される)
  */
 export const ROLE_DEFAULT_VOICES = Object.freeze({
-  male: 'A4AyGcPAjb1pHgflyZZp', // Ritsuto(Q-0103 = A)
+  male: 'GKDaBI8TKSBJVhsCLD6n', // Asahi(Q-0103 = D。11-07 本人の言い直し)
   female: 'fUjY9K2nAIwlALOwSiwc', // Yui(11-07 までのサーバーの既定と同じ)
 });
 
