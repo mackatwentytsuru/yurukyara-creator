@@ -79,6 +79,14 @@ export function progressText(step, { skipped = [], local = false } = {}) {
 }
 
 /**
+ * 1 歩目で案内役が最初に言う 2 文。案内役が主役(nori)のときは主役の口調で名乗る。主役を替えたら、この 1 文も替える。
+ * サーバーの声の前もっての温め(S3 の ttsWarm)は、この関数の文を温める(文が食い違うと、最初の声が温め無しの +0.3〜0.5 秒になる)
+ */
+export function guideFirstLines(guideName, nori) {
+  return [nori ? `はじめまして! ${guideName}デス。いっしょに ゆるキャラを 生み出しマス!` : `はじめまして。${guideName}だよ。いっしょに ゆるキャラを 生み出そう。`, 'どんな子を生み出そうか?'];
+}
+
+/**
  * @typedef {{who:'guide'|'char'|'user'|'note', text:string, img?:string, expression?:string, motion?:string, voice?:boolean}} Line
  * @typedef {{id:string, label:string, kind?:'button'|'text'|'file'|'key'|'persona'|'frame', primary?:boolean, capture?:boolean,
  *   placeholder?:string, max?:number, submit?:string, remember?:boolean, url?:string}} Action
@@ -249,11 +257,7 @@ export class FirstRun {
     const sample = this.d.creator.mode === 'sample';
     // 案内役が主役のときは、主役(ノリー)の口調で名乗る。主役を替えたら、この 1 文も替える
     await this._say(
-      {
-        who: 'guide',
-        text: this.nori ? `はじめまして! ${this.guideName}デス。いっしょに ゆるキャラを 生み出しマス!` : `はじめまして。${this.guideName}だよ。いっしょに ゆるキャラを 生み出そう。`,
-      },
-      { who: 'guide', text: 'どんな子を生み出そうか?' },
+      ...guideFirstLines(this.guideName, this.nori).map((text) => ({ who: 'guide', text })),
       sample ? { who: 'note', text: 'ここでは、見本の子で ためせるよ。' } : null,
       this.local ? { who: 'note', text: '下の 作る画面に、ことばか 絵を 入れてね。' } : null,
       this.local ? { who: 'note', text: 'パソコンの Claude Code が 描くよ。ことばと絵は Claude(Anthropic)に 送られるよ。' } : null,

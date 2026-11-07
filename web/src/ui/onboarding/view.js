@@ -21,6 +21,7 @@ const PICTURE_MAX = 20 * 1024 * 1024;
 const initial = (name) => [...String(name || '?')][0];
 /** 吹き出しと吹き出しの間(ms)。長い文を分けた時も、この間を空ける */
 export const BUBBLE_GAP_MS = 320;
+const PREFETCH_MAX = 4; // 1 回の台本で前もって声を取る吹き出しの数
 /** 1 つの吹き出しに入れる字数の目安(幅 390 で 2 行) */
 export const BUBBLE_CHARS = 34;
 /** すぐに押せる札は、この段数まで(越える時は 2 段のまま横に巻く) */
@@ -304,23 +305,31 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     const settings = ctx?.settings ?? null;
     // 舞台の読み上げが文字送りに対応していれば(会話の流れ S3 の speaker.js)、それに任せる:
     // 本物の声(使う人の鍵・サーバー)があれば声で、無ければレトロ音と文字送りで話し、口も音に合う
+    // 案内役の文も、案内役が舞台に出ていれば同じ読み上げで話す(QF3b 8。前は案内役の文だけ声が出ず、声は 7 歩目から)
     const sp = st?.speaker;
-    if (isChar && onStage && typeof sp?.setVoice === 'function' && typeof sp.enqueue === 'function') {
-      const { text } = row(line.who, name);
+    if (onStage && typeof sp?.setVoice === 'function' && typeof sp.enqueue === 'function') {
+      // 長い案内役の文は吹き出しごとに話す(吹き出しが出る時にその声が鳴る。できた子の返事は 1 つのまま)
+      const parts = isChar ? [line.text] : splitBubbles(line.text);
       sp.setVoice({ seed: name });
       let crawled = false;
-      await sp.enqueue(line.text, {
-        onStart: (_t, info) => {
-          if (info?.crawl) crawled = true;
-          else text.textContent = line.text;
-          scroll();
-        },
-        onCrawl: (shown) => {
-          text.textContent = shown;
-          scroll();
-        },
-      });
-      text.textContent = line.text;
+      for (let i = 0; i < parts.length; i++) {
+        if (closed) return;
+        if (i) await pause(BUBBLE_GAP_MS);
+        const { text } = row(line.who, name);
+        await sp.enqueue(parts[i], {
+          onStart: (_t, info) => {
+            if (info?.crawl) crawled = true;
+            else text.textContent = parts[i];
+            scroll();
+          },
+          onCrawl: (shown) => {
+            text.textContent = shown;
+            scroll();
+          },
+        });
+        text.textContent = parts[i];
+        scroll();
+      }
       live.textContent = line.text;
       if (crawled) stats.crawled += 1;
       else stats.voiced.push({ text: line.text, way: 'speaker' });
@@ -366,9 +375,36 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     scroll();
   }
 
+  /**
+   * これから話す決まった文の声を、前もって取りに行く(2 文目の声を、1 文目を話している間に取る。QF3b 8)。
+   * 舞台の読み上げに prefetch が無ければ何もしない。話さない文(note・user・舞台に居ない人)は取らない。上限 PREFETCH_MAX 個(使われないかもしれない文字を使わない)
+   */
+  function prefetchVoices(lines, ctx) {
+    const st = stage();
+    const sp = st?.speaker;
+    if (!st?.character || typeof sp?.prefetch !== 'function') return;
+    let n = 0;
+    for (const line of lines) {
+      const isChar = line.who === 'char';
+      if (!isChar && line.who !== 'guide') continue;
+      const onStage = isChar ? st.character.id === ctx?.character?.id : st.character.id === st.guideId;
+      if (!onStage) continue;
+      for (const part of isChar ? [line.text] : splitBubbles(line.text)) {
+        if (n >= PREFETCH_MAX) return;
+        n += 1;
+        try {
+          sp.prefetch(part);
+        } catch {
+          // 取れなくても、話す時に取りに行く
+        }
+      }
+    }
+  }
+
   /** 台本の present: 文を順に出し、全部出し終わったら解決する。1 回分の文が 1 つのまとまり(最初の行に印) */
   async function present(lines, ctx) {
     fresh = true;
+    prefetchVoices(lines, ctx);
     let first = true;
     for (const line of lines) {
       if (closed) return;
