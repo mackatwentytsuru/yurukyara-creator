@@ -10,6 +10,11 @@ import { redactSecrets } from '../../src/conversation/secrets.js';
 
 const HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
 const SUBS = new Set(['', 'new', 'pair', 'claim', 'reflect']);
+/**
+ * 合言葉を比べる下の道(番号を作る・受け取る。どちらも POST)。返事で合言葉の当たり外れが分かる道なので、
+ * 公開の入口(S6 の handleMemoryRoute)は、この全部を会話と同じ間違いの数え(gate.mjs の checkPassphrase)に通す(CRITsec2 N2)
+ */
+export const PASS_SUBS = Object.freeze(['pair', 'claim']);
 export const NEW_PER_MINUTE = 10; // 合鍵を作る回数(接続元ごと・1 分)
 export const NEW_PER_DAY = 2000; // 合鍵を作る回数(全体・1 日)
 export const PASS_FAILS_PER_MINUTE = 5; // 番号を作る・受け取る時の、合言葉の間違い(接続元ごと・1 分)。超えたら比べずに断る
@@ -91,6 +96,8 @@ export async function handleMemory(request, { store, cfg = {}, now = Date.now, e
   const client = memoryClient(request);
   const m = request.method;
   try {
+    // 番号を作る・受け取る道は、合言葉が合う時だけ先へ(受け取りも。合言葉を持たない人は番号を試せない。F9)
+    if (m === 'POST' && PASS_SUBS.includes(sub)) await requirePass(request, { conf, store, client, now, what: sub });
     if (m === 'POST' && sub === 'new') {
       const t = now();
       const perMin = await store.incr(`ycm:n:${client}:${Math.floor(t / 60000)}`, { ttlSeconds: 120 });
@@ -105,13 +112,9 @@ export async function handleMemory(request, { store, cfg = {}, now = Date.now, e
       if (id) return reply(200, { ok: true, removed: await mem.forgetItem(key, id) });
       return reply(200, { ok: true, forgotten: await mem.forgetAll(key) });
     }
-    if (m === 'POST' && sub === 'pair') {
-      await requirePass(request, { conf, store, client, now, what: 'pair' });
-      return reply(200, await mem.pair(key));
-    }
+    if (m === 'POST' && sub === 'pair') return reply(200, await mem.pair(key));
     if (m === 'POST' && sub === 'claim') {
-      // 合言葉を持たない人は、番号を試せない(試せると、全体の取り消しで、ほかの人の番号まで消せた。F9)
-      await requirePass(request, { conf, store, client, now, what: 'claim' });
+      // 合言葉は上で確かめた(試せると、全体の取り消しで、ほかの人の番号まで消せた。F9)
       const body = await readBody(request, conf.maxBodyBytes);
       const { key: got } = await mem.claim(String(body.code ?? ''), client);
       return reply(200, { key: got, ...(await mem.list(got)) });
