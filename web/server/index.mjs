@@ -12,10 +12,10 @@ import { createMemoryRoutes, forgetReplyEvents, isForgetRequest } from './memory
 import { extractFacts, selfNamesOf } from './memory/reflect.mjs';
 import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
+import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
 import { createLimiter } from './limits.mjs';
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
-import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
 
 const DIST = join(WEB_ROOT, 'dist');
 const LOG_DIR = config.logDir;
