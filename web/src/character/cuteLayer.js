@@ -361,6 +361,22 @@ export class CuteLayer {
     this.playing = null;
   }
 
+  /** 休みの形へ(数字・速さ・動いている仕草を全部 0 に)。試験が「同じ形」で比べる時などに使う */
+  rest() {
+    for (const c of CHANNELS) {
+      this.out[c] = 0;
+      this.vel[c] = 0;
+      this.target[c] = 0;
+    }
+    this.out.blink = 0;
+    this.blinkPhase = null;
+    this.gestures.length = 0;
+    this.accent = null;
+    this.talkBob = null;
+    this.pendingAuto = null;
+    return this.out;
+  }
+
   /** 状態(idle・listening・thinking・talking)。知らない名前は idle */
   setActivity(name) {
     const next = CUTE_STATES.includes(name) ? name : 'idle';
@@ -563,9 +579,10 @@ export class CuteLayer {
 
     // 8. 使えない部位は 0 に(首の無いキャラは、頭の分を体に寄せる)
     if (!this.caps.head) {
-      d.spineX += d.headX * 0.5;
-      d.spineZ += d.headZ * 0.5;
-      d.spineY += d.headY * 0.5;
+      // 体が頭を兼ねる子(みかんの子など)は、頭の動きの 8 割を体で出す
+      d.spineX += d.headX * 0.8;
+      d.spineZ += d.headZ * 0.8;
+      d.spineY += d.headY * 0.8;
       d.headX = d.headY = d.headZ = 0;
     }
     if (!this.caps.arms) d.armRaiseL = d.armRaiseR = d.armSwingL = d.armSwingR = d.armOutL = d.armOutR = 0;

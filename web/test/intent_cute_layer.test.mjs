@@ -192,3 +192,13 @@ test('bump は 0〜1 の山', () => {
   assert.equal(bump(1.2), 0);
   assert.ok(bump(0.05) > 0 && bump(0.05) < 1);
 });
+
+test('rest() で休みの形(数字が全部 0)に戻り、dt 0 のコマでもそのまま', () => {
+  const l = new CuteLayer({ rng: seededRandom(2), caps: { tail: true } });
+  l.trigger('happy');
+  run(l, 0.8);
+  l.rest();
+  const o = l.step(0);
+  for (const c of CHANNELS) assert.equal(o[c], 0, c);
+  assert.equal(l.busy, null);
+});
