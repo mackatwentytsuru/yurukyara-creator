@@ -123,6 +123,8 @@ Dates, numbers and what went wrong: [How we built it](docs/HOW_WE_BUILT.en.md).
 
 > 日本語の手順: [README.md の同じ節](README.md#make-your-own-character-on-your-pc-with-claude-code)(アプリの画面は日本語だけです)
 
+New characters are made with Claude Code on a computer. The commands are not shown inside the app; they are in this section.
+
 In the browser alone, the first conversation's word box only picks the nearest of the sample characters. To have Claude really draw a new one from your words or your picture, run the maker on the same PC.
 
 **What you need** (on top of Node.js 22 for the app):
