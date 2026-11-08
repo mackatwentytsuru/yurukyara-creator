@@ -9,6 +9,8 @@
 import { VOICE_ROLES, normalizeVoiceRole } from './voiceChoice.js';
 
 import { DEFAULT_ROLE, PLACE_MAX, ROLE_LABELS, normalizeRole, placeLine } from '../onboarding/roles.js';
+import { DEFAULT_LANG_MODE, normalizeLangMode } from '../../conversation/lang.js'; // ML1: ことば(日本語だけ・多言語)
+import { clipFactsText } from '../../conversation/facts.js'; // ML1: お店のきまり・お知らせ(その端末の欄)
 export const SETTINGS_VERSION = 2;
 export const STORE_PREFIX = 'yc.persona.v2.'; // + キャラの id(この端末の中だけ)
 
@@ -148,7 +150,7 @@ export function cleanEnding(raw) {
 }
 
 export function defaults() {
-  return { v: SETTINGS_VERSION, preset: 'calm', tone: 'friendly', ending: '', energy: PRESETS.calm.energy, length: 'normal', voice: { provider: 'none', pitch: 1.0, rate: 1.0, role: 'auto' }, role: DEFAULT_ROLE };
+  return { v: SETTINGS_VERSION, preset: 'calm', tone: 'friendly', ending: '', energy: PRESETS.calm.energy, length: 'normal', voice: { provider: 'none', pitch: 1.0, rate: 1.0, role: 'auto' }, role: DEFAULT_ROLE, lang: DEFAULT_LANG_MODE };
 }
 
 /** 足りない欄を埋め、知らない値を直した、新しい設定を返す(元は変えない) */
@@ -178,6 +180,10 @@ export function normalize(input) {
     },
     // 役目(この子は、どこで だれと。B4 12b)。知らない値は おうち。お店・駅は置く場所の名前と案内することを残す(30 字まで)
     role: normalizeRole(s.role),
+    // ことば(ML1): 日本語だけ(既定)・多言語。知らない値は日本語だけ
+    lang: normalizeLangMode(s.lang) ?? DEFAULT_LANG_MODE,
+    // お店のきまり・お知らせ(ML1。お店・駅や町・学校や施設の時に、日本語で書く欄。その端末だけ。1000 字まで)。空なら欄ごと付けない
+    ...(clipFactsText(s.facts).trim() ? { facts: clipFactsText(s.facts) } : {}),
     ...(placeLine(s.place) ? { place: { name: clipPlace(s.place?.name), about: clipPlace(s.place?.about) } } : {}),
   };
 }
@@ -296,6 +302,8 @@ export function personaBlock(settings) {
     // 役目の行(会話の側 B3 がこの 1 行を読む。言葉は roles.js の ROLE_LABELS)。置く場所はお店・駅などで書いた時だけ
     `- 役目: ${ROLE_LABELS[s.role]}`,
     ...(s.place ? [`- 置く場所: ${placeLine(s.place)}`] : []),
+    // ことばの行(ML1。多言語の時だけ。日本語だけの時は、今までと同じで 1 行も足さない)。会話の側は lang.js の langModeFromPersona がこの行を読む
+    ...(s.lang === 'multi' ? ['- ことば: 多言語(使う人の言葉に合わせて、日本語・English・中文・한국어で話す)'] : []),
   ].join('\n');
 }
 

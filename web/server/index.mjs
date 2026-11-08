@@ -14,6 +14,7 @@ import { extractFacts, memoryAddedEvent, selfNamesOf } from './memory/reflect.mj
 import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
 import { warmFirstVisit } from './ttsWarm.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
+import { STT_LANGS, normalizeHearLang } from '../src/conversation/lang.js'; // ML1: 多言語の聞き取り・声の言葉
 import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
 import { createLimiter } from './limits.mjs';
 import { createClientEvents, MAX_BODY_BYTES as CLIENT_EVENT_BYTES } from './clientEvents.mjs'; // 声の聞き取りを始められなかった原因の小さな報告(logs/client_events.jsonl)
@@ -177,14 +178,16 @@ async function handleChat(req, res) {
   const t0 = Date.now();
   const client = req.socket.remoteAddress ?? 'unknown';
   // 記憶: 合鍵(ヘッダー)があれば、覚えていることを読み、この回の言葉から覚える事を足す
-  const memoryKey = typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
+  // ML1: お店の端末(本文 memory:'off')は、合鍵があっても読まない・作らない・覚えない(次のお客さんに、前の人の名前を出さない)
+  const memoryOff = body.memory === 'off';
+  const memoryKey = !memoryOff && typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
   if (memoryKey && isForgetRequest(body.text)) {
     for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey), body.character?.persona ?? '')) send(ev);
     send({ type: 'done', serverMs: Date.now() - t0 });
     return res.end();
   }
   const selfNames = selfNamesOf(body.character); // 話しかけているキャラの名前は、使う人の名前や好きなものとして覚えない
-  const { recalled, learned } = memoryKey ? rememberWithKey(memoryKey, body.text, send, selfNames) : rememberFirstTime(body.text, client, send, selfNames);
+  const { recalled, learned } = memoryOff ? { recalled: null, learned: [] } : memoryKey ? rememberWithKey(memoryKey, body.text, send, selfNames) : rememberFirstTime(body.text, client, send, selfNames);
   // 本物の Claude を呼ぶときだけ、回数の上限を数える(仮の頭脳は無料)。上限に当たったら、仮の頭脳で話し続ける
   let paid = Boolean(config.anthropicKey);
   if (paid) {
@@ -288,7 +291,10 @@ const handler = async (req, res) => {
       const ac = new AbortController();
       res.on('close', () => ac.abort());
       // 声は話す役ごと(本文の voice: 'auto'|'male'|'female' と、その子自身の声 voiceId。形の違う値は使わない)
-      return await streamSpeech(body.text, res, ac.signal, voiceForRequest(body));
+      // ML1: 多言語の時だけ、画面が文の言葉(en・zh・ko)を足して送る。日本語・無い値は、今までと同じ呼び方
+      const lang = normalizeHearLang(body.lang);
+      const voice = voiceForRequest(body);
+      return await streamSpeech(body.text, res, ac.signal, lang && lang !== 'ja' ? { ...voice, lang } : voice);
     }
     if (req.method === 'POST' && path === '/api/stt/warm') {
       stt.warm();
@@ -305,7 +311,9 @@ const handler = async (req, res) => {
       } catch {
         // 形の違う値は、手がかり無しで聞く
       }
-      return json(res, 200, await stt.transcribe(await readRaw(req, MAX_WAV_BYTES + 1024), { hint }));
+      // ML1: 聞く言葉(見出し x-stt-lang: auto・ja・en・zh・ko)。多言語の時だけ画面が送る。無い・知らない値は、今までの STT_LANG のまま
+      const lang = STT_LANGS.includes(String(req.headers['x-stt-lang'] ?? '')) ? String(req.headers['x-stt-lang']) : '';
+      return json(res, 200, await stt.transcribe(await readRaw(req, MAX_WAV_BYTES + 1024), { hint, lang }));
     }
     if (req.method === 'POST' && path === '/api/client-event') {
       const r = clientEvents.accept(await readBody(req, CLIENT_EVENT_BYTES), req.socket.remoteAddress ?? 'unknown');

@@ -23,7 +23,9 @@ const none = () => ({ handled: false, events: [], memory: null, learned: [] });
  * @param {string} [deps.persona] その子の人格の文(sanitize の後)。「わすれて」の返事の言い方に使う
  * @returns {Promise<{handled:boolean, events:object[], memory:{text:string,items:object[]}|null, learned:object[]}>}
  */
-export async function rememberForChat(request, text, { cfg, store, now = Date.now, env = process.env, persona = '' }) {
+export async function rememberForChat(request, text, { cfg, store, now = Date.now, env = process.env, persona = '', memoryOff = false }) {
+  // ML1: お店の端末(本文 memory:'off')は、記憶の道を通らない(置き場を使わない・数えない・合鍵を作らない・「わすれて」も頭脳へ)
+  if (memoryOff) return none();
   const memCfg = { passphrase: cfg.passphrase, maxBodyBytes: cfg.maxBodyBytes };
   const hasKey = Boolean(request.headers.get('x-memory-key'));
   const facts = hasKey ? [] : extractFacts(redactSecrets(String(text ?? '')).text);

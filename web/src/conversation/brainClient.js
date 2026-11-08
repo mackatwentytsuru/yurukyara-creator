@@ -24,7 +24,8 @@ export function dispatchJson(data, onEvent) {
 export async function streamChat(body, onEvent, signal) {
   const res = await fetch('/api/chat', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...memoryHeaders(), ...demoHeaders() },
+    // ML1: お店の端末(本文 memory:'off')は、合鍵があっても送らない(合鍵は切り替えの時に捨てる。ここでも二重に止める)
+    headers: { 'content-type': 'application/json', ...(body?.memory === 'off' ? {} : memoryHeaders()), ...demoHeaders() },
     body: JSON.stringify(body),
     signal,
   });

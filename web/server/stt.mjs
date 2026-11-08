@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { ValidationError } from './validate.mjs';
+import { STT_LANGS } from '../src/conversation/lang.js'; // ML1: 聞く言葉
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const MAX_WAV_BYTES = 1.5 * 1024 * 1024; // 16kHz・16bit で約 47 秒
@@ -101,7 +102,7 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
   }
 
   /** 1 つの WAV を係に渡して、返事を待つ */
-  async function ask(path, hint = '') {
+  async function ask(path, hint = '', lang = '') {
     const w = worker ?? startWorker();
     await w.ready;
     return new Promise((resolve, reject) => {
@@ -111,7 +112,8 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
         reject(new Error('聞き取りが時間内に終わりませんでした'));
       }, TIMEOUT_MS);
       w.waiting.push({ resolve, reject, timer });
-      w.proc.stdin.write(hint ? `${path}\t${hint}\n` : `${path}\n`);
+      // 係への 1 行: パス、またはパス<タブ>手がかり。ML1: 聞く言葉(auto・ja・en・zh・ko)がある時だけ、3 つ目の欄に足す(無い時は今までと同じ 1 行)
+      w.proc.stdin.write(lang ? `${path}\t${hint}\t${lang}\n` : hint ? `${path}\t${hint}\n` : `${path}\n`);
     });
   }
 
@@ -134,7 +136,10 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
       if (installed && !worker) startWorker();
     },
     /** @returns {Promise<{text:string, ms:number}>} */
-    async transcribe(wav, { hint = '' } = {}) {
+    async transcribe(wav, { hint = '', lang = '' } = {}) {
+      // ML1: 日本語以外(auto も)では、キャラの名前の手がかり(日本語)と、日本語の空耳の消しを使わない
+      const forced = STT_LANGS.includes(lang) ? lang : '';
+      const japanese = !forced || forced === 'ja';
       assertWav(wav);
       if (isSilentWav(wav)) return { text: '', ms: 0, silent: true }; // BUX: 音が届いていない(画面が「マイクを えらびなおしてね」と出す)
       if (pending >= MAX_PENDING) throw Object.assign(new ValidationError('聞き取りが混んでいます'), { status: 429 });
@@ -143,8 +148,8 @@ export function createStt({ command = process.env.STT_PYTHON ?? 'python', args =
         const path = join(tmpdir(), `stt_${randomBytes(8).toString('hex')}.wav`);
         writeFileSync(path, wav);
         try {
-          const r = await ask(path, cleanHint(hint));
-          return { text: cleanText(r.text), ms: r.ms ?? null };
+          const r = await ask(path, japanese ? cleanHint(hint) : '', forced);
+          return { text: japanese ? cleanText(r.text) : String(r.text ?? '').trim(), ms: r.ms ?? null };
         } finally {
           rmSync(path, { force: true });
           pending -= 1;

@@ -17,6 +17,7 @@ import { describeElevenError, fetchElevenPcm } from './elevenDirect.js';
 import { RETRO, crawlSchedule, isPause, scheduleRetro, voiceFor } from './retroVoice.js';
 import { toSpeechText } from './speechReading.js';
 import { VOICE_MODEL_ID, isVoiceId, normalizeVoiceChoice, resolveVoice } from './voiceRole.js';
+import { SR_LANG, VOICE_LANG_CODE, langModeOf, spokenLang } from './lang.js'; // ML1: 多言語(日本語だけの時は、いつも ja で今までと同じ)
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const PCM_CACHE_SAMPLES = 2_400_000; // 画面の中にためておく声の長さの上限(24kHz で 100 秒ぶん。Float32 で約 10MB)
@@ -166,6 +167,7 @@ export class Speaker {
    */
   playFiller({ onStart } = {}) {
     if (!this.ctx || !this.fillers.length) return null;
+    if (this.hearLang && this.hearLang !== 'ja') return null; // ML1: 日本語以外を聞いている時は、日本語の録ってあるあいづちを出さない
     let i;
     do i = Math.floor(Math.random() * this.fillers.length);
     while (this.fillers.length > 1 && i === this.lastFiller);
@@ -338,7 +340,31 @@ export class Speaker {
     const key = getVoiceKey();
     if (!key && this.serverTtsOff) return null;
     const v = this.currentVoice();
-    return `${key ? 'k' : 's'}|${v.voiceId}|${v.role}|${v.ownVoiceId ?? ''}|${toSpeechText(text)}`;
+    const lang = this._spokenLang(text);
+    // ML1: 日本語以外の言葉は、言葉も名前に足し、読み替え表は当てない(日本語の名前は今までと同じ)
+    return lang === 'ja' ? `${key ? 'k' : 's'}|${v.voiceId}|${v.role}|${v.ownVoiceId ?? ''}|${toSpeechText(text)}` : `${key ? 'k' : 's'}|${v.voiceId}|${v.role}|${v.ownVoiceId ?? ''}|${lang}|${String(text ?? '')}`;
+  }
+
+  /** ことば(ML1)。setLangMode で決めた値が先、無ければ今の性格の設定・人格の文から(日本語だけが既定) */
+  _langMode() {
+    if (this.langMode === 'ja' || this.langMode === 'multi') return this.langMode;
+    const app = globalThis.__app;
+    return langModeOf({ settings: app?.personaSettings ?? null, persona: app?.persona ?? '' });
+  }
+
+  /** この文の言葉(ja・en・zh・ko)。日本語だけの時は、いつも 'ja' */
+  _spokenLang(text) {
+    return spokenLang(String(text ?? ''), this._langMode());
+  }
+
+  /** ことばを決める(Dialogue が、会話の回ごとに渡す。'ja' | 'multi'。ほかの値は、今の設定から決める) */
+  setLangMode(mode) {
+    this.langMode = mode === 'ja' || mode === 'multi' ? mode : null;
+  }
+
+  /** 聞く言葉(多言語の時のマイクの選び)。日本語以外の時は、日本語の録ってあるあいづちの声を出さない */
+  setHearLang(lang) {
+    this.hearLang = typeof lang === 'string' ? lang : 'ja';
   }
 
   _store(ck, chunks) {
@@ -420,15 +446,17 @@ export class Speaker {
     // 話す役と声(性格の画面の値 → その子の人格の文 → 女の子)。サーバーへは役と、その子自身の声の id だけを送る
     const voice = this.currentVoice();
     // 声に渡す文だけ、読み方の表を当てる(字幕・文字送りは _play が、もとの text で出す)
-    const spoken = toSpeechText(text);
+    // ML1: 多言語の時だけ、文ごとの言葉(en・zh・ko)を声のサービスへ渡す。日本語は今までと同じ(読み替え表も日本語の時だけ)
+    const lang = this._spokenLang(text);
+    const spoken = lang === 'ja' ? toSpeechText(text) : String(text ?? '');
     let res;
     try {
       res = key
-        ? await fetchElevenPcm(spoken, { key, voiceId: voice.voiceId, modelId: VOICE_MODEL_ID, signal })
+        ? await fetchElevenPcm(spoken, { key, voiceId: voice.voiceId, modelId: VOICE_MODEL_ID, signal, ...(lang !== 'ja' ? { languageCode: VOICE_LANG_CODE[lang] } : {}) })
         : await fetch('/api/tts', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text: spoken, voice: voice.role, ...(voice.ownVoiceId ? { voiceId: voice.ownVoiceId } : {}) }),
+            body: JSON.stringify({ text: spoken, voice: voice.role, ...(voice.ownVoiceId ? { voiceId: voice.ownVoiceId } : {}), ...(lang !== 'ja' ? { lang } : {}) }),
             signal,
           });
     } catch (err) {
@@ -583,8 +611,9 @@ export class Speaker {
   _speakDevice(text) {
     try {
       const v = globalThis.__app?.personaSettings?.voice ?? {};
-      const u = new globalThis.SpeechSynthesisUtterance(toSpeechText(text));
-      u.lang = 'ja-JP';
+      const lang = this._spokenLang(text); // ML1: 日本語だけの時は、いつも ja(今までと同じ)
+      const u = new globalThis.SpeechSynthesisUtterance(lang === 'ja' ? toSpeechText(text) : String(text ?? ''));
+      u.lang = SR_LANG[lang] ?? 'ja-JP';
       u.pitch = Number.isFinite(v.pitch) ? v.pitch : 1;
       u.rate = Number.isFinite(v.rate) ? v.rate : 1;
       globalThis.speechSynthesis.speak(u);

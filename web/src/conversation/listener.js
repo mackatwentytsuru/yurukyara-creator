@@ -4,6 +4,8 @@
 //   server … このページを配っているサーバーへ声の区間を送る(/api/stt)。Quest のブラウザには Web Speech API が無い報告があるので、こちらを使う
 import { encodeWav, resample, SegmentCollector, STT_RATE } from './wav.js';
 import { getSttHint, sttHintHeaders } from './sttHint.js';
+import { SR_LANG, normalizeHearLang } from './lang.js'; // ML1: 多言語の聞き取り
+import { sttLangHeaders } from './hearLang.js';
 // BUX: 「マイクとスピーカー」の窓で選んだマイク。既定でないマイクは PC の聞き取りへ。音が来ない時は画面へ知らせる
 import { AUDIO_WORDS, NOTE_EVENT, SILENT_EVENT, createSilenceWatch, decideListening, isDefaultMic, loadChoice, micConstraints, resolveDevice, serverSttAvailable, splitDevices, tell } from './audioDevices.js';
 // 11-08 本人の iPhone: カメラを入れたまま取り直す・ブラウザの聞き取りが使えない時は PC の聞き取りへ自動で替える・止まった原因の報告
@@ -64,9 +66,10 @@ export class Listener {
    * @param {()=>boolean} [opts.isBusy] server で、キャラが話している(このあいだの音は聞かない。スピーカーが近いヘッドセットでの自分の声の拾い込みを防ぐ)
    * @param {()=>string} [opts.hint] server で、聞き取りの手がかりにする言葉(話しかけているキャラの名前)。無ければ会話が入れた名前(sttHint.js)
    */
-  constructor(cb, { provider = 'web', isBusy = () => false, hint = getSttHint } = {}) {
+  constructor(cb, { provider = 'web', isBusy = () => false, hint = getSttHint, lang = () => 'ja' } = {}) {
     this.cb = cb;
     this.hint = hint;
+    this.lang = lang; // ML1: 聞く言葉(ja・en・zh・ko)を返す関数。日本語だけの時は、いつも 'ja'(今までと同じ)
     this.provider = provider;
     this.baseProvider = provider; // 頼まれた道(選んだマイクで server に替えても、ここは変えない)
     this.micLabel = ''; // 使っているマイクの名前(選んだ時だけ)
@@ -259,6 +262,28 @@ export class Listener {
     }
   }
 
+  /** いま聞く言葉(ja・en・zh・ko)。取れない・知らない値は 'ja' */
+  _langNow() {
+    try {
+      return normalizeHearLang(this.lang()) ?? 'ja';
+    } catch {
+      return 'ja';
+    }
+  }
+
+  /**
+   * 聞く言葉を替えた時に呼ぶ(多言語の時のマイクの選び)。ブラウザの聞き取りは、いまの聞き取りを止めて、新しい言葉で始め直す
+   * (止まると rec.onend が、新しい言葉で 200ms 後に始め直す)。PC の聞き取りは、次の区間から新しい言葉で送る
+   */
+  setLang() {
+    if (!this.listening || this.provider !== 'web') return;
+    try {
+      this.recognition?.stop();
+    } catch {
+      // すでに止まっている
+    }
+  }
+
   async _sendSegment() {
     const pcm = this.collector?.end();
     if (!pcm || pcm.length < this.ctx.sampleRate * MIN_SEGMENT_S) return;
@@ -270,7 +295,7 @@ export class Listener {
     try {
       const res = await fetch('/api/stt', {
         method: 'POST',
-        headers: { 'content-type': 'audio/wav', ...sttHintHeaders(this._hintNow()) },
+        headers: { 'content-type': 'audio/wav', ...sttHintHeaders(this._hintNow()), ...sttLangHeaders(this._langNow()) },
         body: encodeWav(resample(pcm, this.ctx.sampleRate, STT_RATE)),
       });
       const data = await res.json();
@@ -291,7 +316,7 @@ export class Listener {
   _startRecognition() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
-    rec.lang = 'ja-JP';
+    rec.lang = SR_LANG[this._langNow()] ?? 'ja-JP'; // ML1: 日本語は今までの 'ja-JP' のまま
     rec.continuous = true;
     rec.interimResults = true;
     rec.onresult = (e) => {

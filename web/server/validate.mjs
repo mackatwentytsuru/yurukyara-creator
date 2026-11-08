@@ -6,7 +6,9 @@
 // 公開の関数では、履歴の返事を「この画面が送る形」(1 行 1 つの say の JSON・4 行まで・1 文 60 字まで・合わせて 600 字まで)だけ受ける。
 import { normalizeRole } from '../src/conversation/role.js'; // B3(第 12 波 b): 役目
 import { redactSecrets } from '../src/conversation/secrets.js';
-import { isUnsafeOutput, oneLine, sanitizeBlock, sanitizeLine } from './safety.mjs';
+import { normalizeHearLang, normalizeLangMode } from '../src/conversation/lang.js'; // ML1: ことば
+import { FACTS_MAX } from '../src/conversation/facts.js'; // ML1: お店のきまり・町のお知らせ
+import { isUnsafeOutput, oneLine, sanitizeBlock, sanitizeLine, sanitizeLines } from './safety.mjs';
 import { cleanSession } from './safety.mjs'; // BSF 11-08: 1 回の会話の長さ(休むすすめ)
 import { STAGES, isChoiceName } from './prompt.mjs';
 import { readCameraImage } from './camera.mjs'; // BCV: カメラの絵の形と大きさ
@@ -34,6 +36,7 @@ export const LIMITS = {
   scene: 1000,
   persona: 6000,
   placeInfo: 4000,
+  facts: FACTS_MAX, // ML1: 画面の欄の「お店のきまり・お知らせ」(persona.md の節と合わせて、指示文に入るのも同じ字数まで)
   name: 100,
   landmarks: 32,
   landmarkText: 200,
@@ -153,6 +156,17 @@ export function sanitizeChatBody(raw, { publicPath = isPublicRuntime() } = {}) {
   // BSF 11-08: 画面が数えた 1 回の会話の長さ(往復・分・端末の時・すすめた後か)。形が違えば付けない(休むすすめをしないだけ)
   const session = cleanSession(raw.session);
   if (session) out.session = session;
+  // ML1: 多言語。lang は 'multi' か、人格の文の「- ことば: 多言語」の行を打ち消す 'ja' だけ受ける(ほかの値は捨てる)。hearLang は聞く言葉(ja・en・zh・ko)。
+  // 日本語だけの時は、画面は何も足さない(本文も今日と同じ形)
+  const lang = normalizeLangMode(raw.lang);
+  if (lang) out.lang = lang;
+  const hearLang = normalizeHearLang(raw.hearLang);
+  if (hearLang) out.hearLang = hearLang;
+  // ML1: お店のきまり・町のお知らせ(画面の欄)。行ごとに、上書きの言葉の行を外し、行頭の「- 」を外して、2000 字まで。1 行も残らなければ付けない
+  const factLines = sanitizeLines(clean(str(lf(raw.facts), LIMITS.facts * 2)), LIMITS.facts);
+  if (factLines.length) out.facts = factLines.join('\n');
+  // ML1: お店の端末(お客さんの名前を覚えない)。'off' だけ受ける
+  if (raw.memory === 'off') out.memory = 'off';
   out.expressionHints = hintMap(raw.expressionHints, out.expressions);
   // BCV: カメラの絵(使う人がカメラを入れて話しかけた回だけ。近づいた合図の回は受けない)。JPEG の頭と大きさを、枠を使う前に確かめる(server/camera.mjs)
   const image = trigger === 'approach' ? null : readCameraImage(raw.image, (m) => new ValidationError(m));

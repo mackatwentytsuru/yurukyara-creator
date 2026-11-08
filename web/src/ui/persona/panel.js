@@ -8,6 +8,9 @@ import {
 } from './settings.js';
 import { VOICE_ROLE_ORDER, VOICE_ROLES, voiceRoleNote } from './voiceChoice.js';
 import { ROLES, ROLE_CHIPS } from '../onboarding/roles.js';
+import { LANG_MODES, LANG_MODE_LABELS, LANG_MODE_NOTE } from '../../conversation/lang.js'; // ML1: ことば
+import { FACTS_SCREEN_MAX } from '../../conversation/facts.js'; // ML1: お店のきまり・お知らせ
+import { SHOP_DEVICE_LABELS, SHOP_DEVICE_NOTE, SHOP_FORGET_LABEL } from '../../conversation/shopDevice.js'; // ML1: この端末
 
 const el = (tag, props = {}, ...children) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -50,8 +53,10 @@ function segmented(label, entries, current, onPick, { className = 'yp-seg', with
  * @param {boolean} [o.lockTone] 人格の文で話し方が決まっている子(主役ノリーなど)。口調は「この子の話し方」から動かさない(D6)
  * @param {(role:string)=>({choice:string, role:string|null, own:string|null}|null)} [o.onVoiceRole] 声の役(おまかせ・男の子・女の子)を
  *   選んだ時に、舞台の読み上げへ渡す(試しの返事もその声で話す)。返り値は今の役(声の下の一言に出す)。「もどす」では元の役で呼び直す
+ * @param {{isOn:()=>boolean, set:(on:boolean)=>any, forgetNow:()=>Promise<{message:string}>}|null} [o.shopDevice] ML1: この端末(お店の端末か)。
+ *   端末ごとの設定なので、押すとすぐ変わる(「これにする」を待たない)。渡さなければ、この枠は出さない
  */
-export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body, lockTone = false, onVoiceRole = null, recommended = null }) {
+export function openPersonaPanel({ initial, characterName = 'この子', random, preview, play, brain = () => 'mock', onSave, onCancel = () => {}, parent = document.body, lockTone = false, onVoiceRole = null, recommended = null, shopDevice = null }) {
   injectStyles(parent.ownerDocument);
   // 話し方の決まった子は、口調をいつも own にする(覚えた設定・おまかせ・古い保存でも。「これにする」で主役の話し方を上書きしない)
   const fix = (v) => (lockTone ? normalize({ ...normalize(v), tone: 'own', ending: '' }) : normalize(v));
@@ -94,6 +99,50 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   const length = segmented('返事の長さ', LENGTH_ORDER.map((k) => [k, LENGTHS[k]]), s.length, (k) => update({ ...s, length: k }));
   // 役目(この子は、どこで だれと。B4 12b): 作る道の最初に選んだ物を、あとからここで替えられる
   const where = segmented('どこで だれと', ROLES.map((k) => [k, { label: ROLE_CHIPS[k] }]), s.role, (k) => update({ ...s, role: k }), { className: 'yp-seg yp-where' });
+  // ことば(ML1): 日本語だけ(いつもの)・多言語。下に 1 行「日本語だけの方が、日本語の聞き取りと話し方が正確です」
+  const lang = segmented('ことば', LANG_MODES.map((k) => [k, { label: LANG_MODE_LABELS[k] }]), s.lang, (k) => update({ ...s, lang: k }), { className: 'yp-seg yp-two yp-lang' });
+  const langNote = el('p', { className: 'yp-note yp-lang-note', textContent: LANG_MODE_NOTE });
+  // お店のきまり・お知らせ(ML1): お店・駅や町・学校や施設の時だけ出す、日本語で書く欄。その端末の中だけに覚える
+  const factsIn = el('textarea', { className: 'yp-facts-in', rows: 5, maxLength: FACTS_SCREEN_MAX, placeholder: '例:\n営業時間は 9 時から 17 時\n定休日は水曜日\n秋まつりは 11 月 23 日', ariaLabel: 'お店のきまり・お知らせ', value: s.facts ?? '' });
+  const factsCount = el('output', { className: 'yp-facts-count', ariaLive: 'off' });
+  const factsGroup = el(
+    'fieldset',
+    { className: 'yp-group yp-facts', hidden: s.role === 'home' },
+    el('legend', { textContent: 'お店のきまり・お知らせ' }),
+    factsIn,
+    el('p', { className: 'yp-note', textContent: 'お客さんに伝えたいことを、日本語で 1 行ずつ書いてね。ここに書いたことだけを案内します(書いていないことは「スタッフに聞いてね」と言います)。この端末の中だけに覚えます。' }),
+    factsCount,
+  );
+  factsIn.addEventListener('input', () => update({ ...s, facts: factsIn.value }));
+  const showFactsCount = () => {
+    factsCount.textContent = `${[...(factsIn.value ?? '')].length} / ${FACTS_SCREEN_MAX} 字`;
+  };
+  // この端末(ML1): ふつう(覚える)・お店の端末(お客さんの名前を覚えない)。端末ごとの設定なので、押すとすぐ変わる
+  const shopOn = () => Boolean(shopDevice?.isOn());
+  const shop = shopDevice
+    ? segmented('この端末', [['normal', { label: SHOP_DEVICE_LABELS.normal }], ['shop', { label: SHOP_DEVICE_LABELS.shop }]], shopOn() ? 'shop' : 'normal', (k) => {
+        shopDevice.set(k === 'shop');
+        syncShop();
+      }, { className: 'yp-seg yp-two yp-shop' })
+    : null;
+  const shopForget = shopDevice ? el('button', { type: 'button', className: 'yp-forget', textContent: SHOP_FORGET_LABEL }) : null;
+  const shopNote = shopDevice ? el('p', { className: 'yp-note yp-shop-note', textContent: SHOP_DEVICE_NOTE, ariaLive: 'polite' }) : null;
+  const shopGroup = shopDevice ? el('fieldset', { className: 'yp-group yp-shop-group' }, el('legend', { textContent: 'この端末' }), shop.box, shopNote, shopForget) : null;
+  function syncShop() {
+    if (!shopDevice) return;
+    shop.sync(shopOn() ? 'shop' : 'normal');
+    shopForget.hidden = !shopOn();
+  }
+  shopForget?.addEventListener('click', async () => {
+    shopForget.disabled = true;
+    try {
+      shopNote.textContent = (await shopDevice.forgetNow()).message;
+    } catch {
+      shopNote.textContent = '消せませんでした。もう一度おしてね';
+    } finally {
+      shopForget.disabled = false;
+    }
+  });
   let roleResult = null;
   const showRoleNote = (k) => { roleNote.textContent = voiceRoleNote(roleResult, k, s.voice.provider); };
   const voices = segmented('声の出し方', VOICE_ORDER.map((k) => [k, VOICES[k]]), s.voice.provider, (k) => { update({ ...s, voice: { ...s.voice, provider: k } }); showRoleNote(s.voice.role); }, { className: 'yp-voices', withHint: true });
@@ -136,6 +185,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
     el('div', { className: 'yp-group' }, el('div', { className: 'yp-label yp-energy-head' }, el('span', { textContent: '元気さ' }), energyOut), el('div', { className: 'yp-energy' }, energyIn)),
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: '返事の長さ' }), length.box),
     el('fieldset', { className: 'yp-group' }, el('legend', { textContent: 'どこで だれと' }), where.box),
+    factsGroup,
+    el('fieldset', { className: 'yp-group yp-lang-group' }, el('legend', { textContent: 'ことば' }), lang.box, langNote),
     el(
       'fieldset',
       { className: 'yp-group' },
@@ -146,6 +197,7 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
       el('div', { className: 'yp-sub yp-role' }, el('span', { textContent: '声の役' }), role.box),
       roleNote,
     ),
+    shopGroup,
     el('details', {}, el('summary', { textContent: 'Claude に渡す文を見る' }), block),
     el('div', { className: 'yp-foot' }, randomBtn, cancelBtn, saveBtn),
   );
@@ -160,6 +212,11 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
     energyOut.textContent = `${s.energy} ${ENERGY_LABELS[s.energy]}`;
     length.sync(s.length);
     where.sync(s.role);
+    lang.sync(s.lang);
+    factsGroup.hidden = s.role === 'home'; // おうちの役目では使わない(お店・駅や町・学校や施設の時だけ出す)
+    if (document.activeElement !== factsIn) factsIn.value = s.facts ?? '';
+    showFactsCount();
+    syncShop();
     voices.sync(s.voice.provider);
     pitch.sync(pitchKey(s));
     rate.sync(rateKey(s));
@@ -199,7 +256,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   }
 
   tryBtn.addEventListener('click', runPreview);
-  randomBtn.addEventListener('click', () => update({ ...random(), voice: s.voice }));
+  // くじびきで替えるのは性格まわりだけ。声・どこで だれと・ことば・お店のきまり(ML1)は、選んだままにする
+  randomBtn.addEventListener('click', () => update({ ...random(), voice: s.voice, role: s.role, lang: s.lang, ...(s.place ? { place: s.place } : {}), ...(s.facts ? { facts: s.facts } : {}) }));
   panel.dataset.toneLocked = String(lockTone);
   const close = () => {
     clearTimeout(timer);
@@ -212,7 +270,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   });
   autoBtn.addEventListener('click', () => {
     const rec = normalize(recommended?.() ?? initial);
-    const next = fix({ ...rec, voice: { ...rec.voice, role: 'auto' } });
+    // おまかせで決めるのは、前からの 6 つの選び。ことば・お店のきまり(ML1)は、いま選んでいるままにする
+    const next = fix({ ...rec, voice: { ...rec.voice, role: 'auto' }, lang: s.lang, ...(s.facts ? { facts: s.facts } : {}) });
     if (s.voice.role !== 'auto') onVoiceRole?.('auto');
     close();
     onSave(next);

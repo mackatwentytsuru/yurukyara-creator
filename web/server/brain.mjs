@@ -6,6 +6,8 @@ import { config } from './env.mjs';
 import { buildSystemBlocks, buildUserTurn, MOTIONS, safeChoices } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, personalWarn, turnGuard, SAFETY_VERSION } from './safety.mjs';
+import { foreignDistressDetail } from './safetyLang.mjs'; // ML1: 多言語の時だけ、英・中・韓の言葉のつらい話の中身を見る
+import { detectLang, langModeOf } from '../src/conversation/lang.js'; // ML1: ことば
 import { mentionsRest, restGuard, restLine, restNeed } from './safety.mjs'; // BSF 11-08: 長い会話・夜おそくの「休もうか」(1 回の会話で 1 回)
 import { summarize } from './memory/reflect.mjs';
 import { aizuchiPair, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
@@ -202,17 +204,24 @@ export async function callHaikuHedged({ system, messages, signal, onText, hedgeM
  * 返す文も出力の確かめを通す。runTurn は先に決まった返事を返すので、ここの守りは二重の守り。
  */
 export function* mockReply(o) {
-  const { text, trigger, seen, persona = '' } = o;
-  const { kind, source } = classifyTurn({ text, trigger, scene: seen });
+  const { text, trigger, seen, persona = '', lang = null } = o;
+  const { kind, source } = classifyTurn({ text, trigger, scene: seen, lang });
   if (kind) {
-    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: distressDetail(source), text: source });
+    const multi = lang === 'multi';
+    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: detailOf(source, multi), text: source, visitorLang: multi ? detectLang(text, o.hearLang) : 'ja' });
     const { intent, stage, handoff, safety, ...line } = first;
     yield { type: 'thought', seen: seen || '', intent, stage, handoff, safety };
     yield line;
     yield* rest;
     return;
   }
-  for (const ev of mockLines(o)) yield ev.type === 'say' ? guardOutput(ev) : ev;
+  for (const ev of mockLines(o)) yield ev.type === 'say' ? guardOutput(ev, { multi: lang === 'multi' }) : ev;
+}
+
+/** つらい話の中身(self・abuse・other)。多言語の時は、日本語の網で other だった言葉を、英・中・韓の網でも見る */
+function detailOf(source, multi) {
+  const d = distressDetail(source);
+  return multi && d === 'other' ? foreignDistressDetail(source) : d;
 }
 
 /** 人格の初めてのあいさつ(3 文まで)を、おじぎ → うなずき → 手をふる で言う */
@@ -225,9 +234,9 @@ function* greetingLines(hello) {
  * source は分けた元の文(決まった返事の中身 = つらい話の種類・子どもか を、その文から決める)。
  * @returns {{kind:'emergency'|'distress'|'romance'|'dependency'|null, source:string}}
  */
-export function classifyTurn({ text = '', trigger = null, scene = '' } = {}) {
-  const fromText = trigger === 'approach' ? null : classifyInput(text);
-  const fromScene = classifyInput(scene);
+export function classifyTurn({ text = '', trigger = null, scene = '', lang = null } = {}) {
+  const fromText = trigger === 'approach' ? null : classifyInput(text, { lang });
+  const fromScene = classifyInput(scene, { lang });
   const kind = mostSevere(fromText, fromScene);
   return { kind, source: kind && kind === fromText ? String(text ?? '') : String(scene ?? '') };
 }
@@ -379,6 +388,9 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   const mockOnly = forceMock || want === 'mock';
   const brain = config.anthropicKey && !mockOnly ? 'haiku' : 'mock'; // 上限に当たった回・合言葉が無い回は、仮の頭脳で動き続ける
   let handoffFlagged = false;
+  // ML1: ことば。多言語の時だけ、英・中・韓の安全の網を足し、決まった返事に相手の言葉の 1 行を付ける(日本語だけの時は今までと同じ)
+  const multi = langModeOf({ settings: { lang: body.lang }, persona: character.persona ?? '' }) === 'multi';
+  const lang = multi ? 'multi' : null;
   const emit = (obj) => {
     // 引き継ぎの印: 1 行目(用件つき)の物は「考え」として届く。2 行目以降の say に付いた handoff は届かないので、ここで別に知らせる
     const carriesThought = obj.type === 'say' && (obj.intent !== undefined || obj.stage !== undefined);
@@ -393,7 +405,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       if (thought) onEvent(obj.safety ? { ...thought, safety: obj.safety } : thought);
     }
     // 出力の確かめ(恋人役・独り占めの言葉は、決まった文に差し替える)
-    const ev = guardOutput(normalizeEvent(obj, { expressions, motions }));
+    const ev = guardOutput(normalizeEvent(obj, { expressions, motions }), { multi });
     if (ev) {
       if (ev.type === 'say') {
         ev.expression = limitCustom(ev.expression);
@@ -408,15 +420,15 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
 
   // 安全の層(1 段目): つらい話・命の危険は、頭脳を呼ばずに決まった一般の案内を返す(診断しない)。
   // 使う人の言葉に加えて、見えている様子(scene)も分ける(CRITsec F7。近づいた時の scene に言葉を入れても、決まった案内を通る)
-  const { kind, source } = classifyTurn({ text, trigger, scene });
+  const { kind, source } = classifyTurn({ text, trigger, scene, lang });
   // 履歴の中の、まだ答えていない使う人の発言も分ける。決まった返事はくり返さず、本物の頭脳に注意を足すだけ(F7)。
   // 答えてある発言(すぐ後にキャラの返事がある)には足さない: 注意は 1 回だけ(11-07 第 11 波。断った後のふつうの回は、ふつうに話す)
-  const historyKind = classifyHistory(history);
+  const historyKind = classifyHistory(history, { lang });
   // 性的な話は、どちらの頭脳でも呼ばずに決まった返事(BSF 11-08)
   const fixed = kind === 'emergency' || kind === 'distress' || kind === 'sexual' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
   if (fixed) {
     onEvent({ type: 'meta', brain, safety: kind, safetyVersion: SAFETY_VERSION });
-    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: distressDetail(source), text: source })) emit(obj);
+    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: detailOf(source, multi), text: source, visitorLang: multi ? detectLang(text, body.hearLang) : 'ja' })) emit(obj);
     return;
   }
   // UIR 19(UW3 11-08): 住所・電話・メール・学校の名前・本名を書いたら、頭脳を呼ばずに、やさしく「書かないでね」と言う。どちらの頭脳でも同じ。覚えない・記録しない
@@ -459,7 +471,8 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   }
 
   onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}), ...(image ? { camera: 'sent' } : {}) });
-  const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true });
+  // ML1: ことば(multi の時だけ節が足される)・お店のきまり・町のお知らせ(facts)・お店の端末(memory:'off' = 覚えない節に替える)。無い時は今までと同じ指示文
+  const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true, lang: body.lang, facts: body.facts, memoryOff: body.memory === 'off' });
   const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : '', restGuard(rest)].filter(Boolean).join('\n');
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
