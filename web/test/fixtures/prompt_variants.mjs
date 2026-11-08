@@ -1,5 +1,5 @@
 // 多言語(ML1)の「日本語だけは今日と 1 字も同じ」の確かめに使う、指示文の組み立ての見本の入力。
-// 見本の値(prompt_baseline.json)は、多言語を足す前(6872b3f)の buildSystemBlocks の出力の SHA-256。
+// 見本の値(prompt_baseline.json)は、多言語を足す前(297b916)の buildSystemBlocks の出力の SHA-256。
 // 入力の形はここで決め、出力の値だけを置く(指示文そのものは置かない)。
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';

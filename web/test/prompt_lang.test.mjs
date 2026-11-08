@@ -1,5 +1,5 @@
 // 多言語(ML1)の指示文の試験。
-// 1) 日本語だけ(lang 無し・lang: 'ja')の指示文が、多言語を足す前(6872b3f)と、全部のキャラ・全部の形で 1 字も同じ(SHA-256 で比べる)
+// 1) 日本語だけ(lang 無し・lang: 'ja')の指示文が、多言語を足す前(297b916)と、全部のキャラ・全部の形で 1 字も同じ(SHA-256 で比べる)
 // 2) 多言語で「# ことば」の節が 2 段目に入り、相づちの行が「日本語で話す時だけ」に替わる。1 段目の安全の決まりは変わらない
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,15 +11,15 @@ import { digestAll, listCharacters, sha, variantsFor } from './fixtures/prompt_v
 
 const BASE = JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'prompt_baseline.json'), 'utf8'));
 
-test('見本の値は 6872b3f のもので、キャラ 7 体 × 6 つの形がそろっている', () => {
-  assert.equal(BASE.source, '6872b3f');
+test('見本の値は 297b916 のもので、キャラ 7 体 × 6 つの形がそろっている', () => {
+  assert.equal(BASE.source, '297b916');
   const chars = listCharacters().map((c) => c.id);
   assert.equal(chars.length, 7, `キャラの数: ${chars.join(',')}`);
   assert.deepEqual(Object.keys(BASE.digests).sort(), chars);
   for (const id of chars) assert.equal(Object.keys(BASE.digests[id]).length, 6, id);
 });
 
-test('日本語だけ(lang 無し)の指示文は、7 体 × 6 つの形の全部で、6872b3f と 1 字も同じ', () => {
+test('日本語だけ(lang 無し)の指示文は、7 体 × 6 つの形の全部で、297b916 と 1 字も同じ', () => {
   assert.deepEqual(digestAll(buildSystemBlocks), BASE.digests);
 });
 

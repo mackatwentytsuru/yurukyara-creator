@@ -27,7 +27,7 @@
 ## GPU の機械が埋まっている時は、別の機械の確認台で確かめる(2026-11-07 S5w9)
 - 確認台の repo は読むだけ。そこから自分の写しを作る(`git clone --no-checkout <確認台の repo> <写し>`、node_modules は確認台の物へジャンクション、`web\public\mediapipe` は写す)。新しいコミットは `git bundle create x.bundle <確認台にある頭>..<線>`(差分だけ。100KB ほど)→ scp → 写しで `git fetch <bundle> <ref>:refs/remotes/<名前>/tip` → checkout。直す前の木も別の写しにすると、同じ道具で前と後を比べられる(命令の形は板の S5 の第 9 波の道具: setup の ps1・run の py)。
 - .ps1 は UTF-8 の BOM を付ける(Windows PowerShell 5.1 は BOM の無い日本語を化かす)。ssh の命令に `$` も `&` も書かない(確認台の ssh は PowerShell 5.1。台本の中に書き、scp で送って `-File` で動かす)。
-- bundle の土台は、確認台の repo に本当にあるコミットにする(`git cat-file -e <id>^{commit}` を台本で確かめる。第 10 波では確認台の repo の頭が d3a2f9c で、b702004・c30e6d3 は無かった → `d3a2f9c..<線>` で 160KB)。
+- bundle の土台は、確認台の repo に本当にあるコミットにする(`git cat-file -e <id>^{commit}` を台本で確かめる。第 10 波では確認台の repo の頭が 1b2f906 で、8fd8920・bbd1531 は無かった → `1b2f906..<線>` で 160KB)。
 - 札は `machine_lock.py run --machine <確認台> --kind cpu --procs 4 --who <流れ> --job <中身> --minutes 50 --wait 45 -- ssh -n -o BatchMode=yes <確認台> "python -X utf8 <台本>"`(ほかの流れが使っている間は順番を待つ。終わると自動で返る)。描画役は内蔵 GPU の D3D11(SwiftShader ではない)。所要: 組み立て 2 秒・w9_check 43 秒・layout_check 58 秒・`YC_BROWSER_TESTS=1 npm test` 65 秒。
 - 遅い端末のまねは CDP の `Emulation.setCPUThrottlingRate`(6)。見え方の確かめは、開く前に `page.addInitScript` で requestAnimationFrame ごとに(描くたび)要素の visibility と textContent を記録する(MutationObserver は描く前にも動くので、人に見えた物と合わない)。直す前の木で落ちるのを先に見る(S5w9: ノリーが 806ms・838ms に見えた)。
 - 3 本の仮の合わせ(参照を動かさない): `T1=$(git merge-tree --write-tree A B)` → `C1=$(git commit-tree $T1 -p A -p B -m tmp)` → `T2=$(git merge-tree --write-tree $C1 C)` → `git archive $T2 | tar -x -C <板の一時のフォルダ>` → node_modules をジャンクションで借りて `node --test`。**消す前にジャンクションを `cmd /c rmdir` で外す**(外さずに消すと、借りた先の中身まで消える)。
