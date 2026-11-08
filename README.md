@@ -60,6 +60,7 @@ npm run start:claude-code      # npm start の代わり。http://127.0.0.1:8787/
 - つながっている時は、状態の知らせ(`/api/status`)が `brainVia: "claude-code"` と答えます(鍵が無く仮の頭脳で話している時は `"mock"`)。
 - 声は別です。声を出すには、いつもどおり自分の ElevenLabs の鍵を入れます([声](#voices))。
 - Windows の Node.js 22 と、この PC の Claude Code で確かめました。Mac と Linux では、まだ動かしていません。
+
 ## 今できること
 
 どの行も、実際に動かして確かめました。確かめ方を右に書いています。

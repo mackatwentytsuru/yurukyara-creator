@@ -61,6 +61,7 @@ npm run start:claude-code      # instead of npm start; then open http://127.0.0.
 - While connected, the status endpoint (`/api/status`) answers `brainVia: "claude-code"` (it answers `"mock"` when no key is set and the stand-in brain talks).
 - The voice is separate. To hear it, enter your own ElevenLabs key as usual ([Voices](#voices)).
 - Checked on Windows with Node.js 22 and this PC's Claude Code. Not run on Mac or Linux yet.
+
 ## What works today
 
 Each row was checked by running it. The check is named next to it.

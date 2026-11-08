@@ -11,7 +11,7 @@ import { checkClaude } from '../../tools/claude-code-relay/cli.mjs';
 import { problemMessage, startClaudeCode } from '../scripts/start-claude-code.mjs';
 
 const WEB = join(import.meta.dirname, '..');
-const FAKE_CLAUDE = join(import.meta.dirname, 'fixtures', 'fake_claude.mjs');
+const FAKE_CLAUDE = join(import.meta.dirname, '..', 'test-support', 'fake_claude.mjs');
 const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const PORT = 9481;
 

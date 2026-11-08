@@ -15,7 +15,7 @@ const HANDSHAKE = 'test-relay-handshake-0123456789';
 const BRAIN = MODEL_DEFAULTS.brain;
 const DRAW = DRAW_MODEL_DEFAULT;
 const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-const FAKE_CLAUDE = join(import.meta.dirname, 'fixtures', 'fake_claude.mjs');
+const FAKE_CLAUDE = join(import.meta.dirname, '..', 'test-support', 'fake_claude.mjs');
 const img = (over = {}) => ({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG_1PX, ...over } });
 const user = (content) => [{ role: 'user', content }];
 
