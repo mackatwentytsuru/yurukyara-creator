@@ -253,7 +253,7 @@ async function handleChat(req, res) {
   if (paid) {
     const slot = claudeLimiter.take(client);
     if (!slot.ok) {
-      send({ type: 'meta', limited: true, reason: slot.reason, notice: `仮の頭脳です(${slot.message})` });
+      send({ type: 'meta', limited: true, reason: slot.reason, notice: `おためしモードです(${slot.message})` });
       paid = false;
     }
   }

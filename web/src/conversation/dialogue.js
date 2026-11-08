@@ -90,7 +90,7 @@ export class Dialogue {
    * @param {(spec:string, ms:number) => (number[]|null)} deps.setGaze 'person' | 'away' | 'landmark:名前'
    * @param {(entry:object) => void} deps.onMetric
    * @param {(ev:object) => void} [deps.onEvent] サーバーから届いたイベントを全部渡す(記憶の札の onChatEvent など)
-   *   ui.notice(文) があれば、「仮の頭脳です」などの一言をそこへ出す
+   *   ui.notice(文) があれば、「おためしモードです」などの一言をそこへ出す
    */
   constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false, onEvent = null, onOffline = null, onInterrupted = null }) {
     // interview: インタビューの型(返事 2 文まで・台本にしない)で答えさせる(入口の LED の ?interview=1)
@@ -275,7 +275,7 @@ export class Dialogue {
               this.brain = ev.brain;
               m.brain = ev.brain;
             }
-            if (ev.notice) this.ui.notice?.(ev.notice); // 「仮の頭脳です(…)」
+            if (ev.notice) this.ui.notice?.(ev.notice); // 「おためしモードです(…)」
             if (ev.rest) this.talk.markRested(); // BSF: 休むことをすすめた(この 1 回の会話では、もうすすめない)
           } else if (ev.type === 'thought') {
             thoughtEv = ev;

@@ -273,6 +273,16 @@ npm run yuru -- --lan
 
 **確かめたこと**: 11/7 に、本物の Quest 3 のブラウザで、画面のノリーと、VR に入ってノリーが出ることを確かめました(USB の開発用のつなぎ方。その後の版では実機を見ていません)。まねの道具(Meta の WebXR のまね IWER を入れた Chrome)では、入る・立ち位置・歩く・スティック・トリガーで話す・文字の板・出る、など 19 項目を見ています(`web` で `npm start` を起こしたあと、`node scripts/vr-check.mjs --port 8787`。GPU の使える Chrome が要ります)。本物の Quest の中で話すことは【確かめ待ち】です。
 
+## 鍵をかんたんに入れる
+
+`web` のフォルダで `npm run start:keys` を流すと、Claude の鍵と声の鍵を(画面に出さずに)聞かれます。どちらも Enter だけなら入れません。入れた鍵は、起こすアプリの環境変数にだけ渡し、ファイルには書きません。
+
+- Claude の鍵を作る(公式): <https://platform.claude.com/settings/keys>
+- 声の鍵を作る(ElevenLabs の公式): <https://elevenlabs.io/app/api/api-keys>
+- 声の料金とお試しのプラン(ElevenLabs の公式): <https://elevenlabs.io/pricing/api> 。お試しのプランがあるかどうか・中身は変わるので、必ず公式のページで確かめてください。
+
+アプリの画面でも、おためしモードの間は上の帯の「本物の Claude にする」から、次の 2 つの道の案内を開けます。1 つ目は上の鍵を入れる道、2 つ目は自分の PC の Claude Code につなぐ道(`npm run start:claude-code`。鍵は要りません)です。声の鍵は、作る画面の「声」の歩みで、この端末だけに入れることもできます。
+
 ## 今できること
 
 どの行も、実際に動かして確かめました。確かめ方を右に書いています。

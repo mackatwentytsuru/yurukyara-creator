@@ -69,7 +69,7 @@ export async function checkPassphrase(request, { cfg, store, now = Date.now, lim
 }
 
 /**
- * 本物の頭脳を使ってよいかを決める。使えないときは、その理由を返す(画面に「仮の頭脳です」と出すため)。
+ * 本物の頭脳を使ってよいかを決める。使えないときは、その理由を返す(画面に「おためしモードです」と出すため)。
  * 回数は「使ってよい」と決めた時だけ数える(仮の頭脳の回は数えない)。
  * @returns {Promise<{brain: 'real'|'fallback', reason: string}>}
  */

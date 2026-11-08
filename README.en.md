@@ -275,6 +275,16 @@ npm run yuru -- --lan
 
 **What we checked**: on Nov 7, in a real Quest 3 browser, Norrie on the screen and Norrie in VR after entering (through the USB developer connection; later versions have not been checked on the device). With a simulator (Chrome with IWER, Meta's WebXR emulator) we check 19 items, such as entering, where you stand, walking, the stick, talking with the trigger, the text board and leaving (after `npm start` in `web`, run `node scripts/vr-check.mjs --port 8787`; it needs Chrome with a GPU). Talking inside VR on a real Quest: (not checked yet)
 
+## Adding keys the easy way
+
+Run `npm run start:keys` in the `web` folder. It asks for your Claude key and your voice key with hidden input; press Enter alone to skip either one. The keys are passed only to the started app's environment, and are never written to a file.
+
+- Make a Claude key (official): <https://platform.claude.com/settings/keys>
+- Make a voice key (ElevenLabs, official): <https://elevenlabs.io/app/api/api-keys>
+- Voice pricing and any trial plan (ElevenLabs, official): <https://elevenlabs.io/pricing/api>. Whether a trial plan exists, and what it includes, changes over time, so check the official page.
+
+In the app, while it is in trial mode, the 「本物の Claude にする」 button on the banner opens a guide with two ways: the key steps above, or connecting your own Claude Code on this computer (`npm run start:claude-code`, no key needed). A voice key can also be typed on this device only, at the “voice” step of the creation flow.
+
 ## What works today
 
 Each row was checked by running it. The check is named next to it.

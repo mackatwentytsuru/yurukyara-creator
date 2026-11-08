@@ -7,7 +7,7 @@ import { demoHeaders } from './demoPass.js';
 
 /**
  * 公開の関数のまとめた返事を、手元のサーバーと同じイベントの並びにする。
- * 仮の頭脳になった回は、先に { type:'meta', fallback:true, notice } を出す(画面が「仮の頭脳です」を出す)。
+ * 仮の頭脳になった回は、先に { type:'meta', fallback:true, notice } を出す(画面が「おためしモードです」を出す)。
  */
 export function dispatchJson(data, onEvent) {
   const d = data && typeof data === 'object' ? data : {};

@@ -9,7 +9,7 @@ import { latencyNote, FAKE_BRAIN_LATENCY_NOTE } from '../src/ui/panel.js';
 const read = (...p) => readFileSync(join(import.meta.dirname, '..', 'src', ...p), 'utf8').replace(/\r\n/g, '\n');
 
 test('仮の頭脳で話した回だけ「仮の頭脳なので、参考の値」。本物の頭脳なら、声が無くても付けない', () => {
-  assert.equal(FAKE_BRAIN_LATENCY_NOTE, '(仮の頭脳なので、参考の値)');
+  assert.equal(FAKE_BRAIN_LATENCY_NOTE, '(おためしモードなので、参考の値)');
   assert.equal(latencyNote({ brain: 'mock', tts: 'silent', valid: false }), FAKE_BRAIN_LATENCY_NOTE);
   assert.equal(latencyNote({ brain: 'mock', tts: 'eleven', valid: false }), FAKE_BRAIN_LATENCY_NOTE);
   assert.equal(latencyNote({ brain: 'haiku', tts: 'silent', valid: false }), '', '本物の頭脳・声なし(11/7 の録画の形)');

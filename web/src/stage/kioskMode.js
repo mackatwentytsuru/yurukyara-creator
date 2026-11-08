@@ -37,7 +37,9 @@ export const HIDDEN = Object.freeze([
   { name: '店の人の設定の入口', selector: '#kioskSetupBtn' },
   { name: '店の人の設定の窓', selector: '.yc-sheet' },
   { name: 'カメラの知らせ', selector: '#camAsk' },
-  { name: '仮の頭脳の知らせ', selector: '#brainNotice' },
+  { name: 'おためしモードの知らせ', selector: '#brainNotice' },
+  { name: '本物の Claude で話すには(案内)', selector: '#brainGuide' },
+  { name: 'おためしモードの帯(鍵を入れる案内つき)', selector: '#trialBanner' },
   { name: '店のバッジ', selector: '#shopBadge' },
   { name: '注意書き(カメラ・マイクの説明)', selector: '.privacy' },
 ]);

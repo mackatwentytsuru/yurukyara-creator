@@ -10,6 +10,7 @@
 import { injectStyles } from './styles.js';
 import { STEPS, countChars, progressText, OMAKASE_ALL } from './script.js';
 import { crawl } from './voice.js';
+import { KEY_LINKS, VOICE_TRIAL_NOTE } from '../keyLinks.js';
 import { MAIN_CHARACTER } from '../../character/defaults.js';
 import { currentWorkNote, currentWorkText } from '../work.js';
 import { ensureWorkStyles, workBody, workMark } from '../workFx.js';
@@ -649,6 +650,18 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
       el('p', { className: 'fr-field-label', textContent: 'かぎ(この欄の文字は、押したらすぐ消えます)' }),
       form,
       a.remember ? el('label', { className: 'fr-remember' }, remember, 'この端末に おぼえておく(しない方が あんぜん)') : null,
+      keyLinks(),
+    );
+  }
+
+  /** 声の鍵の欄の下: 声の会社(ElevenLabs)の公式の「鍵のページ」と「料金のページ」(新しいタブ)と、1 行の注意。値段はここに書かない */
+  function keyLinks() {
+    const link = (href, text, aria) => el('a', { className: 'fr-key-link', href, target: '_blank', rel: 'noopener noreferrer', textContent: text, ariaLabel: `${aria}(べつのタブでひらきます)` });
+    return el(
+      'div',
+      { className: 'fr-key-links' },
+      el('p', { className: 'fr-key-row' }, link(KEY_LINKS.voiceKeys, 'かぎの 作りかた', '声の鍵を作るページ(ElevenLabs の公式)'), link(KEY_LINKS.voicePricing, 'りょうきん', '料金のページ(ElevenLabs の公式)')),
+      el('p', { className: 'fr-key-note', textContent: VOICE_TRIAL_NOTE }),
     );
   }
 

@@ -118,6 +118,12 @@ export const CSS = `
 .fr-count.over { color: var(--fr-warn); }
 .fr-remember { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; color: var(--fr-muted); }
 .fr-remember input { width: 22px; height: 22px; }
+/* 声の鍵の欄の下: 声の会社の公式の「鍵のページ」「料金のページ」と 1 行の注意(ElevenLabs。値段は書かない) */
+.fr-key-links { display: grid; gap: 2px; }
+.fr-key-row { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; }
+.fr-key-link { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fr-text); text-decoration: underline; text-underline-offset: 3px; }
+.fr-key-link:focus-visible { outline: 3px solid var(--focus, #b7a8ff); outline-offset: 2px; }
+.fr-key-note { margin: 0; font-size: 14px; line-height: 1.5; color: var(--fr-muted); }
 .fr-frame-wrap { display: grid; }
 .fr-frame { display: block; width: 100%; height: min(400px, 48vh); border: 1px solid var(--fr-line); border-radius: 14px; background: var(--ink-2, #1d1a2e); }
 @supports (height: 1dvh) { .fr-frame { height: min(400px, 48dvh); } }
@@ -189,8 +195,8 @@ html .fr-sheet.fr-sheet.fr-kb .fr-log { flex: 1 1 auto; min-height: 0; }
 html .fr-sheet.fr-kb[data-layout="overlay"] { background: var(--fr-bg); }
 html .fr-sheet.fr-kb[data-layout="overlay"]::before { display: none; }
 
-/* 札が開いている間は、後ろの知らせ(仮の頭脳です・カメラの説明)を隠す。札と重なって見えていた(WebKit) */
-@media (max-width: 719px) { html.fr-open #brainNotice, html.fr-open #privacy { visibility: hidden; } }
+/* 札が開いている間は、後ろの知らせ(おためしモードです・カメラの説明)を隠す。札と重なって見えていた(WebKit) */
+@media (max-width: 719px) { html.fr-open #brainNotice, html.fr-open #brainGuide, html.fr-open #privacy { visibility: hidden; } }
 /* 最後まで行った後に、選んだ子が舞台に立っている間だけ出る、小さな「〜にもどす」(Q-0111) */
 .fr-return { position: fixed; left: 12px; bottom: calc(var(--bottom-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); z-index: 6; font: inherit; font-size: 15px;
   min-height: 44px; padding: 0 18px; border-radius: 999px; cursor: pointer; color: var(--on-btn, #ffffff); background: linear-gradient(135deg, var(--btn-from, #7d62ff), var(--btn-to, #c15bff)); border: 0;

@@ -9,15 +9,15 @@ import { CAMERA_CAP_NOTICE } from '../../server/camera.mjs'; // BCV: カメラ�
 
 // 仮の頭脳にした理由を、画面に出す一言にする
 export const FALLBACK_NOTICE = {
-  'no-key': '仮の頭脳です(本物の頭脳の鍵が入っていません)',
-  'no-passphrase-set': '仮の頭脳です(合言葉が決まっていないので、本物の頭脳は使いません)',
-  'weak-passphrase': '仮の頭脳です(合言葉の設定が短いので、本物の頭脳は使いません)',
-  passphrase: '仮の頭脳です(合言葉が無いか、違います)',
-  'passphrase-wait': '仮の頭脳です(合言葉の間違いが続いたので、しばらく本物の頭脳を止めています)',
-  'per-minute': '仮の頭脳です(少し間をあけてから、もう一度どうぞ)',
-  'daily-cap': '仮の頭脳です(今日の上限に届きました)',
-  'counter-unavailable': '仮の頭脳です(回数を数えられないので、本物の頭脳を止めています)',
-  'brain-error': '仮の頭脳です(本物の頭脳が答えられませんでした)',
+  'no-key': 'おためしモードです(本物の頭脳の鍵が入っていません)',
+  'no-passphrase-set': 'おためしモードです(合言葉が決まっていないので、本物の頭脳は使いません)',
+  'weak-passphrase': 'おためしモードです(合言葉の設定が短いので、本物の頭脳は使いません)',
+  passphrase: 'おためしモードです(合言葉が無いか、違います)',
+  'passphrase-wait': 'おためしモードです(合言葉の間違いが続いたので、しばらく本物の頭脳を止めています)',
+  'per-minute': 'おためしモードです(少し間をあけてから、もう一度どうぞ)',
+  'daily-cap': 'おためしモードです(今日の上限に届きました)',
+  'counter-unavailable': 'おためしモードです(回数を数えられないので、本物の頭脳を止めています)',
+  'brain-error': 'おためしモードです(本物の頭脳が答えられませんでした)',
 };
 
 const NO_MEMORY = async () => ({ handled: false, events: [], memory: null, learned: [] });

@@ -29,6 +29,8 @@
   <canvas id="stage" aria-label="話すキャラクター"></canvas>
 
   <header class="top">
+    <!-- おためしモードの帯(鍵も Claude Code もつながっていない間だけ出す。中身は ui/trialMode.js が作る)。上の段の先頭に置くので、出ると段が高くなり、キャラは自動でその下に収まる(--top-h) -->
+    <div id="trialBanner" class="trial-banner" role="status" hidden></div>
     <!-- UW5(画面の見直し): 来場者の上の段は 3 つだけ(はなす・かえる・もっと)。ほかの札とボタンは「かえる」「もっと」を開いた時だけ出す
          (main.js の UW5 の塊が html.top-simple を付ける。ヘッドセット・入口の LED・自動で始める画面・重さを測る時は今までの段のまま) -->
     <nav class="top-main" id="topMain" aria-label="おもな ボタン" hidden>
@@ -84,11 +86,15 @@
          字幕の箱の中に置く(仮の頭脳の知らせ・注意書きと重ならない)。字幕が出たら消える -->
     <p id="waitBubble" class="wait-bubble" role="status" aria-live="polite" hidden><span class="wb-text" id="waitBubbleText"></span><span class="wd" aria-hidden="true"><i></i><i></i><i></i></span></p>
     <section id="caption" class="caption" aria-live="polite" hidden></section>
+    <!-- 接客モードで、決まった台本で話している間だけ、来場者に見せる札(ui/trialMode.js)。案内のボタンは付けない。AI の表示のすぐ上 -->
+    <p id="trialLabel" class="trial-label" role="status" hidden></p>
     <!-- BSF(11-08 安全): いつも見える 1 行。字幕の列のいちばん下(下の帯のすぐ上)。下の帯の高さを変えないので、キャラは小さくならない。
          はじめての会話の間(下を札が覆う)は、下の #aiNoticeTop が上の段のすぐ下に出す。置き場所は style.css の BSF の段 -->
     <p class="ai-notice" id="aiNotice" role="note">AI キャラクターと話しています</p>
   </div>
   <p class="ai-notice ai-notice-top" id="aiNoticeTop" aria-hidden="true">AI キャラクターと話しています</p>
+  <!-- 「本物の Claude で話すには」の案内の窓(おためしモードの帯の「本物の Claude にする」で開く。中身は ui/brainGuide.js が作る) -->
+  <div id="brainGuide" class="brain-guide" hidden></div>
 
   <aside id="thought" class="thought" aria-label="Claude の考え">
     <!-- UW5: 来場者には「もっと」の中だけ。見出しは「(キャラの名前)の あたまの なか」(main.js が入れる)。赤い点は録画の印に見えるので、上の段が 3 つの時は出さない -->
@@ -184,12 +190,16 @@
       </div>
       <!-- 接客モード(店の端末): 入口は大きな 1 つ。店の人が 1 回押すと、マイクと音の許可を取って、あとは来場者が話しかけるだけ(main.js。ふつうの画面では隠したまま) -->
       <p class="kiosk-lead" id="kioskLead" hidden>この たんまつを あんないがかりに するよ。きおくは のこらないよ。やめる ときは、ひだりうえを 3 びょう おして ばんごうを いれてね。</p>
+      <!-- 接客モードの入口(店の人が見る): 鍵も Claude Code も無いままでは、決まった台本で話すだけ。先に PC で入れてもらう(ui/trialMode.js)。案内のボタンは付けない -->
+      <p class="kiosk-trial" id="kioskTrial" role="note" hidden></p>
       <button id="kioskStart" class="primary kiosk-start" type="button" hidden disabled><span class="btn-main">接客を はじめる</span><small class="btn-sub">おすと、マイクと 音を つかえるように なります</small></button>
       <button id="startSim" class="primary" type="button" disabled><span class="btn-main">カメラなしで試す</span><small class="btn-sub" id="simSub">読み込んでいます…</small></button>
       <button id="startCam" class="ghost" type="button" disabled><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">読み込んでいます…</small></button>
+      <!-- おためしモードの 1 行(始めるボタンの下。鍵が入っていないと手元のサーバーが言う時だけ。ui/trialMode.js) -->
+      <p class="gate-trial" id="gateTrial" role="note" hidden></p>
       <!-- /B4 -->
       <label class="pass" id="passField" hidden>
-        <span>合言葉(あれば。無くても仮の頭脳で話せます)</span>
+        <span>合言葉(あれば。無くても おためしモードで話せます)</span>
         <input id="passInput" type="password" autocomplete="off" maxlength="200" />
       </label>
       <!-- BCV: カメラを使うと、話しかけた時の絵が答えを作るために Claude に送られる(保存しない)。使うかは使う人が決める。あとから入・切できる -->

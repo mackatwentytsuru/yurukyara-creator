@@ -372,7 +372,7 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
 }
 
 /** 本物の頭脳が答えられず、仮の頭脳に替えた時の知らせ(公開の関数の FALLBACK_NOTICE['brain-error'] と同じ文) */
-export const BRAIN_ERROR_NOTICE = '仮の頭脳です(本物の頭脳が答えられませんでした)';
+export const BRAIN_ERROR_NOTICE = 'おためしモードです(本物の頭脳が答えられませんでした)';
 export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で流れて見えるように)。まとめて返す公開の関数は 0 にする
 
 /**
@@ -470,7 +470,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
         for (const [i, line] of CAMERA_MOCK_LINES.entries()) emit({ type: 'say', text: line, expression: i === 0 ? 'sad' : 'happy', motion: i === 0 ? 'none' : 'nod', gaze: 'person' });
         return;
       }
-      onEvent({ type: 'meta', camera: 'mock', cameraNotice: CAMERA_MOCK_NOTICE }); // notice でなく cameraNotice(画面の「仮の頭脳です」の知らせを上書きしない)
+      onEvent({ type: 'meta', camera: 'mock', cameraNotice: CAMERA_MOCK_NOTICE }); // notice でなく cameraNotice(画面の「おためしモードです」の知らせを上書きしない)
     }
     const landmarks = (place.landmarks ?? []).map((l) => ({ name: l.name, where: l.where }));
     // 安全の層と出力の確かめは、ここ(上と emit)で通すので、守りの包みの無い台本を使う(差し替えの印 guarded が消えないように)

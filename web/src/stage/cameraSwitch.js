@@ -10,7 +10,7 @@ export const CAMERA_NOTICE = 'カメラの えは、こたえを つくるため
 /** 仮の頭脳の時の 1 行(UW3 11-08: 仮の頭脳では絵をどこにも送らない。Claude に送ると言わない) */
 export const CAMERA_NOTICE_MOCK = 'カメラの えは、どこにも おくられません(ほぞんしません)。つかうかは あなたが きめてね';
 /** 仮の頭脳の時に足す 1 行(絵は見ない。顔の向きを見るのには使う) */
-export const CAMERA_MOCK_NOTE = 'いまは かりの あたまなので、カメラの えは まだ みられません。かおの むきを みるのには つかいます';
+export const CAMERA_MOCK_NOTE = 'いまは おためしモードなので、カメラの えは まだ みられません。かおの むきを みるのには つかいます';
 export const CAMERA_LABEL_OFF = 'カメラ';
 export const CAMERA_LABEL_ON = 'カメラ オン';
 export const CAMERA_YES = 'カメラを つかう';
@@ -21,9 +21,9 @@ export const CAMERA_TITLE_ON = 'カメラを きる(いまは つかっていま
 /** 下の注意書き(絵を送るカメラが入っている間) */
 export const CAMERA_PRIVACY = 'カメラの映像で、この端末の中で人の位置を調べます。話しかけた時だけ、その時の絵を 1 枚、答えを作るために Claude に送ります(保存しません)。';
 /** 下の注意書き(仮の頭脳の時。絵はどこにも送らない) */
-export const CAMERA_PRIVACY_MOCK = 'カメラの映像で、この端末の中で人の位置を調べます。いまは仮の頭脳なので、絵はどこにも送りません(保存しません)。';
+export const CAMERA_PRIVACY_MOCK = 'カメラの映像で、この端末の中で人の位置を調べます。いまは おためしモードなので、絵はどこにも送りません(保存しません)。';
 /** 下の注意書き(仮の頭脳の時のうしろのカメラ) */
-export const CAMERA_PRIVACY_BACK_MOCK = 'うしろのカメラを使っています。いまは仮の頭脳なので、絵はどこにも送りません(保存しません)。';
+export const CAMERA_PRIVACY_BACK_MOCK = 'うしろのカメラを使っています。いまは おためしモードなので、絵はどこにも送りません(保存しません)。';
 /** 下の注意書き(うしろのカメラ。顔の向きは調べない) */
 export const CAMERA_PRIVACY_BACK = 'うしろのカメラを使っています。話しかけた時だけ、その時の絵を 1 枚、答えを作るために Claude に送ります(保存しません)。';
 
