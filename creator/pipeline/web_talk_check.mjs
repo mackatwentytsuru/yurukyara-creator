@@ -61,7 +61,7 @@ try {
   await finish(1);
 }
 result.loaded = true;
-await page.getByText('カメラなしで試す').click({ timeout: 20000 }).catch(() => problems.push('「カメラなしで試す」が押せない'));
+await page.locator('#startSim').click({ timeout: 20000 }).catch(() => problems.push('「はじめる」が押せない'));
 result.status = await page.evaluate(() => fetch('/api/status').then((r) => r.json()).then((s) => ({ brain: s.brain ?? null, tts: s.tts ?? null })).catch(() => null));
 // 口・表情・動きの呼び出しを記録する
 await page.evaluate((tick) => {

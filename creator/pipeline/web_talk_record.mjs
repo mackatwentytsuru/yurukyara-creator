@@ -43,7 +43,7 @@ page.on('pageerror', (e) => problems.push(e.message.slice(0, 200)));
 await page.exposeFunction('__saveChunk', (b64) => fs.appendFileSync(OUT, Buffer.from(b64, 'base64')));
 await page.goto(`http://127.0.0.1:${PORT}/?character=${CHAR}&auto=0`);
 await page.waitForFunction(() => window.__app?.character, null, { timeout: 120000 });
-await page.getByText('カメラなしで試す').click();
+await page.locator('#startSim').click();
 await page.waitForTimeout(1000);
 await page.evaluate(async ({ chunk, bitrate }) => {
   // 画面なしのブラウザでは、タブの音は無音で入る。声は読み上げの出口から直接取る
