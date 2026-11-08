@@ -18,6 +18,7 @@ const P = (q) => new URLSearchParams(q);
 const manifest = JSON.parse(read('public/manifest.webmanifest'));
 const html = read('index.html');
 const css = read('src/ui/style.css');
+const themes = read('src/ui/themes.css'); // 色の変数は themes.css(はじめの色 = ひるの紙が :root の最初)
 
 /** PNG の頭(IHDR)から幅と高さを読む */
 function pngSize(file) {
@@ -34,9 +35,9 @@ test('manifest: 名前・始まりの頁・全画面(だめなら standalone)・
   assert.equal(manifest.display, 'fullscreen');
   assert.deepEqual(manifest.display_override, ['fullscreen', 'standalone']); // 全画面が出せない端末は standalone
   assert.equal(manifest.lang, 'ja');
-  // 色は今の画面と同じ(index.html の theme-color と style.css の --ink)
+  // 色は今の画面(はじめの色 = ひるの紙)と同じ(index.html の theme-color と themes.css の :root の --ink)
   const theme = html.match(/<meta name="theme-color" content="(#[0-9a-f]{6})"/i)?.[1];
-  const ink = css.match(/--ink:\s*(#[0-9a-f]{6})/i)?.[1];
+  const ink = themes.match(/--ink:\s*(#[0-9a-f]{6})/i)?.[1];
   assert.ok(theme && ink);
   assert.equal(manifest.theme_color.toLowerCase(), theme.toLowerCase());
   assert.equal(manifest.background_color.toLowerCase(), ink.toLowerCase());

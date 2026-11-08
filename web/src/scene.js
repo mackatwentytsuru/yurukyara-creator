@@ -1,22 +1,29 @@
 import * as THREE from 'three';
 // 上の段と下の帯の間に収める計算(three を読まない小さな部品)
 import { fitBand, fullSpan, topPad, MOTION_TOLERANCE, KB_MAX_BOTTOM_FRACTION, KB_MIN_USABLE } from './stage/framing.js';
+// 画面の「いろ」: 光の色と床・光の輪の色は、色の変数から(theme.js)。光の強さは変えない
+import { onThemeChange, readStageColors, rgbCss } from './theme.js';
 
 /** ふだんの画角(度)。部屋の中で下がれない時だけ広げる */
 const BASE_FOV = 28;
 
-/** 床にやわらかい丸い影を敷く(画像ファイルは使わず、その場で描く) */
+/** 床にやわらかい丸い影を敷く(画像ファイルは使わず、その場で描く)。色は「いろ」で替わる(paint で描き直す) */
 function makeFloorGlow() {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const g = c.getContext('2d');
-  const grad = g.createRadialGradient(128, 128, 8, 128, 128, 128);
-  grad.addColorStop(0, 'rgba(255,214,170,0.55)');
-  grad.addColorStop(0.5, 'rgba(255,170,120,0.16)');
-  grad.addColorStop(1, 'rgba(255,170,120,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 256, 256);
   const tex = new THREE.CanvasTexture(c);
+  const paint = (s) => {
+    const grad = g.createRadialGradient(128, 128, 8, 128, 128, 128);
+    grad.addColorStop(0, rgbCss(s.floorRgb, s.floorA1));
+    grad.addColorStop(0.5, rgbCss(s.floorRgb2, s.floorA2));
+    grad.addColorStop(1, rgbCss(s.floorRgb2, 0));
+    g.clearRect(0, 0, 256, 256);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 256, 256);
+    tex.needsUpdate = true;
+  };
+  paint(readStageColors());
   tex.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(
     new THREE.CircleGeometry(1.1, 48),
@@ -24,9 +31,22 @@ function makeFloorGlow() {
   );
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = 0.002;
-  return mesh;
+  return { mesh, paint };
 }
 
+/**
+ * キャラの後ろのやわらかい輪(「ひるの紙」だけ。ほかの色では 0 で出さない)。
+ * 紙の色の地では、ノリーの白いおなかとしっぽが地に溶けるので、少し暗い光の輪で輪郭を立てる。
+ * 3D の中ではなく、キャラを描く板(canvas)のすぐ後ろの丸い 1 枚(ui/themes.css の .stage-halo)で描く。色と濃さは CSS の変数
+ * (--stage-halo-rgb・--stage-halo-a)が決めるので、「いろ」を替えると勝手に替わる。位置と大きさは、render が毎回、キャラの位置を画面に写して決める。
+ */
+function makeHalo(canvas) {
+  const el = document.createElement('div');
+  el.className = 'stage-halo';
+  el.setAttribute('aria-hidden', 'true');
+  canvas.parentNode?.insertBefore(el, canvas);
+  return el;
+}
 /**
  * 舞台。背景は透明にして、ページの色を見せる(AR や LED の背景に差し替えやすい)。
  * キャラは原点に +z を向いて立ち、カメラは +z 側から見る(docs/共通の決まり.md)。
@@ -40,14 +60,30 @@ export function createStage(canvas) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.05, 60);
 
-  scene.add(new THREE.HemisphereLight(0xfff1e0, 0x2a2540, 1.0));
+  // 光の色は「いろ」で替わる(applyStageTheme)。強さ(1.0・1.7・0.8)は替えない
+  const hemi = new THREE.HemisphereLight(0xfff1e0, 0x2a2540, 1.0);
+  scene.add(hemi);
   const key = new THREE.DirectionalLight(0xffffff, 1.7);
   key.position.set(1.2, 2.4, 3);
   scene.add(key);
   const rim = new THREE.DirectionalLight(0x9fd8ff, 0.8);
   rim.position.set(-2, 1.6, -1.5);
   scene.add(rim);
-  scene.add(makeFloorGlow());
+  const floorGlow = makeFloorGlow();
+  scene.add(floorGlow.mesh);
+  const halo = makeHalo(canvas);
+  const haloWorld = { center: new THREE.Vector3(), d: 0 }; // キャラの後ろの輪の中心と直径(m)。frameCharacter が決め、render が画面に写す
+  const haloPx = { x: NaN, y: NaN, d: NaN };
+  function applyStageTheme() {
+    const s = readStageColors();
+    hemi.color.setHex(s.hemiSky);
+    hemi.groundColor.setHex(s.hemiGround);
+    key.color.setHex(s.key);
+    rim.color.setHex(s.rim);
+    floorGlow.paint(s);
+  }
+  applyStageTheme();
+  onThemeChange(applyStageTheme);
 
   // bottomInset: 下の帯の高さ(px。main.js が測る)。kbInset: 画面のキーボードの高さ(px。出ている間だけ 0 より大きい。bottomInset に含まれる)。topGuard(left, right): 画面の横の範囲に重なる上の段の下の端(px。main.js が渡す)。
   // topInset: いま避けている上の段の高さ(px。frameCharacter が書く。試験と確かめ用)
@@ -61,11 +97,41 @@ export function createStage(canvas) {
    * キャラの上の端が来ていれば、その線から置き直す(スマホの幅で頭と耳が段の下に入った。11/7 PC で耳が画面の上の端で切れた)。
    * 2 回目はキャラが小さくなるだけなので、横に重なる段は増えない。
    */
+  /** 光の輪を、キャラの真後ろに、キャラより一回り大きく置く(bust は胸のあたりを中心に) */
+  function placeHalo(box, view) {
+    const h = box.max.y - box.min.y;
+    const w = box.max.x - box.min.x;
+    if (!(h > 0.05)) return;
+    haloWorld.d = Math.max(h * 1.3, w * 2.0, 0.5);
+    haloWorld.center.set((box.min.x + box.max.x) / 2, box.min.y + h * (view === 'bust' ? 0.62 : 0.5), (box.min.z + box.max.z) / 2);
+  }
+
+  /** 輪を、いまのカメラで画面の点と大きさに写す(0.5px 以上動いた時だけ書く。VR・AR の中では出さない) */
+  function updateHalo() {
+    const show = haloWorld.d > 0 && !state.immersive;
+    halo.hidden = !show;
+    if (!show) return;
+    const w = canvas.clientWidth || size.w || window.innerWidth;
+    const h = canvas.clientHeight || size.h || window.innerHeight;
+    camera.updateMatrixWorld();
+    const ndc = haloWorld.center.clone().project(camera);
+    const dist = camera.position.distanceTo(haloWorld.center);
+    const pxPerM = h / (2 * Math.tan((camera.fov * Math.PI) / 360) * dist);
+    const x = (ndc.x * 0.5 + 0.5) * w;
+    const y = (1 - (ndc.y * 0.5 + 0.5)) * h;
+    const d = haloWorld.d * pxPerM;
+    if (Math.abs(x - haloPx.x) < 0.5 && Math.abs(y - haloPx.y) < 0.5 && Math.abs(d - haloPx.d) < 0.5) return;
+    haloPx.x = x; haloPx.y = y; haloPx.d = d;
+    halo.style.setProperty('--halo-x', `${x.toFixed(1)}px`);
+    halo.style.setProperty('--halo-y', `${y.toFixed(1)}px`);
+    halo.style.setProperty('--halo-d', `${d.toFixed(1)}px`);
+  }
   function frameCharacter(character, view = state.view, obstacles = state.obstacles) {
     state.view = view;
     state.obstacles = obstacles;
     character.object3d.updateWorldMatrix(true, true);
     const box = new THREE.Box3().setFromObject(character.object3d);
+    placeHalo(box, view);
     syncSize(); // 置く前に、画角の縦横を今の箱にそろえる(古い縦横で置くと、頭や足の位置の計算もずれる)
     const viewW = canvas.clientWidth || size.w || window.innerWidth;
     const viewH = canvas.clientHeight || size.h || window.innerHeight;
@@ -262,6 +328,9 @@ export function createStage(canvas) {
     frameCharacter,
     resize,
     syncSize,
-    render: () => renderer.render(scene, camera),
+    render: () => {
+      renderer.render(scene, camera);
+      updateHalo();
+    },
   };
 }

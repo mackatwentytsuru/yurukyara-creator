@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { applyFur } from '../../../creator/viewer/furShell.js';
 import { SHITSUKAN_IDS, LOOKS, LIGHT, FUR_LOOK, TILE_M, classifyMaterial, cylinderUv, smoothNormals, fleeceHeight, normalFromHeight, ormFromHeight } from './shitsukan.js';
+import { onThemeChange, readStageColors } from '../theme.js';
 
 const TEX_SIZE = 256;
 const CACHE_KEY = 'yc-shitsukan-1';
@@ -55,12 +56,13 @@ function sharedAssets() {
   const uniforms = {
     ycExposure: { value: LIGHT.exposure },
     ycTone: { value: LIGHT.tone === 'aces' ? 1 : 0 },
-    ycRimColor: { value: new THREE.Color().fromArray(LIGHT.rimColor) },
+    ycRimColor: { value: new THREE.Color().fromArray(readStageColors().rimShader) }, // 縁の光の色は「いろ」で替わる(下の onThemeChange)。強さは替えない
     ycRimStrength: { value: LIGHT.rimStrength },
     ycRimPower: { value: LIGHT.rimPower },
     ycRimDir: { value: new THREE.Vector3(...LIGHT.rimDir).normalize() },
   };
   shared = { normal, orm, white, uniforms, env: null, contactTex: null };
+  onThemeChange(() => uniforms.ycRimColor.value.fromArray(readStageColors().rimShader));
   return shared;
 }
 
