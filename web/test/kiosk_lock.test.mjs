@@ -96,6 +96,64 @@ test('札が壊れている・署名が合わない端末は、札の無い端�
   }
 });
 
+const B64U = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+/** 同じ札の別の綴りを集める(署名の確かめがゆるいと、署名が合ったまま別の数えの箱になるもの) */
+function spellings(token) {
+  const [payload, sig] = token.split('.');
+  const last = B64U.indexOf(sig.at(-1));
+  // 16 バイトの署名は 22 字で、最後の字は下 4 ビットが捨てられる。上 2 ビットが同じ別の字は、同じバイト列に読まれる
+  const twin = B64U[(last & 0b110000) | ((last + 1) & 0b001111)];
+  const out = [
+    ...Array.from({ length: 24 }, (_, i) => `${token}${'*'.repeat(i + 1)}`),
+    `${token}=`,
+    `${token}==`,
+    `${token}\n`,
+    ` ${token}`,
+    `${payload}.${sig.slice(0, -1)}${twin}`,
+    `${payload}.${sig}A`,
+    `${payload}=.${sig}`,
+    `${payload}*.${sig}`,
+    `${payload}.*${sig}`,
+    `${payload}.${sig}.`,
+    `${payload}.${sig}.${sig}`,
+  ];
+  return { out, twin, sig };
+}
+
+test('札の別表記は同じ端末として数える: 署名のあとに字を足す・最後の字を同じ意味の字に替える、などでは数えをすり抜けられない', () => {
+  const s = setup();
+  try {
+    const token = s.device();
+    const { out, twin, sig } = spellings(token);
+    assert.notEqual(twin, sig.at(-1), '試験の前提: 同じバイト列に読まれる別の字を作れた');
+    // 決まりの綴りでない札は、署名が合っていても通さない
+    for (const v of out) assert.equal(s.kiosk.verifyToken(v).ok, false, JSON.stringify(v));
+    assert.equal(s.kiosk.verifyToken(token).ok, true, '決まりの綴りは通る');
+    // 別表記を 24 回続けて間違えても、5 回目で止まる(1 回ごとに新しい箱にならない)
+    const results = out.slice(0, 24).map((v) => s.kiosk.exit('1111', v));
+    assert.deepEqual(results.slice(0, MAX_WRONG - 1).map((r) => r.status), Array(MAX_WRONG - 1).fill(403));
+    assert.equal(results[MAX_WRONG - 1].status, 429, `${MAX_WRONG} 回目で止まる`);
+    assert.ok(results.slice(MAX_WRONG - 1).every((r) => r.status === 429), 'そのあとも止まったまま');
+    // 別表記の数えは、決まりの綴りの札の端末に入らない
+    assert.equal(s.kiosk.exit('1111', token).remaining, MAX_WRONG - 1);
+  } finally {
+    s.done();
+  }
+});
+
+test('決まりの綴りの札は、何度送っても同じ端末の数え(綴りが 1 つだけなので、数えがぶれない)', () => {
+  const s = setup();
+  try {
+    const token = s.device();
+    for (let i = 1; i <= MAX_WRONG - 1; i++) assert.equal(s.kiosk.exit('1111', token).remaining, MAX_WRONG - i);
+    assert.equal(s.kiosk.exit('1111', String(token)).status, 429);
+    assert.equal(s.kiosk.lockInfo().lockedDevices, 1);
+  } finally {
+    s.done();
+  }
+});
+
 test('サーバー全体の安全の上限: ふつうの使い方では届かない。届いたら全体が止まり、時間がたつと戻る', () => {
   assert.ok(GLOBAL_MAX_WRONG >= 50, '上限は、ふつうの使い方(数回)より十分高い');
   const s = setup();
@@ -269,6 +327,20 @@ test('道: 店の PC の窓だけが止まりを解ける(unlock)。設定の読
     for (let i = 0; i < MAX_WRONG; i++) await exit('1111', v2);
     const saved = await s.call('POST', '/api/kiosk/settings', { body: { idleSec: 60 }, headers: s.pc });
     assert.equal(saved.body.lockedDevices, 1);
+  } finally {
+    await s.stop();
+  }
+});
+
+test('道: 札の別表記を付けた /api/kiosk/exit も、札なしの端末の数えに入って 5 回で止まる', async () => {
+  const s = await startRoutes();
+  try {
+    const token = s.device();
+    const exit = (t) => s.call('POST', '/api/kiosk/exit', { body: { pin: '1111' }, headers: { 'x-kiosk-token': t } });
+    const codes = [];
+    for (let i = 1; i <= 8; i++) codes.push((await exit(`${token}${'*'.repeat(i)}`)).status);
+    assert.deepEqual(codes, [403, 403, 403, 403, 429, 429, 429, 429]);
+    assert.equal((await exit(token)).body.remaining, MAX_WRONG - 1, '決まりの綴りの札の数えは別');
   } finally {
     await s.stop();
   }
