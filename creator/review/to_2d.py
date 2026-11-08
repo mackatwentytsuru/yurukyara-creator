@@ -7,6 +7,9 @@
   足すのは、話す口(半分・開き)と、うれしい目(^^)と口だけ。
 - 部品の箱は、ヘッドレスの Chrome で getBBox を測る(1 回の起動で全部。GPU は使わない)。
 - 頭の無い絵(まるい 1 つの体に顔がある子)は、体を頭として使う(2D は頭に顔の枠が付く)。
+- 頭と体のつなぎ目(11/8): 頭が体の上にういている絵(すき間がある)は、頭と顔と頭の上の物を下へずらして、体に重ねる(plan_neck)。
+  accessory が頭の上の物(かんむり・めがね)なら頭の部品へ入れる(体の部品のままだと、頭だけ動いて置いていかれ、帽子が頭の後ろに隠れる)。
+  parts.json に headLiftMax(舞台で頭を上げてよい量)を書く。
 終わりの番号: 0 = できた、1 = 絵が読めない・部品が足りない、2 = 箱を測れない。
 """
 import argparse
@@ -42,6 +45,31 @@ BODY_PARTS = [
 Z = {"shadow": 0, "behind": 0.5, "feet": 1, "arm_r": 2, "arm_l": 2, "body": 3, "head": 5}
 LOWER = {"shadow", "feet"}
 
+# 頭と体のつなぎ目(11/8 本人の試験: 描かれた絵で頭が体の上にういていた)。首は描かない決まりなので、頭の下のふちは体の上のふちにかぶせる
+NECK_OVERLAP = 0.18     # 頭と体の重なりの下限(頭と体の低い方の高さに対する割合)
+NECK_OVERLAP_MIN = 12   # 小さな絵でも、これだけは重ねる(元の絵の座標)
+NECK_SIDE_SHARE = 0.3   # 頭と体が横にこれだけ重なっていなければ(横に並んでいる絵)、つなぎ直さない
+ACCESSORY_ON_HEAD = 0.25  # accessory の真ん中が、頭の真ん中からこの割合(頭の高さ)より下なら体の物。それより上なら頭の物(かんむり・めがね)
+HEAD_LIFT_SHARE = 0.8   # 舞台で頭を上げてよい量 = 重なりのこの割合(上を見る動きですき間を開けない)
+
+
+def plan_neck(head, body, accessory=None):
+    """頭・体・accessory の箱([x, y, 幅, 高さ])から、頭を下げる量と accessory の行き先を決める(計算だけ。Chrome は使わない)。
+    返す物: {"dy": 頭を下げる量, "overlap": 下げた後の重なり, "accessory_on_head": bool}。
+    頭が体の上にあり、横に重なっている時だけ、頭と体の重なりを下限まで増やす。"""
+    ok = bool(head and body and head[2] > 0 and head[3] > 0 and body[2] > 0 and body[3] > 0 and head[1] < body[1])
+    dy, overlap = 0.0, None
+    if ok:
+        side = min(head[0] + head[2], body[0] + body[2]) - max(head[0], body[0])
+        if side >= NECK_SIDE_SHARE * min(head[2], body[2]):
+            need = max(float(NECK_OVERLAP_MIN), NECK_OVERLAP * min(head[3], body[3]))
+            have = head[1] + head[3] - body[1]
+            dy = round(max(0.0, need - have), 1)
+            overlap = round(have + dy, 1)
+    on_head = bool(head and head[3] > 0 and accessory and accessory[3] > 0
+                   and accessory[1] + accessory[3] / 2 < head[1] + head[3] / 2 + ACCESSORY_ON_HEAD * head[3])
+    return {"dy": dy, "overlap": overlap, "accessory_on_head": on_head}
+
 
 def tag(e):
     return e.tag.split("}")[-1]
@@ -68,12 +96,15 @@ def inner(e):
     return c
 
 
-def wrap(new_id, elements, xf):
-    """新しい部品の <g id>。元の <g id="char"> の transform を中に入れる(部品だけを切り出しても同じ所に描ける)。"""
+def wrap(new_id, elements, xf, dy=0.0):
+    """新しい部品の <g id>。元の <g id="char"> の transform を中に入れる(部品だけを切り出しても同じ所に描ける)。
+    dy があれば、その分だけ下へずらす(頭と顔のつなぎ直し。変換の後の座標で)。"""
     g = ET.Element(f"{{{SVGNS}}}g", {"id": new_id})
     host = g
+    if dy:
+        host = ET.SubElement(g, f"{{{SVGNS}}}g", {"transform": f"translate(0 {dy:g})"})
     if xf:
-        host = ET.SubElement(g, f"{{{SVGNS}}}g", {"transform": xf})
+        host = ET.SubElement(host, f"{{{SVGNS}}}g", {"transform": xf})
     for e in elements:
         host.append(e)
     return g
@@ -171,6 +202,21 @@ def build(svg_path, cid, name, out_root, role="home", persona=None):
         layout = [(n, src) for n, src in layout if n != "head"]
         layout = [("head" if n == "body" else n, src + (["ear_R", "ear_L", "hat"] if n == "body" else [])) for n, src in layout]
 
+    # 頭と体のつなぎ目を測る(元の絵のまま。頭が体の上にういていたら、頭と顔をまとめて下げる。accessory が頭の上の物なら頭へ入れる)
+    neck = {"dy": 0.0, "overlap": None, "accessory_on_head": False}
+    if has_head and "body" in groups:
+        raw_ids = [g for g in ("head", "body", "accessory") if g in groups]
+        raw = ET.Element(f"{{{SVGNS}}}svg", {"viewBox": " ".join(str(v) for v in vb)})
+        for d in defs:
+            raw.append(copy.deepcopy(d))
+        for g in raw_ids:
+            raw.append(wrap(f"raw_{g}", [inner(groups[g])], xf))
+        rb = measure(ET.tostring(raw, encoding="unicode"), [f"raw_{g}" for g in raw_ids])
+        neck = plan_neck(rb.get("raw_head"), rb.get("raw_body"), rb.get("raw_accessory"))
+        if neck["accessory_on_head"] and "accessory" in groups:
+            layout = [(n, [s for s in src if s != "accessory"] if n == "body" else src + ["accessory"] if n == "head" else src) for n, src in layout]
+    dy = neck["dy"]   # 頭の部品と顔の部品が下がる量(体と手足は動かさない)
+
     eye_col = eye_color(groups)
     out = ET.Element(f"{{{SVGNS}}}svg", {"viewBox": " ".join(str(v) for v in vb)})
     for d in defs:
@@ -179,21 +225,21 @@ def build(svg_path, cid, name, out_root, role="home", persona=None):
     for new_id, src in layout:
         els = [inner(groups[s]) for s in src if s in groups]
         if els:
-            out.append(wrap(new_id, els, xf))
+            out.append(wrap(new_id, els, xf, dy if new_id == "head" else 0.0))
             used.append(new_id)
     cheeks = [inner(groups[s]) for s in ("cheek_R", "cheek_L") if s in groups]
     if cheeks:
-        out.append(wrap("cheeks", cheeks, xf))
-    out.append(wrap("face.neutral.eyes", [inner(groups["eye_R"]), inner(groups["eye_L"])], xf))
+        out.append(wrap("cheeks", cheeks, xf, dy))
+    out.append(wrap("face.neutral.eyes", [inner(groups["eye_R"]), inner(groups["eye_L"])], xf, dy))
     brows = [inner(groups[s]) for s in ("brow_R", "brow_L") if s in groups]
     if brows:
-        out.append(wrap("face.neutral.brows", brows, xf))
-    out.append(wrap("face.neutral.mouth_closed", [inner(groups["mouth"])], xf))
+        out.append(wrap("face.neutral.brows", brows, xf, dy))
+    out.append(wrap("face.neutral.mouth_closed", [inner(groups["mouth"])], xf, dy))
     # まず測る(口と目の位置から、足す口と目を描く)
     first = ET.tostring(out, encoding="unicode")
     ids = used + (["cheeks"] if cheeks else []) + ["face.neutral.eyes", "face.neutral.mouth_closed"] + (["face.neutral.brows"] if brows else [])
     probe = first.replace("</svg>", "".join(
-        f'<g id="probe_{g}">' + ET.tostring(wrap("x", [inner(groups[g])], xf), encoding="unicode").replace(' id="x"', "") + "</g>"
+        f'<g id="probe_{g}">' + ET.tostring(wrap("x", [inner(groups[g])], xf, dy), encoding="unicode").replace(' id="x"', "") + "</g>"
         for g in ("eye_R", "eye_L", "mouth")) + "</svg>")
     boxes = measure(probe, ids + ["probe_eye_R", "probe_eye_L", "probe_mouth"])
     mbox = boxes["probe_mouth"]
@@ -251,6 +297,9 @@ def build(svg_path, cid, name, out_root, role="home", persona=None):
     }
     if cheeks and boxes.get("cheeks"):
         spec["faceLayers"] = [{"id": "cheeks", "box": pad(boxes["cheeks"], 6)}]
+    if neck["overlap"] is not None:
+        # 舞台(svg2dCharacter)が頭を上へ動かしてよい量。これ以上は上げない(頭と体のあいだにすき間を開けない)
+        spec["headLiftMax"] = round(max(0.0, neck["overlap"]) * HEAD_LIFT_SHARE, 1)
 
     # SVG の viewBox も、部品の表と同じ範囲にする(紙の余白で小さく写らないように)。説明の文は <svg> の頭の後ろに置く
     svg_text = re.sub(r'viewBox="[^"]*"', 'viewBox="' + " ".join(f"{v:g}" for v in view) + '"', svg_text, count=1)
@@ -273,7 +322,8 @@ def build(svg_path, cid, name, out_root, role="home", persona=None):
     pm = cdir / "persona.md"
     if not pm.exists():
         pm.write_text(persona or default_persona(rec["name"], rec["role"]), encoding="utf-8", newline="\n")
-    return {"dir": str(cdir), "parts": list(parts), "face": list(face), "viewBox": view}
+    return {"dir": str(cdir), "parts": list(parts), "face": list(face), "viewBox": view,
+            "neck": {"headDown": neck["dy"], "overlap": neck["overlap"], "accessoryOnHead": neck["accessory_on_head"]}}
 
 
 ROLE_LINE = {"home": "おうち", "shop": "お店の案内", "station": "駅や町の案内", "facility": "学校や施設"}

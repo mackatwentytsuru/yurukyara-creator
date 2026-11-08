@@ -113,3 +113,12 @@ test('画面の描く道: 切ってある時は見本の道のまま。入れた
     globalThis.fetch = real;
   }
 });
+
+test('描く決まりに、頭と体をつなげること・hat と accessory の使い分けが入っている(11/8: 頭が体の上にういた)', () => {
+  assert.match(DRAW_RULES, /頭と体はつなげる/);
+  assert.match(DRAW_RULES, /すき間を空けない/);
+  assert.match(DRAW_RULES, /hat は頭の上/);
+  assert.match(DRAW_RULES, /accessory は体の前/);
+  // hat と accessory は、決まった部品の名前の中(validateSvg が通す)
+  assert.deepEqual(validateSvg(GOOD.replace('<g id="body">', '<g id="accessory"></g><g id="hat"></g><g id="body">')), []);
+});

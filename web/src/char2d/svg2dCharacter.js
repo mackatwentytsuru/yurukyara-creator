@@ -269,7 +269,9 @@ export class Svg2DCharacter extends CharacterBase {
     if (this.groups.ear_r) this.groups.ear_r.rotation.z = m.earRotR;
     this.upper.scale.y = m.upperSquash;
     const head = this.groups.head;
-    head.position.set(head.userData.base.x + m.headX * this.headSize.w, head.userData.base.y + m.headY * this.headSize.h, head.userData.base.z);
+    // 頭を上へ動かす量は、体との重なりの内まで(parts.json の headLiftMax。無いキャラは今までどおり)。上を見ても首にすき間を開けない
+    const lift = Number.isFinite(this.spec.headLiftMax) ? Math.max(0, this.spec.headLiftMax) * this.unit : Infinity;
+    head.position.set(head.userData.base.x + m.headX * this.headSize.w, head.userData.base.y + Math.min(m.headY * this.headSize.h, lift), head.userData.base.z);
     head.rotation.z = m.headRot;
     // 上半身のつぶしを頭では打ち消す(頭は丸いまま、少し手前へ大きく)
     head.scale.set(m.headGrow, (m.headSquash * m.headGrow) / this.upper.scale.y, 1);
