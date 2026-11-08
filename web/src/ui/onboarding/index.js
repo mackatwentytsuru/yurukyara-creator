@@ -29,6 +29,7 @@ import { applyVoiceRole } from '../persona/voiceChoice.js';
 import { streamChat } from '../../conversation/brainClient.js';
 import { mlBodyFields } from '../../conversation/mlBody.js'; // ML1: 多言語・お店のきまり・お店の端末の欄(試しの返事にも同じ欄を付ける)
 import { getHearLang } from '../../conversation/hearLang.js';
+import { normalizeReadings } from '../../conversation/readings.js';
 // 主役で案内役(協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリー」と呼ぶ)。three を読まない小さな部品
 import { MAIN_CHARACTER } from '../../character/defaults.js';
 // ?character= の id の形(英小文字・数字・_ の 32 字まで。main.js と同じ決まり。three を読まない小さな部品)
@@ -777,6 +778,7 @@ export function mountFirstRun({
       guideUrl: readGuideUrl(),
       showCharacter: showCharacter ?? defaultShow,
       onPersona: (s, c) => applyPersona(s, c),
+      onReadings: (r) => { if (app) app.sessionReadings = normalizeReadings(r); }, // 聞いた名前の読み方を、今の画面の声もすぐ使う(11-08 b13-yomi)
       onStep: (n, info) => sheet.setStep(n, info),
       save: (snap) => {
         session?.setItem(RESUME_KEY, JSON.stringify(snap));

@@ -7,6 +7,7 @@ import { DEFAULT_CHARACTERS, MAIN_CHARACTER, loadFirstOf } from './defaults.js';
 // 見た目の方式(3D と 2D)の決まりと、このタブで選んだ見た目の覚え方(three を読まない小さな部品)
 import { LOOKS, pickLook, partsPath, twoDHint, readRemembered } from './looks.js';
 import { cuteChoices } from './cuteLayer.js'; // B5G: どのキャラでも使える仕草の名前
+import { normalizeReadings } from '../conversation/readings.js'; // 名前の読み方(11-08 b13-yomi。character.json の readings)
 
 export { DEFAULT_CHARACTERS, MAIN_CHARACTER, pickLook };
 
@@ -56,6 +57,7 @@ async function load2d(json, base) {
     kind: '2d',
     look: '2d',
     expressionHints: json.expression_hints ?? {},
+    readings: normalizeReadings(json.readings),
     personaUrl: json.persona ? new URL(json.persona, base).href : null,
   });
 }
@@ -93,7 +95,7 @@ async function load3d(json, url, base, rest) {
   const type = json.type ?? 'vrm';
   if (type === 'rig') {
     // 身長合わせの大きさは、rigRuntime が中身(gltf.scene)に掛ける。object3d の座標は、メートルのまま
-    return Object.assign(await loadRigCharacter(url, rest), { kind: 'rig', look: '3d', expressionHints: json.expression_hints ?? {} });
+    return Object.assign(await loadRigCharacter(url, rest), { kind: 'rig', look: '3d', expressionHints: json.expression_hints ?? {}, readings: normalizeReadings(json.readings) });
   }
   if (type !== 'vrm') throw new Error(`知らない type です: ${type}`);
   const config = {
@@ -106,7 +108,7 @@ async function load3d(json, url, base, rest) {
     ...rest,
   };
   const character = await loadVrm(new URL(json.model, base).href, config);
-  return Object.assign(character, { kind: 'vrm', look: '3d', expressionHints: json.expression_hints ?? {}, personaUrl: json.persona ? new URL(json.persona, base).href : null });
+  return Object.assign(character, { kind: 'vrm', look: '3d', expressionHints: json.expression_hints ?? {}, readings: normalizeReadings(json.readings), personaUrl: json.persona ? new URL(json.persona, base).href : null });
 }
 
 /**

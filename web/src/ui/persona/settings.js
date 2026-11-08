@@ -11,6 +11,7 @@ import { VOICE_ROLES, normalizeVoiceRole } from './voiceChoice.js';
 import { DEFAULT_ROLE, PLACE_MAX, ROLE_LABELS, normalizeRole, placeLine } from '../onboarding/roles.js';
 import { DEFAULT_LANG_MODE, normalizeLangMode } from '../../conversation/lang.js'; // ML1: ことば(日本語だけ・多言語)
 import { clipFactsText } from '../../conversation/facts.js'; // ML1: お店のきまり・お知らせ(その端末の欄)
+import { READINGS_LINE, normalizeReadings, readingsText } from '../../conversation/readings.js'; // 名前の読み方(11-08 b13-yomi)
 export const SETTINGS_VERSION = 2;
 export const STORE_PREFIX = 'yc.persona.v2.'; // + キャラの id(この端末の中だけ)
 
@@ -185,6 +186,8 @@ export function normalize(input) {
     // お店のきまり・お知らせ(ML1。お店・駅や町・学校や施設の時に、日本語で書く欄。その端末だけ。1000 字まで)。空なら欄ごと付けない
     ...(clipFactsText(s.facts).trim() ? { facts: clipFactsText(s.facts) } : {}),
     ...(placeLine(s.place) ? { place: { name: clipPlace(s.place?.name), about: clipPlace(s.place?.about) } } : {}),
+    // 名前の読み方(11-08 b13-yomi。お店・駅の名前・その子の名前の漢字・英字を、声が正しく読むための { 字: かな })。空なら欄ごと付けない
+    ...(Object.keys(normalizeReadings(s.readings)).length ? { readings: normalizeReadings(s.readings) } : {}),
   };
 }
 const clipPlace = (v) => [...String(v ?? '').trim()].slice(0, PLACE_MAX).join('');
@@ -302,6 +305,8 @@ export function personaBlock(settings) {
     // 役目の行(会話の側 B3 がこの 1 行を読む。言葉は roles.js の ROLE_LABELS)。置く場所はお店・駅などで書いた時だけ
     `- 役目: ${ROLE_LABELS[s.role]}`,
     ...(s.place ? [`- 置く場所: ${placeLine(s.place)}`] : []),
+    // 名前の読み方の行(声に渡す文だけが、この読みになる。画面の字幕と、文に書く字は、もとの字のまま。声の側は readings.js の readingsFromPersona がこの行を読む)
+    ...(s.readings ? [`- ${READINGS_LINE}: ${readingsText(s.readings)}(声は この読みで 読む。文に書く時は、もとの字のまま)`] : []),
     // ことばの行(ML1。多言語の時だけ。日本語だけの時は、今までと同じで 1 行も足さない)。会話の側は lang.js の langModeFromPersona がこの行を読む
     ...(s.lang === 'multi' ? ['- ことば: 多言語(使う人の言葉に合わせて、日本語・English・中文・한국어で話す)'] : []),
   ].join('\n');

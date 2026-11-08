@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path';
 import { config, REPO_ROOT } from './env.mjs';
 import { toSpeechText } from '../src/conversation/speechReading.js';
+import { normalizeReadings } from '../src/conversation/readings.js'; // この子の名前の読み方(11-08 b13-yomi)
 import { cacheKey, createTtsCache } from './ttsCache.mjs';
 import { ROLE_DEFAULT_VOICES, isVoiceId, normalizeVoiceChoice, personaVoice } from '../src/conversation/voiceRole.js';
 import { VOICE_LANG_CODE, normalizeHearLang } from '../src/conversation/lang.js'; // ML1: 多言語の声の言葉
@@ -76,13 +77,15 @@ export function knownVoiceIds(cfg = config, { now = Date.now(), dir = join(REPO_
  * 本文: { text, voice: 'auto'|'male'|'female'(話す役。画面は、性格の画面で選んだ役か、その子の役を送る), voiceId?: その子自身の声の id }
  * voice が 'auto'・無い・知らない値なら女の子(サーバーはキャラを知らない。11-07 までの既定の声と同じ)。
  * 声の id: その子自身の声(形が正しく、使ってよい表 knownVoiceIds に入っている時)> 役の既定 > ELEVEN_VOICE_ID
- * @returns {{role: 'male'|'female', voiceId: string}}
+ * 本文の readings(その子の名前の読み方 { 辰三: 'たつぞう' }。かなだけ・8 件まで。形の違う行は捨てる)は、あれば返す(声に渡す文だけに当てる)。
+ * @returns {{role: 'male'|'female', voiceId: string, readings?: Record<string,string>}}
  */
 export function voiceForRequest(body, cfg = config, known = knownVoiceIds(cfg)) {
   const b = body && typeof body === 'object' ? body : {};
   const choice = normalizeVoiceChoice(b.voice);
   const role = choice === 'male' ? 'male' : 'female';
-  return { role, voiceId: isVoiceId(b.voiceId) && known.has(b.voiceId) ? b.voiceId : roleVoiceId(role, cfg) };
+  const readings = normalizeReadings(b.readings);
+  return { role, voiceId: isVoiceId(b.voiceId) && known.has(b.voiceId) ? b.voiceId : roleVoiceId(role, cfg), ...(Object.keys(readings).length ? { readings } : {}) };
 }
 
 const speechUrl = (voiceId) => `${config.elevenUrl}${voiceId}/stream?output_format=pcm_${SAMPLE_RATE}`;
@@ -198,7 +201,7 @@ export async function streamSpeech(text, res, signal, voice = {}) {
   const { role, voiceId } = isVoiceId(voice.voiceId) ? { role: voice.role === 'male' ? 'male' : 'female', voiceId: voice.voiceId } : voiceForRequest({ voice: voice.role });
   // ML1: 多言語の時だけ、画面が文の言葉(en・zh・ko)を送る。日本語・無い・知らない値は 'ja'(今までと同じ)。日本語以外には、日本語の読み替え表を当てない
   const lang = normalizeHearLang(voice.lang) ?? 'ja';
-  const clean = (lang === 'ja' ? toSpeechText(text) : String(text ?? '')).trim().slice(0, 300);
+  const clean = (lang === 'ja' ? toSpeechText(text, normalizeReadings(voice.readings)) : String(text ?? '')).trim().slice(0, 300);
   if (!clean) {
     res.writeHead(400, { 'content-type': 'application/json' }).end('{"error":"text が空です"}');
     return;

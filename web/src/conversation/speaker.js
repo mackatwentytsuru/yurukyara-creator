@@ -16,6 +16,7 @@ import { getVoiceKey } from './voiceKey.js';
 import { describeElevenError, fetchElevenPcm } from './elevenDirect.js';
 import { RETRO, crawlSchedule, isPause, scheduleRetro, voiceFor } from './retroVoice.js';
 import { toSpeechText } from './speechReading.js';
+import { readingsOf } from './readings.js'; // この子の名前の読み方(11-08 b13-yomi)
 import { VOICE_MODEL_ID, isVoiceId, normalizeVoiceChoice, resolveVoice } from './voiceRole.js';
 import { SR_LANG, VOICE_LANG_CODE, langModeOf, spokenLang } from './lang.js'; // ML1: 多言語(日本語だけの時は、いつも ja で今までと同じ)
 
@@ -343,7 +344,13 @@ export class Speaker {
     const v = this.currentVoice();
     const lang = this._spokenLang(text);
     // ML1: 日本語以外の言葉は、言葉も名前に足し、読み替え表は当てない(日本語の名前は今までと同じ)
-    return lang === 'ja' ? `${key ? 'k' : 's'}|${v.voiceId}|${v.role}|${v.ownVoiceId ?? ''}|${toSpeechText(text)}` : `${key ? 'k' : 's'}|${v.voiceId}|${v.role}|${v.ownVoiceId ?? ''}|${lang}|${String(text ?? '')}`;
+    return lang === 'ja' ? `${key ? 'k' : 's'}|${v.voiceId}|${v.role}|${v.ownVoiceId ?? ''}|${toSpeechText(text, this._readings())}` : `${key ? 'k' : 's'}|${v.voiceId}|${v.role}|${v.ownVoiceId ?? ''}|${lang}|${String(text ?? '')}`;
+  }
+
+  /** 今の子の名前の読み方({ 辰三: 'たつぞう' })。声に渡す文だけに当てる(字幕・文字送りはもとの字)。無ければ空 */
+  _readings() {
+    const app = globalThis.__app;
+    return readingsOf({ character: app?.character, persona: app?.persona ?? '', settings: app?.personaSettings ?? null, session: app?.sessionReadings ?? null });
   }
 
   /** ことば(ML1)。setLangMode で決めた値が先、無ければ今の性格の設定・人格の文から(日本語だけが既定) */
@@ -449,7 +456,8 @@ export class Speaker {
     // 声に渡す文だけ、読み方の表を当てる(字幕・文字送りは _play が、もとの text で出す)
     // ML1: 多言語の時だけ、文ごとの言葉(en・zh・ko)を声のサービスへ渡す。日本語は今までと同じ(読み替え表も日本語の時だけ)
     const lang = this._spokenLang(text);
-    const spoken = lang === 'ja' ? toSpeechText(text) : String(text ?? '');
+    const readings = lang === 'ja' ? this._readings() : {};
+    const spoken = lang === 'ja' ? toSpeechText(text, readings) : String(text ?? '');
     let res;
     try {
       res = key
@@ -457,7 +465,7 @@ export class Speaker {
         : await fetch('/api/tts', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text: spoken, voice: voice.role, ...(voice.ownVoiceId ? { voiceId: voice.ownVoiceId } : {}), ...(lang !== 'ja' ? { lang } : {}) }),
+            body: JSON.stringify({ text: spoken, voice: voice.role, ...(voice.ownVoiceId ? { voiceId: voice.ownVoiceId } : {}), ...(lang !== 'ja' ? { lang } : {}), ...(Object.keys(readings).length ? { readings } : {}) }), // 名前の読み方は、サーバーの側の文にも当てる(11-08 b13-yomi)
             signal,
           });
     } catch (err) {
@@ -619,7 +627,7 @@ export class Speaker {
     try {
       const v = globalThis.__app?.personaSettings?.voice ?? {};
       const lang = this._spokenLang(text); // ML1: 日本語だけの時は、いつも ja(今までと同じ)
-      const u = new globalThis.SpeechSynthesisUtterance(lang === 'ja' ? toSpeechText(text) : String(text ?? ''));
+      const u = new globalThis.SpeechSynthesisUtterance(lang === 'ja' ? toSpeechText(text, this._readings()) : String(text ?? ''));
       u.lang = SR_LANG[lang] ?? 'ja-JP';
       u.pitch = Number.isFinite(v.pitch) ? v.pitch : 1;
       u.rate = Number.isFinite(v.rate) ? v.rate : 1;

@@ -16,6 +16,7 @@ import { MAIN_CHARACTER } from '../../character/defaults.js'; // 主役の決ま
 import { ASKS_PLACE, DEFAULT_ROLE, PLACE_MAX, ROLES, ROLE_CHIPS, autoWords, normalizeRole } from './roles.js';
 import { COLOR_CHIPS, SHAPE_CHIPS } from './creators.js';
 import { MATERIAL_THUMBS, SHAPE_THUMBS } from './thumbs.js';
+import { READING_MAX, cleanReading, guessReadings, normalizeReadings, riskyRuns } from '../../conversation/readings.js'; // 名前の読み方(11-08 b13-yomi)
 
 /**
  * 決めたことを、子どもが読める 1 つの文にする(UIR 15: 「元気さ 2・ふつう・文字とレトロ音」のような並びにしない)。
@@ -44,6 +45,7 @@ export const VOICE_THANKS = '声が出せるようになったよ、ありがと
 export const WORDS_MAX = 60;
 export const NOTE_MAX = 40; // 直してほしい一言(K3 と同じ 40 字)
 export const SAY_MAX = 200;
+export const READING_ASKS_MAX = 2; // 1 つの名前で、読みを聞く字の数の上限(11-08 b13-yomi)
 export const SNAPSHOT_VERSION = 1;
 export const FRAME_WAIT_MS = 10000; // 作る画面(枠)から「開いた」の知らせが来るのを待つ長さ
 /**
@@ -170,6 +172,8 @@ export class FirstRun {
     this.auto = false; // おまかせ(ぜんぶ じどう)で進めている
     this.role = null; // 役目(この子は、どこで だれと。roles.js の id)。選ぶ前は null
     this.place = null; // お店・駅の時だけ { name, about }
+    this.readings = {}; // 名前の読み方 { 書いてある字: かな }(お店・駅の名前・その子の名前。声に渡す文だけに使う。11-08 b13-yomi)
+    this.pendingRead = null; // 読みを聞いている最中の { queue, next, current, guesses }
     this.convert = null; // 3D 用のゆるキャラ変換の選び { shape, material }(手元の PC の道)
     this.log = []; // 試験と確かめのための、言った文の記録
   }
@@ -501,16 +505,86 @@ export class FirstRun {
     if (id === 'place_name') {
       if (text) await this._say({ who: 'user', text });
       this.place = { name: text, about: '' };
-      await this._say({ who: 'guide', text: this.role === 'shop' ? 'なにを あんないする?' : 'どんな ことを あんないする?' });
-      return this._offer([
-        { id: 'place_about', label: 'あんないする こと', kind: 'text', placeholder: this.role === 'shop' ? '例: パンの しゅるいと 店の 中' : '例: 出口と のりかえ', max: PLACE_MAX, submit: '送る', primary: true },
-        { id: 'place_skip', label: 'このことは とばす' },
-      ]);
+      return this._askReadings(text, 'about'); // 漢字・英字・記号があれば、読み方を聞いてから「なにを あんないする?」へ
     }
     if (id === 'place_about') {
       if (text) await this._say({ who: 'user', text });
       this.place = { ...(this.place ?? { name: '' }), about: text };
     } else await this._echo(id);
+    return this._askWhat();
+  }
+
+  /** お店・駅の名前の次: 何を案内するか */
+  async _askAbout() {
+    await this._say({ who: 'guide', text: this.role === 'shop' ? 'なにを あんないする?' : 'どんな ことを あんないする?' });
+    return this._offer([
+      { id: 'place_about', label: 'あんないする こと', kind: 'text', placeholder: this.role === 'shop' ? '例: パンの しゅるいと 店の 中' : '例: 出口と のりかえ', max: PLACE_MAX, submit: '送る', primary: true },
+      { id: 'place_skip', label: 'このことは とばす' },
+    ]);
+  }
+
+  /* ---------- 名前の読み方(11-08 b13-yomi): 漢字・英字・記号の名前は、声が読み違えるので、読みを聞く ---------- */
+
+  /**
+   * 名前(お店・駅・場所・その子の名前)に、声が読み違えそうな字(漢字 2 字以上・英字・記号)があれば、
+   * 1 つずつ「なんて よむの?」と聞く(1 つの名前で 2 つまで)。かなだけの名前・もう読みが分かっている字は聞かない。
+   * 聞き終えたら next の歩みへ('about' = なにを あんないする? / 'persona' = 性格 / それ以外 = どんな子?)
+   */
+  async _askReadings(name, next) {
+    const queue = riskyRuns(name).filter((r) => !this.readings[r]).slice(0, READING_ASKS_MAX);
+    this.pendingRead = { queue, next };
+    return this._askNextReading();
+  }
+
+  async _askNextReading() {
+    const p = this.pendingRead;
+    const run = p?.queue.shift();
+    if (!run) {
+      this.pendingRead = null;
+      return this._afterReadings(p?.next);
+    }
+    p.current = run;
+    p.guesses = guessReadings(run);
+    await this._say({ who: 'guide', text: `『${run}』は なんて よむの?(ひらがなで)` });
+    return this._offerReading();
+  }
+
+  /** 読みの選び: 安全に当てられる案(あれば)・「このままで いい」(とばす)・ひらがなの欄 */
+  _offerReading() {
+    const p = this.pendingRead;
+    return this._offer([
+      ...(p?.guesses ?? []).map((g, i) => ({ id: `read_g${i}`, label: g, primary: i === 0 })),
+      { id: 'read_skip', label: 'このままで いい' },
+      { id: 'read_text', label: 'よみがな(ひらがな)', kind: 'text', placeholder: '例: たつぞう', max: READING_MAX, submit: '送る', primary: !p?.guesses?.length },
+    ]);
+  }
+
+  async _readingAnswer(id, p) {
+    const cur = this.pendingRead?.current;
+    if (!cur) return this._afterReadings(this.pendingRead?.next);
+    if (id === 'read_skip') {
+      await this._echo(id);
+      return this._askNextReading(); // 読みは覚えない(声は、書いてある字のまま)
+    }
+    const guess = /^read_g(\d+)$/.exec(id);
+    const typed = guess ? this.pendingRead.guesses?.[Number(guess[1])] : p?.text;
+    const reading = cleanReading(typed);
+    if (!reading) {
+      // かな以外・長すぎ・空: 覚えずに、同じ問いに戻る(「このままで いい」でとばせる)
+      if (String(typed ?? '').trim()) await this._say({ who: 'user', text: clip(typed, READING_MAX) });
+      await this._say({ who: 'guide', text: `ひらがなで ${READING_MAX} 字まで おしえてね。` });
+      return this._offerReading();
+    }
+    await this._say({ who: 'user', text: guess ? typed : reading });
+    this.readings = normalizeReadings({ ...this.readings, [cur]: reading });
+    this.d.onReadings?.({ ...this.readings }); // 今の画面の声(案内役)も、すぐこの読みで読む
+    await this._say({ who: 'guide', text: `「${reading}」ね。おぼえたよ!` });
+    return this._askNextReading();
+  }
+
+  async _afterReadings(next) {
+    if (next === 'about') return this._askAbout();
+    if (next === 'persona') return this._persona();
     return this._askWhat();
   }
 
@@ -529,8 +603,10 @@ export class FirstRun {
   /** 役目を性格の設定に足した、新しい設定(元は変えない) */
   _withRole(s) {
     const base = normalize(s);
-    if (!this.role) return base;
-    return normalize({ ...base, role: this.role, ...(this.place ? { place: this.place } : {}) });
+    // 名前の読み方(覚えている分に、今回聞いた分を重ねる)。これが人格の文の「- 名前の読み方:」の行と、この端末の設定になる
+    const readings = { ...(base.readings ?? {}), ...this.readings };
+    if (!this.role) return normalize({ ...base, readings });
+    return normalize({ ...base, role: this.role, readings, ...(this.place ? { place: this.place } : {}) });
   }
 
   _offerStart() {
@@ -610,6 +686,9 @@ export class FirstRun {
         await this._echo(id);
         this.role = null;
         this.place = null;
+        this.readings = {};
+        this.pendingRead = null;
+        this.d.onReadings?.({});
         this.settings = null;
         this.auto = false;
         this.askBack = null;
@@ -626,7 +705,7 @@ export class FirstRun {
         return this._restart();
       case 'keep':
         await this._echo(id);
-        return this._persona();
+        return this._askReadings(this.character?.name, 'persona'); // その子の名前に、漢字・英字・記号があれば、読みを聞いてから性格へ
       case 'fix':
         if (!p?.text) await this._echo(id);
         return this._fix(p);
@@ -658,6 +737,10 @@ export class FirstRun {
       case 'place_about':
       case 'place_skip':
         return this._placeAnswer(id, p);
+      case 'read_text':
+      case 'read_skip':
+      case 'read_g0':
+        return this._readingAnswer(id, p);
       case 'want3d':
       case 'no3d':
         await this._echo(id);
@@ -1335,6 +1418,7 @@ export class FirstRun {
       ...(this.auto ? { auto: true } : {}),
       ...(this.role ? { role: this.role } : {}),
       ...(this.place ? { place: this.place } : {}),
+      ...(Object.keys(this.readings).length ? { readings: this.readings } : {}),
     };
   }
 
@@ -1345,6 +1429,8 @@ export class FirstRun {
     this.check = snap.check ?? null;
     if (snap.role) this.role = normalizeRole(snap.role);
     if (snap.place) this.place = { name: clip(snap.place.name, PLACE_MAX), about: clip(snap.place.about, PLACE_MAX) };
+    this.readings = normalizeReadings(snap.readings);
+    if (Object.keys(this.readings).length) this.d.onReadings?.({ ...this.readings });
     for (const n of snap.skipped ?? []) this.skipped.add(n);
     if (!snap.character?.id) {
       // 子を選ぶ前でも、言葉を入れた後(3 歩目)なら、言葉は残っているので、同じ言葉で見本を出し直す。絵は残していないので 1 歩目から
