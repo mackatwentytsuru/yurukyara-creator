@@ -169,7 +169,7 @@ test('絵を選ぶ(幅 390): 「使っていい絵か」を 1 回だけ聞き、
     assert.match(text, /ごめんなさい、この絵から うまく 描けマセンでした/, 'ノリーの言葉で正直に言う');
     assert.ok(!SAMPLE_CHARACTERS.some((c) => text.includes(c.name)) && !text.includes('にた 見本の子'), '見本の子を黙って出さない');
     assert.deepEqual(await page.evaluate(() => window.__test.swaps), [], '舞台に子を出さない');
-    assert.deepEqual(await actIds(page), ['draw_retry', 'draw_words', 'choose_sample']);
+    assert.deepEqual((await actIds(page)).filter((a) => a !== 'back'), ['draw_retry', 'draw_words', 'choose_sample']); // 「ひとつ もどる」(back の枝)は、3 つの数に入れない
     await checkLayout(page, '描けなかった');
     await page.click('.fr-actions [data-act="draw_retry"]');
     await waitAct(page, 'draw_retry');
