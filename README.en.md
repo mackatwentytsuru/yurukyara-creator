@@ -417,7 +417,7 @@ In the browser alone (without the maker running), words and pictures only bring 
 
 **The create path** (choose and answer → 2D at once → 3D with Claude Code):
 
-1. Start the app and the maker with `npm run yuru` (`npm run yuru -- --lan` to create from a phone too). On this PC, open `http://127.0.0.1:8796/qr` and click the link under 「この PC の初めての会話」 ("the first conversation on this PC"), or read the 「スマホで作る」 ("create on a phone") QR code with a phone.
+1. Start the app and the maker with `npm run yuru` (`npm run yuru -- --lan --auto-next claude` to create from a phone too; read the caution below about pictures from people you do not know first). On this PC, open `http://127.0.0.1:8796/qr` and click the link under 「この PC の初めての会話」 ("the first conversation on this PC"), or read the 「スマホで作る」 ("create on a phone") QR code with a phone.
 2. Choose 「この子は、どこで だれと?」 with a chip, choose how to start (「ことばで 書く」, 「絵を選ぶ」, 「写真を撮る」 or 「おまかせ」), and press 「これで作る」. Every question has 「おまかせ」.
 3. **The PC runs Claude Code by itself and draws** (`claude -p /yuru-next`; you do not need to type anything on the PC. To turn this off, start only the app with `npm run yuru -- --no-make`, start the maker separately from the repository root with `python creator/review/serve_review.py --make --web http://127.0.0.1:8787 --auto-next off`, and type `/yuru-next` on the PC instead). For a picture, Claude first checks that it suits a yuru-chara.
 4. Look at the picture in the card. **To change it**, write a short note (for example 「帽子を青にして」, "make the hat blue") and press 「直したい」 (up to 3 times). **When you like it**, press 「この子にする」. The character **goes on stage at once as a moving 2D**.
@@ -427,6 +427,7 @@ In the browser alone (without the maker running), words and pictures only bring 
 
 - Your words and picture go to the maker on this PC and, for the check and the drawing, to Claude. The link holds a passphrase made fresh at each start. Show the link and the QR code only to people you trust, and stop the maker when you are done. The maker's link and QR code stop working 8 hours after it starts; start it again for a new passphrase.
 - To try the steps without calling Claude, start the maker with `--auto-next off` as above. Each time you press 「これで作る」 or 「この子にする」 on the maker's screen, run `python creator/review/yuru_make.py next --fake-draw --fake-check yuru` once in the repository root (it puts a fixed test picture in the card and skips the picture check; run before a request arrives, it just says that nothing has arrived yet).
+- **Do not put in pictures from people you do not know, or whose source you cannot tell.** The drawing Claude may read instructions written inside a picture, and this Claude can run commands on your PC (environment variables whose names look like keys or tokens are not passed to it). For this reason, when you open the maker to the network with `--lan` or `--bind`, the path where the PC runs Claude by itself (`--auto-next`) is off at first. Turn it on yourself only when you trust the people using it, for example `npm run yuru -- --lan --auto-next claude`.
 - **Drawing from the browser (off)**: only when the server's environment has `YC_BROWSER_DRAW=1` and the brain key, the server asks Claude to draw from the browser screen (this costs API money; daily cap `YC_DRAW_DAILY`, default 20 pictures; per visitor `YC_DRAW_PER_VISITOR`, default 2 a day). It does not work on the public link.
 
 ### One-shot test: a fresh Claude Code and one picture
@@ -530,6 +531,10 @@ Versions and licences of every part: [THIRD_PARTY.md](THIRD_PARTY.md).
 | `docs/` | How we built it, numbers, the first-commit table, when it asks you, render weights, what's new |
 
 The work from before the turn to yuru-chara is kept on the `before-pivot` branch.
+
+## About the developer
+
+The developer has worked in 3D and video with Unreal Engine, Blender, Cinema 4D and Character Creator, and on live events. At the Japan Mobility Show, the developer also built a system for holding conversations with robots. That experience went into the Claude Code skills in this repository, so that anyone can have a moving, talking yuru-chara from a few words or a single picture.
 
 <a name="license"></a>
 

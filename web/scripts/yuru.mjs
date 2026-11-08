@@ -1,5 +1,5 @@
 // 始める命令 1 つ(第 12 波 b・BUX。本人「使う人はどう入れて、どう進めるの?」への答え)。web のフォルダで:
-//   node scripts/yuru.mjs [--lan] [--port 8787] [--make-port 8796] [--no-make]   (npm run yuru の中身)
+//   node scripts/yuru.mjs [--lan] [--auto-next claude|direct|off] [--port 8787] [--make-port 8796] [--no-make]   (npm run yuru の中身)
 // - アプリを見張り役(scripts/yuru-run.mjs)の下で起こす(画面の「アップデートする」の後も、自分で起こし直せる)。
 // - Python と作る道の部品(creator/review/serve_review.py)があれば、作る道のサーバーも一緒に起こす(言葉か絵からキャラを作る)。
 // - 起きたら、開く住所を出す。--lan の時は、同じ Wi-Fi のスマホで開く住所と、segno があれば QR も出す
@@ -88,9 +88,9 @@ function showQr(py, url) {
 }
 
 /** 作る道のサーバーを起こす。{child, up:Promise<boolean>} か null */
-function startMake(py, { port, makePort, lan }) {
+function startMake(py, { port, makePort, lan, autoNext = '' }) {
   if (!py || !existsSync(MAKE)) return null;
-  const args = [...py[1], MAKE, '--make', '--web', `http://127.0.0.1:${port}`, '--port', String(makePort), ...(lan ? ['--lan'] : [])];
+  const args = [...py[1], MAKE, '--make', '--web', `http://127.0.0.1:${port}`, '--port', String(makePort), ...(lan ? ['--lan'] : []), ...(['claude', 'direct', 'off'].includes(autoNext) ? ['--auto-next', autoNext] : [])];
   const child = spawn(py[0], args, { cwd: REPO, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   const up = new Promise((done) => {
     let told = false;
@@ -123,7 +123,7 @@ if (process.argv[1] && same(resolve(process.argv[1]), fileURLToPath(import.meta.
   const makePort = Number(argValue(argv, '--make-port', 8796));
   const py = findPython();
   const w = runWatcher({ port, host: lanOn ? '0.0.0.0' : process.env.HOST ?? '127.0.0.1' });
-  const make = argv.includes('--no-make') ? null : startMake(py, { port, makePort, lan: lanOn });
+  const make = argv.includes('--no-make') ? null : startMake(py, { port, makePort, lan: lanOn, autoNext: argValue(argv, '--auto-next', '') });
   const stop = () => {
     w.stop();
     if (make) killTree(make.child.pid);

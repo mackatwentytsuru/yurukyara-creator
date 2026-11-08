@@ -8,6 +8,7 @@
 - claude や node を名前で止めない。時間切れは、自分で起こした子の PID だけを止める(Windows は taskkill /T /PID)。
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,11 +22,12 @@ MODES = ("claude", "direct", "off")
 JOB_TIMEOUT = 660          # 1 本の上限(秒)。絵の Claude は 9 分で止まる + 受け取りの分
 MAX_ROUNDS = 6             # 1 回の頼みで続けて流す上限(受け取り → 2D → 何も無い、で止まる)
 DROP_ENV = ("CLAUDECODE",)
+SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL", re.I)   # 子の Claude(Bash つき)に、鍵や合言葉の入った環境変数を渡さない
 
 
 def child_env():
-    """子の Claude Code に、この会話の印(CLAUDE_CODE_*)を渡さない(入れ子の会話と見なされないように)。鍵は読まない・足さない。"""
-    return {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_") and k not in DROP_ENV}
+    """子の Claude Code に、この会話の印(CLAUDE_CODE_*)を渡さない(入れ子の会話と見なされないように)。鍵・トークン・合言葉の名前の変数は外す(絵の中の命令に読まれないように)。"""
+    return {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_") and k not in DROP_ENV and not SECRET_NAME.search(k)}
 
 
 def command(mode, model="claude-sonnet-5-5", extra=()):

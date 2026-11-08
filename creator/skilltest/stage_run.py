@@ -36,6 +36,7 @@ from datetime import datetime, timezone, timedelta
 JST = timezone(timedelta(hours=9))
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DROP = ("ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY")
+SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL", re.I)   # 子の Claude(Bash つき)に、鍵や合言葉の入った環境変数を渡さない
 sys.path.insert(0, os.path.join(REPO, "creator", "pipeline"))
 import review_gate as RG  # noqa: E402
 
@@ -52,7 +53,7 @@ def commit():
 
 
 def plan_env(gated=None):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_") and k not in DROP}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_") and k not in DROP and not SECRET_NAME.search(k)}
     if gated:       # 確認はここで見た。中で呼ぶ段の道具(t07_talk など)は二重に見ない
         env[RG.ENV_GATED] = gated
     return env

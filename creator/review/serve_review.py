@@ -13,7 +13,7 @@
   会話の画面は /m/ を枠(iframe)に入れ、状態の知らせ(postMessage)だけを受け取る。/m/ を枠に入れてよいのは --allow-origin の元
   (--web の元と、この PC の 5173・8787 は既定で入る)だけ。枠の中は Cookie が使えないので、合言葉は見出し X-YC-Key で送る
   (合言葉は枠の URL の # の後ろで渡す。# はサーバーに送られない)。よその元からの呼び出し(CORS)は受けない。
-- --auto-next claude(既定)/ direct / off: 作る画面から頼みが届いたら(合言葉の門を通った書き込みの後だけ)、このサーバーが
+- --auto-next claude(既定。--lan・--bind の時の既定は off)/ direct / off: 作る画面から頼みが届いたら(合言葉の門を通った書き込みの後だけ)、このサーバーが
   使う人の Claude Code で /yuru-next を自分で流す(1 回に 1 本・時間の上限つき。auto_next.py)。スマホだけで作れる(B4 12b)。
   off にすると前と同じ(PC で /yuru-next と打つ)。
 """
@@ -593,7 +593,8 @@ def main(argv=None):
     runner = None
     # 既定は claude。試験(YC_REVIEW_TEST=1)の時は、決めて渡した時だけ流す(試験で本物の Claude を起こさない)
     if args.auto_next is None:
-        args.auto_next = "off" if os.environ.get("YC_REVIEW_TEST") == "1" else "claude"
+        # 外へ開く時(--lan・--bind)は、絵を読む Claude を勝手に起こさない(合言葉を持つ人の絵が、そのまま Claude に届くため)。使う時は --auto-next claude を自分で付ける
+        args.auto_next = "off" if (os.environ.get("YC_REVIEW_TEST") == "1" or args.lan or args.bind) else "claude"
     if args.make and args.auto_next != "off":
         import yuru_make as ym   # 進められる物があるか(1 本流した後に、続けて流すか)
 
