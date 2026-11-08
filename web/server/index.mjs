@@ -9,7 +9,7 @@ import { gzipSync } from 'node:zlib';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
 import { isAbortError } from './abort.mjs';
-import { createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memory/store.mjs';
+import { characterOf, createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memory/store.mjs';
 import { createMemoryRoutes, forgetReplyEvents, isForgetRequest } from './memory/routes.mjs';
 import { extractFacts, memoryAddedEvent, selfNamesOf } from './memory/reflect.mjs';
 import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
@@ -20,6 +20,7 @@ import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs
 import { createLimiter } from './limits.mjs';
 import { createClientEvents, MAX_BODY_BYTES as CLIENT_EVENT_BYTES } from './clientEvents.mjs'; // 声の聞き取りを始められなかった原因の小さな報告(logs/client_events.jsonl)
 import { createDrawer } from './draw.mjs'; // B4(12b): ブラウザから描く。既定は切ってある(YC_BROWSER_DRAW=1 の時だけ)
+import { createMadeRoutes } from './madeCharacters.mjs'; // 作った子の一覧・名前の変更・消す(characters/yb*)
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
 import { CAMERA_CAP_NOTICE, IMAGE_LIMITS, cameraImageCap } from './camera.mjs'; // BCV: カメラの絵(大きさの決まり・1 日の枚数)
@@ -188,11 +189,11 @@ function latencySummary() {
 
 
 /** 合鍵がある回: 覚えていることを読み、この回の言葉から覚える事を足す(知らせは send で) */
-function rememberWithKey(memoryKey, text, send, selfNames = []) {
-  const recalled = memory.recall(memoryKey);
+function rememberWithKey(memoryKey, text, send, selfNames = [], ch = '') {
+  const recalled = memory.recall(memoryKey, ch); // 話している子が覚えた事だけ
   let learned = [];
   try {
-    learned = memory.add(memoryKey, extractFacts(text, { selfNames }));
+    learned = memory.add(memoryKey, extractFacts(text, { selfNames }), ch);
   } catch {
     learned = []; // 合鍵の記憶が無い(消えた・7 日たった)ときは、覚えずに話す
   }
@@ -205,12 +206,12 @@ function rememberWithKey(memoryKey, text, send, selfNames = []) {
  * 返事のイベント { type:'memory', key, added, ... } で画面に渡す。あいさつだけ・開いただけでは作らない。
  * 作る回数は /api/memory/new と同じ上限(1 分 10 回・1 日 2000 回)で数え、超えたら覚えずに話す。合鍵は記録に書かない
  */
-function rememberFirstTime(text, client, send, selfNames = []) {
+function rememberFirstTime(text, client, send, selfNames = [], ch = '') {
   const none = { recalled: null, learned: [] };
   const facts = extractFacts(text, { selfNames });
   if (!facts.length || !memoryLimiter.take(client).ok) return none;
   const made = memory.create();
-  const learned = memory.add(made.key, facts);
+  const learned = memory.add(made.key, facts, ch);
   send(memoryAddedEvent(learned, { key: made.key, notice: made.notice, retentionDays: made.retentionDays, expiresAt: made.expiresAt }));
   return { recalled: null, learned };
 }
@@ -234,13 +235,14 @@ async function handleChat(req, res) {
   // ML1: お店の端末(本文 memory:'off')は、合鍵があっても読まない・作らない・覚えない(次のお客さんに、前の人の名前を出さない)
   const memoryOff = body.memory === 'off';
   const memoryKey = !memoryOff && typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
+  const memoryChar = characterOf(req.headers['x-yc-character']); // 話している子の id(子ごとに記憶を分ける)
   if (memoryKey && isForgetRequest(body.text)) {
-    for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey), body.character?.persona ?? '')) send(ev);
+    for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey, memoryChar), body.character?.persona ?? '', { scoped: Boolean(memoryChar) })) send(ev);
     send({ type: 'done', serverMs: Date.now() - t0 });
     return res.end();
   }
   const selfNames = selfNamesOf(body.character); // 話しかけているキャラの名前は、使う人の名前や好きなものとして覚えない
-  const { recalled, learned } = memoryOff ? { recalled: null, learned: [] } : memoryKey ? rememberWithKey(memoryKey, body.text, send, selfNames) : rememberFirstTime(body.text, client, send, selfNames);
+  const { recalled, learned } = memoryOff ? { recalled: null, learned: [] } : memoryKey ? rememberWithKey(memoryKey, body.text, send, selfNames, memoryChar) : rememberFirstTime(body.text, client, send, selfNames, memoryChar);
   // 本物の Claude を呼ぶときだけ、回数の上限を数える(仮の頭脳は無料)。上限に当たったら、仮の頭脳で話し続ける
   let paid = Boolean(config.anthropicKey);
   if (paid) {
@@ -283,6 +285,7 @@ async function handleChat(req, res) {
 }
 
 const memoryRoutes = createMemoryRoutes({ store: memory, config, limiter: memoryLimiter, readBody });
+const madeRoutes = createMadeRoutes({ root: REPO_ROOT, readBody, canEdit: () => drawer.status().on });
 
 // ---- BUX(第 12 波 b): 画面のアップデートの受け口(この PC の中からだけ。update.mjs)。見張り役(scripts/yuru-run.mjs)の下なら、
 // 新しくし終えた後に決まった番号で閉じ、見張り役が組み立て直して起こし直す。YURU_UPDATE_UI=0 で受け口ごと無くす ----
@@ -305,6 +308,7 @@ const handler = async (req, res) => {
   const path = decodeURIComponent(url.pathname);
   try {
     if (await memoryRoutes(req, res, path, url)) return;
+    if (await madeRoutes(req, res, path)) return; // 作った子の一覧・名前の変更・消す
     if (await updateRoutes(req, res, path)) return; // BUX: 画面のアップデート(この PC の中からだけ)
     if (req.method === 'GET' && path === '/api/status') {
       warmFirstVisit().catch(() => {}); // 初めての訪問の決まった文の声を、前もって作る(全部そろうまで 10 分に 1 回まで。待たない)
@@ -316,6 +320,7 @@ const handler = async (req, res) => {
         stt: stt.status(),
         claude: claudeLimiter.status(),
         draw: drawer.status(), // B4(12b)
+        made: process.env.YC_CHARACTER_LIST !== '0', // 作った子の一覧(/api/characters)がある(画面の「かえる」の「つくった子」が聞きにいく)
         latency: latencySummary(),
       });
     }

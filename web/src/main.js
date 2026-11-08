@@ -30,7 +30,8 @@ import { effectiveHearLang, getHearLang, setHearLang } from './conversation/hear
 import { mountHearLangSelect } from './ui/hearLangSelect.js';
 import { setAiNotice } from './ui/aiNotice.js';
 import { createIdleClear, createShopDevice } from './conversation/shopDevice.js';
-import { clearKey, forgetAll, getKey, setKey } from './ui/memoryKey.js';
+import { clearKey, forgetAll, getKey, setKey, setMemoryCharacter } from './ui/memoryKey.js';
+import { forgetStageId, readStageId, stageMemoryWanted, writeStageId } from './character/stageMemory.js'; // いま舞台にいる子を端末が覚える(読み込み直しても同じ子)
 import { loadPlaceData, landmarkWorld, promptPlace, SAMPLE_PLACE } from './place.js';
 import { createArPlacement } from './arPlacement.js';
 import { createVrStage } from './vrStage.js';
@@ -186,6 +187,7 @@ function setGaze(spec, ms = 2000) {
 
 /* ---------- 会話のイベント(記憶の札・仮の頭脳の知らせ) ---------- */
 let memory = null; // 記憶の札(S3 の mountMemoryPanel の返り値)
+let madeKids = null; // 「かえる」の中の「つくった子」(ui/madeKids.js の返り値。来場者の上の段の時だけ)
 let brainNoticeText = null; // イベントで届いた「仮の頭脳です(理由)」
 let eventBrain = null; // 会話のイベントで分かった頭脳('haiku' | 'mock')。公開の関数の fallback も mock
 
@@ -1265,6 +1267,14 @@ function swapCharacter(next) {
   // UW5(UIR 14): ほかの子に替わったら、前の子の字幕と「あたまの なか」を空にする(見た目だけの切り替えでは残す)
   if (characterKey(prev) !== characterKey(next)) ui.clearTalk?.();
   uw5ThoughtLabel();
+  // 舞台の子が替わったら: 記憶はその子の分に切り替え(札も読み直す)、端末が「いまの子」として覚える(読み込み直しても同じ子で始める)
+  const nowId = characterKey(next);
+  setMemoryCharacter(nowId);
+  if (stageMemoryWanted(params, { headset: IS_HEADSET })) writeStageId(siteMemory, nowId);
+  if (characterKey(prev) !== nowId) {
+    memory?.resync?.();
+    madeKids?.sync();
+  }
 }
 
 /* ---------- B5M: しつかん(3D の材質: いつもの・ぬの・け・つるつる)と光。ここから下の 1 塊だけが B5M(合わせ 12b) ----------
@@ -1457,6 +1467,57 @@ function setupMemory() {
   drawer.addEventListener('toggle', () => {
     if (drawer.open) resyncMemory(); // 開くたびに、合鍵を確かめて一覧を読み直す
   });
+}
+
+/* ---------- 「かえる」の中の「つくった子」(ui/madeKids.js) ---------- */
+// ブラウザで作った子(サーバーの characters/yb*)を、サーバーの一覧から並べる。選ぶと舞台がその子になり、端末が覚える。
+// 来場者の上の段の時だけ。サーバーが一覧を持たない時(公開の関数・/api/status に made が無い)は、聞きにいかない
+function setupMadeKids() {
+  const root = $('madeKids');
+  if (!root || !stageMemoryWanted(params, { headset: IS_HEADSET })) return;
+  void import('./ui/madeKids.js')
+    .then(({ mountMadeKids }) => {
+      madeKids = mountMadeKids({
+        root,
+        getStageId: () => characterKey(app.character) || app.characterId || '',
+        // 初めての会話の部品の「舞台に出す」(読み込み直さない)。まだ用意できていなければ、できるまで待つ
+        putOnStage: (id) => firstRunReady.then((api) => (api?.putOnStage ? api.putOnStage(id) : false)),
+        onPicked: () => uw5SetTop(null),
+        onRenamed: (id, name) => {
+          if (characterKey(app.character) !== id) return;
+          // 舞台にいる子の名前が変わった: 札・見出し・声の種・会話に渡す名前を、新しい名前に
+          const old = app.character.name;
+          try {
+            app.character.name = name;
+          } catch {
+            // 書けない形の子は、読み直した時に新しい名前になる
+          }
+          if (typeof app.persona === 'string' && old) app.persona = app.persona.replace(new RegExp(`^# ${old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), `# ${name}`);
+          updateAiNotice();
+          uw5ThoughtLabel();
+          document.documentElement.dataset.guideName = name;
+          try {
+            speaker.setVoice({ seed: name });
+          } catch {
+            // 声の種を替えられなくても続ける
+          }
+        },
+        onRemoved: (id) => {
+          if (readStageId(siteMemory) === id) forgetStageId(siteMemory);
+        },
+        storage: siteMemory,
+      });
+      if (app.status?.made) void madeKids.refresh();
+      // 「かえる」を開くたびに、サーバーの一覧を読み直す(別の端末で作った・変えた子も出る)
+      $('changeBtn')?.addEventListener('click', () => {
+        if (app.status?.made) void madeKids?.refresh();
+      });
+      // 作る画面を閉じた時にも読み直す(いま作った子が、すぐ並ぶ)
+      globalThis.addEventListener('yc:firstrun-closed', () => {
+        if (app.status?.made) void madeKids?.refresh();
+      });
+    })
+    .catch((err) => console.warn('「つくった子」を用意できませんでした:', err.message));
 }
 
 /* ---------- VR(Quest)で開く(本人の案 11/7。決まりは stage/questLink.js、入口の部品は ui/panel.js) ---------- */
@@ -1657,12 +1718,26 @@ async function boot() {
     app.tierOverrides = tierOverrides; // 見た目を切り替える時も同じ段で読む
     // ?character= は id(公開の URL)か、この PC の中ならパス・URL も。無ければ主役ノリー → ようこそくんの順に、出せるキャラ。
     // 見た目の方式は ?look=2d|3d → このタブで選んだ物 → looks.default の順
-    const { character, id } = await loadFirstCharacter(charPick.spec, { ...tierOverrides, look: params.get('look') ?? '', lookMemory: tabMemory });
+    const loadOpts = { ...tierOverrides, look: params.get('look') ?? '', lookMemory: tabMemory };
+    // アドレスに ?character= が無い時は、この端末が覚えている「いま舞台にいた子」から始める(作った子が、読み込み直すとノリーに戻らない)。
+    // 読めなかった(消された・サーバーが替わった)時は、覚えを消して、いつもの子から
+    let first = null;
+    const remembered = !charPick.spec && stageMemoryWanted(params, { headset: IS_HEADSET }) ? readStageId(siteMemory) : '';
+    if (remembered) {
+      try {
+        first = await loadFirstCharacter(remembered, loadOpts);
+      } catch (err) {
+        console.info(`覚えていた子 ${remembered} は出せませんでした: ${err.message}`);
+        forgetStageId(siteMemory);
+      }
+    }
+    const { character, id } = first ?? (await loadFirstCharacter(charPick.spec, loadOpts));
     app.character = character;
     app.characterId = id;
     bootLookId = characterKey(character);
     fillGuide(); // 入口の案内役の名前は、読んだすぐ後に書いてから見せる(状態を読むのを待たない)
     updateAiNotice();
+    setMemoryCharacter(characterKey(character) || id); // 記憶は子ごとに分ける(会話と記憶の札が、この子の id を付けて送る)
     dialogue.character = character;
     speaker.setVoice({ seed: character.name ?? id ?? '' }); // 声が無い時の「ピッ」の高さと音色をキャラごとに(S3 の speaker)
     document.documentElement.dataset.look = character.look ?? '3d';
@@ -1692,6 +1767,7 @@ async function boot() {
   setInterval(refreshStatus, 15000);
   setupPass();
   setupMemory();
+  setupMadeKids(); // 「かえる」の中の「つくった子」(作った子の一覧はサーバーが持つ)
   setupQuestLink(); // 見せ方を調べた後(Quest の中なら出さない)
   setupTvMode(); // テレビ表示の入口(iPhone・iPad は「テレビに映す」。ヘッドセットの中では出さない)
   app.camera.setup(); // BCV: カメラの入・切(いつでも。入口だけでなく)

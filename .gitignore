@@ -9,6 +9,9 @@ _trials/
 tools/history_terms.local.txt
 tools/prepush_terms.local.txt
 
+# 使う人がブラウザで作った子(characters/yb<日付>_<乱数>/)は、その人の手元の物。リポジトリに入れない
+characters/yb*/
+
 # 外から持ってきたキャラ(VRM)はリポジトリに入れない
 characters/*/model.vrm
 *.vrm

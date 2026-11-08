@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { modelsFrom } from '../src/conversation/models.js';
 
 export const WEB_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-export const REPO_ROOT = join(WEB_ROOT, '..');
+// キャラ(characters/)と作った子の置き場の頭。試験が一時フォルダを渡す時だけ YC_REPO_ROOT を使う(本物の characters/ に試験の子を置かない)
+export const REPO_ROOT = process.env.YC_REPO_ROOT ? process.env.YC_REPO_ROOT : join(WEB_ROOT, '..');
 
 const envFile = join(WEB_ROOT, '.env');
 if (existsSync(envFile)) {

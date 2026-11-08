@@ -8,6 +8,7 @@
 import { chatMemory, memoryConfig, NEW_PER_MINUTE } from '../../server/memory/handler.mjs';
 import { createKvMemory } from '../../server/memory/kv.mjs';
 import { extractFacts } from '../../server/memory/reflect.mjs';
+import { characterOf } from '../../server/memory/store.mjs';
 import { redactSecrets } from '../../src/conversation/secrets.js';
 import { clientId } from './gate.mjs';
 import { countMemoryUse } from './memory.mjs';
@@ -38,7 +39,7 @@ export async function rememberForChat(request, text, { cfg, store, now = Date.no
     if (n > NEW_PER_MINUTE) return none();
     const mem = createKvMemory({ store, pepper: memoryConfig(memCfg, env).pepper, now });
     const made = await mem.create();
-    const learned = await mem.add(made.key, facts);
+    const learned = await mem.add(made.key, facts, characterOf(request.headers.get('x-yc-character') ?? ''));
     const added = learned.map(({ id, kind, text: t }) => ({ id, kind, text: t }));
     const ev = { type: 'memory', key: made.key, added, notice: made.notice, retentionDays: made.retentionDays, expiresAt: made.expiresAt };
     return { handled: false, events: [ev], memory: null, learned };
