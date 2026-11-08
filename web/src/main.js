@@ -610,6 +610,7 @@ if (KIOSK.on) {
   });
   // 角の長押し + 番号で出る。サーバーが番号を確かめた後だけ。出たら、聞くのも画面を消さないのもやめて、ふつうの画面へ読み直す
   mountKioskExit({
+    getToken: () => KIOSK.token, // 端末ごとに、サーバーが間違いを数える
     onExit: () => {
       handsFree.disable();
       try {

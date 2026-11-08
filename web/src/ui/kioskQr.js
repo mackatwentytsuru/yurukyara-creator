@@ -10,7 +10,8 @@ import { createSheet, el } from './sheet.js';
 export const KIOSK_WORDS = Object.freeze({
   button: '接客モード',
   lead: 'お店の端末で、キャラが ひとりで 接客できるように します。お客さんに出るのは、キャラ・AI の表示・マイク・文字の欄・質問ボタンだけです。',
-  pinTitle: '1. ばんごうを きめる',
+  pinTitle: '1. ばんごうを きめる', // 番号を決める前の見出し。決めた後は QR を上に出すので、番号は付けない
+  pinTitleHave: 'ばんごう',
   pinLead: `お店の人が 接客モードを やめる ときの ばんごうです(${PIN_MIN}〜${PIN_MAX} けた・数字)。きめるまで QR は 出ません。`,
   pin1: 'ばんごう',
   pin2: 'もういちど',
@@ -18,13 +19,13 @@ export const KIOSK_WORDS = Object.freeze({
   pinChange: 'ばんごうを かえる',
   pinCurrent: 'いまの ばんごう',
   pinHave: (n) => `ばんごうは きまっています(${n} けた)`,
-  settingsTitle: '2. お店の きまり',
+  settingsTitle: 'お店の きまり',
   lang: 'ことば',
   facts: 'お店の きまり・お知らせ(あれば)',
   idle: 'お客さんが さわらなく なってから、画面を 空に するまで',
   save: 'ほぞんして、QR を つくりなおす',
   saved: 'ほぞんしました',
-  qrTitle: '3. 店の端末で QR を 読む',
+  qrTitle: '店の端末で QR を 読む',
   qrHow: '店の端末の カメラで この QR を 読むと、その端末が 接客モードに なります。QR は 12 じかん つかえます。',
   qrNoOrigin: '店の端末から 開ける https の住所を 設定してね(サーバーの KIOSK_ORIGIN)。設定すると QR が 出ます。',
   qrInsecure: 'この住所は https では ありません。店の端末では マイクが ひらかないことが あります。',
@@ -32,6 +33,10 @@ export const KIOSK_WORDS = Object.freeze({
   qrFail: 'QR を つくれませんでした。',
   offline: 'この PC の サーバーに つながりません。',
   locked: (min) => `まちがいが つづいたので、${min} ぶん まってね`,
+  lockedDevices: (n) => `店の端末が まちがいで とまっています(${n} だい)`,
+  lockedAll: '店の端末が まちがいで ぜんぶ とまっています',
+  unlock: 'とまっているのを ぜんぶ とく',
+  unlocked: 'とめていたのを といたよ',
 });
 
 const ERROR_TEXT = Object.freeze({
@@ -67,8 +72,7 @@ export function drawQr(canvas, matrix, px = 224) {
   const size = cells * scale;
   canvas.width = size;
   canvas.height = size;
-  canvas.style.width = `${px}px`;
-  canvas.style.height = `${px}px`;
+  canvas.style.maxWidth = `${px}px`; // 見える大きさは kiosk.css が窓の高さに合わせて決める
   const g = canvas.getContext('2d');
   g.fillStyle = '#fff';
   g.fillRect(0, 0, size, size);
@@ -91,8 +95,9 @@ export function mountKioskSetup({ app, local, loadQr = () => import('../stage/qr
   const sheet = createSheet({ id: 'ycKiosk', title: KIOSK_WORDS.button });
 
   const msg = el('p', { class: 'yc-au-msg', id: 'kioskMsg', role: 'status', 'aria-live': 'polite' });
+  const lead = el('p', { class: 'yc-au-lead', text: KIOSK_WORDS.lead });
   const body = el('div', { class: 'kq-body' });
-  sheet.body.append(el('p', { class: 'yc-au-lead', text: KIOSK_WORDS.lead }), msg, body);
+  sheet.body.append(body);
   let cur = null;
   let renderSeq = 0;
 
@@ -112,7 +117,7 @@ export function mountKioskSetup({ app, local, loadQr = () => import('../stage/qr
     if (r.status !== 200) {
       cur = null;
       say(r.status === 403 ? 'この PC の中の画面から ひらいてね' : KIOSK_WORDS.offline);
-      body.replaceChildren();
+      body.replaceChildren(msg);
       return;
     }
     cur = r.data;
@@ -122,7 +127,7 @@ export function mountKioskSetup({ app, local, loadQr = () => import('../stage/qr
 
   function pinSection() {
     const have = Boolean(cur.hasPin);
-    const nodes = [el('h3', { text: KIOSK_WORDS.pinTitle })];
+    const nodes = [el('h3', { text: have ? KIOSK_WORDS.pinTitleHave : KIOSK_WORDS.pinTitle })];
     if (have) nodes.push(el('p', { class: 'kq-note', id: 'kioskPinHave', text: KIOSK_WORDS.pinHave(cur.pinLength) }));
     else nodes.push(el('p', { class: 'kq-note', text: KIOSK_WORDS.pinLead }));
     const cu = have ? pinInput('kioskPinCur', KIOSK_WORDS.pinCurrent) : null;
@@ -196,11 +201,30 @@ export function mountKioskSetup({ app, local, loadQr = () => import('../stage/qr
     qrBox.replaceChildren(canvas, el('p', { class: 'kq-note', text: KIOSK_WORDS.qrHow }), ...(r.data.secure ? [] : [el('p', { class: 'yc-au-msg', text: KIOSK_WORDS.qrInsecure })]), el('p', { class: 'kq-url', id: 'kioskQrUrl', text: r.data.url }));
   }
 
+  /** 店の端末が間違いで止まっている時だけ出る、止まりを解く所(店の PC のこの窓からだけ。サーバーが PC 自身かを確かめる) */
+  function lockSection() {
+    if (!cur?.lockedDevices && !cur?.globalLocked) return [];
+    const go = el('button', { type: 'button', class: 'yc-btn yc-btn-small', id: 'kioskUnlock', text: KIOSK_WORDS.unlock });
+    go.addEventListener('click', async () => {
+      go.disabled = true;
+      const r = await call('/api/kiosk/unlock', { method: 'POST', body: {} }).catch(() => ({ status: 0, data: {} }));
+      go.disabled = false;
+      if (r.status !== 200) return say(errorText(r));
+      cur = { ...cur, lockedDevices: r.data.lockedDevices ?? 0, globalLocked: Boolean(r.data.globalLocked) };
+      say(KIOSK_WORDS.unlocked);
+      render();
+    });
+    const note = cur.globalLocked ? KIOSK_WORDS.lockedAll : KIOSK_WORDS.lockedDevices(cur.lockedDevices);
+    return [el('div', { class: 'kq-lock', id: 'kioskLockBox' }, el('p', { class: 'yc-au-msg', id: 'kioskLockNote', text: note }), go)];
+  }
+
+  /** 番号を決めた後は、QR を窓の一番上に置く(スクロールしないで見えるように。窓の高さ 720〜800 でも)。番号・お店のきまりは、その下 */
   function render() {
     if (!cur) return;
     body.replaceChildren(
-      ...pinSection(),
-      ...(cur.hasPin ? [...settingsSection(), el('h3', { text: KIOSK_WORDS.qrTitle }), qrBox] : []),
+      ...(cur.hasPin
+        ? [...lockSection(), el('h3', { text: KIOSK_WORDS.qrTitle }), qrBox, msg, lead, ...pinSection(), ...settingsSection()]
+        : [lead, msg, ...pinSection()]),
     );
     if (cur.hasPin) void renderQr();
   }

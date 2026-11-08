@@ -11,12 +11,13 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'back', '0', 'ok'];
  * @param {object} o
  * @param {()=>void} o.onExit 番号が合った時(接客モードを終える)
  * @param {Document} [o.doc]
- * @param {(pin:string)=>Promise<{status:number, remaining?:number|null, retryAfterS?:number}>} [o.post] 番号をサーバーへ(試験で替えられる)
+ * @param {()=>string} [o.getToken] この端末の札(サーバーが端末ごとに間違いを数える。無ければ札なしの端末として数える)
+ * @param {(pin:string, token?:string)=>Promise<{status:number, remaining?:number|null, retryAfterS?:number}>} [o.post] 番号をサーバーへ(試験で替えられる)
  * @param {()=>number} [o.now]
  * @param {(cb:FrameRequestCallback)=>number} [o.raf]
  * @param {(id:number)=>void} [o.caf]
  */
-export function mountKioskExit({ onExit, doc = document, post = postPin, now = () => performance.now(), raf = (cb) => requestAnimationFrame(cb), caf = (id) => cancelAnimationFrame(id) } = {}) {
+export function mountKioskExit({ onExit, getToken = () => '', doc = document, post = postPin, now = () => performance.now(), raf = (cb) => requestAnimationFrame(cb), caf = (id) => cancelAnimationFrame(id) } = {}) {
   const pad = createPinPad();
   const ring = el('span', { class: 'kx-ring' });
   const zone = el('div', { id: 'kioskExitZone', class: 'kx-zone', role: 'presentation' }, ring);
@@ -67,7 +68,7 @@ export function mountKioskExit({ onExit, doc = document, post = postPin, now = (
     msg.textContent = 'たしかめているよ…';
     let r;
     try {
-      r = await post(pad.value);
+      r = await post(pad.value, getToken());
     } catch {
       r = { status: 0 };
     }
@@ -159,8 +160,8 @@ export function mountKioskExit({ onExit, doc = document, post = postPin, now = (
 }
 
 /** 番号をサーバーへ送る(サーバーが照合して数える。番号はここに残さない) */
-async function postPin(pin) {
-  const res = await fetch('/api/kiosk/exit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) });
+async function postPin(pin, token = '') {
+  const res = await fetch('/api/kiosk/exit', { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { 'x-kiosk-token': token } : {}) }, body: JSON.stringify({ pin }) });
   let data = {};
   try {
     data = await res.json();

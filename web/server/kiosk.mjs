@@ -2,7 +2,9 @@
 // - 設定(番号・ことば・お店のきまり・放っておく時間)は、サーバーだけが持つ。番号は塩つきの scrypt で logs の中に残し、平文は残さない
 // - 札(QR に入れる短い文)= 短い中身 + サーバーの鍵の署名。期限は 12 時間。番号・鍵・記憶の番号は入れない
 // - 抜ける時の番号の照合と、間違いの数え(5 回違うと 5 分とめる)もここ。数えるのはサーバーだけ(画面を読み込み直しても数え直せない)
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+//   数えは端末ごと(札ごと)。来場者の間違いで、店の人の端末まで止まらない。サーバー全体の安全の上限は、ふつうの使い方では届かない高さ
+//   PC の窓で「今の番号」を間違えた分は、別に数える(店の端末の出る番号の数えには入らない)。店の PC の窓からは、止まっている分を解ける
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { FACTS_MAX } from '../src/conversation/facts.js';
@@ -19,6 +21,13 @@ export const TOKEN_TTL_S = 12 * 60 * 60;
 export const QR_LIMIT_BYTES = 213;
 export const MAX_WRONG = 5;
 export const LOCK_S = 5 * 60;
+/** サーバー全体の安全の上限: この時間の中で、全部の端末の間違いがこの数に届いたら、全体を止める(ふつうの使い方では届かない高さ) */
+export const GLOBAL_MAX_WRONG = 100;
+export const GLOBAL_WINDOW_S = 10 * 60;
+export const GLOBAL_LOCK_S = 5 * 60;
+/** 数えを持つ端末の数の上限(超えたら、止まっていない古いものから捨てる) */
+export const MAX_DEVICES = 256;
+const ANON = 'anon';
 export const KIOSK_PATH = '/?kiosk=';
 
 const PIN_RE = /^\d{4,8}$/;
@@ -59,7 +68,9 @@ export function createKiosk({ file, secret = '', now = Date.now } = {}) {
       key: typeof saved.key === 'string' && saved.key.length >= 32 ? saved.key : '',
       pin: saved.pin && typeof saved.pin.salt === 'string' && typeof saved.pin.hash === 'string' ? saved.pin : null,
       settings: normalizeSettings(saved.settings),
-      wrong: { count: 0, lockedUntil: 0 },
+      wrong: new Map(), // 端末(札)ごとの間違い: key -> { count, lockedUntil, seen }
+      wrongAll: { count: 0, since: 0, lockedUntil: 0 }, // サーバー全体の安全の上限
+      wrongPc: { count: 0, lockedUntil: 0 }, // PC の窓の「今の番号」の間違い(店の端末の数えとは別)
     };
     if (!state.key) {
       state.key = b64u(randomBytes(32));
@@ -92,31 +103,84 @@ export function createKiosk({ file, secret = '', now = Date.now } = {}) {
     return got.length === want.length && timingSafeEqual(got, want);
   };
 
-  const lockLeftS = () => {
-    const s = load();
-    const left = Math.ceil((s.wrong.lockedUntil - now()) / 1000);
+  const leftS = (until) => {
+    const left = Math.ceil((until - now()) / 1000);
     return left > 0 ? left : 0;
   };
 
-  /** 間違いを数える入口(抜ける・番号を変える)。止めている間は照合せずに断る */
-  const tryPin = (pin) => {
+  /** 端末の数えの名前。署名の合った札(期限切れでも)はその札ごと。札が無い・壊れている端末は、まとめて 1 つ(anon) */
+  const deviceKey = (token) => {
+    const v = api.verifyToken(token);
+    if (!v.ok && !v.expired) return ANON;
+    return `t:${createHash('sha256').update(String(token)).digest('base64url').slice(0, 22)}`;
+  };
+
+  /** 数えの箱を取る。多くなりすぎたら、止まっていない古いものから捨てる */
+  const deviceBucket = (key) => {
     const s = load();
-    const left = lockLeftS();
+    let b = s.wrong.get(key);
+    if (!b) {
+      if (s.wrong.size >= MAX_DEVICES) {
+        const idle = [...s.wrong].filter(([, v]) => leftS(v.lockedUntil) === 0).sort((a, c) => a[1].seen - c[1].seen);
+        for (const [k] of idle.slice(0, Math.max(1, s.wrong.size - MAX_DEVICES + 1))) s.wrong.delete(k);
+      }
+      b = { count: 0, lockedUntil: 0, seen: 0 };
+      s.wrong.set(key, b);
+    }
+    b.seen = now();
+    return b;
+  };
+
+  /** 抜ける番号の間違いを数える入口(端末ごと + サーバー全体の安全の上限)。止めている間は照合せずに断る */
+  const tryExit = (pin, token) => {
+    const s = load();
+    const key = deviceKey(token);
+    const b = deviceBucket(key);
+    const left = Math.max(leftS(b.lockedUntil), leftS(s.wrongAll.lockedUntil));
     if (left > 0) return { ok: false, status: 429, retryAfterS: left, locked: true };
     if (!s.pin) return { ok: false, status: 409, error: 'pin-unset' };
     if (pinMatches(pin)) {
-      s.wrong = { count: 0, lockedUntil: 0 };
+      s.wrong.delete(key);
       return { ok: true, status: 200 };
     }
-    s.wrong.count += 1;
-    if (s.wrong.count >= MAX_WRONG) {
-      s.wrong = { count: 0, lockedUntil: now() + LOCK_S * 1000 };
+    b.count += 1;
+    const all = s.wrongAll;
+    if (!all.since || now() - all.since > GLOBAL_WINDOW_S * 1000) {
+      all.count = 0;
+      all.since = now();
+    }
+    all.count += 1;
+    if (all.count >= GLOBAL_MAX_WRONG) {
+      s.wrongAll = { count: 0, since: 0, lockedUntil: now() + GLOBAL_LOCK_S * 1000 };
+      return { ok: false, status: 429, retryAfterS: GLOBAL_LOCK_S, locked: true };
+    }
+    if (b.count >= MAX_WRONG) {
+      b.count = 0;
+      b.lockedUntil = now() + LOCK_S * 1000;
       return { ok: false, status: 429, retryAfterS: LOCK_S, locked: true };
     }
-    return { ok: false, status: 403, remaining: MAX_WRONG - s.wrong.count };
+    return { ok: false, status: 403, remaining: MAX_WRONG - b.count };
   };
 
-  return {
+  /** PC の窓で「今の番号」を確かめる(番号を変える時)。この窓だけの数え。店の端末の出る番号の数えには入らない */
+  const tryPcPin = (pin) => {
+    const s = load();
+    const left = leftS(s.wrongPc.lockedUntil);
+    if (left > 0) return { ok: false, status: 429, retryAfterS: left, locked: true };
+    if (!s.pin) return { ok: false, status: 409, error: 'pin-unset' };
+    if (pinMatches(pin)) {
+      s.wrongPc = { count: 0, lockedUntil: 0 };
+      return { ok: true, status: 200 };
+    }
+    s.wrongPc.count += 1;
+    if (s.wrongPc.count >= MAX_WRONG) {
+      s.wrongPc = { count: 0, lockedUntil: now() + LOCK_S * 1000 };
+      return { ok: false, status: 429, retryAfterS: LOCK_S, locked: true };
+    }
+    return { ok: false, status: 403, remaining: MAX_WRONG - s.wrongPc.count };
+  };
+
+  const api = {
     /** PC の窓に見せてよい今の設定(番号は返さない) */
     publicSettings() {
       const s = load();
@@ -135,7 +199,7 @@ export function createKiosk({ file, secret = '', now = Date.now } = {}) {
         if (!isPin(body.pin)) return { ok: false, status: 400, error: 'pin-form' };
         if (body.pin !== body.pinConfirm) return { ok: false, status: 400, error: 'pin-mismatch' };
         if (s.pin) {
-          const r = tryPin(body.currentPin);
+          const r = tryPcPin(body.currentPin);
           if (!r.ok) return { ...r, error: r.error ?? 'pin-current' };
         }
         newPin = body.pin;
@@ -147,7 +211,9 @@ export function createKiosk({ file, secret = '', now = Date.now } = {}) {
       if (newPin) {
         const salt = b64u(randomBytes(16));
         s.pin = { salt, hash: b64u(hashPin(newPin, salt)), len: newPin.length };
-        s.wrong = { count: 0, lockedUntil: 0 };
+        s.wrongPc = { count: 0, lockedUntil: 0 };
+        s.wrong.clear(); // 新しい番号になったら、端末ごとの数えも戻す
+        s.wrongAll = { count: 0, since: 0, lockedUntil: 0 };
       }
       save();
       return { ok: true, status: 200, settings: this.publicSettings() };
@@ -201,9 +267,26 @@ export function createKiosk({ file, secret = '', now = Date.now } = {}) {
       return { kiosk: true, valid: true, lang, facts, idleSec, characterId: isSpecId(v.claims.c) ? v.claims.c : characterId };
     },
 
-    /** 抜ける。番号が合えば 200。5 回違うと 5 分止める(429) */
-    exit(pin) {
-      return tryPin(pin);
+    /** 抜ける。番号が合えば 200。その端末(札)が 5 回違うと、その端末だけ 5 分止める(429)。token は店の端末の札(x-kiosk-token) */
+    exit(pin, token = '') {
+      return tryExit(pin, token);
+    },
+
+    /** いま止まっている数(PC の窓に見せる)。端末ごとの止まりと、サーバー全体の止まり */
+    lockInfo() {
+      const s = load();
+      const devices = [...s.wrong.values()].filter((b) => leftS(b.lockedUntil) > 0);
+      const global = leftS(s.wrongAll.lockedUntil);
+      return { lockedDevices: devices.length, globalLocked: global > 0, retryAfterS: Math.max(global, ...devices.map((b) => leftS(b.lockedUntil)), 0) };
+    },
+
+    /** 止まっている分を全部解く(店の PC の窓から。呼ぶ側が PC 自身かを確かめる)。数えも 0 に戻す。PC の窓の「今の番号」の数えは触らない */
+    unlockAll() {
+      const s = load();
+      s.wrong.clear();
+      s.wrongAll = { count: 0, since: 0, lockedUntil: 0 };
+      return this.lockInfo();
     },
   };
+  return api;
 }
