@@ -4,7 +4,8 @@
 // DOM も three も読まない小さな部品(node の試験で読む)。
 
 export const CLIENT_EVENT_PATH = '/api/client-event';
-export const EVENT_KINDS = Object.freeze(['voice-start-failed', 'voice-fallback']);
+// 'sheet-blank' = 作る札の中が見えなくなって、札が自分で立て直した時(11-08 本人の iPhone)。stage に「何が見えなかったか」だけを入れる
+export const EVENT_KINDS = Object.freeze(['voice-start-failed', 'voice-fallback', 'sheet-blank']);
 export const BROWSER_FAMILIES = Object.freeze(['ios-chrome', 'ios-safari', 'ios-other', 'android-chrome', 'android-other', 'quest', 'chrome', 'edge', 'firefox', 'safari', 'other']);
 
 /** UA の文字列から、短いブラウザの分類だけを作る(UA の全文は外へ出さない) */

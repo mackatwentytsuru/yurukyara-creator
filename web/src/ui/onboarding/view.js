@@ -13,6 +13,7 @@ import { crawl } from './voice.js';
 import { MAIN_CHARACTER } from '../../character/defaults.js';
 import { currentWorkNote, currentWorkText } from '../work.js';
 import { ensureWorkStyles, workBody, workMark } from '../workFx.js';
+import { reportVoice } from '../../conversation/clientEvents.js';
 
 const el = (tag, props = {}, ...children) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -33,6 +34,10 @@ export const CHIP_ROWS = 2;
 /** 絵つきの札(見本の子・形・しつかん)の時の段の数 */
 export const CARD_ROWS = 3;
 const KB_MIN = 80; // これより小さい見える範囲の差は、アドレスバーの出入り
+/** 札の点検(札の中が見えなくなっていないか測る)の間(ms)。見えなくなったら、次の点検までに戻る */
+export const HEAL_EVERY_MS = 1500;
+const HEAL_GIVE_UP = 3; // 続けて直しても見えないなら(CSS で隠しているなど)、あきらめて 1 分休む
+const HEAL_REST_MS = 60_000;
 
 /**
  * 長い文を、文の切れ目(。!?)で、1 つの吹き出しに入る長さに分ける。切れ目が無い時は、そのまま 1 つ
@@ -199,10 +204,18 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   let latest = null;
   let fresh = true;
   let lastSide = null; // 続けて同じ側が話す時は、顔と名前を最初の吹き出しだけに出す
+  // 会話の欄に出した吹き出し(待つ間の「…」とはたらく 1 行は除く)。札の点検が、欄が空になった時に戻すための控え(DOM の物そのもの)
+  let kept = [];
+  // いま出している選び(札の点検が、選びが消えた時に出し直す)
+  let lastOffer = { list: [], meta: {} };
+  const keepLines = () => {
+    kept = [...log.children].filter((n) => n !== thinkRow && n !== workRow);
+  };
   function add(node) {
     dropThinking(); // 返事が来たので、待つ間の「…」は消す
     log.append(node);
     if (workRow) log.append(workRow); // はたらいている間の 1 行は、いつも会話のいちばん下(新しい吹き出しの後ろ)に置く
+    keepLines();
     if (fresh) {
       latest?.classList.remove('fr-latest');
       latest = node;
@@ -676,6 +689,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     chips.hidden = !chipEls.length;
     fieldRow.replaceChildren(...fields);
     fieldRow.hidden = !fields.length;
+    lastOffer = { list, meta };
     const back = list.length ? meta?.back : null;
     backRow.hidden = !back;
     if (back) {
@@ -705,12 +719,90 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     latest = marked.length ? marked[marked.length - 1] : null;
     fresh = true;
     lastSide = null; // 次の吹き出しは、顔と名前から出す
+    keepLines();
     scroll();
   }
+
+  /* ---------- 札の点検(11/8 本人の iPhone: 作り直したら、会話が進んでいるのに札の中が全部見えなくなった) ----------
+     手元の Chrome では同じことが起きなかったので、原因は決めていない(iPhone が描き直しの途中で札の層を落とした、が疑わしい)。
+     原因が何でも、札が自分で気づいて戻す: 札が開いている間、一定の間をおいて(と、画面に戻った時・向きが変わった時・選びを出した時に)
+     会話の欄・選び・札の頭が見えているかを測り、見えていなければ元に戻す。戻したことは、原因の名前だけ記録に送る(会話の中身は送らない) */
+  const doc = parent.ownerDocument;
+  const head = sheet.querySelector('.fr-head');
+  const reported = new Set();
+  let streak = 0;
+  let restUntil = 0;
+
+  /** 見えなくなっている物の名前(見えていれば null)。'detached' 札が画面から取れた / 'hidden' 札が見えない・大きさが 0 / 'log-lost' 会話の欄から吹き出しが消えた / 'head-lost' 札の頭が潰れた / 'actions-lost' 選びが消えた */
+  function diagnose() {
+    if (closed) return null;
+    if (!sheet.isConnected) return 'detached';
+    const cs = getComputedStyle(sheet);
+    const rect = sheet.getBoundingClientRect();
+    if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) < 0.05 || rect.width < 1 || rect.height < 1) return 'hidden';
+    if (kept.some((n) => n.parentNode !== log)) return 'log-lost';
+    if (!doc.documentElement.classList.contains('vv-mini') && head.getBoundingClientRect().height < 1) return 'head-lost'; // 横向きの小さな画面では、札の頭をたたむ(layoutB13.css)
+    if (actionsLost()) return 'actions-lost';
+    return null;
+  }
+  /** 選びを出しているはずなのに、押す札も言葉の欄も無い・選びの段の高さが 0 */
+  const actionsLost = () => lastOffer.list.length > 0 && ((!chips.children.length && !fieldRow.children.length) || actions.getBoundingClientRect().height < 1);
+
+  function report(why) {
+    if (reported.has(why)) return; // 同じ原因は 1 回だけ
+    reported.add(why);
+    try {
+      void reportVoice({ kind: 'sheet-blank', stage: why });
+    } catch {
+      // 送れなくても、札は戻す
+    }
+  }
+
+  /** 札を戻す。見えなくなっていなければ何もしない。戻したら true */
+  function heal() {
+    const why = diagnose();
+    if (!why) {
+      streak = 0;
+      return false;
+    }
+    if (Date.now() < restUntil) return false;
+    streak += 1;
+    if (streak > HEAL_GIVE_UP) {
+      streak = 0;
+      restUntil = Date.now() + HEAL_REST_MS; // 直しても見えない(CSS が隠している等)なら、1 分休む。ちらつかせない
+      return false;
+    }
+    report(why);
+    if (!sheet.isConnected) parent.append(sheet);
+    // 見えない印(インラインのスタイル)が付いたなら外す。キーボードの間の位置と高さ(top・height・bottom)は fitKeyboard の持ち物なので触らない
+    for (const p of ['display', 'visibility', 'opacity']) sheet.style.removeProperty(p);
+    head.style.removeProperty('display');
+    if (kept.some((n) => n.parentNode !== log)) log.replaceChildren(...[...kept, thinkRow, workRow].filter(Boolean));
+    if (actionsLost()) offer(lastOffer.list, lastOffer.meta);
+    // 描き直させる(WebKit は、層を落とした札を display の出し入れで描き直す)。キーボードを出している間は、入力が外れるのでしない
+    if (!sheet.contains(doc.activeElement)) {
+      sheet.style.display = 'none';
+      void sheet.offsetHeight;
+      sheet.style.removeProperty('display');
+    }
+    resetView();
+    return true;
+  }
+  const healTimer = setInterval(heal, HEAL_EVERY_MS);
+  const healOnShow = () => {
+    if (doc.visibilityState !== 'hidden') heal();
+  };
+  doc.addEventListener?.('visibilitychange', healOnShow);
+  globalThis.addEventListener?.('pageshow', healOnShow);
+  globalThis.addEventListener?.('orientationchange', healOnShow);
 
   function close(reason = 'done') {
     if (closed) return;
     closed = true;
+    clearInterval(healTimer);
+    doc.removeEventListener?.('visibilitychange', healOnShow);
+    globalThis.removeEventListener?.('pageshow', healOnShow);
+    globalThis.removeEventListener?.('orientationchange', healOnShow);
     skip?.abort();
     workOff?.();
     workRow?.remove();
