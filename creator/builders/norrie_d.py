@@ -122,13 +122,22 @@ CATCH = [(-0.36, 0.40, 0.33), (0.36, -0.38, 0.15)]   # 目の光(横, 縦, 半�
 SMILE_ARC = [(-0.92, -0.10), (-0.55, 0.36), (0.0, 0.56), (0.55, 0.36), (0.92, -0.10)]   # 笑う目「∩」の線(目の半径に対して)
 SMILE_HALF = 0.115            # 笑う目の線の半分の太さ(目の半径に対して。約 7 mm の帯)
 BLINK_LINE, BLINK_KEEP = -0.12, 0.10    # まばたき: 目を縦に 0.10 倍、この高さの線へ寄せる
+CATCH_HIDE = 0.030            # 笑顔で光を頭の中へ隠す深さ(m)。黒いレンズの 25 mm より深く、笑顔 0.9 でも面の下 9 mm 以上
 
 MASK_TIP = 0.801
 MASK_RIGHT = [(0.000, 0.801), (0.012, 0.792), (0.030, 0.778), (0.051, 0.762), (0.071, 0.742), (0.087, 0.722), (0.101, 0.702),
               (0.111, 0.682), (0.116, 0.660), (0.118, 0.635), (0.116, 0.610), (0.108, 0.588), (0.090, 0.571), (0.060, 0.561),
               (0.030, 0.557), (0.000, 0.556)]
 NOSE_C, NOSE_R = (0.0, 0.707), (0.053, 0.064)
-CHEEK_C, CHEEK_R = (0.076, 0.624), (0.024, 0.016)
+# ほお(CK1・案 B): 縁がやわらかく消える桃色のぼかし(硬い楕円の板ではない)。位置と大きさは数字(ND_CHEEK_*)で変える。
+# CHEEK_C = 片側のほおの中心(正面の x, z)。CHEEK_R = ぼかしの外の半径(横, 縦)。ぼかしの真ん中が濃さの上限(OPA)、
+# 外の半径の HARD 倍の内側までは一定、そこから外へなめらかに 0 へ。見える大きさは「濃さの半分の線」= 外の半径 × (1 + HARD) / 2。
+# HARD 1 にすると前の硬い楕円の板になる(比べる用)。
+CHEEK_C = (num("CHEEK_X", 0.092), num("CHEEK_Z", 0.712))   # 案 B を少し上・内へ(目の下端 0.776 − 0.064。z は 0.72 まで。x は 0.090〜0.095)
+CHEEK_R = (num("CHEEK_RX", 0.0452), num("CHEEK_RZ", 0.0348))
+CHEEK_HARD, CHEEK_OPA, CHEEK_TILT = num("CHEEK_HARD", 0.35), num("CHEEK_OPA", 0.8), num("CHEEK_TILT", 0.0)
+CHEEK_RGB = (num("CHEEK_CR", 240), num("CHEEK_CG", 134), num("CHEEK_CB", 148))
+CHEEK_LIFT = num("CHEEK_LIFT", 0.0042)   # やわらかいほおの持ち上げ。鼻(0.0036)より上・口(0.0050)より下: 鼻の縁にかかっても面が交わらない
 MOUTH_TOP = 0.690
 # 口(ふだん)= 小さな三日月: 上の縁は笑いの線(両端が curl だけ上がる)、下の縁は上の縁から depth の U、端はとがる。
 # 2D の口を測った数字(幅 77 px・口角が真ん中より 9 px 上・真ん中の高さ 30 px、S = 1040)を頭の 1.12 倍にした大きさ。
@@ -273,8 +282,11 @@ def eye_parts(sign, hb, K=40, rings=7):
         fn = np.cross(pts[f2[k2][1]] - pts[f2[k2][0]], pts[f2[k2][2]] - pts[f2[k2][0]])
         if np.dot(fn, a) < 0:
             f2 = [tuple(f[::-1]) for f in f2]
-        cen = pts.mean(0)
-        hide = cen + (pts - cen) * 0.2 - a * 0.008
+        # 笑顔: 光は形を変えず、そのまま CATCH_HIDE だけ奥(頭の中)へ平行に動かす。
+        # 前は「中心へ 0.2 倍に縮めて 8 mm 奥」だった。光は目の上 7 mm にあるので、笑顔 0.9(happy)では面の下 0.4 mm にしか届かず、
+        # 面のでこぼこに負けて白い点が出た。さらに、まばたき(縮めて 1 点にする)と笑顔(縮める向きの動き)はシェイプキーの足し算で重なるので、
+        # 笑顔のまま目を閉じると、縮めた 1 点が「裏返った小さな円板」に戻って面の上へ出た。平行移動なら、重なっても 1 点のまま奥へ行く。
+        hide = pts - a * CATCH_HIDE
         # まばたき: 光は、縦に寄せた目の上の 1 点へ縮む(悲しい顔 = まばたき 0.3 でも、小さな光が目の上に残る)
         cb = np.array([[c2[0], yl + (c2[1] - yl) * BLINK_KEEP]])
         sc = math.sqrt(cu * cu + cv * cv)
@@ -374,6 +386,70 @@ def mirror_outline(right, per=3):
     return np.concatenate([r, left], 0)
 
 
+def blush_image(size=64):
+    """ほおの絵(正方形)。色は 1 色、濃さ(アルファ)だけが真ん中から外へなめらかに消える。"""
+    img = bpy.data.images.new("blush_soft", size, size, alpha=True)
+    img.alpha_mode = "STRAIGHT"
+    v = (np.arange(size) + 0.5) / size * 2.0 - 1.0
+    X, Z = np.meshgrid(v, v)
+    t = np.clip((1.0 - np.sqrt(X * X + Z * Z)) / max(1.0 - CHEEK_HARD, 1e-6), 0.0, 1.0)
+    px = np.zeros((size, size, 4), np.float32)
+    px[..., :3] = np.array(CHEEK_RGB, np.float32) / 255.0
+    px[..., 3] = CHEEK_OPA * t * t * (3.0 - 2.0 * t)
+    img.pixels.foreach_set(px.ravel())
+    img.update()
+    img.pack()   # .blend に埋める(埋めないと、保存した .blend を開いた骨づけの段で黒い絵になる)
+    return img
+
+
+def blush_material(img):
+    m = bpy.data.materials.new("Blush_soft")
+    m.use_nodes = True
+    nt = m.node_tree
+    b = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    t = nt.nodes.new("ShaderNodeTexImage")
+    t.image = img
+    t.extension = "EXTEND"
+    nt.links.new(t.outputs["Color"], b.inputs["Base Color"])
+    nt.links.new(t.outputs["Alpha"], b.inputs["Alpha"])
+    b.inputs["Roughness"].default_value = 1.0
+    for k in ("Specular IOR Level", "Specular"):
+        if k in b.inputs:
+            b.inputs[k].default_value = 0.0
+            break
+    for attr, val in (("surface_render_method", "BLENDED"), ("blend_method", "BLEND")):
+        try:
+            setattr(m, attr, val)
+        except (AttributeError, TypeError):
+            pass
+    return m
+
+
+def soft_plate(name, boundary, center, mat, hb, tilt_deg, rings=4):
+    """やわらかいほお: 硬い楕円と同じ並び(32 点 × 4 輪 = 224 三角形)の板に、縁が消える絵を貼る。UV は輪郭の外接の正方形。"""
+    p2, ss = RD.disc_uv(boundary, center, rings)
+    front, nor, miss = RD.place_on(p2, ss, FRONT, hb, lambda s: CHEEK_LIFT)
+    faces = RD.disc_topology(rings, len(boundary))
+    v = np.asarray(front)
+    f0 = faces[len(boundary)]
+    if np.dot(np.cross(v[f0[1]] - v[f0[0]], v[f0[2]] - v[f0[0]]), nor[f0[0]]) < 0:
+        faces = [tuple(f[::-1]) for f in faces]
+    ob = RD.make(name, front, faces, mat)
+    ob["miss"] = miss
+    # 絵の中心を板の中心に。回した楕円は、回す前の向きで UV を決める(絵の丸がそのまま楕円になる)
+    tl = math.radians(-tilt_deg)
+    ct, st = math.cos(tl), math.sin(tl)
+    d = np.asarray(p2) - np.asarray(center)
+    loc = np.stack([d[:, 0] * ct - d[:, 1] * st, d[:, 0] * st + d[:, 1] * ct], 1)
+    uv = np.stack([0.5 + loc[:, 0] / (2.0 * CHEEK_R[0]), 0.5 + loc[:, 1] / (2.0 * CHEEK_R[1])], 1).astype(np.float32)
+    me = ob.data
+    vi = np.empty(len(me.loops), np.int32)
+    me.loops.foreach_get("vertex_index", vi)
+    layer = me.uv_layers.new(name="UVMap")
+    layer.data.foreach_set("uv", uv[vi].ravel())
+    return ob
+
+
 def face_plates(hb, mats):
     out = {}
     mask_b = mirror_outline(MASK_RIGHT)
@@ -385,8 +461,17 @@ def face_plates(hb, mats):
     out["nose"] = RD.plate("nose", nb, NOSE_C, 7, FRONT, hb, lambda s: LIFT["nose"], mats["pink"])
     for sign, nm in ((1, "cheek_L"), (-1, "cheek_R")):
         c = (sign * CHEEK_C[0], CHEEK_C[1])
-        cb = RD.curve_outline(lambda t: (c[0] + CHEEK_R[0] * math.cos(2 * math.pi * t), c[1] + CHEEK_R[1] * math.sin(2 * math.pi * t)), 32)
-        out[nm] = RD.plate(nm, cb, c, 4, FRONT, hb, lambda s: LIFT["cheek"], mats["blush"])
+        tl = math.radians(sign * CHEEK_TILT)
+        ct, st = math.cos(tl), math.sin(tl)
+
+        def ell(t, c=c, ct=ct, st=st):
+            a, b = CHEEK_R[0] * math.cos(2 * math.pi * t), CHEEK_R[1] * math.sin(2 * math.pi * t)
+            return (c[0] + a * ct - b * st, c[1] + a * st + b * ct)
+        cb = RD.curve_outline(ell, 32)
+        if CHEEK_HARD >= 1.0:   # 前の硬い板(比べるため)
+            out[nm] = RD.plate(nm, cb, c, 4, FRONT, hb, lambda s: LIFT["cheek"], mats["blush"])
+        else:
+            out[nm] = soft_plate(nm, cb, c, mats["blush_soft"], hb, sign * CHEEK_TILT)
     arc = RD.stroke("nose_arc", NOSE_ARC, 0.0036, FRONT, hb, LIFT["nose_line"], mats["ink"])
     phil = RD.stroke("philtrum", PHILTRUM, 0.0030, FRONT, hb, LIFT["nose_line"], mats["ink"])
     out["nose_line"] = P.join([arc, phil], "nose_line")
@@ -543,6 +628,8 @@ def main():
     mats = dict(brown=flat("Brown", BROWN), cream=flat("Cream", CREAM), pink=flat("Pink", PINK), green=flat("Green", GREEN),
                 white=flat("Glove", WHITE), core=flat("Stripe", CORE), ink=flat("Ink", INK), mouth=flat("MouthIn", INK),
                 blush=flat("Blush", BLUSH), catch=flat("CatchWhite", WHITE, base=0.0, glow=1.0), tooth=flat("ToothWhite", WHITE, base=0.0, glow=1.0))
+    if CHEEK_HARD < 1.0:
+        mats["blush_soft"] = blush_material(blush_image())
     ol = P.material("Outline", (0, 0, 0), rough=1.0, spec=0.0)
     ol.use_backface_culling = True
     hb, tb = head_blobs(), torso_blobs()

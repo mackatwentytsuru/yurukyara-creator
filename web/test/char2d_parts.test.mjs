@@ -2,8 +2,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { extractGroup, faceVariants, listGroupIds, mouthShape, partSvg, pickFaceId, validateParts } from '../src/char2d/parts.js';
+import { extractGroup, faceVariants, listGroupIds, mouthShape, partSvg, pickFaceId, validateParts, withoutShine } from '../src/char2d/parts.js';
 import { normalizeIntent } from '../src/char2d/intentLocal.js';
+
+test('withoutShine: 決めた色の単純な図形だけを取る(#fff・#FFFFFF のどちらでも)。取る物が無ければ null・元は変えない', () => {
+  const s = '<svg xmlns="http://www.w3.org/2000/svg"><g id="face.neutral.eyes"><circle cx="1" cy="1" r="9" fill="#000"/><circle cx="2" cy="2" r="3" fill="#FFFFFF"/><ellipse cx="3" cy="3" rx="2" ry="1" fill="#fff"/><g fill="none" stroke="#000"><path d="M0 0L1 1"/></g></g><g id="other"><circle r="1" fill="#FFFFFF"/></g></svg>';
+  const out = withoutShine(s, 'face.neutral.eyes', ['#FFFFFF']);
+  assert.ok(out.includes('fill="#000"'), '黒は残る');
+  assert.ok(out.includes('stroke="#000"') && out.includes('d="M0 0L1 1"'), '線の図形は残る');
+  const group = extractGroup(out, 'face.neutral.eyes');
+  assert.doesNotMatch(group, /fill="#(?:FFFFFF|fff)"/i, '白は全部取れる');
+  assert.ok(out.includes('<g id="other"><circle r="1" fill="#FFFFFF"/></g>'), '別の部品は触らない');
+  assert.ok(s.includes('fill="#FFFFFF"/><ellipse'), '元の文字列は変わらない');
+  assert.equal(withoutShine(s, 'face.neutral.eyes', ['#ff0000']), null, '取る物が無い');
+  assert.equal(withoutShine(s, 'ない部品', ['#FFFFFF']), null);
+  assert.equal(withoutShine(s, 'face.neutral.eyes', []), null);
+});
 
 const DIR = new URL('../../characters/yokoso/2d/', import.meta.url);
 const spec = JSON.parse(fs.readFileSync(new URL('parts.json', DIR), 'utf8'));

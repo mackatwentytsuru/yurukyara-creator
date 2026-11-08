@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as THREE from 'three';
 import { Svg2DCharacter } from '../src/char2d/svg2dCharacter.js';
-import { extractGroup, faceVariants, listGroupIds, validateParts } from '../src/char2d/parts.js';
+import { extractGroup, faceVariants, listGroupIds, validateParts, withoutShine } from '../src/char2d/parts.js';
 import { applyIntent } from '../src/character/intent.js';
 import { STANDARD_EXPRESSIONS } from '../src/character/expressionNames.js';
 
@@ -31,7 +31,8 @@ function make() {
   return { c: new Svg2DCharacter({ spec, svg, rasterize, pxPerUnit: spec.pxPerUnit }), sizes };
 }
 
-const visibleIn = (c, slot) => c.slotGroups[slot]?.children.filter((m) => m.visible).map((m) => m.name.replace('2d:', '')) ?? [];
+// 出ている板の名前。目を閉じている間は「光を取った目の板」(名前の後ろに :closed)が出る。raw でなければ、同じ表情の目として数える
+const visibleIn = (c, slot, raw = false) => c.slotGroups[slot]?.children.filter((m) => m.visible).map((m) => m.name.replace('2d:', '').replace(raw ? /$^/ : /:closed$/, '')) ?? [];
 const visibleMouth = (c) => ['mouth_closed', 'mouth_half', 'mouth_open'].flatMap((s) => visibleIn(c, s));
 const run = (c, seconds, onFrame) => {
   for (let i = 0; i < Math.round(seconds * 30); i++) {
@@ -45,12 +46,22 @@ test('ノリーの parts.json と SVG は点検で問題 0 件', () => {
   assert.equal(spec.id, 'norrie');
 });
 
-test('色は元の絵の 6 色だけ(焦げ茶・クリーム・黒・白・ピンク・緑)', () => {
-  const used = new Set([...svg.matchAll(/(?:fill|stroke|stop-color)="(#[0-9a-fA-F]{3,6})"/g)].map((m) => full(m[1])));
+// ほっぺ(<g id="cheeks">)だけは、縁がふんわり消える桃色のぼかし(グラデーション)。色は #F08694 の 1 色(鼻の #E4B2BC より赤みを強く)。
+// それ以外の絵は、元の 6 色のベタ塗りのまま。
+const CHEEK_RGB = '#f08694';
+const CHEEK_GROUP = /<g id="cheeks">[\s\S]*?<\/g>/;
+const svgWithoutCheeks = svg.replace(CHEEK_GROUP, '');
+
+test('色は元の絵の 6 色だけ(焦げ茶・クリーム・黒・白・ピンク・緑)。ほっぺのぼかしだけが例外(#F08694 の 1 色)', () => {
+  assert.notEqual(svgWithoutCheeks, svg, 'ほっぺの部品が無い');
+  const used = new Set([...svgWithoutCheeks.matchAll(/(?:fill|stroke|stop-color)="(#[0-9a-fA-F]{3,6})"/g)].map((m) => full(m[1])));
   assert.ok(used.size >= 6, `使っている色 ${[...used]}`);
   for (const c of used) assert.ok(PALETTE.has(c), `元の絵に無い色 ${c}`);
-  assert.doesNotMatch(svg, /gradient|filter=|opacity=/i, 'ぼかし・グラデーション・透けは使わない(元の絵はベタ塗り)');
+  assert.doesNotMatch(svgWithoutCheeks, /gradient|filter=|opacity=/i, 'ほっぺ以外では、ぼかし・グラデーション・透けは使わない(元の絵はベタ塗り)');
   assert.ok(used.has('#249867'), '蝶ネクタイは緑');
+  // 例外はほっぺのグラデーションだけ: 色は #F08694 の 1 色で、それ以外の色を足さない
+  const cheekColours = new Set([...svg.match(CHEEK_GROUP)[0].matchAll(/(?:fill|stroke|stop-color)="(#[0-9a-fA-F]{3,6})"/g)].map((m) => full(m[1])));
+  assert.deepEqual([...cheekColours], [CHEEK_RGB], 'ほっぺのぼかしの色は #F08694 の 1 色だけ');
 });
 
 test('部品は分かれている: 耳・頭・顔・鼻・目・口・体・お腹・腕・手袋・蝶ネクタイ・しっぽ', () => {
@@ -102,11 +113,91 @@ test('目を開く表情には、どれも白い光が大小 2 つ。ほお(桃�
   }
   const cheeks = extractGroup(svg, 'cheeks');
   assert.equal((cheeks.match(/<ellipse/g) ?? []).length, 2, 'ほおは左右 1 つずつ');
-  assert.equal(full(cheeks.match(/fill="(#[0-9A-Fa-f]+)"/)[1]), '#e4b2bc', 'ほおは鼻と同じ桃色');
+  assert.equal([...cheeks.matchAll(/<ellipse[^>]*fill="url\(#cheekFade\)"/g)].length, 2, 'ほおは縁が消えるぼかし(cheekFade)で塗る');
   assert.ok(spec.faceLayers.some((l) => l.id === 'cheeks'), 'ほおは顔の上の部品(まばたきで消えない)');
   const { c } = make();
   assert.ok(c.faceLayers.cheeks, 'ほおの板がある');
   assert.equal(c.faceLayers.cheeks.parent, c.face, '顔の枠と同じ親');
+});
+
+// ---- ほっぺ(CB1): 目の下のふっくらした所に、ふんわり消える桃色。3D と同じ位置・同じ形 ----
+function readCheeks() {
+  const g = extractGroup(svg, 'cheeks');
+  const ell = [...g.matchAll(/<ellipse cx="([\d.]+)" cy="([\d.]+)" rx="([\d.]+)" ry="([\d.]+)"/g)].map((m) => ({ cx: +m[1], cy: +m[2], rx: +m[3], ry: +m[4] }));
+  const stops = [...g.matchAll(/<stop offset="([\d.]+)" stop-color="(#[0-9A-Fa-f]+)" stop-opacity="([\d.]+)"/g)].map((m) => ({ at: +m[1], colour: full(m[2]), alpha: +m[3] }));
+  return { g, ell, stops };
+}
+/** グラデーションで濃さが最大の半分になる所(外の半径に対する割合)。見える大きさはこの楕円 */
+function halfAt(stops) {
+  const half = Math.max(...stops.map((s) => s.alpha)) / 2;
+  const hi = stops.findIndex((s) => s.alpha <= half);
+  const a = stops[hi - 1], b = stops[hi];
+  return a.at + ((a.alpha - half) / (a.alpha - b.alpha)) * (b.at - a.at);
+}
+
+test('ほっぺは、縁へなめらかに消える桃色のぼかし(中心の濃さ 0.8・外は 0・濃さは外へ減るだけ・硬い線なし)', () => {
+  const { stops } = readCheeks();
+  assert.ok(stops.length >= 6, `グラデーションの止めの数 ${stops.length}`);
+  assert.equal(stops[0].at, 0);
+  assert.equal(stops.at(-1).at, 1);
+  assert.equal(stops[0].alpha, 0.8, '真ん中の濃さ');
+  assert.equal(stops.at(-1).alpha, 0, '外のふちは透明(硬い線を作らない)');
+  for (const s of stops) assert.equal(s.colour, CHEEK_RGB, 'ほっぺの色は #F08694 の 1 色');
+  for (let i = 1; i < stops.length; i++) {
+    assert.ok(stops[i].at > stops[i - 1].at, '止めの位置は外へ増える');
+    assert.ok(stops[i].alpha <= stops[i - 1].alpha, `濃さは外へ減るだけ(${i})`);
+    assert.ok(stops[i - 1].alpha - stops[i].alpha <= 0.2, `濃さの落ち方がなだらか(${i}: 一度に 0.2 より急に落ちない)`);
+  }
+  const h = halfAt(stops);
+  assert.ok(Math.abs(h - 0.675) < 0.01, `濃さが半分になる所 ${h}(外の半径の 0.675)`);
+});
+
+test('ほっぺは、顔の軸(x = waist)に対して左右対称(軸から 0.5 px までのずれ)な楕円 2 つで、仮面の頬の帯の中にあり、目と鼻づらから離れ、parts.json の箱に収まる', () => {
+  const { ell, stops } = readCheeks();
+  assert.equal(ell.length, 2);
+  const [a, b] = [...ell].sort((p, q) => p.cx - q.cx);
+  const axis = spec.waist[0]; // 顔の軸は 296.5。決めた値は 215.0 と 377.0(真ん中 296.0)なので 0.5 px だけずれる(0.6 mm 相当。見えない)
+  assert.ok(Math.abs(a.cx + b.cx - 2 * axis) <= 1, `左右が軸 ${axis} に対して対称でない: ${a.cx} と ${b.cx}`);
+  assert.ok(a.cy === b.cy && a.rx === b.rx && a.ry === b.ry, '左右で高さと大きさが同じ');
+  // 中心は仮面の頬の帯(y 290〜320・x は軸から 71〜91 離れた所)の中
+  for (const e of [a, b]) {
+    assert.ok(e.cy >= 290 && e.cy <= 320, `ほっぺの中心の高さ ${e.cy}`);
+    const dx = Math.abs(e.cx - axis);
+    assert.ok(dx >= 71 && dx <= 91, `ほっぺの中心が軸から ${dx} 離れている(71〜91)`);
+  }
+  // 見える大きさ(濃さ半分)は、前の硬い丸(16×10.5)の 1.5 倍以上の幅
+  const k = halfAt(stops);
+  assert.ok(a.rx * k > 16 * 1.2 && a.ry * k > 10.5 * 1.4, `見える大きさ ${(a.rx * k).toFixed(1)}×${(a.ry * k).toFixed(1)}`);
+  // 見える楕円は、目の円と鼻づらの板に重ならない
+  const eyes = [...extractGroup(svg, 'face.neutral.eyes').matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)" fill="#000"/g)].map((m) => ({ cx: +m[1], cy: +m[2], r: +m[3] }));
+  assert.equal(eyes.length, 2);
+  const muzzle = spec.faceLayers.find((l) => l.id === 'muzzle').box;
+  for (const e of [a, b]) {
+    const rx = e.rx * k, ry = e.ry * k;
+    for (let t = 0; t < 360; t += 3) {
+      const x = e.cx + rx * Math.cos((t * Math.PI) / 180), y = e.cy + ry * Math.sin((t * Math.PI) / 180);
+      for (const eye of eyes) assert.ok(Math.hypot(x - eye.cx, y - eye.cy) > eye.r + 22, `ほっぺの縁 (${x.toFixed(0)},${y.toFixed(0)}) が目に近い`);
+      assert.ok(x < muzzle[0] || x > muzzle[0] + muzzle[2], `ほっぺの縁 x ${x.toFixed(0)} が鼻づらの板(${muzzle[0]}〜${muzzle[0] + muzzle[2]})の中`);
+    }
+  }
+  // parts.json の箱は、外の楕円をすべて含む
+  const box = spec.faceLayers.find((l) => l.id === 'cheeks').box;
+  for (const e of [a, b]) {
+    assert.ok(box[0] <= e.cx - e.rx && box[0] + box[2] >= e.cx + e.rx, `箱の横が外の楕円を含まない: ${box}`);
+    assert.ok(box[1] <= e.cy - e.ry && box[1] + box[3] >= e.cy + e.ry, `箱の縦が外の楕円を含まない: ${box}`);
+  }
+});
+
+test('ほっぺは頭と一緒に動く: 顔の部品の層に入っていて、顔の枠の親(顔)が動けば、ほっぺも同じだけ動く', () => {
+  const { c } = make();
+  const layer = c.faceLayers.cheeks;
+  assert.equal(layer.parent, c.face, 'ほっぺは顔の枠の子');
+  const before = layer.getWorldPosition(new THREE.Vector3());
+  const head = c.face.parent;
+  head.position.x += 0.05;
+  head.updateMatrixWorld(true);
+  const after = layer.getWorldPosition(new THREE.Vector3());
+  assert.ok(Math.abs(after.x - before.x - 0.05) < 1e-6, `顔を 0.05 動かしても、ほっぺが ${(after.x - before.x).toFixed(4)} しか動かない`);
 });
 
 test('口を開いた形(半分・開き)には、どの表情でも前歯が残る', () => {
@@ -188,6 +279,54 @@ test('まばたき: ふつうでは目を閉じる時があり、目を閉じた
     let m = 1;
     run(c, 8, (cc) => (m = Math.min(m, cc.state2d.eyesScaleY)));
     assert.equal(m, 1, `${e} ではつぶさない`);
+  }
+});
+
+test('目を閉じる間は、目の光(白い丸)を取った目の板に替わる(閉じた細い線の上に白いすじが残らない)(NE1)', () => {
+  const { c } = make();
+  const shown = () => visibleIn(c, 'eyes', true);
+  assert.deepEqual(spec.blink.shine, ['#FFFFFF']);
+  // 光を取った板は、まばたきをする目(ふつう・おどろき・かなしい・おこり・考え中)にだけある。目を閉じた絵(happy・relaxed)には無い
+  assert.ok(c.closedPlanes.has('face.neutral.eyes'));
+  assert.ok(!c.closedPlanes.has('face.happy.eyes') && !c.closedPlanes.has('face.relaxed.eyes'));
+  // 光を取った板の SVG には、白い丸が 1 つも無く、黒い目は残る
+  const open = extractGroup(svg, 'face.neutral.eyes');
+  assert.equal((open.match(/fill="#FFFFFF"/g) ?? []).length, 4, '元の目には光が 4 つ(左右 2 つずつ)');
+  const closedSvg = withoutShine(svg, 'face.neutral.eyes', spec.blink.shine);
+  const closed = extractGroup(closedSvg, 'face.neutral.eyes');
+  assert.equal((closed.match(/fill="#FFFFFF"/gi) ?? []).length, 0);
+  assert.equal((closed.match(/fill="#000"/g) ?? []).length, 2, '黒い目は 2 つ残る');
+  // 8 秒走らせ、目をつぶしている(縮み < 0.5)コマでは必ず光を取った板、開いているコマでは元の板
+  for (const emotion of ['neutral', 'sad', 'surprised', 'think', 'angry']) {
+    c.setEmotion(emotion, 1);
+    run(c, 0.5);
+    let closedFrames = 0;
+    let openFrames = 0;
+    run(c, 10, (cc) => {
+      const names = shown();
+      assert.equal(names.length, 1, `${emotion}: 目の板は常に 1 枚(${names})`);
+      if (cc.state2d.eyesScaleY <= 0.5) {
+        closedFrames++;
+        assert.match(names[0], /:closed$/, `${emotion}: 目を閉じている間は光なしの板(${names[0]}, 縮み ${cc.state2d.eyesScaleY.toFixed(2)})`);
+      } else {
+        openFrames++;
+        assert.doesNotMatch(names[0], /:closed$/, `${emotion}: 目を開けている間は元の板`);
+      }
+    });
+    assert.ok(closedFrames > 0 && openFrames > 0, `${emotion}: 閉じたコマ ${closedFrames}・開いたコマ ${openFrames}`);
+  }
+  // 閉じている途中で表情が替わっても、板が重ならない・消えない
+  c.setEmotion('neutral', 1);
+  run(c, 0.2);
+  for (const e of ['happy', 'sad', 'relaxed', 'surprised', 'neutral']) {
+    c.setEmotion(e, 1);
+    run(c, 6, () => assert.equal(shown().length, 1, `${e}: 目の板は 1 枚`));
+  }
+  // 目を閉じた絵の表情(happy・relaxed)は、光を取った板を使わない(元から光が無い)
+  for (const e of ['happy', 'relaxed']) {
+    c.setEmotion(e, 1);
+    run(c, 0.5);
+    run(c, 6, () => assert.ok(!/:closed$/.test(shown()[0] ?? ''), `${e}: 光なしの板は使わない`));
   }
 });
 

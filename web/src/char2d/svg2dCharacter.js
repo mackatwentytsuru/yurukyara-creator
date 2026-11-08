@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { CharacterBase } from '../character/characterBase.js';
 import { STANDARD_EXPRESSIONS } from '../character/expressionNames.js';
-import { FACE_SLOTS, MOUTH_SHAPES, availableExpressions, faceVariants, listGroupIds, mouthShape, partSvg, pickFaceId, validateParts } from './parts.js';
+import { FACE_SLOTS, MOUTH_SHAPES, availableExpressions, faceVariants, listGroupIds, mouthShape, partSvg, pickFaceId, validateParts, withoutShine } from './parts.js';
 import { DEFAULT_GAINS, pose2d } from './pose2d.js';
 
 const LAYER_GAP = 0.002; // 板どうしの前後の間(メートル)
 const EMOTION_MIN = 0.25; // これより弱い表情は neutral にする
 const ARM_FRONT = 1.0; // 腕がこれ(ラジアン)より上がったら頭の前に描く(parts.json の arms.front で変えられる。false なら前に出さない)
 const FACE_LAYER_ORDER = 0.3; // 顔の上の動かない部品(鼻など)は、頭の板の上・目と口の下
+const EYES_CLOSED_AT = 0.5; // まばたきがこれ以上なら「目を閉じた絵」(光を取った目)に替える(parts.json の blink.shine がある時)
 // 向こうを向く動き 'turn'(後ろ姿の板があるキャラだけ): 0.55 秒で後ろを向き、1.4 秒そのまま、0.65 秒で前へ戻る(1 回り)
 const TURN = { out: 0.55, hold: 1.4, back: 0.65 };
 const TURN_TOTAL = TURN.out + TURN.hold + TURN.back;
@@ -62,6 +63,9 @@ export class Svg2DCharacter extends CharacterBase {
     this.variants = variants;
     this.expressionFallback = { ...(spec.expressionFallback ?? {}), ...expressionFallback };
     this.noBlink = new Set(spec.blink?.noBlink ?? []);
+    // 目の光(白い丸など)の色。目を縦につぶして閉じる時、光が細い線の上に白いすじで残るので、閉じる間は光を取った目の板に替える
+    this.shineFills = Array.isArray(spec.blink?.shine) ? spec.blink.shine : [];
+    this.closedPlanes = new Map(); // 目の gid → 光を取った目の板
     // キャラごとの動きの効き(腕の大きさ・顔の部品のずれ)と、腕を頭の前に出す角度
     this.gains = { ...DEFAULT_GAINS, ...(spec.gains ?? {}) };
     const front = spec.arms?.front;
@@ -69,7 +73,7 @@ export class Svg2DCharacter extends CharacterBase {
     // 腕が 2 枚の時: 前腕をこの角度より大きく曲げたら、上腕の後ろへ回す(ひじの丸を前に出し、前腕の線の元を隠す)
     const behind = spec.arms?.foreBehind;
     this.foreBehind = Number.isFinite(behind) ? behind : Infinity;
-    this.state2d = { emotion: 'neutral', mouthShape: 'mouth_closed', eyesScaleY: 1, faceIds: {}, facing: 'front' };
+    this.state2d = { emotion: 'neutral', mouthShape: 'mouth_closed', eyesScaleY: 1, eyesClosed: false, faceIds: {}, facing: 'front' };
     // 後ろ姿の板があるキャラは、前の板を表だけ描く(後ろから見ると前の板は消え、後ろ姿の板が見える)
     this.side = spec.back ? THREE.FrontSide : THREE.DoubleSide;
     this.turnT = null; // 向こうを向く動きの経過(秒)。null なら動いていない
@@ -180,6 +184,15 @@ export class Svg2DCharacter extends CharacterBase {
         mesh.visible = false;
         sg.add(mesh);
         this.facePlanes.set(gid, mesh);
+        // 目を閉じた絵(光を取った目)。まばたきをする目(noBlink でない表情)で、取る光がある時だけ
+        const shineless = slot === 'eyes' && this.shineFills.length && !this.noBlink.has(emotion) ? withoutShine(svg, gid, this.shineFills) : null;
+        if (shineless) {
+          const closed = this._plane(shineless, gid, box, rasterize, pxPerUnit, order, c);
+          closed.name = `2d:${gid}:closed`;
+          closed.visible = false;
+          sg.add(closed);
+          this.closedPlanes.set(gid, closed);
+        }
       }
     }
     this.headSize = { w: parts.head.box[2] * this.unit, h: parts.head.box[3] * this.unit };
@@ -243,6 +256,18 @@ export class Svg2DCharacter extends CharacterBase {
     }
     for (const [gid, mesh] of this.facePlanes) mesh.visible = want.has(gid);
     this.state2d.faceIds = ids;
+    this._syncClosedEyes();
+  }
+
+  /** 目を閉じている間(まばたきが EYES_CLOSED_AT 以上)は、出ている目の板を、光を取った板に替える */
+  _syncClosedEyes() {
+    if (!this.closedPlanes.size) return;
+    const shown = this.state2d.faceIds.eyes;
+    for (const [gid, closed] of this.closedPlanes) {
+      const swap = this.state2d.eyesClosed && gid === shown;
+      closed.visible = swap;
+      if (swap) this.facePlanes.get(gid).visible = false;
+    }
   }
 
   _apply(s) {
@@ -258,6 +283,14 @@ export class Svg2DCharacter extends CharacterBase {
     const eyesScaleY = Math.max(0.08, 1 - blink);
     if (this.slotGroups.eyes) this.slotGroups.eyes.scale.y = eyesScaleY;
     this.state2d.eyesScaleY = eyesScaleY;
+    const eyesClosed = blink >= EYES_CLOSED_AT;
+    if (eyesClosed !== this.state2d.eyesClosed) {
+      this.state2d.eyesClosed = eyesClosed;
+      if (this.closedPlanes.size) {
+        // 元の板に戻す時は、出ている目の板を見せ直す(_showFace が決め直す)
+        this._showFace(emotion, shape);
+      }
+    }
 
     // 体の動き(B5G: かわいい仕草の層 s.cute も渡す。3D と同じ名前・同じ数字で、弾み・ゆれ・しっぽ・耳が動く)
     const m = pose2d(s.pose, { headYaw: s.headYaw, headPitch: s.headPitch, time: this.time, cute: s.cute }, this.gains);

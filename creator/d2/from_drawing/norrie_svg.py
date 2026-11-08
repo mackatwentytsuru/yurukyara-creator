@@ -266,7 +266,8 @@ spec = {
     'parts': parts,
     'face': {k: {'box': v} for k, v in face_boxes.items()},
     'faceLayers': [{'id': 'muzzle', 'box': mz}],
-    'blink': {'noBlink': ['happy', 'relaxed']},
+    # shine: 目の光(白い丸)の色。目を閉じる間は、光を取った目の板に替える(つぶした細い線の上に白いすじが残らない)
+    'blink': {'noBlink': ['happy', 'relaxed'], 'shine': ['#FFFFFF']},
     # front: 腕を頭の前に出さない。foreBehind: 前腕をこの角度(ラジアン)より大きく曲げたら、上腕の後ろへ回す(ひじの丸が前に出る)
     'arms': {'front': False, 'foreBehind': 0.6},
     # 腕は 2 枚(arm 上腕の効き・elbow ひじで曲げる最大・swing 前腕の振り)。
@@ -281,7 +282,7 @@ spec = {
 # ---------- SVG ----------
 head = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{f1(vx)} {vy} {vw} {vh}" width="{vw}" height="{vh}">\n'
         '<!-- ノリー(セスジキノボリカンガルーの執事見習い)の 2D。協力者が手で描いた正面の絵から、色と形をそのままに部品へ分けて描き直した。\n'
-        '     部品は <g id>。顔は face.<表情>.<枠>(枠 = eyes・brows・mouth_closed・mouth_half・mouth_open)、鼻は muzzle。色は元の絵の 6 色だけ。\n'
+        '     部品は <g id>。顔は face.<表情>.<枠>(枠 = eyes・brows・mouth_closed・mouth_half・mouth_open)、鼻は muzzle。色は元の絵の 6 色だけ(ほおのぼかしだけ #F08694)。\n'
         '     腕は上腕(arm_*)と前腕(forearm_*)の 2 枚。back は三面図の後ろ姿の絵から(向こうを向いた時に出す板。背中の筋)。 -->\n')
 order = ['tail', 'arm_r', 'arm_l', 'body', 'forearm_r', 'forearm_l', 'bowtie', 'head']
 body = ''.join(f'<g id="{k}">{groups[k]}</g>\n' for k in order)
