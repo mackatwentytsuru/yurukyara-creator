@@ -14,12 +14,12 @@
 
 | いつ(日本時間) | 起きた事 | 記録 |
 |---|---|---|
-| 11/2 14:25 | 3 本の柱(キャラを作る・実際の場所に置く・舞台で見せる)で始めた。 | [コミット]({{commit:94f3649}}) |
-| 11/2 16:04 | 初日に、もうゆるキャラがブラウザで動いていた(3D の体・骨・顔の表・8 つの動き)。 | [コミット]({{commit:0bf93ef}}) |
-| 11/2 16:41 | ゆるキャラは、Blender の Python で部品ごとに組む道を本命にした。 | [コミット]({{commit:b68ffd1}}) |
-| 11/3〜4 | それでも、**リアルな人型**を作る道を探し続けた(Character Creator 5 での写実の人、写真に合わせて頭を計算だけで寄せる道具、アニメ調の人)。 | [写実]({{commit:45f7f9d}})・[頭の合わせ]({{commit:c2db7d6}})・[アニメ調]({{commit:f10db35}}) |
-| 11/6 11:52 | **人が「リアルな人型はきっぱりやめて、ゆるキャラに絞る」と決めた。** 本流をゆるキャラクリエイターだけに整えた。いちばんの曲がり角。 | [曲がり角]({{commit:007e795}})・[その直前]({{commit:fd7f245}}) |
-| 11/6 12:04〜13:03 | 曲がり角の後、判定役を Claude だけにし、作例 4 体の元の絵を Claude が SVG で描き直して、その絵から 4 体を作り直した。 | [判定役]({{commit:1c1eff5}})・[描き直し]({{commit:7fb739d}}) |
+| 11/2 14:25 | 3 本の柱(キャラを作る・実際の場所に置く・舞台で見せる)で始めた。 | [コミット](https://github.com/mackatwentytsuru/yurukyara-creator/commit/125a4815b716102090475144fb90e7a8f110bd0e) |
+| 11/2 16:04 | 初日に、もうゆるキャラがブラウザで動いていた(3D の体・骨・顔の表・8 つの動き)。 | [コミット](https://github.com/mackatwentytsuru/yurukyara-creator/commit/04913a2bc952308d895ba11f2a11f2697ea5d1db) |
+| 11/2 16:41 | ゆるキャラは、Blender の Python で部品ごとに組む道を本命にした。 | [コミット](https://github.com/mackatwentytsuru/yurukyara-creator/commit/b0dd43d2649731a7868a1963c53691523e739e56) |
+| 11/3〜4 | それでも、**リアルな人型**を作る道を探し続けた(Character Creator 5 での写実の人、写真に合わせて頭を計算だけで寄せる道具、アニメ調の人)。 | [写実](https://github.com/mackatwentytsuru/yurukyara-creator/commit/601f170b33efa12b7bb4befa8e059340e67eb471)・[頭の合わせ](https://github.com/mackatwentytsuru/yurukyara-creator/commit/5ff7b3136adffd5523cc8ab9acf9457569ade2c0)・[アニメ調](https://github.com/mackatwentytsuru/yurukyara-creator/commit/e26ee74d09f0f2d07c74d68543d65519a81f8b88) |
+| 11/6 11:52 | **人が「リアルな人型はきっぱりやめて、ゆるキャラに絞る」と決めた。** 本流をゆるキャラクリエイターだけに整えた。いちばんの曲がり角。 | [曲がり角](https://github.com/mackatwentytsuru/yurukyara-creator/commit/c96827f9f6c0711d514ad0d452bb7f7c5ea2aa3f)・[その直前](https://github.com/mackatwentytsuru/yurukyara-creator/commit/f9fa6137e0bd89ee8151dc7917c8e2dcfdff9c1b) |
+| 11/6 12:04〜13:03 | 曲がり角の後、判定役を Claude だけにし、作例 4 体の元の絵を Claude が SVG で描き直して、その絵から 4 体を作り直した。 | [判定役](https://github.com/mackatwentytsuru/yurukyara-creator/commit/10304fb66ce7660b191e4196e244156f12da8009)・[描き直し](https://github.com/mackatwentytsuru/yurukyara-creator/commit/c292bc081b287e8d3f2012cd918ad061829420b6) |
 
 なぜゆるキャラか: ブラウザ・スマホ・VR のゴーグルで動くほど軽く、親しみやすいから。
 リアルな人型は、形・材質・表情・動き・品質・時間のどれを見ても重かった。
@@ -41,14 +41,14 @@
 |---|---|---|
 | 11/6 15:35〜20:40 | 協力者がノリーを手で描いた(正面・横・後ろと、名前と「セスジキノボリカンガルーの執事見習い。」の一文)。名前と見た目(緑の蝶ネクタイ・白い手袋)は人が決めた。 | — |
 | 11/6 21:15〜22:40 | Claude Code が三面図から 3 つの向きを切り抜き、元の絵と画素ごとに比べた。横の絵の塗り残し 2 か所を埋めた。 | — |
-| 11/6 21:50 と 23:27 | ノリーの人格: 自分を「ノリー」と呼び(11/7 に人が、伸ばす棒つきの呼び名にそろえた)、ていねいで少しカタコト(「ノリー、がんばりマス!」)、一生懸命な見習い。安全の層は今までどおり先に効く。 | [人格]({{commit:45fb9ec}})・[話し方]({{commit:4153995}}) |
-| 11/7 00:02 | **2D。** Claude Code が正面の絵を SVG の部品(耳・頭・顔・鼻・目・前歯 2 本の口・体・お腹・腕・白い手袋・緑の蝶ネクタイ・しっぽ)に分けた。色は元の絵の 6 色だけ。描き直した絵と元の絵の差は、平均 1.1/255(線のふちだけ)。 | [2D]({{commit:8b57e62}}) |
-| 11/7 00:30 | **3D。** Claude(Sonnet 5.5、新しい文脈で 3 回)が、三面図から 7 段で、Blender の Python を動かして組んだ。耳・手袋・目を、元の絵と比べて 1 回ずつ直した。まっすぐ写した絵での輪郭の重なり: 正面 0.960・横 0.963・後ろ 0.952。三角形 37,100・1.34MB・毛なし(スマホと VR で軽く動くように)。 | [3D]({{commit:97fbb1c}}) |
+| 11/6 21:50 と 23:27 | ノリーの人格: 自分を「ノリー」と呼び(11/7 に人が、伸ばす棒つきの呼び名にそろえた)、ていねいで少しカタコト(「ノリー、がんばりマス!」)、一生懸命な見習い。安全の層は今までどおり先に効く。 | [人格](https://github.com/mackatwentytsuru/yurukyara-creator/commit/852731e4b13f0f3c1bbff0cbbc4d1e70289bd498)・[話し方](https://github.com/mackatwentytsuru/yurukyara-creator/commit/e1db0fbdd5ba01154543a4e97781dfb93eadb4f2) |
+| 11/7 00:02 | **2D。** Claude Code が正面の絵を SVG の部品(耳・頭・顔・鼻・目・前歯 2 本の口・体・お腹・腕・白い手袋・緑の蝶ネクタイ・しっぽ)に分けた。色は元の絵の 6 色だけ。描き直した絵と元の絵の差は、平均 1.1/255(線のふちだけ)。 | [2D](https://github.com/mackatwentytsuru/yurukyara-creator/commit/0486bc71bbb1849c4e0220e7f3967d4adfd80a85) |
+| 11/7 00:30 | **3D。** Claude(Sonnet 5.5、新しい文脈で 3 回)が、三面図から 7 段で、Blender の Python を動かして組んだ。耳・手袋・目を、元の絵と比べて 1 回ずつ直した。まっすぐ写した絵での輪郭の重なり: 正面 0.960・横 0.963・後ろ 0.952。三角形 37,100・1.34MB・毛なし(スマホと VR で軽く動くように)。 | [3D](https://github.com/mackatwentytsuru/yurukyara-creator/commit/c6efd745ca03c819e5582a8c38ff9c34669ea53e) |
 | 11/7 00:53 | **判定。** ノリーを作っていない Claude(Opus 5.5)のセッションが、2 つを元の絵と比べた: どちらも、ひと目でノリー。2D の正面は合格。3D の正面と後ろも合格。3D の横は一部だけ(横から目・鼻先・前歯が見えない、クリーム色が影で灰色、背中の筋が首で切れる)。直す順と、それぞれの合格の線を書いた。 | — |
-| 11/7 00:57〜01:00 | ノリーの 3D と 2D を、開発の線と main に合わせた。 | [3D を合わせた]({{commit:cb9063a}})・[2D を合わせた]({{commit:10987e9}}) |
-| 11/7 02:05〜02:32 | **直し(それぞれ合格の線で確かめた)。** 2D: おじぎの間も蝶ネクタイが見える(0% → 89%)。手を振る腕を 2 枚にして、ひじで曲げる(肩の細い線 32 → 0 画素)。後ろの絵から後ろ姿を作り、背中の筋が出る。3D: 横から顔が分かる(90°・270° で目・鼻先・前歯が見える。重なり 0.960・0.962・0.952)。照りを消して影を浅く(あご・お腹・しっぽのクリーム色の差 118・54・101 → 13・10・14。合格の線は 20)。前歯を 1 つに、鼻の上を丸い線に。背中の筋が首でもつながる。 | [3D の直し]({{commit:d64381b}})・[横顔]({{commit:7c35480}})・[2D の直しを合わせた]({{commit:a6572e4}}) |
+| 11/7 00:57〜01:00 | ノリーの 3D と 2D を、開発の線と main に合わせた。 | [3D を合わせた](https://github.com/mackatwentytsuru/yurukyara-creator/commit/982e62eec9a23454d0ae544fb0e64b31ece5bf68)・[2D を合わせた](https://github.com/mackatwentytsuru/yurukyara-creator/commit/11b2469b0eedcc280299ab3e3c56667604ac536d) |
+| 11/7 02:05〜02:32 | **直し(それぞれ合格の線で確かめた)。** 2D: おじぎの間も蝶ネクタイが見える(0% → 89%)。手を振る腕を 2 枚にして、ひじで曲げる(肩の細い線 32 → 0 画素)。後ろの絵から後ろ姿を作り、背中の筋が出る。3D: 横から顔が分かる(90°・270° で目・鼻先・前歯が見える。重なり 0.960・0.962・0.952)。照りを消して影を浅く(あご・お腹・しっぽのクリーム色の差 118・54・101 → 13・10・14。合格の線は 20)。前歯を 1 つに、鼻の上を丸い線に。背中の筋が首でもつながる。 | [3D の直し](https://github.com/mackatwentytsuru/yurukyara-creator/commit/cfc0b9d9fe880f8d59525eebe274b1cdaee2830c)・[横顔](https://github.com/mackatwentytsuru/yurukyara-creator/commit/3b786ca464d2e07c2148dcac04ac067fc2ef3724)・[2D の直しを合わせた](https://github.com/mackatwentytsuru/yurukyara-creator/commit/2ce4f3929571921b6531b805721ddbeffe9ce081) |
 | 11/7 02:35 | 直した後の Claude の判定役(Haiku 5.5 と Sonnet 5.5、3 回ずつ): 正面からも横からも「同じキャラ」3/3・3/3。横から見ると、答え 6 つがすべて「前歯がまだ小さい」。残った点として書いておく。 | — |
-| 11/7 03:37 | アプリはノリーで開き、3D・2D の切り替えがあり、スマホの幅でもノリーの頭が上の段の下に収まる。 | [合わせた]({{commit:0f18657}}) |
+| 11/7 03:37 | アプリはノリーで開き、3D・2D の切り替えがあり、スマホの幅でもノリーの頭が上の段の下に収まる。 | [合わせた](https://github.com/mackatwentytsuru/yurukyara-creator/commit/f5bcc070f354658b87311a8218595a2207bbd6dd) |
 
 ノリーを描き、名前と見た目を決めたのは人。切り抜き・2D の部品・3D の形・人格の文・判定・直しは Claude Code。
 
@@ -59,7 +59,7 @@
 | スキル | 作る 7 段にそれぞれ 1 つ(⓪ 言葉から SVG を描く → ① 絵を見る → ② Blender の Python で形を組む → ③ 材質 → ④ テクスチャ → ⑤ 骨 → ⑥ 動き → ⑦ 話す)。ほかに、絵の確かめ・確かめの往復・2D・描画・合わせ・公開のスキル。 | `.claude/skills/`(例 `yc-0-draw`・`yuru-check`・`make-character`・`yc-2d`・`yc-7-talk`・`yuru-next`・`release-check`) |
 | 作業役(サブエージェント) | 自分の文脈を持つ判定役と試験役: キャラの判定役・安全の試験役・個人の情報の点検役・公開の前の点検役。ノリーは、作っていないセッションが判定した。 | `.claude/agents/` |
 | 画面なしの呼び出し(`claude -p`) | 判定役は、ファイルを読むことだけを許した(`--allowedTools Read`)別の Claude の呼び出しで、答えを JSON で返す。作り手が同じ文脈で自分の出来を採点しない。 | `creator/pipeline/j01_judge.py`・`web/server/tools/safety-judge.mjs` |
-| フック | 道具が動く前に、鍵・見せないファイル・公開しない語を止める(記録の時と、リポジトリの中にファイルを書く時)。段を頼む言葉には、前の段に人の OK が無ければ止める関所。直した後は web の試験を回す。最初の見張りと web の試験は 11/2 に、11/6 に見張りをファイルを書く時へ広げ、関所を足した。 | `.claude/settings.json`・`tools/hooks/`・[最初のフック]({{commit:3712843}})・[広げた時]({{commit:a020d24}}) |
+| フック | 道具が動く前に、鍵・見せないファイル・公開しない語を止める(記録の時と、リポジトリの中にファイルを書く時)。段を頼む言葉には、前の段に人の OK が無ければ止める関所。直した後は web の試験を回す。最初の見張りと web の試験は 11/2 に、11/6 に見張りをファイルを書く時へ広げ、関所を足した。 | `.claude/settings.json`・`tools/hooks/`・[最初のフック](https://github.com/mackatwentytsuru/yurukyara-creator/commit/8e5d0c44d546a87707ed3775478f2eff61a55c16)・[広げた時](https://github.com/mackatwentytsuru/yurukyara-creator/commit/1e8e86731f76a83adb8779e40affa4a3c183c8af) |
 | スラッシュコマンドになるスキル | スマホの確かめる画面が小さな依頼のファイル(段・OK かやり直し・短い一言)を書き、`/yuru-next` がそれを読んで、その段を流し直す。一言は「命令」ではなく「希望」として渡す。 | `.claude/skills/yuru-next/`・`creator/review/` |
 | git の worktree と同時に動くセッション | 作業を 7 つの流れ(3D・2D・会話・確かめる画面・描画と端末・公開・動画)に分け、流れごとに Claude Code のセッションと worktree と線を持ち、合わせる役のセッションを 1 つ置いた。各流れは自分のフォルダだけを書き、合わせは毎回、試験の門を通した(次の節)。 | — |
 | 計画づくりの作業役 | 作る計画そのものを、Claude の作業役が作った(調べもの 7 本・競う下書き 2 本・批評 2 本・最後の計画 1 本)。 | — |
@@ -88,7 +88,7 @@
 
 - どの合わせも、落ちた試験 0 で終わった。門は 1 回 3 分ほど。
 - 話す試験は毎回通った。最後の回では、ノリー(3D と 2D)・みかんちゃん・ようこそくんが話し、口の開きは 0.69 ほど。
-- 夜の回ごとの最後の合わせのコミット: [③]({{commit:bc1ca09}})・[④]({{commit:10987e9}})・[⑤]({{commit:b3c8a7d}})・[5b]({{commit:0f18657}})。
+- 夜の回ごとの最後の合わせのコミット: [③](https://github.com/mackatwentytsuru/yurukyara-creator/commit/b091ea7200f14e68db4efac7e86aa91082aeb6da)・[④](https://github.com/mackatwentytsuru/yurukyara-creator/commit/11b2469b0eedcc280299ab3e3c56667604ac536d)・[⑤](https://github.com/mackatwentytsuru/yurukyara-creator/commit/aebfa95aea0dc440e3443b129aaf393e98ead37e)・[5b](https://github.com/mackatwentytsuru/yurukyara-creator/commit/f5bcc070f354658b87311a8218595a2207bbd6dd)。
 
 ## 1 体を作る時間と費用
 
