@@ -44,10 +44,11 @@ const THINK_NAMED = Object.freeze({
 
 /** 動きの下に、すぐ付ける一言(長くかかる物だけ。ことば別) */
 export const WORK_NOTE = Object.freeze({
-  ja: { draw: '1 分くらい かかるよ', build: 'すこし かかるよ' },
-  en: { draw: 'This takes about a minute', build: 'This takes a little while' },
-  zh: { draw: '大约要一分钟', build: '需要一点时间' },
-  ko: { draw: '1분쯤 걸려요', build: '조금 걸려요' },
+  // 描く待ちの目安は、11-08 の試しの実測(6〜14 秒。2D にする機械が遅いと、もっと)に合わせて 10〜30 秒。前の「1 分くらい」は実際より長く、止まったように見えた
+  ja: { draw: '10〜30 秒くらい かかるよ', build: 'すこし かかるよ' },
+  en: { draw: 'This takes about 10 to 30 seconds', build: 'This takes a little while' },
+  zh: { draw: '大约要 10 到 30 秒', build: '需要一点时间' },
+  ko: { draw: '10~30초쯤 걸려요', build: '조금 걸려요' },
 });
 
 const pick = (table, lang) => table[Object.hasOwn(table, lang) ? lang : 'ja'];
