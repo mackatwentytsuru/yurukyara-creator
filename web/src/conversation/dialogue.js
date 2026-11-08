@@ -8,6 +8,7 @@ import { streamChat } from './brainClient.js';
 import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
+import { normalizeSpoken } from './interimSend.js'; // 言葉の同じ・違いを見る形(句読点と全角半角を除く)
 import { VOICE_CAP_NOTICE } from './speaker.js';
 
 /** 店の入口の画面(LED・テレビ表示)か。夜に動く画面なので、時間帯の休むすすめは付けない(BSFf) */
@@ -33,6 +34,14 @@ export function friendlyChatError(err) {
   return OFFLINE_NOTICE;
 }
 
+/** 送り直せば通る失敗か: 返事が無い(status なし = 通信の切れ・時間切れ)か、門が「いま届かない」と答えた 502・503・504 だけ。
+ *  500 はサーバーの中の失敗で、送り直しても同じ(送り続けてしまう)ので除く。413・429 などの 4xx も除く */
+const OUTAGE_STATUSES = new Set([502, 503, 504]);
+export function isOutage(err) {
+  const s = Number(err?.status);
+  return !Number.isFinite(s) || OUTAGE_STATUSES.has(s);
+}
+
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
 const FILLER_FRESH_MS = 4000; // 話し終わりの合図で先に出したあいづちは、この間なら、送るときに出し直さない
 
@@ -54,6 +63,8 @@ export function joinWords(before, now) {
   const b = String(now ?? '').trim();
   if (!a) return b;
   if (!b) return a;
+  // 今の言葉が、前の言葉を頭に含んでいる(途中の文字を先に送ったあと、確定が全部の言葉で届いた時など)なら、重ねずに今の言葉だけ
+  if (normalizeSpoken(b).startsWith(normalizeSpoken(a))) return b;
   const joined = /[。.!！?？、,]$/u.test(a) ? a + b : `${a}、${b}`;
   return Array.from(joined).slice(-CARRY_MAX_CHARS).join('');
 }
@@ -81,9 +92,11 @@ export class Dialogue {
    * @param {(ev:object) => void} [deps.onEvent] サーバーから届いたイベントを全部渡す(記憶の札の onChatEvent など)
    *   ui.notice(文) があれば、「仮の頭脳です」などの一言をそこへ出す
    */
-  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false, onEvent = null }) {
+  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false, onEvent = null, onOffline = null, onInterrupted = null }) {
     // interview: インタビューの型(返事 2 文まで・台本にしない)で答えさせる(入口の LED の ?interview=1)
-    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview, onEvent });
+    // onOffline: 通信が切れて返事が 1 つも来なかった回の言葉を渡す(main.js が、つながり直したら送り直す)
+    // onInterrupted: 返事の最初の音の前に、言い直し・割り込みで止められた回の記録を渡す(いちばん待たせた回が、数字から消えないように。11-08 LF4)
+    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview, onEvent, onOffline, onInterrupted });
     this.history = [];
     this.abort = null;
     this.timers = [];
@@ -91,6 +104,7 @@ export class Dialogue {
     this.busy = false;
     this.brain = 'unknown';
     this.cur = null; // 返事を待っている最中の回 { text, trigger, said }
+    this.open = null; // 送ったが、まだ記録を出していない回の数字 m(止められたら onInterrupted に出す)
     this.carry = null; // 返事が 1 文も来ないまま止められた回の言葉 { text, at }。次の言葉の頭につなげる(取りこぼさない)
     try {
       setSttHint(getContext?.()?.character?.name); // 聞き取りの手がかり(キャラの名前)。最初の声から効くように
@@ -129,6 +143,7 @@ export class Dialogue {
       this.history.push({ role: 'assistant', content: assistantLines(cur.sayEvents, cur.thought) });
       this.history = trimHistory(this.history);
     }
+    this._reportInterrupted();
     this.cur = null;
     this.turnId += 1;
     this.abort?.abort();
@@ -147,8 +162,10 @@ export class Dialogue {
   /**
    * @param {{text?:string, trigger?:string|null, t0?:number, mode?:'voice'|'text'}} turn
    *   t0: ユーザーが話し終えた時刻(performance.now())。声でないときは送信した時刻
+   *   retry: つながり直して送り直した回(true)。この回がまた通信の切れで失敗しても、もう送り直さない(onOffline の info.retry で伝える)
+   via: 'interim'(確定を待たずに途中の文字を先に送った回)・'replace'(先に送ったあと、違う字の確定で送り直した回)。記録の 1 項目になる(11-08 LF3)
    */
-  async send({ text: raw = '', trigger = null, t0 = performance.now(), mode = 'text' } = {}) {
+  async send({ text: raw = '', trigger = null, t0 = performance.now(), mode = 'text', via = null, retry = false } = {}) {
     // 鍵らしい文字は、画面にもサーバーにも出さない(声の鍵を会話の欄に貼ってしまったとき)
     let { text, count: secrets } = redactSecrets(raw);
     if (secrets) this.ui.notice?.(SECRET_NOTICE);
@@ -184,7 +201,8 @@ export class Dialogue {
     // ML1: ことば(声は文ごとの言葉で話す)と、聞く言葉(日本語以外の時は、日本語のあいづちを出さない)。日本語だけの時は、どちらも ja
     this.speaker.setLangMode?.(ctx.lang);
     this.speaker.setHearLang?.(ctx.hearLang);
-    const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null };
+    const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null, via, done: false };
+    this.open = trigger === 'approach' ? null : m; // 近づいた合図の声かけは、待たせた回ではないので数えない
     // あいづち: 先に出していればそれを、まだなら今出す(声で話しかけられた回だけ)。数字は本当の返事とは別に残す
     let fillerWanted = mode === 'voice' && trigger !== 'approach';
     if (fillerWanted && pre && performance.now() - pre.at < FILLER_FRESH_MS) {
@@ -243,6 +261,7 @@ export class Dialogue {
       ...(cameraImage ? { image: cameraImage } : {}),
     };
 
+    let offline = null; // 通信が切れて、返事が 1 つも無かった回の言葉(送り直しの元)
     let failed = false; // つながらない・断られた回(返事が 1 つも無い)は、履歴に残さない(長すぎる言葉の 413 が、以後ずっと続かないように)
     try {
       await streamChat(
@@ -311,12 +330,16 @@ export class Dialogue {
         const msg = friendlyChatError(err);
         this.ui.error(msg);
         this.ui.caption(msg, 6000);
+        // 通信が切れていた(サーバーが短く止まった等)なら、画面が自分でつながり直して送り直す(reconnect.js)。言葉が長すぎた(413)などは送り直さない
+        if (isOutage(err) && trigger !== 'approach') offline = { text: askText, mode, turnId: id, at: Date.now(), retry };
       }
     }
     if (id !== this.turnId) return;
     this.cur = null;
     if (failed && !sayEvents.length) {
       this.busy = false;
+      this.open = null; // つながらなかった回は、止められた回ではない
+      if (offline) this.onOffline?.(offline);
       return;
     }
     this.history.push({ role: 'user', content: trigger === 'approach' ? '(使う人が近づいてきた)' : askText });
@@ -331,6 +354,7 @@ export class Dialogue {
       if (id !== this.turnId) return;
       if (m.tAudio !== null) this._report(m);
       else if (this.speaker.pending > 0) setTimeout(waitStart, 50);
+      else if (this.open === m) this.open = null; // 声の無い返事(字幕だけ・声の上限・声の失敗)は、止められた回ではない。残すと次の言葉が「止められた」の嘘の 1 行を出す
     };
     waitStart();
   }
@@ -345,7 +369,29 @@ export class Dialogue {
     this.ui.caption(info.crawl ? '' : ev.text); // 文字送りのときは空から始め、onCrawl が 1 字ずつ足す
   }
 
+  /** 返事の最初の音の前に止められた回(言い直し・割り込み・ボタン)を 1 行残す。止められた回が、いちばん遅かった回のことがある。valid にはしない(中央値に混ぜない) */
+  _reportInterrupted() {
+    const m = this.open;
+    this.open = null;
+    if (!m || m.done || !this.onInterrupted) return;
+    m.done = true;
+    this.onInterrupted({
+      mode: m.mode,
+      brain: m.brain,
+      tts: this.speaker.ttsError ? 'silent' : 'eleven',
+      interrupted: true,
+      valid: false,
+      waitedMs: Math.round(performance.now() - m.t0),
+      t0ToSendMs: Math.round(m.tSend - m.t0),
+      sendToFirstSayMs: m.tFirstSay ? Math.round(m.tFirstSay - m.tSend) : null,
+      totalMs: m.tAudio !== null ? Math.round(m.tAudio - m.t0) : null,
+      ...(m.via ? { via: m.via } : {}),
+    });
+  }
+
   _report(m) {
+    m.done = true;
+    if (this.open === m) this.open = null;
     const entry = {
       mode: m.mode,
       brain: m.brain,
@@ -357,6 +403,7 @@ export class Dialogue {
       // あいづちの声(話し終わりから、その声が出るまで / 終わるまで)。本当の返事の最初の音(totalMs)とは別の数字
       fillerMs: m.fillerMs,
       fillerEndMs: m.fillerEndMs,
+      ...(m.via ? { via: m.via } : {}),
     };
     entry.valid = entry.brain === 'haiku' && entry.tts === 'eleven';
     this.onMetric(entry);

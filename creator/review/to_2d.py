@@ -31,6 +31,7 @@ from d01_svg_to_png import find_chrome  # noqa: E402
 SVGNS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVGNS)
 JST = timezone(timedelta(hours=9))
+MEASURE_TIMEOUT_S = 240  # 箱を測る Chrome を待つ長さ。混んだ機械では 90 秒を超えた(11-08)。画面の側の待ち(web/server/draw.mjs の 300 秒)より短くする
 
 # 2D の部品 ← 絵の部品(描く順 = 後ろ → 前)
 BODY_PARTS = [
@@ -123,7 +124,7 @@ def measure(svg_text, ids):
         page = Path(tmp) / "m.html"
         page.write_text(html, encoding="utf-8")
         out = subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-first-run", f"--user-data-dir={tmp}/u",
-                              "--dump-dom", page.as_uri()], capture_output=True, text=True, encoding="utf-8", timeout=90)
+                              "--dump-dom", page.as_uri()], capture_output=True, text=True, encoding="utf-8", timeout=MEASURE_TIMEOUT_S)
     m = re.search(r"BOX(\{.*?\})XOB", out.stdout or "")
     if not m:
         raise RuntimeError("箱を測れませんでした")
@@ -189,7 +190,7 @@ def eye_color(groups):
     return "#2b2b2b"
 
 
-def build(svg_path, cid, name, out_root, role="home", persona=None):
+def build(svg_path, cid, name, out_root, role="home", persona=None, trait=None):
     root, vb, defs, xf, groups = load(svg_path)
     for need in ("eye_R", "eye_L", "mouth"):
         if need not in groups:
@@ -321,7 +322,7 @@ def build(svg_path, cid, name, out_root, role="home", persona=None):
     cj.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     pm = cdir / "persona.md"
     if not pm.exists():
-        pm.write_text(persona or default_persona(rec["name"], rec["role"]), encoding="utf-8", newline="\n")
+        pm.write_text(persona or default_persona(rec["name"], rec["role"], trait), encoding="utf-8", newline="\n")
     return {"dir": str(cdir), "parts": list(parts), "face": list(face), "viewBox": view,
             "neck": {"headDown": neck["dy"], "overlap": neck["overlap"], "accessoryOnHead": neck["accessory_on_head"]}}
 
@@ -331,9 +332,10 @@ ROLE_SCENE = {"home": "おうちで、家族と話す", "shop": "お店で、来
               "station": "駅や町で、来た人に 道や 町の ことを 案内する", "facility": "学校や施設で、来た人と 話して 案内する"}
 
 
-def default_persona(name, role="home"):
-    """最初の人格の文(性格は画面で選ぶ。ここは名前と役目と、正直さの決まりだけ)。"""
-    return (f"# {name}\n\n- 生まれ: 使う人の言葉か絵から、Claude が描いた絵で生まれたゆるキャラ。\n"
+def default_persona(name, role="home", trait=None):
+    """最初の人格の文(性格は画面で選ぶ。ここは名前と役目と、正直さの決まりだけ。trait があれば、描いた時に決めた性格の 1 文を足す)。"""
+    trait_line = f"- 性格: {trait}\n" if trait else ""
+    return (f"# {name}\n\n- 生まれ: 使う人の言葉か絵から、Claude が描いた絵で生まれたゆるキャラ。\n" + trait_line +
             f"- 役目: {ROLE_LINE.get(role, 'おうち')}({ROLE_SCENE.get(role, ROLE_SCENE['home'])})\n"
             "- 話し方: やさしく、短く。むずかしい言葉は使わない。相手は名前で呼ぶ(名前を覚えていないときは「きみ」)。\n"
             "- 分からない時は、推測で答えず、正直に「わからない」と言う。\n"
@@ -347,12 +349,13 @@ def main(argv=None):
     ap.add_argument("--name")
     ap.add_argument("--out", default=str(ROOT / "characters"))
     ap.add_argument("--role", default="home")
+    ap.add_argument("--trait", default=None, help="描いた時に決めた、性格の 1 文(人格の文に足す)")
     a = ap.parse_args(argv)
     if not re.match(r"^[a-z0-9_]{1,32}$", a.id):
         print(json.dumps({"ok": False, "error": "id の形が違います"}, ensure_ascii=False))
         return 1
     try:
-        r = build(a.svg, a.id, a.name, a.out, a.role)
+        r = build(a.svg, a.id, a.name, a.out, a.role, trait=a.trait)
     except (ValueError, ET.ParseError) as e:
         print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
         return 1
