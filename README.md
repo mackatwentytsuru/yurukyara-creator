@@ -10,8 +10,6 @@
 <img src="https://img.shields.io/badge/license-MIT_%28%E3%82%B3%E3%83%BC%E3%83%89%E3%81%A0%E3%81%91%29-D97757?style=flat" alt="License">
 </p>
 
-<p align="center">▶ デモ動画(3 分): {{VIDEO_URL}}</p>
-
 **日本語** · [English](README.en.md)
 
 # ゆるキャラクリエイター
