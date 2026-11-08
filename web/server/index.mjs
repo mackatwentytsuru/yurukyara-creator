@@ -175,14 +175,16 @@ async function handleChat(req, res) {
   const t0 = Date.now();
   const client = req.socket.remoteAddress ?? 'unknown';
   // 記憶: 合鍵(ヘッダー)があれば、覚えていることを読み、この回の言葉から覚える事を足す
-  const memoryKey = typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
+  // ML1: お店の端末(本文 memory:'off')は、合鍵があっても読まない・作らない・覚えない(次のお客さんに、前の人の名前を出さない)
+  const memoryOff = body.memory === 'off';
+  const memoryKey = !memoryOff && typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
   if (memoryKey && isForgetRequest(body.text)) {
     for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey), body.character?.persona ?? '')) send(ev);
     send({ type: 'done', serverMs: Date.now() - t0 });
     return res.end();
   }
   const selfNames = selfNamesOf(body.character); // 話しかけているキャラの名前は、使う人の名前や好きなものとして覚えない
-  const { recalled, learned } = memoryKey ? rememberWithKey(memoryKey, body.text, send, selfNames) : rememberFirstTime(body.text, client, send, selfNames);
+  const { recalled, learned } = memoryOff ? { recalled: null, learned: [] } : memoryKey ? rememberWithKey(memoryKey, body.text, send, selfNames) : rememberFirstTime(body.text, client, send, selfNames);
   // 本物の Claude を呼ぶときだけ、回数の上限を数える(仮の頭脳は無料)。上限に当たったら、仮の頭脳で話し続ける
   let paid = Boolean(config.anthropicKey);
   if (paid) {

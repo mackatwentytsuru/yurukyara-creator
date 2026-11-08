@@ -459,7 +459,8 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   }
 
   onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}), ...(image ? { camera: 'sent' } : {}) });
-  const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true });
+  // ML1: ことば(multi の時だけ節が足される)・お店のきまり・町のお知らせ(facts)・お店の端末(memory:'off' = 覚えない節に替える)。無い時は今までと同じ指示文
+  const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true, lang: body.lang, facts: body.facts, memoryOff: body.memory === 'off' });
   const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : '', restGuard(rest)].filter(Boolean).join('\n');
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),

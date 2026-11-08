@@ -339,6 +339,33 @@ export function sanitizeBlock(value) {
   return { text: kept.join(' '), removed: lines.filter((l) => l && isOverrideLine(l)).length };
 }
 
+/**
+ * 何行かある欄で、行の区切りを残したい欄(お店のきまり・町のお知らせ。ML1): 上書きの言葉の入った行を外し(sanitizeBlock と同じ決まり)、
+ * 行頭の「- 」を外して、空行を除き、字数の上限で切った行の列を返す。指示文に入れる時は、各行の頭に「- 」を付ける
+ * (「# 安全の決まり(改訂)」のような見出しを、指示文の中に作らせない)。
+ * @param {unknown} value
+ * @param {number} [max] 全部の字数の上限
+ * @returns {string[]}
+ */
+export function sanitizeLines(value, max = Infinity) {
+  if (typeof value !== 'string') return [];
+  const out = [];
+  let used = 0;
+  for (const raw of value.split(LINE_SPLIT)) {
+    const line = raw.replace(/^[-*・]\s*/u, '').replace(/\s+/g, ' ').trim();
+    if (!line || isOverrideLine(line)) continue;
+    const chars = Array.from(line);
+    if (used + chars.length > max) {
+      const room = max - used;
+      if (room > 0) out.push(chars.slice(0, room).join(''));
+      break;
+    }
+    out.push(line);
+    used += chars.length;
+  }
+  return out;
+}
+
 // ---- 個人のこと(覚えない) ----
 // 本名・住所・学校・電話番号・メールの入った言葉は、記憶に残さない(11-08 子どもの決まり。memory/reflect.mjs が使う)
 const PERSONAL = /(本名|ほんみょう|住所|じゅうしょ|電話番号|でんわばんごう|めーる|小学校|しょうがっこう|中学校|ちゅうがっこう|高校|こうこう|幼稚園|ようちえん|保育園|ほいくえん|丁目|ちょうめ|番地|ばんち|〒|[0-9０-９]{2,4}[-ー‐－][0-9０-９]{2,4}[-ー‐－][0-9０-９]{3,4}|0[0-9]{9,10}|[\w.+-]+@[\w-]+\.[\w.]+)/;

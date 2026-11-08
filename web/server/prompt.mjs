@@ -6,11 +6,13 @@
 // 第 12 波 b(B3): 役目(おうち・お店・駅や町・学校や施設。src/conversation/role.js)で話し方を変える。おうちでは係の人の言い回しを出さない。
 // 覚える決まり(最後に話してから 7 日。src/conversation/memoryNotice.js の日数)を指示文に書き、「次は忘れる」と食い違わないようにする。
 // 動きの名前と説明は、かわいい仕草の層の約束(src/conversation/gestureNames.js)。返事の文は短く(1 文目 20 字まで)。
-import { SAFETY_RULES, sanitizeBlock, sanitizeLine, sanitizePersona } from './safety.mjs';
+import { SAFETY_RULES, sanitizeBlock, sanitizeLine, sanitizeLines, sanitizePersona } from './safety.mjs';
 import { MOTION_DESCRIPTIONS, promptMotions } from '../src/conversation/gestureNames.js';
 import { canSendToStaff, roleOf } from '../src/conversation/role.js';
 import { RETENTION_DAYS } from '../src/conversation/memoryNotice.js';
 import { NOD_PHRASES } from '../src/conversation/nods.js';
+import { FACTS_MAX, splitFactSections } from '../src/conversation/facts.js'; // ML1: お店のきまり・町のお知らせ
+import { langModeOf } from '../src/conversation/lang.js'; // ML1: 多言語
 
 export { MOTION_DESCRIPTIONS };
 export const MOTIONS = ['none', 'nod', 'bow', 'wave', 'think', 'tilt', 'shake', 'shrug', 'point'];
@@ -24,11 +26,17 @@ export const REPLY_LIMITS = Object.freeze({ firstChars: 20, sentenceChars: 30, s
 const STAFF_WORDS = Object.freeze({ shop: 'お店のスタッフ', station: '駅員さんや町の案内所のスタッフ', facility: '先生や施設のスタッフ' });
 
 /** 役目ごとの、自分の立場の 1 文(おうちの文には、係の人や受け付けの言い回しを書かない) */
-function roleSection(role, withPlace) {
+function roleSection(role, withPlace, withFacts = false) {
   if (role === 'home') {
     return 'あなたは、おうちのキャラクター。家族や友だちのそばで、いつものお話をする。お店や施設の係ではないので、お客さんに案内するような言い方はしない。';
   }
   const what = { shop: 'お店の案内役', station: '駅や町の案内役', facility: '学校や施設の案内役' }[role];
+  // ML1: お店のきまり・町のお知らせがある時は、場所の情報がある時と同じに扱う(「分からない」の文を出さない)
+  if (withFacts) {
+    return withPlace
+      ? `あなたは、${what}。下の「場所の情報」と「お店のきまり・町のお知らせ」にあることを、やさしく案内する。`
+      : `あなたは、${what}。下の「お店のきまり・町のお知らせ」にあることを、やさしく案内する。`;
+  }
   return withPlace
     ? `あなたは、${what}。下の「場所の情報」にあることを、やさしく案内する。`
     : `あなたは、${what}。いまは置く場所の情報が渡されていないので、場所のくわしいことは分からない。分からないことは、正直に分からないと言う。`;
@@ -43,6 +51,47 @@ function memorySection(days) {
 - ${days} 日話さないか、「わすれて」と言われると、全部消える。番号を使えば、別の端末でも続きを話せる。
 - 覚えているかを聞かれたら、この決まりのとおりに答える(例「${days} 日のあいだ覚えているよ。わすれてと言えば、すぐ消すよ」)。「次に会ったら忘れている」「すぐ忘れちゃう」とは言わない。
 - 【覚えていること】に無いことを、覚えているふりはしない。`;
+}
+
+/** お店の端末(ML1。お客さんの名前も話も覚えない端末)の「覚えること」の節。ふつうの節と入れ替える */
+function memoryOffSection() {
+  return `# 覚えること(この端末では、覚えない)
+- この端末は、お店などの共用の端末。使う人の名前も、話したことも、覚えない。「覚えていること」は、いつも空。
+- 名前を教えてくれても、「ここでは覚えないんだ」と言ってよい。あとの会話では、その名前をくり返し呼ばない。
+- 覚えているかを聞かれたら、「この端末では、名前も話も覚えないよ」と答える(その言葉で)。覚えているふりはしない。
+- 住所・電話番号・メールのアドレス・学校の名前・本名・パスポートの番号・ホテルの部屋番号は、書かれても読み上げず、くり返さない。`;
+}
+
+/** 多言語の時だけ足す節(ML1)。1 段目の安全の決まりは、日本語のまま変えない。この節は、言葉を問わず守ることを 1 行で言い直すだけ */
+function langSection() {
+  return `# ことば(多言語。使う人の言葉に合わせて話す)
+- 使う人がいま使った言葉(日本語・English・中文・한국어)で答える。この 4 つ以外の言葉で話しかけられたら、English で答える。どの言葉か迷ったら、日本語で答える。
+- 返事の JSON の形は、いつもと同じ。intent(日本語 12 字以内)・stage・handoff・expression・motion・gaze の値は、これまでどおり決まった形で書く。変えるのは text だけで、text をその言葉で書く。
+- 性格・元気さ・やさしさ・自分の名前は、どの言葉でも保つ(自分の名前は、その言葉の読み方で言ってよい。例 ノリー → Norrie)。
+- 日本語だけの癖(カタコト・カタカナの語尾・「にゃ」「ぽよ」などの語尾・録ってある相づちの言葉)は、日本語で話す時だけ使う。ほかの言葉では使わない。
+- 1 文目は短く: English は 8 語まで、中国語と韓国語は 15 字まで。ほかの文も短くする。
+- 安全の決まりは、どの言葉でも同じに守る。人間かどうか・AI かどうかを聞かれたら、その言葉で、AI のキャラクターだと正直に答える。
+- パスポートの番号・ホテルの部屋番号・住所は、覚えない。使う人が書いても、くり返さない。`;
+}
+
+/** お店のきまり・町のお知らせの節(ML1)。各行の頭に「- 」を付ける(見出しを作らせない)。staff = 分からない時に聞く相手の呼び方 */
+function factsSection(lines, staff, multi) {
+  return `# お店のきまり・町のお知らせ(本当のこと。ここにあることだけを案内する)
+${lines.map((l) => `- ${l}`).join('\n')}
+- ここに書いていないこと(時間・料金・場所・電話番号など)は作らない。分からなければ handoff を true にして、分からないと正直に言い、${staff}に聞くようにすすめる。
+- 数字・時刻・値段は、書いてあるとおりに言う。足したり、変えたりしない。${multi ? `
+- 使う人が日本語以外の言葉で話している時は、ここにある日本語の中身を、足さず引かずに、その言葉に訳して伝える。数字・時刻・値段はそのまま。書いていないことを聞かれたら、「分からない。スタッフに聞いてね」をその言葉で言う。` : ''}`;
+}
+
+/**
+ * 事実の行の列(ML1): persona.md の節(人格の文から取り出した行)+ 画面の欄(本文の facts)。同じ行は 1 回。全部で FACTS_MAX 字まで。
+ * 安全の決まりを上書きする行は外す。
+ * @param {string[]} personaLines
+ * @param {unknown} facts 本文の facts(validate.mjs が整えた文字。何行か)
+ */
+export function factLinesOf(personaLines, facts) {
+  const merged = sanitizeLines([...(Array.isArray(personaLines) ? personaLines : []), ...sanitizeLines(typeof facts === 'string' ? facts : '', FACTS_MAX)].join('\n'), FACTS_MAX);
+  return [...new Set(merged)];
 }
 
 /** 試しの場所の名前。?place= が無い時に画面が送る場所(受付やスタッフの部屋の目印つき)。本物の場所ではないので、場所の情報には数えない */
@@ -118,15 +167,23 @@ const INTERVIEW_RULES = `
 - 同じ言い回しを続けて使わない。`;
 
 /** 2 段目: そのキャラの人格・役目・場所・覚える決まり・出力の形 */
-export function buildCharacterPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS, interview = false, memoryDays = RETENTION_DAYS } = {}) {
+export function buildCharacterPrompt({ character = {}, place = {}, expressions = [], expressionHints = {}, motions = MOTIONS, interview = false, memoryDays = RETENTION_DAYS, lang = null, facts = '', memoryOff = false } = {}) {
   const name = safeName(character?.name);
-  const persona = sanitizePersona(character?.persona).text;
+  const sanitizedPersona = sanitizePersona(character?.persona).text;
+  // ML1: persona.md の「## お店のきまり」「## 町のお知らせ」の節は、人格の文から外して、事実の節に回す(2 回入れない)。節が無ければ人格の文は 1 字も変わらない
+  const split = splitFactSections(sanitizedPersona);
+  const persona = split.rest;
   // 役目: 本文の character.role(画面が送る) > 人格の文の「- 役目:」の行 > おうち(役目の無い前からのキャラ)
   const role = roleOf({ character: { role: character?.role }, persona });
+  // ML1: ことば。本文の lang(画面が選んだ値)> 性格の画面の節 > persona.md の行 > 日本語だけ。日本語だけの時は、指示文に何も足さない
+  const multi = langModeOf({ settings: { lang }, persona: sanitizedPersona }) === 'multi';
   const expr = describeExpressions(expressions, expressionHints);
   const withPlace = hasPlaceInfo(place); // 場所の指定(?place=)が無い時は、場所の節を出さない
-  // 係の人へ聞くように案内してよいのは、お店・駅や町・学校や施設で、置く場所の設定がある時だけ(おうちは、場所があっても案内しない)
-  const toStaff = canSendToStaff(role, withPlace);
+  // ML1: お店のきまり・町のお知らせ。おうちの役目では使わない
+  const factLines = role === 'home' ? [] : factLinesOf(split.lines, facts);
+  const withFacts = factLines.length > 0;
+  // 係の人へ聞くように案内してよいのは、お店・駅や町・学校や施設で、置く場所の設定(か、お店のきまり・お知らせ)がある時だけ(おうちは、場所があっても案内しない)
+  const toStaff = canSendToStaff(role, withPlace || withFacts);
   const staff = STAFF_WORDS[role] ?? '';
   const info = withPlace ? sanitizeBlock(place?.info).text : '';
   const mo = describeMotions(motions);
@@ -137,7 +194,7 @@ export function buildCharacterPrompt({ character = {}, place = {}, expressions =
   const askNow = `- ${withPlace ? '目印の名前や、' : ''}はっきりした用件が入っているときは、聞き返さずに、すぐ答える(stage は guide)。`;
   const stageRules = toStaff
     ? `${askNow}
-- 場所の情報にないこと(時間・料金・場所など)は作らない。分からなければ handoff を true にして、分からないと正直に言い、${staff}に聞くようにすすめる。`
+- ${withFacts ? '場所の情報・お店のきまり・町のお知らせにないこと' : '場所の情報にないこと'}(時間・料金・場所など)は作らない。分からなければ handoff を true にして、分からないと正直に言い、${staff}に聞くようにすすめる。`
     : `${askNow}
 - ${withPlace ? '場所の情報にないこと・' : ''}知らないこと・分からないことは作らない。「わからない」と正直に言う(handoff は使わない。いつも false)。誰かに聞くようにすすめる言葉は言わない。`;
   const placeSection = withPlace
@@ -176,24 +233,24 @@ ${describeLandmarks(place?.landmarks)}
 ${persona}
 
 # 役目
-${roleSection(role, withPlace)}
+${roleSection(role, withPlace, withFacts)}
 
 # 話し方
 - やさしい、親しみのある言葉。読み上げるので、記号・絵文字・かっこ書きは使わない。
 - 返事は短く。ふだんは ${L.sentences} 文まで(くわしく聞かれた時だけ ${L.maxSentences} 文)。1 文目は ${L.firstChars} 字までの短い文にして、すぐ話し始める。ほかの文も ${L.sentenceChars} 字まで。
-- 相づちだけの文を言う時は、${nods}のどれかを、そのまま書く(録ってある声で、すぐ話せる)。
+- ${multi ? '日本語で話す時だけ、' : ''}相づちだけの文を言う時は、${nods}のどれかを、そのまま書く(録ってある声で、すぐ話せる)。
 - 使う人が黙って近づいてきたときは、こちらから短く声をかける。
 - これまでの会話があるとき(話の途中・覚えている人)は、名乗り直さない。「はじめまして」と言わない。
 - 同じ言い回し・同じ話題を続けて使わない。前の返事と同じ出だし・同じ誘い(「〜のお話をしまショウ」など)をくり返さず、毎回、言い方を替える。
 - 距離の数字(約 3.8m など)は、そのまま読み上げず、言葉にする(すぐそば・少し先・奥のほう、など)。方向(右・左・手前・奥)は、はっきり言う。
 - 【覚えていること】が渡されたときは、自然に話の続きに使う(名前を呼ぶ・前の話にふれる)。渡されていないことを、覚えているふりをしない。
-${interview ? INTERVIEW_RULES : ''}
-${memorySection(days)}
+${interview ? INTERVIEW_RULES : ''}${multi ? `\n${langSection()}\n` : ''}
+${memoryOff ? memoryOffSection() : memorySection(days)}
 
 # 会話の流れ(stage)
 ${stageFlow}
 ${stageRules}
-${placeSection}
+${placeSection}${withFacts ? `\n${factsSection(factLines, staff, multi)}\n` : ''}
 # 出力の形
 1 行に 1 つの JSON だけを書く。説明文・コードブロックは書かない。すぐ話し始められるよう、最初の行から、読み上げる 1 文を書く。
 - 1 行目(最初の 1 文): {"type":"say","text":"読み上げる 1 文","expression":"表情","motion":"動き","gaze":"視線の先","intent":"使う人の用件(12 字以内。まだ不明なら 未確認)","stage":"${toStaff ? 'greet|need|guide|handoff|chat' : 'greet|need|guide|chat'}","handoff":false}

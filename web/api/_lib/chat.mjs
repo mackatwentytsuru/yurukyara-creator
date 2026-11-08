@@ -49,7 +49,7 @@ export async function handleChat(request, { cfg, store, runTurn, sanitize, remem
   // 合言葉と回数の上限を、記憶の置き場を使う前に見る(当て試しも置き場の使いすぎも、先に数える)
   const pick = await decideBrain(request, { cfg, store, now });
   // 記憶は頭脳を呼ぶ前に 1 回(契約 K4)。「わすれて」は全部消して、頭脳を呼ばずに、その子の言葉で答える
-  const mem = await remember(request, body.text, { cfg, store, now, persona: body.character?.persona ?? '' });
+  const mem = await remember(request, body.text, { cfg, store, now, persona: body.character?.persona ?? '', memoryOff: body.memory === 'off' });
   if (mem.handled) return json(200, { brain: 'none', fallback: false, reason: '', notice: '', events: mem.events, ms: now() - started });
 
   const events = [];
