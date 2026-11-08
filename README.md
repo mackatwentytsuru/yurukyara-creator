@@ -339,7 +339,7 @@ npm run start:claude-code      # npm start の代わり。http://127.0.0.1:8787/
 | **作った子は残る。** 描けた子が「かえる」の「つくった子」に並び、選ぶ・名前を変える・消す、読み込み直しても同じ子、覚えたことは子ごと。「全部わすれる」は全部の子の分を消し、子を消す時は子が先・覚えたことが後。 | `node --test web/test/made_characters.test.mjs web/test/made_kids_dom.test.mjs web/test/memory_character.test.mjs web/test/memory_character_client.test.mjs web/test/onboarding_keep.test.mjs` |
 | **いろ。** 設定の「いろ」で 4 つの色を選べ、その端末に残ります。 | `node --test web/test/theme.test.mjs` |
 | **接客モード。** 店の端末を QR で接客モードにし、抜けるには番号。間違いは端末ごとに数え、PC の窓で解けます。 | `node --test web/test/kiosk_lock.test.mjs web/test/kiosk_mode.test.mjs web/test/kiosk_server.test.mjs web/test/hands_free.test.mjs`・画面の試験 `YC_BROWSER_TESTS=1 node --test web/test/kiosk_browser.test.mjs web/test/kiosk_pcwindow_browser.test.mjs` |
-| **web の試験の全部。** | `cd web && YC_BROWSER_TESTS=1 npm test`(まとめるたびに、全部を流す)。11/8 の夜の合わせの後: 1438 件のうち 1435 件が通り、飛ばしが 2 件(組み立てた画面が無い時や、描画が GPU でない時の自動の飛ばし)。落ちた 1 件(ハンズフリーの通し。画面なしの Chrome を何本も同時に動かすと落ちることがある)は、その 1 本だけ流し直すと 2 件とも通りました |
+| **web の試験の全部。** | `cd web && YC_BROWSER_TESTS=1 npm test`(まとめるたびに、全部を流す)。11/8 の夜の合わせの後: 1534 件のうち 1533 件が通り、飛ばしが 1 件(組み立てた画面が無い時や、描画が GPU でない時の自動の飛ばし)、落ちたのは 0 件です。画面なしの Chrome を何本も同時に動かすと、画面の試験が 1 本落ちることがあります(その 1 本だけ流し直すと通ります) |
 
 ## まだの事・まだ確かめていない事
 
