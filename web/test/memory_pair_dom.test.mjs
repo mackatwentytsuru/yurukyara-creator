@@ -271,7 +271,7 @@ test('PC: 番号の横に QR。中身は origin + pathname + #pair= + 番号だ�
   reset();
   Object.assign(globalThis.location, { origin: 'https://yuru.test', pathname: '/app/', search: '?askpass=1&memory=1', hash: '', hostname: 'yuru.test' });
   const parent = new FakeEl('div');
-  t.after(() => parent.find('mem-forget').click()); // 途中で落ちても 10 分の番号の時計を止める(止めないと node の試験が 10 分終わらない)
+  t.after(() => (parent.find('mem-forget').click(), parent.find('mem-forget-yes').click())); // 途中で落ちても 10 分の番号の時計を止める(止めないと node の試験が 10 分終わらない)
   const panel = mountMemoryPanel(parent, { linked: null });
   await panel.ready;
   assert.equal(panel.ask, null, 'QR で開いていない時は聞かない');
@@ -296,7 +296,7 @@ test('PC: 番号の横に QR。中身は origin + pathname + #pair= + 番号だ�
   assert.match(parent.find('mem-status').textContent, /1 回だけ/);
   assert.ok(box.scrolled >= 1, '引き出しの中で QR が見える所まで送る');
   // 全部わすれると、番号と一緒に QR も消える
-  parent.find('mem-forget').click();
+  (parent.find('mem-forget').click(), parent.find('mem-forget-yes').click());
   await until(() => box.hidden === true);
   assert.equal(box.dataset.qrText, undefined);
   assert.equal(box.children.length, 0);
@@ -326,7 +326,7 @@ test('PC: QR の部品を読めない・描けない時は、番号だけ(今ま
   reset();
   Object.assign(globalThis.location, { origin: 'https://yuru.test', pathname: '/', search: '', hash: '', hostname: 'yuru.test' });
   const parent = new FakeEl('div');
-  t.after(() => parent.find('mem-forget').click()); // 途中で落ちても番号の時計を止める
+  t.after(() => (parent.find('mem-forget').click(), parent.find('mem-forget-yes').click())); // 途中で落ちても番号の時計を止める
   const panel = mountMemoryPanel(parent, { linked: null, loadQr: () => Promise.reject(new Error('読めない')) });
   await panel.ready;
   adoptKey(KEY_A);
@@ -336,6 +336,6 @@ test('PC: QR の部品を読めない・描けない時は、番号だけ(今ま
   assert.equal(parent.find('mem-qr').hidden, true);
   assert.match(parent.find('mem-status').textContent, /この番号を入れてね/);
   assert.doesNotMatch(parent.find('mem-status').textContent, /QR/);
-  parent.find('mem-forget').click(); // のこり時間の数え(10 分)を止める
+  (parent.find('mem-forget').click(), parent.find('mem-forget-yes').click()); // のこり時間の数え(10 分)を止める
   await until(() => parent.find('mem-code').textContent === '');
 });

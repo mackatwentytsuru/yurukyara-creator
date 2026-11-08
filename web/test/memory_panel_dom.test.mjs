@@ -213,6 +213,7 @@ test('番号を出している間に「全部わすれる」: 番号とのこり
   await until(() => q('mem-code').textContent === '123456');
   assert.match(q('mem-status').textContent, /のこり/);
   q('mem-forget').click();
+  q('mem-forget-yes').click(); // 1 回目は聞くだけ。「はい」で消す
   await until(() => q('mem-status').textContent === '全部わすれました');
   assert.equal(q('mem-code').textContent, '');
   await new Promise((r) => setTimeout(r, 1150));
@@ -235,6 +236,7 @@ test('「全部わすれる」: 遅い通信でも、知らせが出た時には
   const before = calls.length;
   const seen = [];
   q('mem-forget').click();
+  q('mem-forget-yes').click(); // 1 回目は聞くだけ。「はい」で消す
   await until(() => {
     if (q('mem-status').textContent === '全部わすれました') seen.push(shown());
     return seen.length > 0;
@@ -283,7 +285,8 @@ test('引き出しを開いた時の読み直し用に resync() もある(番号
   await settle();
   assert.ok(calls.length > before, '一覧を読み直す');
   assert.equal(q('mem-code').textContent, '123456');
-  q('mem-forget').click(); // 時計を止めて終わる
+  q('mem-forget').click();
+  q('mem-forget-yes').click(); // 1 回目は聞くだけ。「はい」で消す // 時計を止めて終わる
   await until(() => q('mem-code').textContent === '');
 });
 
@@ -292,9 +295,49 @@ test('全部わすれた後に新しく覚えたら、「全部わすれまし�
   await panel.ready;
   await adopt(panel, shown);
   q('mem-forget').click();
+  q('mem-forget-yes').click(); // 1 回目は聞くだけ。「はい」で消す
   await until(() => q('mem-status').textContent === '全部わすれました');
   await settle();
   assert.equal(q('mem-status').textContent, '全部わすれました', '空の間は、そのまま');
   await adopt(panel, shown, [{ id: '9', kind: 'name', text: '名前: じろう' }]);
   assert.equal(q('mem-status').textContent, '', '覚え直したら消える');
+});
+
+test('「全部わすれる」は 1 回押しただけでは消さない。確かめ(はい・やめる)が出て、「やめる」で何も起きない・「はい」で消える(QA8 #8)', async () => {
+  const { panel, q, shown } = mount();
+  await panel.ready;
+  await adopt(panel, shown);
+  const before = calls.length;
+  q('mem-forget').click();
+  const ask = q('mem-forget-ask');
+  assert.equal(ask.hidden, false, '確かめが出る');
+  assert.equal(q('mem-forget').hidden, true, '元のボタンは確かめの間は隠れる');
+  assert.match(q('mem-forget-ask-text').textContent, /ほんとうに ぜんぶ わすれる/);
+  assert.match(q('mem-forget-ask-text').textContent, /もどせない/, '戻せないことを言う');
+  await settle();
+  assert.equal(shown(), 2, '押しただけでは消えない');
+  assert.ok(!calls.slice(before).some((c) => c.method === 'DELETE'), '消す通信もしない');
+  q('mem-forget-no').click();
+  assert.equal(ask.hidden, true);
+  assert.equal(q('mem-forget').hidden, false, '「やめる」で元に戻る');
+  await settle();
+  assert.equal(shown(), 2, 'やめたら、そのまま');
+  q('mem-forget').click();
+  q('mem-forget-yes').click();
+  await until(() => q('mem-status').textContent === '全部わすれました');
+  assert.equal(shown(), 0);
+  assert.equal(ask.hidden, true, '「はい」の後は確かめを閉じる');
+});
+
+test('結果の文(status)は、ボタンの下ではなく上(一覧の前)に置く。出すたびに見える所へ巻く(下に隠れて、何も起きないように見えない。QA8 #8)', async () => {
+  const { panel, q } = mount();
+  await panel.ready;
+  const order = panel.root.children.map((c) => String(c.className));
+  assert.ok(order.indexOf('mem-status') > -1 && order.indexOf('mem-status') < order.indexOf('mem-list'), `status は一覧より前: ${order}`);
+  let scrolled = 0;
+  q('mem-status').scrollIntoView = () => (scrolled += 1);
+  q('mem-forget').click();
+  q('mem-forget-yes').click();
+  await until(() => q('mem-status').textContent === '全部わすれました');
+  assert.ok(scrolled >= 1, '文を出したら、見える所へ巻く');
 });

@@ -126,7 +126,7 @@ test('全体の おまかせ: 押すとまず確かめる。「やめる」は�
   const h = harness({ creator });
   await h.fr.start();
   await h.fr.act('role_station');
-  assert.deepEqual(h.offered, ['place_name', 'place_skip']);
+  assert.deepEqual(h.offered, ['place_name', 'place_auto', 'place_skip']);
   assert.equal(await h.fr.omakaseAsk(), true);
   assert.deepEqual(h.offered, ['omakase_yes', 'omakase_no'], '確かめの 2 択だけ(全体のおまかせは、また出さない)');
   assert.deepEqual(h.offeredAll.map((a) => a.label), [OMAKASE_YES, OMAKASE_NO]);
@@ -138,7 +138,7 @@ test('全体の おまかせ: 押すとまず確かめる。「やめる」は�
   assert.equal(calls.make.length + calls.surprise, 0);
 
   assert.equal(await h.fr.act('omakase_no'), true);
-  assert.deepEqual(h.offered, ['place_name', 'place_skip'], '同じ問いに戻る');
+  assert.deepEqual(h.offered, ['place_name', 'place_auto', 'place_skip'], '同じ問いに戻る');
   assert.equal(h.fr.role, 'station', '役目は駅のまま');
   assert.equal(h.fr.auto, false);
   assert.equal(h.done, false);

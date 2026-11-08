@@ -30,6 +30,9 @@ export const ROLE_AUTO_WORDS = {
   facility: 'がっこうで みんなを まもる 子',
 };
 
+/** 名前の問いの「おまかせ」で入れる、かりの名前(入力欄の例と同じ。本当の名前ではないので、あとから変えられると言う。CU3_2 should 5) */
+export const AUTO_PLACE = { shop: 'ひだまり パン', station: 'みどり駅' };
+
 /** 役目(と場所の名前)から、おまかせの説明を 1 つ作る。名前は、お店と駅の時だけ使う */
 export function autoWords(role, place = null) {
   const r = normalizeRole(role);

@@ -50,7 +50,7 @@ test('台本: 役目を先に聞き、お店は名前と案内することを聞
   assert.ok(!said.some((l) => l.text === 'どんな子を生み出そうか?'), '役目の前に「どんな子」を聞かない');
   await fr.act('role_shop');
   assert.ok(said.some((l) => l.text === 'おみせの なまえは?'));
-  assert.deepEqual(offered.map((a) => a.id), ['place_name', 'place_skip']);
+  assert.deepEqual(offered.map((a) => a.id), ['place_name', 'place_auto', 'place_skip']);
   await fr.act('place_name', { text: 'ひだまりパン' });
   assert.deepEqual(offered.map((a) => a.id), ['place_about', 'place_skip']);
   await fr.act('place_skip');
