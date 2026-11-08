@@ -139,10 +139,12 @@ test('probeServer: 何か返事が来れば(404 も)届いている。5xx と投
   assert.equal(await probeServer((url, init) => new Promise((_, rej) => init.signal.addEventListener('abort', () => rej(new Error('aborted')))), 30), false);
 });
 
-test('isOutage: 通信が切れた(status なし)と 5xx は送り直す。413・429・400 などは送り直さない', () => {
+test('isOutage: 返事が無い(status なし)と 502・503・504 だけ送り直す。500・413・429・400 などは送り直さない', () => {
   assert.equal(isOutage(new TypeError('Failed to fetch')), true);
   assert.equal(isOutage({ status: 502 }), true);
   assert.equal(isOutage({ status: 503 }), true);
+  assert.equal(isOutage({ status: 504 }), true);
+  assert.equal(isOutage({ status: 500 }), false, '500 はサーバーの中の失敗。送り直しても同じ');
   assert.equal(isOutage({ status: 413 }), false);
   assert.equal(isOutage({ status: 429 }), false);
   assert.equal(isOutage({ status: 400 }), false);
@@ -310,4 +312,129 @@ test('to_2d.py の中で箱を測る Chrome を待つ長さは、外の待ち(30
   assert.ok(Number(m[1]) * 1000 < TO_2D_TIMEOUT_MS);
   assert.match(src, /timeout=MEASURE_TIMEOUT_S/);
   assert.doesNotMatch(src, /timeout=90/);
+});
+
+// ---- LF4(11-08): 500 を送り続けない・声の無い返事の次の言葉・つながり直しの順番 ----
+/** main.js と同じ向きの配線(onOffline は info.retry なら知らせだけ。送り直しは retry を付ける)。送った回数を返す */
+function wiredRig(prepare = null) {
+  const c = clockRig();
+  let dialogue;
+  const resent = [];
+  const reconnector = new Reconnector({
+    probe: async () => true, // /api/status はいつも届く
+    prepare,
+    onBack: ({ pending, fresh }) => {
+      if (pending && fresh && !dialogue.busy) {
+        resent.push(pending.text);
+        void dialogue.send({ text: pending.text, mode: 'text', retry: true });
+      }
+    },
+    now: c.now,
+    setTimer: c.setTimer,
+    clearTimer: c.clearTimer,
+  });
+  const made = newDialogue({ onOffline: (info) => reconnector.begin(info.retry ? null : info) });
+  dialogue = made.d;
+  return { c, dialogue, resent, reconnector, log: made.log };
+}
+
+test('LF4: /api/chat がいつも 500(/api/status は届く)でも、送り直しは多くて 1 回(80 秒たっても)', async () => {
+  const rig = wiredRig();
+  await withFetch(() => new Response('{"error":"x"}', { status: 500 }), async (calls) => {
+    await rig.dialogue.send({ text: 'まるい子', mode: 'text' });
+    for (let i = 0; i < 40; i++) {
+      await rig.c.advance(2000);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    assert.ok(rig.resent.length <= 1, `送り直し ${rig.resent.length} 回`);
+    assert.ok(calls.length <= 2, `会話の送り ${calls.length} 回`);
+  });
+});
+
+test('LF4: 502 がいつも続いても、送り直した回は印がつき、もう送り直さない(最初の 1 回 + 送り直し 1 回だけ)', async () => {
+  const rig = wiredRig();
+  await withFetch(() => new Response('', { status: 502 }), async (calls) => {
+    await rig.dialogue.send({ text: 'まるい子', mode: 'text' });
+    for (let i = 0; i < 40; i++) {
+      await rig.c.advance(2000);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    assert.deepEqual(rig.resent, ['まるい子'], '送り直しは 1 回だけ');
+    assert.equal(calls.length, 2);
+  });
+});
+
+test('LF4: 送り直した回の失敗は、onOffline に retry: true で伝わる。ふつうの回は retry: false', async () => {
+  const seen = [];
+  const { d } = newDialogue({ onOffline: (info) => seen.push(info.retry) });
+  await withFetch(() => new Response('', { status: 503 }), async () => {
+    await d.send({ text: 'いち' });
+    await d.send({ text: 'に', retry: true });
+  });
+  assert.deepEqual(seen, [false, true]);
+});
+
+test('LF4: 声の無い返事(音が出ない)のあと、次の言葉で「止められた回」の嘘の 1 行を出さない', async () => {
+  const interrupted = [];
+  const d = new Dialogue({
+    character: { expressions: ['neutral'], play() {}, setEmotion() {}, setMouth() {}, isCustomExpression: () => false },
+    speaker: { speaking: false, pending: 0, capReached: false, setVoicePersona() {}, playFiller: () => null, stop() {}, enqueue: () => Promise.resolve() },
+    ui: { thought() {}, say() {}, userSaid() {}, caption() {}, error() {}, notice() {} },
+    getContext: () => ({ scene: '', character: { name: 'ノリー', persona: '' }, place: {} }),
+    setGaze: () => null,
+    onMetric: () => {},
+    onInterrupted: (e) => interrupted.push(e),
+  });
+  await withFetch(() => okChat(), async () => {
+    await d.send({ text: 'あ', mode: 'voice' });
+    await new Promise((r) => setTimeout(r, 120));
+    await d.send({ text: 'い', mode: 'voice' });
+  });
+  assert.equal(interrupted.length, 0, '字幕だけの返事の次の言葉で、止められた回の行が出た');
+});
+
+test('LF4: つながり直したら、声・聞き取りの読み直し(prepare)が終わってから送り直す', async () => {
+  let release;
+  const order = [];
+  const gate = new Promise((r) => { release = r; });
+  const rig = wiredRig(async () => {
+    order.push('prepare-start');
+    await gate;
+    order.push('prepare-done');
+  });
+  await withFetch(() => new Response('', { status: 502 }), async () => {
+    await rig.dialogue.send({ text: 'ステージ', mode: 'text' });
+  });
+  await withFetch(() => { order.push('send'); return okChat(); }, async () => {
+    await rig.c.advance(2000);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(order, ['prepare-start'], '読み直しの終わりを待っている間は送らない');
+    assert.equal(rig.resent.length, 0);
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(order.slice(0, 3), ['prepare-start', 'prepare-done', 'send']);
+    assert.deepEqual(rig.resent, ['ステージ']);
+  });
+});
+
+test('LF4: 読み直しを待つ間に新しい言葉を言ったら、止まった言葉は送り直さない。読み直しが投げても進む', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const rig = wiredRig(() => gate);
+  await withFetch(() => new Response('', { status: 502 }), async () => {
+    await rig.dialogue.send({ text: 'ふるい', mode: 'text' });
+  });
+  await rig.c.advance(2000);
+  rig.reconnector.supersede();
+  release();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(rig.resent.length, 0);
+  // 投げる prepare
+  const c2 = clockRig();
+  const backs = [];
+  const r2 = new Reconnector({ probe: async () => true, prepare: async () => { throw new Error('x'); }, onBack: (i) => backs.push(i), now: c2.now, setTimer: c2.setTimer, clearTimer: c2.clearTimer });
+  r2.begin({ text: 'a', at: c2.now() });
+  await c2.advance(2000);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(backs.length, 1);
 });

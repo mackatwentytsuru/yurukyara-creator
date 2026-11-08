@@ -11,10 +11,11 @@ export class Reconnector {
    * @param {object} o
    * @param {() => Promise<boolean>} o.probe サーバーに届くか(届けば true)。投げた時は届かないとみなす
    * @param {(info:{pending:object|null, fresh:boolean}) => void} o.onBack つながり直した。pending は止まった回の言葉(無ければ null)。fresh は送り直してよい新しさか
+   * @param {() => Promise<void>} [o.prepare] つながったと分かってから、onBack の前に待つ仕事(声・聞き取りの有無の読み直し)。投げても進む
    * @param {() => number} [o.now]
    */
-  constructor({ probe, onBack, now = () => Date.now(), setTimer = (fn, ms) => setTimeout(fn, ms), clearTimer = (h) => clearTimeout(h), delays = PROBE_DELAYS_MS, freshMs = RETRY_FRESH_MS, giveUpMs = GIVE_UP_MS }) {
-    Object.assign(this, { probe, onBack, now, setTimer, clearTimer, delays, freshMs, giveUpMs });
+  constructor({ probe, onBack, prepare = null, now = () => Date.now(), setTimer = (fn, ms) => setTimeout(fn, ms), clearTimer = (h) => clearTimeout(h), delays = PROBE_DELAYS_MS, freshMs = RETRY_FRESH_MS, giveUpMs = GIVE_UP_MS }) {
+    Object.assign(this, { probe, onBack, prepare, now, setTimer, clearTimer, delays, freshMs, giveUpMs });
     this.pending = null;
     this.waiting = false;
     this.startedAt = 0;
@@ -79,6 +80,17 @@ export class Reconnector {
       this.tries += 1;
       this._schedule();
       return;
+    }
+    if (this.prepare) {
+      // 読み直しが終わるまで、送り直さない(終わる前に送ると、声のサーバーが「無い」のままで字幕だけになりうる)。待つ間も、新しい言葉(supersede)・やめる(cancel)は効く
+      this.probing = true;
+      try {
+        await this.prepare();
+      } catch {
+        // 読み直しの失敗は、送り直しを止めない
+      }
+      this.probing = false;
+      if (!this.waiting) return;
     }
     const pending = this.pending;
     const fresh = Boolean(pending) && this.now() - pending.at <= this.freshMs;

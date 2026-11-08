@@ -28,10 +28,12 @@ export function friendlyChatError(err) {
   return Number(err?.status) === 413 ? TOO_LONG_NOTICE : OFFLINE_NOTICE;
 }
 
-/** 送り直せば通る失敗か: 通信が切れた(status なし)か、サーバーが落ちている・再起動中(5xx・429 以外の 4xx は、送り直しても同じなので除く) */
+/** 送り直せば通る失敗か: 返事が無い(status なし = 通信の切れ・時間切れ)か、門が「いま届かない」と答えた 502・503・504 だけ。
+ *  500 はサーバーの中の失敗で、送り直しても同じ(送り続けてしまう)ので除く。413・429 などの 4xx も除く */
+const OUTAGE_STATUSES = new Set([502, 503, 504]);
 export function isOutage(err) {
   const s = Number(err?.status);
-  return !Number.isFinite(s) || s >= 500;
+  return !Number.isFinite(s) || OUTAGE_STATUSES.has(s);
 }
 
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
@@ -154,9 +156,10 @@ export class Dialogue {
   /**
    * @param {{text?:string, trigger?:string|null, t0?:number, mode?:'voice'|'text'}} turn
    *   t0: ユーザーが話し終えた時刻(performance.now())。声でないときは送信した時刻
-   *   via: 'interim'(確定を待たずに途中の文字を先に送った回)・'replace'(先に送ったあと、違う字の確定で送り直した回)。記録の 1 項目になる(11-08 LF3)
+   *   retry: つながり直して送り直した回(true)。この回がまた通信の切れで失敗しても、もう送り直さない(onOffline の info.retry で伝える)
+   via: 'interim'(確定を待たずに途中の文字を先に送った回)・'replace'(先に送ったあと、違う字の確定で送り直した回)。記録の 1 項目になる(11-08 LF3)
    */
-  async send({ text: raw = '', trigger = null, t0 = performance.now(), mode = 'text', via = null } = {}) {
+  async send({ text: raw = '', trigger = null, t0 = performance.now(), mode = 'text', via = null, retry = false } = {}) {
     // 鍵らしい文字は、画面にもサーバーにも出さない(声の鍵を会話の欄に貼ってしまったとき)
     let { text, count: secrets } = redactSecrets(raw);
     if (secrets) this.ui.notice?.(SECRET_NOTICE);
@@ -319,7 +322,7 @@ export class Dialogue {
         this.ui.error(msg);
         this.ui.caption(msg, 6000);
         // 通信が切れていた(サーバーが短く止まった等)なら、画面が自分でつながり直して送り直す(reconnect.js)。言葉が長すぎた(413)などは送り直さない
-        if (isOutage(err) && trigger !== 'approach') offline = { text: askText, mode, turnId: id, at: Date.now() };
+        if (isOutage(err) && trigger !== 'approach') offline = { text: askText, mode, turnId: id, at: Date.now(), retry };
       }
     }
     if (id !== this.turnId) return;
@@ -342,6 +345,7 @@ export class Dialogue {
       if (id !== this.turnId) return;
       if (m.tAudio !== null) this._report(m);
       else if (this.speaker.pending > 0) setTimeout(waitStart, 50);
+      else if (this.open === m) this.open = null; // 声の無い返事(字幕だけ・声の上限・声の失敗)は、止められた回ではない。残すと次の言葉が「止められた」の嘘の 1 行を出す
     };
     waitStart();
   }

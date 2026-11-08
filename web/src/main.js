@@ -253,7 +253,8 @@ const dialogue = new Dialogue({
   setGaze,
   motionChoices,
   onEvent: onChatEvent, // サーバーのイベントが全部届く(記憶の札・仮の頭脳の知らせ)
-  onOffline: (info) => reconnector.begin(info), // 通信が切れて返事が 1 つも来なかった回: つながり直したら送り直す(LF3)
+  // 通信が切れて返事が 1 つも来なかった回: つながり直したら送り直す(LF3)。送り直した回(info.retry)がまた失敗した時は、もう送り直さない(知らせだけ。同じ言葉を送り続けない)
+  onOffline: (info) => reconnector.begin(info.retry ? null : info),
   // 返事の前に止められた回(言い直し・割り込み): 記録だけ残す(画面の「返事が始まるまで」の表示と、ふだんの数え方には混ぜない。LF4)
   onInterrupted: (entry) => {
     fetch('/api/metrics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry) }).catch(() => {});
@@ -296,8 +297,8 @@ app.dialogue = dialogue;
 // 聞き取り(listener)には触らない = 聞き続ける。聞き取りが通信の切れで止まっていて、使う人が聞かせたい状態のままなら、つながった時に入れ直す
 const reconnector = new Reconnector({
   probe: () => probeServer(),
+  prepare: () => refreshStatus(), // 声・聞き取りの有無の記録を読み直す(切れている間に null になっている)。終わってから送り直す
   onBack: ({ pending, fresh }) => {
-    void refreshStatus(); // 声・聞き取りの有無の記録を読み直す(切れている間に null になっている)
     if (micWanted && !listener) void toggleMic();
     if (pending && fresh && !dialogue.busy) {
       ui.notice('つながったよ。さっきの言葉を もう一度 送るね');
