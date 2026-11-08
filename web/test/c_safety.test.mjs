@@ -126,6 +126,28 @@ test('FCS_3 should 1: 「包丁で刺してね」は拾う。食べ物の「さ�
   for (const t of ['ナイフでさしてたべる', '包丁で刺して食べる', 'ほうちょうでさしてたべたい', 'ほうちょうでさしみ', 'ナイフでころがす']) assert.equal(classifyInput(t), null, t);
 });
 
+test('FCS_4 must: 「包丁でさしてたべちゃうぞ」などのおどしは命の案内に戻す。食べ物の「さしてたべる」「ころころ」は外したまま', () => {
+  for (const t of ['包丁でさしてたべちゃうぞ', 'ナイフで刺してたべさせるぞ', 'ほうちょうでさしてたべちゃうよ', 'ナイフで刺してたべさせてやるぞ']) {
+    assert.equal(classifyInput(t), 'emergency', t);
+    assert.equal(classifyInput(t, MULTI), 'emergency', `多言語 ${t}`);
+  }
+  for (const t of ['ナイフでさしてたべる', '包丁で刺して食べる', 'ほうちょうでさしてたべたい', 'ほうちょうでころころ', 'ほうちょうでさしみをつくった']) {
+    assert.equal(classifyInput(t), null, t);
+    assert.equal(classifyInput(t, MULTI), null, `多言語 ${t}`);
+  }
+});
+
+test('FCS_4 should 2: 薬をたくさん買った次の文で「のむ」なら命の案内。ふつうの次の文は拾わない', () => {
+  for (const t of ['くすりをたくさんかってきた。あしたのむ', '薬をたくさん買った。明日飲む', 'くすりをいっぱいもらった。それをのむ']) {
+    assert.equal(classifyInput(t), 'emergency', t);
+    assert.equal(classifyInput(t, MULTI), 'emergency', `多言語 ${t}`);
+  }
+  for (const t of ['くすりをたくさんもらった。ジュースをのむ', 'かぜぐすりをかってきた。あしたのむ', 'くすりをたくさんかってきた。おかあさんにわたした']) {
+    assert.equal(classifyInput(t), null, t);
+    assert.equal(classifyInput(t, MULTI), null, `多言語 ${t}`);
+  }
+});
+
 test('FCS_3 should 2: 「くすりをたくさんうった」は文全体で決める(店・お金など売る話は外す。決められなければ拾う)', () => {
   for (const t of ['くすりをたくさんうった', 'くすりをいっぱいうった', 'くすりをたくさんうって、しぬ', '薬をたくさん打った', 'お店でくすりをたくさんうって、しにたい']) {
     assert.ok(classifyInput(t), t);
