@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#14121f" />
+  <!-- 画面の色(ひるの紙・あたたかい夜・ゆうやけの町・むらさき)は、設定の「いろ」で選ぶ。下の小さな台本が、描く前に覚えた色を html に入れる(白い一瞬を出さない)。theme.js が同じ決まりで引き継ぐ。上の帯の色は、theme.js が地の色に合わせる -->
+  <meta name="theme-color" content="#f6efe3" />
   <!-- 「ホーム画面に追加」から開くと、ブラウザの上と下の帯(URL など)が出ない全画面で開く(テレビに映す時の完全な全画面。
        iPhone・iPad のブラウザの頁は、頁の中から全画面にできない)。表示の決まりは manifest.webmanifest(display: fullscreen、だめなら standalone)。
        iPhone・iPad は、下の apple- の 3 行(と apple-touch-icon)も読む -->
@@ -17,6 +18,7 @@
   <!-- 初めての会話(S4)が、見本に近い子がいない時に 1 回で開く「PC の Claude Code で新しい子を作る」手順。
        画面は日本語だけなので、日本語の README(README.md)の見出し「自分の PC で、Claude Code と自分のキャラを作る」の節を指す -->
   <link rel="help" hreflang="ja" href="https://github.com/mackatwentytsuru/yurukyara-creator/blob/HEAD/README.md#自分の-pc-でclaude-code-と自分のキャラを作る" />
+  <link rel="stylesheet" href="/src/ui/themes.css" />
   <link rel="stylesheet" href="/src/ui/style.css" />
 </head>
 <body>
@@ -187,6 +189,7 @@
     </div>
   </div>
 
+  <script>try{var yt=new URLSearchParams(location.search).get('theme')||localStorage.getItem('yc.theme');document.documentElement.setAttribute('data-theme',/^(paper|warm|dusk|purple)$/.test(yt)?yt:'paper')}catch(e){document.documentElement.setAttribute('data-theme','paper')}</script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

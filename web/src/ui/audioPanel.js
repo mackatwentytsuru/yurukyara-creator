@@ -9,6 +9,7 @@ import { beginRecording, createRecordingHold, endRecording, getMicWithSession } 
 import { AUDIO_WORDS, NOTE_EVENT, SILENT_EVENT, canPickSpeaker, decideListening, isDefaultMic, loadChoice, resolveDevice, saveChoice, serverSttAvailable, setServerSttCheck, splitDevices } from '../conversation/audioDevices.js';
 import { micFailureText, micUnavailableText } from '../stage/micNotice.js';
 import { createNote, createSheet, el } from './sheet.js';
+import { createThemePicker } from './themePicker.js';
 
 const TEST_MS = 12000; // 「はなしてみてね」は 12 秒で自分で止まる
 export const PICKER_WORDS = Object.freeze({
@@ -125,6 +126,7 @@ export function mountAudioPicker({ app, update = null } = {}) {
   const meterRow = el('div', { class: 'yc-meter-row' }, el('span', { class: 'yc-meter-label', text: PICKER_WORDS.meter }), meter);
   const testRow = el('div', { class: 'yc-au-actions' }, testBtn);
   sheet.body.append(
+    createThemePicker(), // 画面の「いろ」(いちばん上。下のマイクの部分が長くても、見つけられるように)
     el('p', { class: 'yc-au-lead', text: PICKER_WORDS.lead }),
     unavailable,
     allowBtn,

@@ -297,17 +297,17 @@ function askLinked(linked, { host, claimWith, panelPass, say }) {
   // 見た目(style.css は S5 の物なので、この窓の分はここで付ける。幅 390 でも PC でも、ボタンは横いっぱい・高さ 64px)。
   // 窓は画面いっぱいの暗い地にして、後ろの「はじめての案内」などの文字を隠す(::backdrop は style の属性では塗れない)。
   // dialog の display は替えない(閉じた時に隠れる決まりを残す)。真ん中に置くのは中の wrap
-  css(dlg, { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', margin: '0', padding: '0', border: '0', background: 'rgba(8, 6, 18, 0.82)', color: 'var(--text, #f4f1fb)', overflow: 'auto' });
+  css(dlg, { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', margin: '0', padding: '0', border: '0', background: 'rgb(var(--scrim-rgb, 8 6 18) / 0.82)', color: 'var(--text, #f4f1fb)', overflow: 'auto' });
   css(wrap, { display: 'grid', placeItems: 'center', minHeight: '100%', padding: '16px', boxSizing: 'border-box' });
-  css(box, { width: 'min(100%, 440px)', boxSizing: 'border-box', display: 'grid', gap: '14px', padding: '24px 20px', border: '1px solid var(--line, #444)', borderRadius: '22px', background: 'var(--ink-2, #1d1a2e)', boxShadow: '0 16px 48px rgba(0, 0, 0, 0.5)', fontFamily: 'var(--font, system-ui)', textAlign: 'center' });
+  css(box, { width: 'min(100%, 440px)', boxSizing: 'border-box', display: 'grid', gap: '14px', padding: '24px 20px', border: '1px solid var(--line, #444)', borderRadius: '22px', background: 'var(--ink-2, #1d1a2e)', boxShadow: '0 16px 48px rgb(var(--shadow-rgb, 0 0 0) / 0.5)', fontFamily: 'var(--font, system-ui)', textAlign: 'center' });
   css(title, { margin: '0', fontSize: '26px', fontWeight: '800', lineHeight: '1.35' });
   css(lead, { margin: '0', fontSize: '17px', lineHeight: '1.6', color: 'var(--muted, #b2abc9)' });
   css(msg, { margin: '0', fontSize: '18px', lineHeight: '1.6', fontWeight: '700' });
-  css(passIn, { font: 'inherit', fontSize: '18px', minHeight: '56px', padding: '8px 14px', borderRadius: '14px', border: '1px solid var(--line, #444)', background: 'rgba(255, 255, 255, 0.08)', color: 'inherit', width: '100%', boxSizing: 'border-box' });
+  css(passIn, { font: 'inherit', fontSize: '18px', minHeight: '56px', padding: '8px 14px', borderRadius: '14px', border: '1px solid var(--line, #444)', background: 'rgb(var(--tint-rgb, 255 255 255) / 0.08)', color: 'inherit', width: '100%', boxSizing: 'border-box' });
   const bigButton = (b, primary) =>
     css(b, {
       font: 'inherit', fontSize: '22px', fontWeight: '800', width: '100%', minHeight: '64px', padding: '10px 16px', borderRadius: '18px', cursor: 'pointer',
-      border: primary ? '0' : '2px solid var(--line, #555)', background: primary ? 'var(--mint, #7be0c3)' : 'rgba(255, 255, 255, 0.08)', color: primary ? 'var(--ink, #14121f)' : 'inherit',
+      border: primary ? '0' : '2px solid var(--line-strong, #555)', background: primary ? 'var(--mint, #7be0c3)' : 'rgb(var(--tint-rgb, 255 255 255) / 0.08)', color: primary ? 'var(--on-chip, #14121f)' : 'inherit',
     });
   bigButton(yes, true);
   bigButton(no, false);

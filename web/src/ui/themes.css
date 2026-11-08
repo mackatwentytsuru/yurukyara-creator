@@ -1,0 +1,145 @@
+/*
+ * 画面の「いろ」(4 つ)。設定(歯車)の「いろ」で選ぶ。選んだ物は、この端末が覚える(src/theme.js が html の data-theme に入れる)。
+ *   ひるの紙(paper。はじめの色)・あたたかい夜(warm)・ゆうやけの町(dusk)・むらさき(purple。これまでの色)
+ * 色は、ここの変数だけで決める。style.css・onboarding/styles.js・舞台の光(scene.js)・VR(vrStage.js・vrPanel.js)は、この変数を読む。
+ * 4 つの塊は、どれも全部の変数を持つ(試験 web/test/theme.test.mjs が、名前がそろっているかを見る)。
+ * 数字 3 つの変数(-rgb)は、rgb(var(--accent-rgb) / 0.28) のように透ける色で使う。
+ * 明るいオレンジ・テラコッタのボタンの上の字は、白ではなく --on-btn(字と地の比は 4.5 以上)。
+ * 変えるのは色だけ。ロゴ・マーク・字体は使わない。
+ */
+
+/* ---- ひるの紙(はじめの色): クリーム色の紙の地に、素焼きの赤茶 ---- */
+:root,
+:root[data-theme="paper"] {
+  --ink: #f6efe3;  --ink-2: #fffaf3;  --ink-3: #efe4d4;  --ink-deep: #efe4d4;  --sheet-bg: #efe4d4;  --face-bg: #efe4d4;  --input-bg: #fffdf8;
+  --scrim-rgb: 246 239 227;  --scrim-b-rgb: 246 239 227;  --tint-rgb: 90 60 40;  --shadow-rgb: 90 60 40;
+  --glass: rgba(255, 250, 242, 0.8);  --line: rgba(90, 60, 40, 0.18);  --line-strong: #9a806c;
+  --text: #2a1c13;  --muted: #6a5444;
+  --accent: #b04e28;  --accent-rgb: 176 78 40;  --accent-mid: #b04e28;  --lav: var(--accent);
+  --coral: #a5325a;  --coral-rgb: 165 50 90;
+  --mint: #2c7656;  --mint-rgb: 44 118 86;
+  --warn: #8a5800;  --warn-rgb: 138 88 0;
+  --on-chip: #ffffff;
+  --btn-from: #a8471f;  --btn-to: #b5532c;  --on-btn: #ffffff;  --btn-glow-rgb: 168 71 31;
+  --hear-from: #a5325a;  --hear-to: #c2405a;  --on-hear: #ffffff;
+  --bubble-char: #e1efe6;  --bubble-note: #f3eadc;  --bubble-user-from: #a8471f;  --bubble-user-to: #b5532c;
+  --ink-3-rgb: 239 228 212;  --bubble-char-rgb: 225 239 230;  --bubble-note-rgb: 243 234 220;
+  --rec: #c62828;  --rec-rgb: 198 40 40;  --rec-text: #8e1c1c;
+  --focus: #8a3a1a;
+  --bg-glow-1: #fbe2c8;  --bg-glow-2: #f3d2bf;
+  /* 舞台(3D・2D)の光。床は光でなく、やわらかい茶色の影。キャラの後ろの「光の輪」(halo)は、白いおなかとしっぽが紙に溶けないための少し暗い輪 */
+  --stage-hemi-sky: #fff6ea;  --stage-hemi-ground: #c9b39a;  --stage-key: #fff8f0;  --stage-rim: #ffffff;  --stage-rim-shader: 1 0.97 0.92;
+  --stage-floor-rgb: 110 70 40;  --stage-floor-rgb2: 110 70 40;  --stage-floor-a1: 0.30;  --stage-floor-a2: 0.10;
+  --stage-halo-rgb: 122 80 48;  --stage-halo-a: 0.34;
+  /* VR(空と床と板) */
+  --vr-sky-0: #f7e6d0;  --vr-sky-42: #f7dcc0;  --vr-sky-50: #f2b98a;  --vr-sky-53: #e9d7c0;  --vr-sky-100: #e2cdb3;
+  --vr-floor: #e6d3bb;  --vr-ring: #c9a888;  --vr-panel-rgb: 42 28 19;
+  --vr-off: #c2ae9f;  --vr-idle: #ffc796;  --vr-hearing: #9de6bb;  --vr-thinking: #ffd479;  --vr-speaking: #ffadc2;
+  --vr-error: #ffa898;  --vr-user: #e3d2c2;  --vr-reply: #ffffff;
+}
+
+/* ---- あたたかい夜: こげ茶に近い炭の地に、オレンジの光 ---- */
+:root[data-theme="warm"] {
+  --ink: #1a1411;  --ink-2: #251d18;  --ink-3: #33281f;  --ink-deep: #33281f;  --sheet-bg: #33281f;  --face-bg: #33281f;  --input-bg: #140f0c;
+  --scrim-rgb: 18 13 10;  --scrim-b-rgb: 18 13 10;  --tint-rgb: 255 244 234;  --shadow-rgb: 0 0 0;
+  --glass: rgba(42, 33, 27, 0.66);  --line: rgba(255, 236, 220, 0.14);  --line-strong: #7f6a59;
+  --text: #f8efe5;  --muted: #cbb8a5;
+  --accent: #f2a06a;  --accent-rgb: 242 160 106;  --accent-mid: #f2a06a;  --lav: var(--accent);
+  --coral: #ff94a8;  --coral-rgb: 255 148 168;
+  --mint: #86d9b4;  --mint-rgb: 134 217 180;
+  --warn: #ffd479;  --warn-rgb: 255 212 121;
+  --on-chip: #1a1411;
+  --btn-from: #e9814f;  --btn-to: #f4a463;  --on-btn: #24130a;  --btn-glow-rgb: 233 129 79;
+  --hear-from: #ff94a8;  --hear-to: #ff7a92;  --on-hear: #2a0d14;
+  --bubble-char: #1f3a31;  --bubble-note: #2e241d;  --bubble-user-from: #e9814f;  --bubble-user-to: #f09a5c;
+  --ink-3-rgb: 51 40 31;  --bubble-char-rgb: 31 58 49;  --bubble-note-rgb: 46 36 29;
+  --rec: #ff5a4e;  --rec-rgb: 255 90 78;  --rec-text: #ffdcd6;
+  --focus: #ffd2a8;
+  --bg-glow-1: #33251e;  --bg-glow-2: #4a2a1c;
+  --stage-hemi-sky: #fff0dc;  --stage-hemi-ground: #3a2a20;  --stage-key: #fff4e6;  --stage-rim: #ffd9b0;  --stage-rim-shader: 1 0.88 0.74;
+  --stage-floor-rgb: 255 200 150;  --stage-floor-rgb2: 255 200 150;  --stage-floor-a1: 0.55;  --stage-floor-a2: 0.16;
+  --stage-halo-rgb: 0 0 0;  --stage-halo-a: 0;
+  --vr-sky-0: #1d1513;  --vr-sky-42: #4a2f24;  --vr-sky-50: #c47a4e;  --vr-sky-53: #2c2019;  --vr-sky-100: #1a1411;
+  --vr-floor: #2a201a;  --vr-ring: #5a4434;  --vr-panel-rgb: 26 20 17;
+  --vr-off: #a8968a;  --vr-idle: #ffc796;  --vr-hearing: #8fe0b0;  --vr-thinking: #ffd479;  --vr-speaking: #ff9fb6;
+  --vr-error: #ff9a8a;  --vr-user: #d6c4b2;  --vr-reply: #ffffff;
+}
+
+/* ---- ゆうやけの町: 夕方の空の青い地に、地平線とボタンだけオレンジ ---- */
+:root[data-theme="dusk"] {
+  --ink: #171822;  --ink-2: #22232f;  --ink-3: #2d2e3c;  --ink-deep: #2d2e3c;  --sheet-bg: #2d2e3c;  --face-bg: #2d2e3c;  --input-bg: #12131b;
+  --scrim-rgb: 15 16 25;  --scrim-b-rgb: 15 16 25;  --tint-rgb: 255 242 230;  --shadow-rgb: 0 0 0;
+  --glass: rgba(35, 36, 52, 0.66);  --line: rgba(255, 236, 220, 0.14);  --line-strong: #75707f;
+  --text: #f9f1e7;  --muted: #c4b9b0;
+  --accent: #f5a35f;  --accent-rgb: 245 163 95;  --accent-mid: #f5a35f;  --lav: var(--accent);
+  --coral: #ff92ab;  --coral-rgb: 255 146 171;
+  --mint: #86dcb8;  --mint-rgb: 134 220 184;
+  --warn: #ffd479;  --warn-rgb: 255 212 121;
+  --on-chip: #171822;
+  --btn-from: #ec7f45;  --btn-to: #f7a85a;  --on-btn: #251208;  --btn-glow-rgb: 236 127 69;
+  --hear-from: #ff92ab;  --hear-to: #ff7895;  --on-hear: #2a0d14;
+  --bubble-char: #1f3a35;  --bubble-note: #2b2a38;  --bubble-user-from: #ec7f45;  --bubble-user-to: #f39550;
+  --ink-3-rgb: 45 46 60;  --bubble-char-rgb: 31 58 53;  --bubble-note-rgb: 43 42 56;
+  --rec: #ff5a4e;  --rec-rgb: 255 90 78;  --rec-text: #ffdcd6;
+  --focus: #ffd2a8;
+  --bg-glow-1: #262a40;  --bg-glow-2: #6a3420;
+  --stage-hemi-sky: #ffe8d4;  --stage-hemi-ground: #2a2a44;  --stage-key: #ffe2c4;  --stage-rim: #9fc4ff;  --stage-rim-shader: 0.8 0.88 1;
+  --stage-floor-rgb: 255 190 130;  --stage-floor-rgb2: 255 190 130;  --stage-floor-a1: 0.55;  --stage-floor-a2: 0.16;
+  --stage-halo-rgb: 0 0 0;  --stage-halo-a: 0;
+  --vr-sky-0: #1b1d33;  --vr-sky-42: #3a3b63;  --vr-sky-50: #f08a4b;  --vr-sky-53: #2a2235;  --vr-sky-100: #171822;
+  --vr-floor: #23233a;  --vr-ring: #5a4a68;  --vr-panel-rgb: 23 24 34;
+  --vr-off: #a39a9a;  --vr-idle: #ffc796;  --vr-hearing: #8fe0b0;  --vr-thinking: #ffd479;  --vr-speaking: #ff9fb6;
+  --vr-error: #ff9a8a;  --vr-user: #d2c7c0;  --vr-reply: #ffffff;
+}
+
+/* ---- むらさき: これまでの色(いまの画面と同じ) ---- */
+:root[data-theme="purple"] {
+  --ink: #14121f;  --ink-2: #1d1a2e;  --ink-3: #2c2845;  --ink-deep: #15122a;  --sheet-bg: #171426;  --face-bg: #3a3156;  --input-bg: #0f0d1c;
+  --scrim-rgb: 12 10 22;  --scrim-b-rgb: 20 18 31;  --tint-rgb: 255 255 255;  --shadow-rgb: 0 0 0;
+  --glass: rgba(24, 21, 40, 0.62);  --line: rgba(255, 255, 255, 0.12);  --line-strong: rgba(255, 255, 255, 0.12);
+  --text: #f4f1fb;  --muted: #b2abc9;
+  --accent: #b7a8ff;  --accent-rgb: 183 168 255;  --accent-mid: #9b7dff;  --lav: var(--accent);
+  --coral: #ff8f7a;  --coral-rgb: 255 143 122;
+  --mint: #7be0c3;  --mint-rgb: 123 224 195;
+  --warn: #ffd37a;  --warn-rgb: 255 211 122;
+  --on-chip: #14121f;
+  --btn-from: #7d62ff;  --btn-to: #c15bff;  --on-btn: #ffffff;  --btn-glow-rgb: 125 98 255;
+  --hear-from: #ff8f7a;  --hear-to: #ff6fa8;  --on-hear: #ffffff;
+  --bubble-char: #213a37;  --bubble-note: #26233b;  --bubble-user-from: #7d62ff;  --bubble-user-to: #a35bff;
+  --ink-3-rgb: 38 34 62;  --bubble-char-rgb: 28 58 54;  --bubble-note-rgb: 34 31 56;
+  --rec: #ff5a5a;  --rec-rgb: 255 90 90;  --rec-text: #ffd9d9;
+  --focus: #b7a8ff;
+  --bg-glow-1: #3a2f63;  --bg-glow-2: #5a2f48;
+  --stage-hemi-sky: #fff1e0;  --stage-hemi-ground: #2a2540;  --stage-key: #ffffff;  --stage-rim: #9fd8ff;  --stage-rim-shader: 0.87 0.92 1;
+  --stage-floor-rgb: 255 214 170;  --stage-floor-rgb2: 255 170 120;  --stage-floor-a1: 0.55;  --stage-floor-a2: 0.16;
+  --stage-halo-rgb: 0 0 0;  --stage-halo-a: 0;
+  --vr-sky-0: #191633;  --vr-sky-42: #3b2f63;  --vr-sky-50: #a9708f;  --vr-sky-53: #2a2440;  --vr-sky-100: #14121f;
+  --vr-floor: #241f38;  --vr-ring: #4a4068;  --vr-panel-rgb: 20 18 31;
+  --vr-off: #8d86a8;  --vr-idle: #9fd8ff;  --vr-hearing: #7fe3a8;  --vr-thinking: #ffd27f;  --vr-speaking: #ff9fc4;
+  --vr-error: #ff8d8d;  --vr-user: #b9b3d6;  --vr-reply: #ffffff;
+}
+
+/* ---- キャラの後ろの輪(scene.js が位置と大きさを入れる)。canvas のすぐ後ろ。色と濃さは舞台の変数(ひるの紙だけ濃さがある) ---- */
+.stage-halo {
+  position: fixed; left: 0; top: 0; width: var(--halo-d, 0px); height: var(--halo-d, 0px); border-radius: 50%; pointer-events: none;
+  transform: translate(calc(var(--halo-x, 0px) - 50%), calc(var(--halo-y, 0px) - 50%));
+  background: radial-gradient(closest-side, rgb(var(--stage-halo-rgb) / var(--stage-halo-a)) 4%, rgb(var(--stage-halo-rgb) / calc(var(--stage-halo-a) * 0.62)) 50%, rgb(var(--stage-halo-rgb) / 0) 100%);
+}
+.stage-halo[hidden] { display: none; }
+
+/* ---- 設定の「いろ」の選び(ui/themePicker.js)。見本の丸の色は、選んでいる色にかかわらず、いつも同じ ---- */
+.yc-theme { display: grid; gap: 6px; margin-bottom: 8px; }
+.yc-theme > span { font-size: 14px; color: var(--muted); }
+.yc-theme-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.yc-theme-opt {
+  font: inherit; font-size: 14px; min-height: 44px; padding: 6px 10px; border-radius: 14px; cursor: pointer;
+  display: flex; align-items: center; gap: 8px; text-align: left; color: var(--text);
+  background: rgb(var(--tint-rgb) / 0.06); border: 1px solid var(--line-strong);
+}
+.yc-theme-opt[aria-pressed="true"] { border: 2px solid var(--accent); background: rgb(var(--accent-rgb) / 0.14); font-weight: 700; padding: 5px 9px; }
+.yc-theme-opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.yc-theme-sw { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.25); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35); }
+.yc-theme-opt[data-theme-id="paper"] .yc-theme-sw { background: linear-gradient(135deg, #f6efe3 55%, #b04e28 55%); }
+.yc-theme-opt[data-theme-id="warm"] .yc-theme-sw { background: linear-gradient(135deg, #1a1411 55%, #f2a06a 55%); }
+.yc-theme-opt[data-theme-id="dusk"] .yc-theme-sw { background: linear-gradient(135deg, #262a40 55%, #f08a4b 55%); }
+.yc-theme-opt[data-theme-id="purple"] .yc-theme-sw { background: linear-gradient(135deg, #3a2f63 55%, #7d62ff 55%); }

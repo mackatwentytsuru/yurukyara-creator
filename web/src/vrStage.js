@@ -2,6 +2,7 @@
 // キャラは場所が決めた位置に立ったままで、見ている人のほうを、キャラの正面の少し先へ連れていく(座標の原点をずらす)。
 // こうすると、撮った部屋の立ち位置・視線の計算・目印の方向を、VR のために変えなくてよい。
 import * as THREE from 'three';
+import { getTheme, readVrColors } from './theme.js';
 
 export const AHEAD_M = 1.6; // はじめに立つ、キャラからの距離
 const STICK_SPEED = 1.2; // スティックで歩く速さ(m/秒)
@@ -47,6 +48,7 @@ export function rigToOffset(rig) {
 
 /** 撮った部屋が無いときの背景。暗闇に浮かないよう、空の色と床だけを置く(画像ファイルは使わない) */
 function makeBackdrop() {
+  const vr = readVrColors(); // 空・床・輪の色は「いろ」で替わる(theme.js)
   const group = new THREE.Group();
   group.name = 'vrBackdrop';
   const c = document.createElement('canvas');
@@ -54,22 +56,18 @@ function makeBackdrop() {
   c.height = 256;
   const g = c.getContext('2d');
   const sky = g.createLinearGradient(0, 0, 0, 256);
-  sky.addColorStop(0, '#191633');
-  sky.addColorStop(0.42, '#3b2f63');
-  sky.addColorStop(0.5, '#a9708f');
-  sky.addColorStop(0.53, '#2a2440');
-  sky.addColorStop(1, '#14121f');
+  [0, 0.42, 0.5, 0.53, 1].forEach((at, i) => sky.addColorStop(at, vr.sky[i]));
   g.fillStyle = sky;
   g.fillRect(0, 0, 4, 256);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   group.add(new THREE.Mesh(new THREE.SphereGeometry(30, 32, 16), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, toneMapped: false })));
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(14, 64), new THREE.MeshBasicMaterial({ color: 0x241f38, toneMapped: false }));
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(14, 64), new THREE.MeshBasicMaterial({ color: vr.floor, toneMapped: false }));
   floor.rotation.x = -Math.PI / 2;
   group.add(floor);
   // 床の距離感のための輪(1m ごと)
   const rings = new THREE.Group();
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0x4a4068, toneMapped: false });
+  const ringMat = new THREE.MeshBasicMaterial({ color: vr.ring, toneMapped: false });
   for (let r = 1; r <= 8; r++) {
     const ring = new THREE.Mesh(new THREE.RingGeometry(r - 0.006, r + 0.006, 96), ringMat);
     ring.rotation.x = -Math.PI / 2;
@@ -88,6 +86,7 @@ function makeBackdrop() {
  */
 export function createVrStage({ renderer, scene, getCharacterObject }) {
   let backdrop = null;
+  let backdropTheme = '';
   let base = null; // ずらす前の参照空間
   let rig = null;
   let floorY = 0;
@@ -116,7 +115,19 @@ export function createVrStage({ renderer, scene, getCharacterObject }) {
       rig = null;
       noFloorLift = floor ? 0 : NO_FLOOR_HEAD_M;
       if (showBackdrop) {
-        backdrop ??= makeBackdrop();
+        if (backdrop && backdropTheme !== getTheme()) {
+          // 入る前に「いろ」を替えた時は、空を作り直す(前の色の空を使い回さない)
+          backdrop.traverse((o) => {
+            o.geometry?.dispose?.();
+            o.material?.map?.dispose?.();
+            o.material?.dispose?.();
+          });
+          backdrop = null;
+        }
+        if (!backdrop) {
+          backdrop = makeBackdrop();
+          backdropTheme = getTheme();
+        }
         scene.add(backdrop);
       }
     },

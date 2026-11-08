@@ -1,14 +1,5 @@
 :root {
-  --ink: #14121f;
-  --ink-2: #1d1a2e;
-  --glass: rgba(24, 21, 40, 0.62);
-  --line: rgba(255, 255, 255, 0.12);
-  --text: #f4f1fb;
-  --muted: #b2abc9;
-  --lav: #b7a8ff;
-  --coral: #ff8f7a;
-  --mint: #7be0c3;
-  --warn: #ffd37a;
+  /* 色の変数は themes.css(ひるの紙・あたたかい夜・ゆうやけの町・むらさき。設定の「いろ」で選ぶ)。ここは色でないものだけ */
   --radius: 18px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", Meiryo, system-ui, sans-serif;
@@ -20,8 +11,8 @@ body {
   font-family: var(--font);
   color: var(--text);
   background:
-    radial-gradient(120% 80% at 50% 8%, #3a2f63 0%, rgba(58, 47, 99, 0) 60%),
-    radial-gradient(90% 60% at 50% 100%, #5a2f48 0%, rgba(90, 47, 72, 0) 70%),
+    radial-gradient(120% 80% at 50% 8%, var(--bg-glow-1) 0%, transparent 60%),
+    radial-gradient(90% 60% at 50% 100%, var(--bg-glow-2) 0%, transparent 70%),
     var(--ink);
   overflow: hidden;
   -webkit-text-size-adjust: 100%;
@@ -38,11 +29,11 @@ html.gate-up:not(.fr-open) .top,
 html.gate-up:not(.fr-open) #thought { visibility: hidden; }
 .modes { display: flex; gap: 8px; pointer-events: auto; }
 .modes:empty { display: none; }
-.place-mode-button { font: inherit; font-size: 14px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-.place-mode-button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.place-mode-button { font: inherit; font-size: 14px; padding: 9px 14px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line-strong); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.place-mode-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .place-mode-button[hidden] { display: none; }
 /* ヘッドセットの 2D の画面では、次に押す物を大きく(コントローラーで狙いやすく) */
-html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background: var(--lav, #b8a6ff); color: #14121f; font-weight: 700; }
+html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background: var(--lav, #b8a6ff); color: var(--on-chip); font-weight: 700; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   font-size: 14px; line-height: 1; padding: 7px 10px; border-radius: 999px;
@@ -62,8 +53,8 @@ html.is-headset .place-mode-vr { font-size: 26px; padding: 18px 34px; background
 .caption {
   width: 100%; text-align: center; margin: 0;
   font-size: clamp(20px, 3.4vw, 38px); font-weight: 700; line-height: 1.45; letter-spacing: 0.02em;
-  padding: 12px 22px; border-radius: 22px; background: rgba(12, 10, 22, 0.66);
-  border: 1px solid var(--line); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  padding: 12px 22px; border-radius: 22px; background: rgb(var(--scrim-rgb) / 0.66);
+  border: 1px solid var(--line); text-shadow: 0 2px 12px rgb(var(--scrim-rgb) / 0.5);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   transition: opacity 0.25s ease;
   max-height: 34vh; overflow-y: auto; line-break: strict; /* 小さい「ョ」などで行を始めない(日本語の決まり) */
@@ -87,22 +78,22 @@ html.tv-mode .caption .cap-next, html.kb-tight .caption .cap-next { display: non
 /* 字幕の上: Claude が店のデータを見て答えている札(どの情報を、いつの更新として使ったか) */
 .shop-badge {
   width: 100%; margin: 0; text-align: center; font-size: clamp(14px, 1.7vw, 20px); line-height: 1.45;
-  padding: 6px 14px; border-radius: 999px; background: rgba(12, 10, 22, 0.72); border: 1px solid var(--mint); color: var(--mint);
+  padding: 6px 14px; border-radius: 999px; background: rgb(var(--scrim-rgb) / 0.72); border: 1px solid var(--mint); color: var(--mint);
 }
 .shop-badge[hidden] { display: none; }
 
 /* よくある質問のボタン(押すとそのまま質問になる。聞き取れなかったときは目立たせる) */
 .choices { width: min(100%, 880px); display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .choices[hidden] { display: none; }
-.choices button { font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-.choices button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
-.choices.emphasis button { font-size: 16px; padding: 12px 16px; border-color: var(--lav); background: rgba(125, 98, 255, 0.28); }
+.choices button { font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line-strong); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.choices button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.choices.emphasis button { font-size: 16px; padding: 12px 16px; border-color: var(--lav); background: rgb(var(--btn-glow-rgb) / 0.28); }
 
 /* AR の位置合わせの案内(部屋を現実に重ねる、床のタップ) */
 .align {
   position: fixed; left: 50%; top: calc(max(12px, env(safe-area-inset-top)) + 96px); transform: translateX(-50%);
   width: min(86vw, 520px); margin: 0; text-align: center; font-size: 15px; font-weight: 700; line-height: 1.5;
-  padding: 10px 16px; border-radius: 16px; background: rgba(12, 10, 22, 0.78); border: 1px solid var(--lav); color: var(--text);
+  padding: 10px 16px; border-radius: 16px; background: rgb(var(--scrim-rgb) / 0.78); border: 1px solid var(--lav); color: var(--text);
 }
 .align.bad { border-color: var(--warn); color: var(--warn); }
 /* ヘッドセットの 2D の画面(Quest のブラウザ 1280×670): 「VR で見る」の案内は、上の段のすぐ下の左(押すボタンの下)に。
@@ -118,8 +109,8 @@ html.is-headset .align {
 .xr-wait {
   position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; pointer-events: none;
   width: min(88vw, 640px); margin: 0; text-align: center; font-size: 22px; font-weight: 700; line-height: 1.5;
-  padding: 18px 22px; border-radius: 18px; background: rgba(12, 10, 22, 0.9); border: 2px solid var(--lav); color: var(--text);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  padding: 18px 22px; border-radius: 18px; background: rgb(var(--scrim-rgb) / 0.9); border: 2px solid var(--lav); color: var(--text);
+  box-shadow: 0 12px 40px rgb(var(--shadow-rgb) / 0.55);
 }
 .xr-wait[hidden] { display: none; }
 html.is-headset .xr-wait { font-size: 30px; }
@@ -134,27 +125,27 @@ html.is-headset .xr-wait { font-size: 30px; }
   all: unset; box-sizing: border-box; width: 100%; min-height: 44px; padding: 11px 14px; cursor: pointer;
   font-size: 14px; font-weight: 700; letter-spacing: 0.04em; display: flex; align-items: center; gap: 8px; color: var(--lav);
 }
-.thought-head:focus-visible { outline: 2px solid var(--lav); outline-offset: -2px; border-radius: var(--radius); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 0 rgba(255, 143, 122, 0.6); animation: pulse 2.4s infinite; }
-@keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(255, 143, 122, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 143, 122, 0); } }
+.thought-head:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 0 rgb(var(--coral-rgb) / 0.6); animation: pulse 2.4s infinite; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 8px rgb(var(--coral-rgb) / 0); } 100% { box-shadow: 0 0 0 0 rgb(var(--coral-rgb) / 0); } }
 .thought-body { margin: 0; padding: 0 14px 10px; display: grid; gap: 9px; }
 .thought-body .row { display: grid; grid-template-columns: 5.4em 1fr; gap: 8px; align-items: baseline; }
 .thought-body dt { font-size: 14px; color: var(--muted); letter-spacing: 0.05em; }
 .thought-body dd { margin: 0; font-size: 14px; line-height: 1.5; word-break: break-word; }
 .thought.collapsed .thought-body, .thought.collapsed .thought-foot { display: none; }
 .thought-foot { padding: 8px 14px 10px; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-.thought-body .src { display: inline-flex; flex-direction: column; margin: 0 8px 4px 0; padding: 3px 8px; border-radius: 10px; background: rgba(123, 224, 195, 0.14); color: var(--mint); font-size: 14px; line-height: 1.3; }
+.thought-body .src { display: inline-flex; flex-direction: column; margin: 0 8px 4px 0; padding: 3px 8px; border-radius: 10px; background: rgb(var(--mint-rgb) / 0.14); color: var(--mint); font-size: 14px; line-height: 1.3; }
 .thought-body .src small, .thought-body .src-label { font-size: 14px; color: var(--muted); }
-.thought-body .src.stale { background: rgba(255, 211, 122, 0.16); color: var(--warn); }
+.thought-body .src.stale { background: rgb(var(--warn-rgb) / 0.16); color: var(--warn); }
 .thought-body .src-label { display: block; }
-.stage-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 14px; background: rgba(183, 168, 255, 0.18); color: var(--lav); margin-right: 6px; }
-.stage-tag.handoff { background: rgba(255, 211, 122, 0.2); color: var(--warn); }
+.stage-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 14px; background: rgb(var(--accent-rgb) / 0.18); color: var(--lav); margin-right: 6px; }
+.stage-tag.handoff { background: rgb(var(--warn-rgb) / 0.2); color: var(--warn); }
 
 /* 下: 注意書きと入力 */
 .bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px max(12px, env(safe-area-inset-right)) calc(10px + var(--safe-b)) max(12px, env(safe-area-inset-left)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; justify-items: center; } /* 列を minmax(0, 1fr) に: 幅 320 で入力の列が中身の幅(343px)まで広がっていた(P1) */
 .privacy {
   margin: 0; width: min(100%, 880px); font-size: 14px; line-height: 1.4; color: var(--muted);
-  display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(12, 10, 22, 0.5);
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgb(var(--scrim-rgb) / 0.5);
 }
 .rec { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mint); }
 .privacy.off .rec { background: var(--muted); }
@@ -164,26 +155,28 @@ html.is-headset .xr-wait { font-size: 30px; }
   background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .composer input::placeholder { color: var(--muted); }
-.composer input:focus-visible { outline: 2px solid var(--lav); outline-offset: 1px; }
+.composer input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .composer button { font: inherit; font-size: 14px; border: 0; border-radius: 14px; padding: 0 16px; cursor: pointer; color: var(--text); transition: transform 0.12s ease, background 0.2s ease; }
 .composer button:active { transform: scale(0.97); }
-.composer button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
-.send { background: linear-gradient(135deg, #7d62ff, #c15bff); font-weight: 700; }
-.mic { background: var(--glass); border: 1px solid var(--line); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.mic[aria-pressed="true"] { background: rgba(255, 143, 122, 0.22); border-color: var(--coral); color: var(--coral); }
-.mic.hearing { box-shadow: 0 0 0 3px rgba(255, 143, 122, 0.35); }
+.composer button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.send { background: linear-gradient(135deg, var(--btn-from), var(--btn-to)); font-weight: 700; }
+/* 「送る」の字の色: .composer button(字は --text)より強くして、ボタンの上の字(--on-btn)にする(いろの変更で、明るいオレンジの上の字が白のままになった。TC2) */
+.composer .send { color: var(--on-btn); }
+.mic { background: var(--glass); border: 1px solid var(--line-strong); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.mic[aria-pressed="true"] { background: rgb(var(--coral-rgb) / 0.22); border-color: var(--coral); color: var(--coral); }
+.mic.hearing { box-shadow: 0 0 0 3px rgb(var(--coral-rgb) / 0.35); }
 /* ML1: 多言語の時だけ出す、聞く言葉の選び(マイクの横)。日本語だけの時は hidden のまま */
 .hear-lang { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-width: 0; padding: 0 8px; border-radius: 14px; background: var(--glass); border: 1px solid var(--line); font-size: 13px; color: var(--muted); white-space: nowrap; }
 .hear-lang[hidden] { display: none; }
 .hear-lang select { font: inherit; font-size: 14px; color: var(--text); background: transparent; border: 0; max-width: 8.5em; padding: 6px 2px; cursor: pointer; }
 .hear-lang select option { color: #1d1a2e; }
-.hear-lang:focus-within { outline: 2px solid var(--lav); outline-offset: 2px; }
+.hear-lang:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* AR のあいだは、現実が見えるよう、入口の背景も透明にする(背景は場所の柱が透明にする) */
 html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
 
 /* 入口 */
-.gate { position: fixed; inset: 0; display: grid; place-items: start center; padding: 20px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: rgba(12, 10, 22, 0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 10; }
+.gate { position: fixed; inset: 0; display: grid; place-items: start center; padding: 20px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: rgb(var(--scrim-rgb) / 0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); z-index: 10; }
 .gate.hidden { display: none; }
 .gate-card { margin: auto; /* 余りがある時は縦の真ん中、足りない時は上から並べて、gate ごと巻ける(横向きのスマホで「カメラなしで試す」が画面の外に出ていた。QA 高 2) */ width: min(440px, 100%); padding: 28px 24px; border-radius: 26px; background: var(--ink-2); border: 1px solid var(--line); display: grid; gap: 12px; }
 .gate-card h1 { margin: 0; font-size: clamp(22px, 6.4vw, 28px); letter-spacing: 0.04em; line-height: 1.3; }
@@ -195,15 +188,15 @@ html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: n
    「案内するのは主役のノリー…」が先に見えていた(M8b 4)。書いた所で main.js が html に guide-ready を付ける */
 html:not(.guide-ready) .gate-guide { visibility: hidden; }
 .lead { margin: 0 0 6px; color: var(--muted); line-height: 1.6; }
-.gate-first { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.6; color: var(--lav); background: rgba(183, 168, 255, 0.1); border: 1px solid rgba(183, 168, 255, 0.28); }
+.gate-first { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.6; color: var(--lav); background: rgb(var(--accent-rgb) / 0.1); border: 1px solid rgb(var(--accent-rgb) / 0.28); }
 .gate-first[hidden] { display: none; }
-.gate button { font: inherit; font-size: 16px; border-radius: 16px; padding: 13px 16px; cursor: pointer; border: 1px solid var(--line); color: var(--text); display: grid; gap: 2px; justify-items: center; text-align: center; }
+.gate button { font: inherit; font-size: 16px; border-radius: 16px; padding: 13px 16px; cursor: pointer; border: 1px solid var(--line-strong); color: var(--text); display: grid; gap: 2px; justify-items: center; text-align: center; }
 /* ボタンの言葉: 何をするか(大)+ どう動くか(小)。カメラのボタンはマイクを言わない・スマホではマウスと言わない(CRITux 15・24) */
 .gate .btn-sub { font-size: 14px; font-weight: 400; line-height: 1.4; opacity: 0.85; }
 .gate button[hidden] { display: none; } /* .gate button の display: grid が hidden に勝つため、ヘッドセットの入口に「カメラなしで試す」が見えていた(Q3 ③) */
-.gate .primary { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 0; font-weight: 700; }
+.gate .primary { background: linear-gradient(135deg, var(--btn-from), var(--btn-to)); border: 0; font-weight: 700; color: var(--on-btn); }
 .gate .ghost { background: transparent; }
-.gate button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.gate button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .gate button:disabled { opacity: 0.5; cursor: wait; }
 .fine { margin: 4px 0 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
 .status { margin: 0; min-height: 1.4em; font-size: 14px; color: var(--warn); }
@@ -213,13 +206,13 @@ html:not(.guide-ready) .gate-guide { visibility: hidden; }
    (字幕が出ている間は、字幕の列の高さに入るので、長い返事の字幕も足にかからない。main.js の subsHeight)。
    はじめての会話(下を札が覆う間): #aiNoticeTop を上の段のすぐ下の左に(その間は隠れている「Claude の考え」の場所)。入口: 入口の札の中の 1 行(#gateAi。子どもの使い方も)。
    画面のキーボードが出ている間だけは、入力の 1 行と字幕を先に見せるため隠す(注意書きと同じ。入る前と閉じた後は見える) */
-.ai-notice { margin: 0; padding: 2px 10px; border-radius: 999px; background: rgba(12, 10, 22, 0.5); font-size: 13px; line-height: 1.3; color: var(--muted); text-align: center; letter-spacing: 0.02em; pointer-events: none; }
+.ai-notice { margin: 0; padding: 2px 10px; border-radius: 999px; background: rgb(var(--scrim-rgb) / 0.5); font-size: 13px; line-height: 1.3; color: var(--muted); text-align: center; letter-spacing: 0.02em; pointer-events: none; }
 html.tv-mode .ai-notice { font-size: max(12px, 1.6vh); opacity: 0.85; }
 html.kb-open .ai-notice, html.fr-open #aiNotice { display: none; }
 .ai-notice-top { display: none; }
 html.fr-open:not(.kb-open) .ai-notice-top {
   display: block; position: fixed; z-index: 31; top: calc(max(12px, env(safe-area-inset-top)) + var(--top-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left));
-  max-width: calc(100vw - 180px); padding: 5px 10px; background: rgba(12, 10, 22, 0.62); text-align: left; font-size: 12px; letter-spacing: 0;
+  max-width: calc(100vw - 180px); padding: 5px 10px; background: rgb(var(--scrim-rgb) / 0.62); text-align: left; font-size: 12px; letter-spacing: 0;
 }
 /* BSFf: 「はじめての会話」の札が右に出る PC の幅では、長い決まった返事の字幕(相談先の電話番号を含む)が札の下に入って切れていた。字幕は札の左に収める */
 @media (min-width: 912px) {
@@ -313,8 +306,8 @@ html.is-led .top .chips { opacity: 0.55; transform: scale(0.85); transform-origi
   font: inherit; font-size: 14px; font-weight: 700; min-width: 44px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 999px;
   cursor: pointer; color: var(--muted); background: transparent; transition: background 0.2s ease, color 0.2s ease;
 }
-.look-switch button[aria-pressed="true"] { color: var(--ink); background: var(--lav); }
-.look-switch button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.look-switch button[aria-pressed="true"] { color: var(--on-chip); background: var(--lav); }
+.look-switch button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .look-switch button:disabled { cursor: wait; opacity: 0.6; }
 html.is-led .look-switch { display: none !important; }
 /* ---------- B5M: しつかん(3D の材質: いつもの・ぬの・け・つるつる)。見た目の 3D・2D の となり(main.js の B5M の塊・stage/shitsukanSwitch.js) ----------
@@ -328,24 +321,24 @@ html.is-led .look-switch { display: none !important; }
 html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
 .sk-open {
   font: inherit; font-size: 14px; display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0 10px;
-  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
+  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line-strong); white-space: nowrap;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .sk-open[aria-expanded="true"] { border-color: var(--lav); }
-.sk-open:focus-visible, .sk-list button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.sk-open:focus-visible, .sk-list button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .sk-list { display: none; }
 .sk-title { display: none; }
 .sk-list button {
   font: inherit; display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 56px; min-width: 44px; padding: 6px 4px;
-  border-radius: 14px; cursor: pointer; color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+  border-radius: 14px; cursor: pointer; color: var(--text); background: rgb(var(--tint-rgb) / 0.06); border: 1px solid var(--line-strong);
 }
-.sk-list button[aria-pressed="true"] { color: var(--ink); background: var(--lav); border-color: var(--lav); }
+.sk-list button[aria-pressed="true"] { color: var(--on-chip); background: var(--lav); border-color: var(--lav); }
 .sk-main { font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
 .sk-sub { font-size: 14px; line-height: 1.2; opacity: 0.85; white-space: nowrap; }
 @media (max-width: 1599px) {
   .shitsukan.open .sk-list {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; position: absolute; top: calc(100% + 6px); right: 0; z-index: 6;
-    width: min(380px, calc(100vw - 24px)); padding: 8px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    width: min(380px, calc(100vw - 24px)); padding: 8px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgb(var(--shadow-rgb) / 0.45);
   }
 }
 /* 低い画面(横向きのスマホ)では上の段の行が横に巻く(overflow-x)ので、札を上の段の全体(.top)の右にそろえて、巻く行で切れないようにする */
@@ -362,7 +355,7 @@ html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
   .sk-list button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); transition: background 0.2s ease, color 0.2s ease; }
   .sk-list .sk-sub { display: none; }
   .sk-list .sk-main { font-size: 14px; }
-  .sk-list button[aria-pressed="true"] { color: var(--ink); background: var(--lav); }
+  .sk-list button[aria-pressed="true"] { color: var(--on-chip); background: var(--lav); }
 }
 /* ---------- B5M ここまで ---------- */
 .thought-body .row[hidden] { display: none; }
@@ -370,13 +363,13 @@ html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
 /* 仮の頭脳の知らせ(契約 K5)。字幕の上に 1 行、黄色で */
 .brain-notice {
   width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(14px, 1.6vw, 15px); line-height: 1.4;
-  padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--warn); color: var(--warn);
+  padding: 5px 12px; border-radius: 999px; background: rgb(var(--scrim-rgb) / 0.74); border: 1px solid var(--warn); color: var(--warn);
 }
 .brain-notice[hidden] { display: none; }
 /* 短い知らせ(会話の側の ui.notice。鍵らしい文字を送らなかった、など)。数秒で消える */
 .ui-notice {
   width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(14px, 1.6vw, 15px); line-height: 1.4;
-  padding: 5px 12px; border-radius: 999px; background: rgba(12, 10, 22, 0.74); border: 1px solid var(--lav); color: var(--text);
+  padding: 5px 12px; border-radius: 999px; background: rgb(var(--scrim-rgb) / 0.74); border: 1px solid var(--lav); color: var(--text);
 }
 .ui-notice[hidden] { display: none; }
 
@@ -388,12 +381,12 @@ html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
   background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .drawer > summary::-webkit-details-marker { display: none; }
-.drawer > summary:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.drawer > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .drawer[open] > summary { border-color: var(--lav); }
 .top:has(.drawer[open]) { z-index: 7; } /* 開いている間は「Claude の考え」より手前に出す */
 .drawer-body {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: min(360px, calc(100vw - 24px)); max-height: 55vh; overflow: auto;
-  padding: 12px 14px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 12px 14px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgb(var(--shadow-rgb) / 0.45);
 }
 /* スマホと小さいタブレット: 上の段にボタン(性格・はじめての会話・AR)が増えると引き出しが右へ押され、開いた札が画面の外へはみ出した。
    札は上の段の全体(.top)の左にそろえる(幅 390 で、札のボタン 3 つが右の外に出ていたのを直した) */
@@ -405,20 +398,20 @@ html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
 .mem-notice, .mem-status { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .mem-status:empty { display: none; }
 .mem-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.mem-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); word-break: break-word; }
+.mem-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 10px; background: rgb(var(--tint-rgb) / 0.05); word-break: break-word; }
 .mem-empty { color: var(--muted); padding: 4px 0; }
 .mem-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 /* 記憶の札の押す所も 44px 以上(指で押せる大きさ。CRITux 20・S3 の頼み) */
 .memory-panel button {
   font: inherit; font-size: 14px; min-height: 44px; padding: 8px 12px; border-radius: 12px; cursor: pointer;
-  color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+  color: var(--text); background: rgb(var(--tint-rgb) / 0.06); border: 1px solid var(--line-strong);
 }
-.memory-panel button:focus-visible, .memory-panel input:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.memory-panel button:focus-visible, .memory-panel input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .memory-panel .mem-item-forget { min-height: 44px; min-width: 44px; padding: 4px 10px; font-size: 14px; }
 .memory-panel .mem-forget { border-color: var(--coral); color: var(--coral); }
 .memory-panel input {
   font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border-radius: 12px; width: 9.5em;
-  color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+  color: var(--text); background: rgb(var(--tint-rgb) / 0.06); border: 1px solid var(--line);
 }
 .memory-panel input[hidden] { display: none; }
 .mem-code { font-size: 22px; font-weight: 700; letter-spacing: 0.12em; color: var(--mint); font-variant-numeric: tabular-nums; }
@@ -433,7 +426,7 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
    長い言葉では PC(1280)で見た目の切り替えがキャラの横の範囲まで押し出され、キャラが上の段の下へ置き直されて 2 割小さくなった */
 .quest-link-btn {
   font: inherit; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px;
-  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
+  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line-strong); white-space: nowrap;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .ql-phone { display: none; }
@@ -454,12 +447,12 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
   .top .tv-btn { padding: 0 10px; }
 }
 .quest-link-btn[aria-expanded="true"] { border-color: var(--lav); }
-.quest-link-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.quest-link-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .quest-link-box {
   --ql-size: clamp(96px, calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 64px), 220px);
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; display: grid; grid-template-columns: var(--ql-size) minmax(0, 260px); gap: 12px; align-items: start;
   max-height: calc(45vh - max(12px, env(safe-area-inset-top)) - var(--top-h, 64px) - 22px); overflow: auto;
-  padding: 12px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 12px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 12px 32px rgb(var(--shadow-rgb) / 0.45);
 }
 @supports (height: 1dvh) {
   .quest-link-box {
@@ -479,7 +472,7 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
 .ql-send {
   justify-self: start; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 14px;
   border-radius: 999px; font-size: 14px; font-weight: 700; line-height: 1.2; white-space: nowrap; text-decoration: none;
-  color: #14121f; background: var(--lav); border: 1px solid var(--lav); cursor: pointer;
+  color: var(--on-chip); background: var(--lav); border: 1px solid var(--lav); cursor: pointer;
 }
 .ql-send:hover { filter: brightness(1.08); }
 .ql-send:active { transform: scale(0.97); }
@@ -524,16 +517,16 @@ html.fr-open .quest-link, html.is-led .quest-link, html.is-headset .quest-link {
 .gate .pass[hidden] { display: none; }
 .gate .pass input {
   font: inherit; font-size: 16px; padding: 12px 14px; border-radius: 14px; color: var(--text);
-  background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+  background: rgb(var(--tint-rgb) / 0.06); border: 1px solid var(--line);
 }
-.gate .pass input:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.gate .pass input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 html.is-led .drawer { display: none !important; }
 
 /* ---------- テレビ表示(11/7 本人「iPhone にあるものを AirPlay で、テレビにすぐパンって映せるようにしたい」。決まりは stage/tvMode.js) ----------
    上の段の入口: 見せる言葉は TV の印と「テレビ」だけ(押す所は 44px)。初めての会話(7 歩の札)の間・入口の LED・ヘッドセットでは出さない */
 .tv-btn {
   pointer-events: auto; font: inherit; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 12px;
-  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line); white-space: nowrap;
+  border-radius: 999px; cursor: pointer; color: var(--text); background: var(--glass); border: 1px solid var(--line-strong); white-space: nowrap;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .tv-btn[hidden] { display: none; }
@@ -553,7 +546,7 @@ html.is-led .drawer { display: none !important; }
   body:has(#tvBtn:not([hidden])) .look-switch .look-label { display: none; }
 }
 .tv-btn[aria-expanded="true"] { border-color: var(--lav); }
-.tv-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.tv-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 html.fr-open .tv-btn, html.is-led .tv-btn, html.is-headset .tv-btn, html.is-headset .tv-cast { display: none !important; }
 
 /* テレビ表示の間(html.tv-mode。main.js が付ける・?tv=1 でも): 小さな窓(上の段・考え・よくある質問・入力・案内)を隠し、隅の「もどる」だけを残す。
@@ -565,17 +558,17 @@ html.tv-mode .tv-exit {
   display: inline-flex; align-items: center; justify-content: center; position: fixed; z-index: 9;
   top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right));
   min-height: 44px; min-width: 44px; padding: 0 14px; font: inherit; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer;
-  border-radius: 999px; background: rgba(12, 10, 22, 0.55); border: 1px solid var(--line); opacity: 0.6; transition: opacity 0.2s ease;
+  border-radius: 999px; background: rgb(var(--scrim-rgb) / 0.55); border: 1px solid var(--line-strong); opacity: 0.6; transition: opacity 0.2s ease;
 }
 html.tv-mode .tv-exit:hover, html.tv-mode .tv-exit:focus-visible { opacity: 1; }
-html.tv-mode .tv-exit:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+html.tv-mode .tv-exit:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 html.tv-mode .bottom { padding: 0 12px calc(6px + var(--safe-b)); }
 html.tv-mode .privacy { width: auto; font-size: max(12px, 1.6vh); opacity: 0.8; }
 /* 字幕: 3 m 先から読める大きさ(字の高さ = 画面の高さの 6%。--tv-cap は main.js が px で入れる)。今の文だけを大きく、箱は 3 行まで(長い返事は新しい行を見せる) */
 html.tv-mode .subs { width: min(92vw, 1800px); bottom: calc(var(--bottom-h, 0px) + max(10px, 3vh)); gap: max(6px, 1vh); }
 html.tv-mode .caption, html.tv-mode .caption.settled, html.tv-mode .caption.user {
   font-size: var(--tv-cap, clamp(24px, 6vh, 120px)); line-height: 1.3; padding: max(8px, 1.2vh) max(14px, 2.2vh); border-radius: max(14px, 2vh);
-  max-height: calc(var(--tv-cap, 6vh) * 1.3 * var(--tv-rows, 3) + max(16px, 2.4vh) + 2px); overflow: hidden; background: rgba(12, 10, 22, 0.78);
+  max-height: calc(var(--tv-cap, 6vh) * 1.3 * var(--tv-rows, 3) + max(16px, 2.4vh) + 2px); overflow: hidden; background: rgb(var(--scrim-rgb) / 0.78);
 }
 html.tv-mode .caption .cap-prev { display: none; }
 html.tv-mode .caption.user { font-size: calc(var(--tv-cap, 6vh) * 0.75); }
@@ -584,7 +577,7 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
 @media (orientation: portrait) and (pointer: coarse) {
   html.tv-mode .tv-rotate {
     display: block; position: fixed; z-index: 9; top: max(10px, env(safe-area-inset-top)); left: 12px; right: 96px; margin: 0;
-    font-size: 14px; line-height: 1.4; padding: 6px 12px; border-radius: 14px; color: var(--text); background: rgba(12, 10, 22, 0.7); border: 1px solid var(--lav);
+    font-size: 14px; line-height: 1.4; padding: 6px 12px; border-radius: 14px; color: var(--text); background: rgb(var(--scrim-rgb) / 0.7); border: 1px solid var(--lav);
   }
 }
 
@@ -594,14 +587,14 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
 .tv-guide {
   position: fixed; z-index: 12; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); max-width: min(56vw, 560px);
   display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 14px; border-radius: 16px; color: var(--text);
-  background: rgba(12, 10, 22, 0.82); border: 1px solid var(--lav);
+  background: rgb(var(--scrim-rgb) / 0.82); border: 1px solid var(--lav);
 }
 .tv-guide-text { margin: 0; font-size: 14px; line-height: 1.5; }
 .tv-guide-close {
   flex: none; min-width: 44px; min-height: 44px; font: inherit; font-size: 22px; line-height: 1; color: var(--text); cursor: pointer;
   border-radius: 999px; background: transparent; border: 0;
 }
-.tv-guide-close:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.tv-guide-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 @media (orientation: portrait) and (pointer: coarse) {
   .tv-guide { top: calc(max(10px, env(safe-area-inset-top)) + 56px); right: 12px; max-width: none; }
 }
@@ -609,12 +602,12 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
 /* 「テレビに映す」(iPhone・iPad): 画面ミラーリングの 3 つの手順と、大きな「テレビ表示にする」。入口と同じ形の真ん中の札(子どもにも読める大きな字) */
 .tv-cast {
   position: fixed; inset: 0; z-index: 11; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
-  background: rgba(12, 10, 22, 0.72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); overflow: auto;
+  background: rgb(var(--scrim-rgb) / 0.72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); overflow: auto;
 }
 .tv-cast[hidden] { display: none; }
 .tv-cast-card {
   width: min(460px, 100%); max-height: 100%; overflow: auto; padding: 22px 20px; border-radius: 24px; background: var(--ink-2); border: 1px solid var(--line);
-  display: grid; gap: 12px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  display: grid; gap: 12px; box-shadow: 0 16px 48px rgb(var(--shadow-rgb) / 0.5);
 }
 .tv-cast-card h2 { margin: 0; font-size: 24px; line-height: 1.3; letter-spacing: 0.04em; }
 .tv-cast-lead, .tv-cast-note { margin: 0; font-size: 15px; line-height: 1.6; color: var(--muted); }
@@ -623,15 +616,15 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
 .tv-cast-steps li { counter-increment: tvstep; display: grid; grid-template-columns: 36px 1fr; column-gap: 10px; align-items: center; }
 .tv-cast-steps li::before {
   content: counter(tvstep); grid-row: span 2; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
-  font-size: 18px; font-weight: 800; color: var(--ink); background: var(--mint);
+  font-size: 18px; font-weight: 800; color: var(--on-chip); background: var(--mint);
 }
 .tv-cast-steps b { font-size: 18px; line-height: 1.4; }
 .tv-cast-steps small { font-size: 14px; line-height: 1.5; color: var(--muted); }
 .tv-cast button { font: inherit; border-radius: 16px; cursor: pointer; color: var(--text); }
-.tv-enter { min-height: 64px; padding: 12px 16px; border: 0; display: grid; gap: 2px; justify-items: center; font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #7d62ff, #c15bff); }
+.tv-cast .tv-enter { color: var(--on-btn); min-height: 64px; padding: 12px 16px; border: 0; display: grid; gap: 2px; justify-items: center; font-size: 20px; font-weight: 800; background: linear-gradient(135deg, var(--btn-from), var(--btn-to)); }
 .tv-enter .btn-sub { font-size: 14px; font-weight: 400; opacity: 0.9; }
-.tv-cast-close { min-height: 44px; padding: 8px 16px; font-size: 16px; background: transparent; border: 1px solid var(--line); }
-.tv-cast button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.tv-cast-close { min-height: 44px; padding: 8px 16px; font-size: 16px; background: transparent; border: 1px solid var(--line-strong); }
+.tv-cast button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* 横向きの iPhone(高さ 430px まで): 手順と押す所を左右に並べ、縦に収める */
 @media (orientation: landscape) and (max-height: 430px) {
   .tv-cast-card { width: min(760px, 100%); grid-template-columns: 1.3fr 1fr; column-gap: 18px; row-gap: 8px; padding: 14px 18px; }
@@ -648,11 +641,11 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
    窓の下の端が足され(ui/sheet.js の sheetGuard)、キャラは窓の下へ置き直される(重ならない・形は変えない)。下の帯は動かさない。字は 14px 以上 */
 .yc-update-badge {
   pointer-events: auto; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 999px;
-  font: inherit; font-size: 14px; color: var(--ink); background: var(--warn); border: 1px solid rgba(255, 255, 255, 0.4); cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  font: inherit; font-size: 14px; color: var(--on-chip); background: var(--warn); border: 1px solid rgb(var(--tint-rgb) / 0.4); cursor: pointer;
+  box-shadow: 0 4px 14px rgb(var(--shadow-rgb) / 0.25);
 }
 .yc-update-badge[hidden] { display: none; }
-.yc-update-badge:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.yc-update-badge:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .yc-update-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); flex: none; }
 .yc-update-short { display: none; }
 @media (max-width: 640px) {
@@ -662,14 +655,14 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
 }
 .yc-audio-btn {
   flex: none; width: 44px; min-height: 44px; padding: 0 !important; display: grid; place-items: center;
-  background: var(--glass) !important; border: 1px solid var(--line) !important; color: var(--text);
+  background: var(--glass) !important; border: 1px solid var(--line-strong) !important; color: var(--text);
 }
 .yc-audio-btn[aria-expanded="true"] { border-color: var(--lav) !important; color: var(--lav); }
 .yc-sheet {
   position: fixed; z-index: 8; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; margin: 0 auto;
   width: min(calc(100% - 24px), 560px); max-height: min(40vh, 400px); max-height: min(40dvh, 400px); overflow: auto; overscroll-behavior: contain;
   padding: 12px 14px 14px; border-radius: var(--radius); background: var(--ink-2); border: 1px solid var(--line); /* 不透明(上の段の字が透けて見えないように) */
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 32px rgb(var(--shadow-rgb) / 0.45);
   display: grid; gap: 10px; align-content: start; font-size: 15px; line-height: 1.55; color: var(--text);
 }
 .yc-sheet[hidden] { display: none; }
@@ -690,12 +683,12 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
 .yc-sheet-head h2 { margin: 0; font-size: 17px; letter-spacing: 0.04em; }
 .yc-sheet-close, .yc-btn, .yc-link-btn {
   font: inherit; font-size: 14px; min-height: 44px; padding: 8px 14px; border-radius: 14px; cursor: pointer; color: var(--text);
-  background: transparent; border: 1px solid var(--line);
+  background: transparent; border: 1px solid var(--line-strong);
 }
-.yc-sheet-close:focus-visible, .yc-btn:focus-visible, .yc-link-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.yc-sheet-close:focus-visible, .yc-btn:focus-visible, .yc-link-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .yc-btn:disabled { opacity: 0.55; cursor: wait; }
 .yc-btn[hidden], .yc-link-btn[hidden] { display: none; }
-.yc-btn-main { border: 0; font-weight: 700; background: linear-gradient(135deg, #7d62ff, #c15bff); }
+.yc-btn-main { border: 0; font-weight: 700; color: var(--on-btn); background: linear-gradient(135deg, var(--btn-from), var(--btn-to)); }
 .yc-btn-small { min-height: 40px; padding: 6px 12px; justify-self: start; }
 .yc-link-btn { justify-self: start; border-style: dashed; color: var(--muted); }
 .yc-sheet p, .yc-sheet ul, .yc-sheet ol, .yc-sheet h3 { margin: 0; }
@@ -707,10 +700,10 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
   font: inherit; font-size: 15px; min-height: 44px; width: 100%; min-width: 0; padding: 0 10px; border-radius: 12px;
   color: var(--text); background: var(--ink); border: 1px solid var(--line);
 }
-.yc-select:focus-visible { outline: 2px solid var(--lav); outline-offset: 1px; }
+.yc-select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .yc-meter-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; }
 .yc-meter-label { font-size: 14px; color: var(--muted); }
-.yc-meter { height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.yc-meter { height: 12px; border-radius: 999px; background: rgb(var(--tint-rgb) / 0.08); overflow: hidden; }
 .yc-meter-bar { display: block; height: 100%; width: 100%; transform: scaleX(0); transform-origin: left center; background: linear-gradient(90deg, var(--mint), var(--lav)); transition: transform 0.06s linear; }
 .yc-au-actions, .yc-up-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .yc-au-route, .yc-au-foot, .yc-au-lead, .yc-up-keep { font-size: 14px; color: var(--muted); }
@@ -723,19 +716,19 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
 .yc-up-details summary { cursor: pointer; font-size: 14px; color: var(--muted); min-height: 32px; }
 .yc-up-raw { margin: 6px 0 0; max-height: 9em; overflow: auto; white-space: pre-wrap; word-break: break-all; font: inherit; font-size: 14px; color: var(--muted); }
 .yc-up-offer-list { list-style: none; padding: 0; display: grid; gap: 10px; }
-.yc-up-offer { display: grid; gap: 4px; padding: 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+.yc-up-offer { display: grid; gap: 4px; padding: 10px; border-radius: 12px; background: rgb(var(--tint-rgb) / 0.04); border: 1px solid var(--line); }
 .yc-up-offer > span { font-size: 14px; color: var(--muted); }
 .yc-up-asked { font-size: 14px; color: var(--mint); }
 /* 知らせは低く(ボタンを横に並べる。字幕の場所の高さに収め、キャラの足元へ伸びない) */
 .yc-note { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; text-align: left; border-radius: 16px; padding: 6px 8px 6px 14px; }
 .yc-note[hidden] { display: none; }
 .yc-note-text { flex: 1 1 auto; min-width: 0; }
-.yc-note-action { flex: none; font: inherit; font-size: 14px; min-height: 40px; padding: 4px 12px; border-radius: 999px; cursor: pointer; color: var(--ink); background: var(--lav); border: 0; pointer-events: auto; }
+.yc-note-action { flex: none; font: inherit; font-size: 14px; min-height: 40px; padding: 4px 12px; border-radius: 999px; cursor: pointer; color: var(--on-chip); background: var(--lav); border: 0; pointer-events: auto; }
 @media (max-width: 640px) {
   .yc-au-lead { display: none; } /* 電話の幅: 窓の名前で分かるので、押す所を先に見せる */
 }
 .yc-note-action[hidden] { display: none; }
-.yc-gate-update { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 15px; line-height: 1.5; background: rgba(123, 224, 195, 0.14); border: 1px solid var(--mint); }
+.yc-gate-update { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 15px; line-height: 1.5; background: rgb(var(--mint-rgb) / 0.14); border: 1px solid var(--mint); }
 html.tv-mode .yc-update-badge, html.tv-mode .yc-sheet, html.tv-mode .yc-note { display: none !important; }
 /* ---- BUX ここまで ---- */
 
@@ -766,10 +759,10 @@ html.kb-short .top, html.kb-short .look-switch, html.kb-short .tv-btn, html.kb-s
 
 
 /* ---------- BCV: カメラは使う人が決める(入力の列のボタン・テレビ表示の隅のボタン・入れる前の知らせ・入っている間の赤い点の札) ---------- */
-.cam { background: var(--glass); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; position: relative; min-width: 44px; }
+.cam { background: var(--glass); border: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; position: relative; min-width: 44px; }
 .cam[hidden], .tv-cam[hidden] { display: none !important; }
-.cam.on { background: rgba(255, 90, 90, 0.2); border-color: #ff6b6b; color: #ffd9d9; }
-.cam-dot { display: none; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #ff5a5a; box-shadow: 0 0 0 3px rgba(255, 90, 90, 0.28); }
+.cam.on { background: rgb(var(--rec-rgb) / 0.2); border-color: var(--rec); color: var(--rec-text); }
+.cam-dot { display: none; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--rec); box-shadow: 0 0 0 3px rgb(var(--rec-rgb) / 0.28); }
 .cam.on .cam-dot, .tv-cam.on .cam-dot { display: inline-block; }
 @media (max-width: 640px) {
   .cam .cam-label { display: none; } /* マイクと同じく、狭い画面は印だけ(赤い点は右上に重ねる) */
@@ -777,9 +770,9 @@ html.kb-short .top, html.kb-short .look-switch, html.kb-short .tv-btn, html.kb-s
 }
 /* 上の札の先頭の印(絵を送るカメラが入っている間だけ。main.js の updateChips が出す)。高さ 500 未満で札の列を隠す時も、この札だけ残す。
    名前は cam-rec(.rec は下の注意書きの 8px の点の名前で、同じ名前だと札が点の大きさにつぶれた) */
-.chip.cam-rec { color: #ffd9d9; background: rgba(255, 70, 70, 0.2); border-color: rgba(255, 107, 107, 0.65); }
-.chip.cam-rec b { color: #ffe9e9; }
-.chip.cam-rec::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 2px; border-radius: 50%; background: #ff5a5a; }
+.chip.cam-rec { color: var(--rec-text); background: rgb(var(--rec-rgb) / 0.2); border-color: rgb(var(--rec-rgb) / 0.65); }
+.chip.cam-rec b { color: var(--rec-text); }
+.chip.cam-rec::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 2px; border-radius: 50%; background: var(--rec); }
 @media (max-height: 500px) {
   .chips:has(.chip.cam-rec) { display: flex; }
   .chips:has(.chip.cam-rec) .chip:not(.cam-rec) { display: none; }
@@ -790,11 +783,11 @@ html.tv-mode .tv-cam {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; position: fixed; z-index: 9;
   top: max(10px, env(safe-area-inset-top)); right: calc(max(10px, env(safe-area-inset-right)) + 92px);
   min-height: 44px; min-width: 44px; padding: 0 12px; font: inherit; color: var(--text); cursor: pointer;
-  border-radius: 999px; background: rgba(12, 10, 22, 0.55); border: 1px solid var(--line); opacity: 0.6; transition: opacity 0.2s ease;
+  border-radius: 999px; background: rgb(var(--scrim-rgb) / 0.55); border: 1px solid var(--line-strong); opacity: 0.6; transition: opacity 0.2s ease;
 }
-html.tv-mode .tv-cam.on { opacity: 0.9; border-color: #ff6b6b; color: #ffd9d9; }
+html.tv-mode .tv-cam.on { opacity: 0.9; border-color: var(--rec); color: var(--rec-text); }
 html.tv-mode .tv-cam:hover, html.tv-mode .tv-cam:focus-visible { opacity: 1; }
-html.tv-mode .tv-cam:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+html.tv-mode .tv-cam:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* 縦持ちの一言(左上)は、カメラの隅のボタンの左で止める。ボタンは入れている間、赤い点の分だけ広い(幅 約 60px)。重ならないよう 10px あける */
 @media (orientation: portrait) and (pointer: coarse) {
   html.tv-mode body:has(#tvCam:not([hidden])) .tv-rotate { right: calc(max(10px, env(safe-area-inset-right)) + 162px); }
@@ -802,23 +795,23 @@ html.tv-mode .tv-cam:focus-visible { outline: 2px solid var(--lav); outline-offs
 /* 入れる前の知らせ(入口・「テレビに映す」と同じ形の真ん中の札。子どもにも読める大きな字) */
 .cam-ask {
   position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
-  background: rgba(12, 10, 22, 0.66); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); overflow: auto;
+  background: rgb(var(--scrim-rgb) / 0.66); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); overflow: auto;
 }
 .cam-ask[hidden] { display: none; }
-.cam-ask-card { width: min(420px, 100%); max-height: 100%; overflow: auto; padding: 20px; border-radius: 22px; background: var(--ink-2); border: 1px solid var(--line); display: grid; gap: 12px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5); }
+.cam-ask-card { width: min(420px, 100%); max-height: 100%; overflow: auto; padding: 20px; border-radius: 22px; background: var(--ink-2); border: 1px solid var(--line); display: grid; gap: 12px; box-shadow: 0 16px 48px rgb(var(--shadow-rgb) / 0.5); }
 .cam-ask-card h2 { margin: 0; font-size: 20px; line-height: 1.3; }
 .cam-ask-text { margin: 0; font-size: 16px; line-height: 1.7; color: var(--text); }
 .cam-ask-mock { margin: 0; font-size: 14px; line-height: 1.6; color: var(--warn); }
 .cam-ask-mock[hidden] { display: none; }
 .cam-ask-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.cam-ask button { font: inherit; font-size: 16px; min-height: 48px; padding: 8px 12px; border-radius: 14px; cursor: pointer; color: var(--text); border: 1px solid var(--line); }
-.cam-ask .cam-ask-yes { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 0; font-weight: 700; }
+.cam-ask button { font: inherit; font-size: 16px; min-height: 48px; padding: 8px 12px; border-radius: 14px; cursor: pointer; color: var(--text); border: 1px solid var(--line-strong); }
+.cam-ask .cam-ask-yes { background: linear-gradient(135deg, var(--btn-from), var(--btn-to)); border: 0; font-weight: 700; color: var(--on-btn); }
 .cam-ask .cam-ask-no { background: transparent; }
-.cam-ask .cam-ask-back { display: grid; gap: 2px; justify-items: center; background: rgba(123, 224, 195, 0.12); border-color: rgba(123, 224, 195, 0.45); }
+.cam-ask .cam-ask-back { display: grid; gap: 2px; justify-items: center; background: rgb(var(--mint-rgb) / 0.12); border-color: rgb(var(--mint-rgb) / 0.45); }
 .cam-ask .cam-ask-back[hidden] { display: none; }
 .cam-ask-back .btn-sub { font-size: 14px; opacity: 0.85; }
 .cam-ask button:disabled { opacity: 0.55; cursor: wait; }
-.cam-ask button:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.cam-ask button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .cam-ask-status { margin: 0; font-size: 14px; line-height: 1.5; color: var(--warn); }
 .cam-ask-status:empty { display: none; }
 /* テレビ表示の間は、知らせの窓も 3 m 先から読める大きさ(画面の高さに合わせる。テレビの字幕と同じ考え) */
@@ -837,13 +830,13 @@ html.tv-mode .cam-ask button { font-size: max(16px, 3vh); min-height: max(48px, 
 .top-main[hidden] { display: none; }
 .tm-btn {
   font: inherit; font-size: 16px; font-weight: 700; min-height: 48px; padding: 0 18px; border-radius: 999px; cursor: pointer;
-  color: var(--text); background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  color: var(--text); background: var(--glass); border: 1px solid var(--line-strong); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   -webkit-user-select: none; user-select: none; touch-action: manipulation;
 }
-.tm-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.tm-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .tm-btn[aria-expanded="true"] { border-color: var(--lav); color: var(--lav); }
-.tm-talk { border: 0; color: #fff; background: linear-gradient(135deg, #7d62ff, #c15bff); box-shadow: 0 6px 18px rgba(125, 98, 255, 0.35); padding: 0 24px; }
-.tm-talk.hearing { background: linear-gradient(135deg, #ff8f7a, #ff6fa8); }
+.tm-talk { border: 0; color: var(--on-btn); background: linear-gradient(135deg, var(--btn-from), var(--btn-to)); box-shadow: 0 6px 18px rgb(var(--btn-glow-rgb) / 0.35); padding: 0 24px; }
+.tm-talk.hearing { background: linear-gradient(135deg, var(--hear-from), var(--hear-to)); color: var(--on-hear); }
 .grown-up { margin: 0; font-size: 14px; color: var(--muted); pointer-events: none; }
 .grown-up[hidden], html:not(.top-more) .grown-up { display: none; }
 html.top-simple:not(.top-more) .top .chips,
@@ -866,10 +859,10 @@ html.top-simple.top-more #modes > .fr-launch, html.top-simple.top-more #modes > 
   html.top-simple #memoryDrawer[open] > .drawer-body {
     max-height: max(120px, calc(45vh - 140px)); max-height: max(120px, calc(45dvh - 140px)); overflow-y: auto; -webkit-overflow-scrolling: touch;
     background:
-      linear-gradient(var(--ink-2) 30%, rgba(0, 0, 0, 0)) center top / 100% 24px no-repeat local,
-      linear-gradient(rgba(0, 0, 0, 0), var(--ink-2) 70%) center bottom / 100% 24px no-repeat local,
-      radial-gradient(farthest-side at 50% 0, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0)) center top / 100% 12px no-repeat scroll,
-      radial-gradient(farthest-side at 50% 100%, rgba(190, 160, 255, 0.55), rgba(190, 160, 255, 0)) center bottom / 100% 14px no-repeat scroll;
+      linear-gradient(var(--ink-2) 30%, rgb(var(--shadow-rgb) / 0)) center top / 100% 24px no-repeat local,
+      linear-gradient(rgb(var(--shadow-rgb) / 0), var(--ink-2) 70%) center bottom / 100% 24px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgb(var(--tint-rgb) / 0.28), rgb(var(--tint-rgb) / 0)) center top / 100% 12px no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgb(var(--accent-rgb) / 0.55), rgb(var(--accent-rgb) / 0)) center bottom / 100% 14px no-repeat scroll;
   }
 }
 /* Quest の箱を開いている間(html.quest-open。main.js が付ける): 上の段の入口のほかの物はしまう。上の段が低くなり、箱は
@@ -898,7 +891,7 @@ html.top-simple .thought-head .dot { display: none; }
 /* 来場者には、はかる数字(返事が始まるまで ○ 秒・目安)と「用件」の中身の言葉は出さない(UW5r 中 4。作る人の点検は ?perf=1 の画面で見る) */
 html.top-simple .thought-foot, html.top-simple .thought-body .row:has(#tIntent) { display: none; }
 /* 「ノリーにもどす」は紫にしない(いちばん目立つのは「はなす」) */
-html.top-simple .top .fr-return { background: var(--glass); color: var(--text); border: 1px solid var(--line); font-weight: 400; }
+html.top-simple .top .fr-return { background: var(--glass); color: var(--text); border: 1px solid var(--line-strong); font-weight: 400; }
 /* しつかん(B5M の中くらい): 上の段の「かえる」の中では、どの幅でも 4 つを並べて出す(2 回押さない)。せまい画面は 1 行を使う */
 html.top-simple .top .shitsukan { position: static; }
 html.top-simple .top .sk-open { display: none; }
@@ -910,7 +903,7 @@ html.top-simple .top .sk-title { display: inline; font-size: 14px; color: var(--
 html.top-simple .top .sk-list button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); }
 html.top-simple .top .sk-list .sk-sub { display: none; }
 html.top-simple .top .sk-list .sk-main { font-size: 14px; }
-html.top-simple .top .sk-list button[aria-pressed="true"] { color: var(--ink); background: var(--lav); }
+html.top-simple .top .sk-list button[aria-pressed="true"] { color: var(--on-chip); background: var(--lav); }
 /* マイク(UIR 17): スマホでも「はなす」の字を出す。聞いている間は「きいているよ」(main.js が入れる) */
 @media (max-width: 640px) {
   html.top-simple .mic span#micLabel { display: inline; }
@@ -955,7 +948,7 @@ input[type="range"] { touch-action: pan-y; } /* つまみを左右に動かす(�
   background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .composer textarea::placeholder { color: var(--muted); }
-.composer textarea:focus-visible { outline: 2px solid var(--lav); outline-offset: 1px; }
+.composer textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 /* スマホの幅: 入力窓は 1 行目に全幅。「はなす」・歯車・カメラは 2 行目の左、「送る」は右(キーボードの上でも両方見える) */
 @media (max-width: 640px) {
   .composer { flex-wrap: wrap; }
@@ -980,8 +973,8 @@ html.kb-short .composer .mic, html.kb-short .composer .cam, html.kb-short .compo
 @keyframes wd-blink { 0%, 70%, 100% { opacity: 0.3; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
 
 /* 入口: ノリーの顔の丸(CSS の絵。初めての会話の吹き出しの顔と同じ形)が、息をするように上下して、動く点が続く。押せるようになったら顔は止まり、ボタンが光る */
-.gate-wake { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 18px; background: rgba(183, 168, 255, 0.1); border: 1px solid rgba(183, 168, 255, 0.34); }
-.gw-face { position: relative; flex: none; display: block; width: 36px; height: 36px; margin: 9px; border-radius: 50%; overflow: hidden; background: #3a3156; --gw-s: 1.5; transform: scale(var(--gw-s)); animation: gw-breathe 2.4s ease-in-out infinite; }
+.gate-wake { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 18px; background: rgb(var(--accent-rgb) / 0.1); border: 1px solid rgb(var(--accent-rgb) / 0.34); }
+.gw-face { position: relative; flex: none; display: block; width: 36px; height: 36px; margin: 9px; border-radius: 50%; overflow: hidden; background: var(--face-bg); --gw-s: 1.5; transform: scale(var(--gw-s)); animation: gw-breathe 2.4s ease-in-out infinite; }
 .gw-face i { position: absolute; display: block; }
 .gw-face .ff-ear { top: 3px; width: 11px; height: 14px; border-radius: 50% 50% 40% 40%; background: #5b463c; }
 .gw-face .ff-ear.ff-l { left: 6px; transform: rotate(-16deg); }
@@ -998,25 +991,25 @@ html.kb-short .composer .mic, html.kb-short .composer .cam, html.kb-short .compo
 .gw-line { display: flex; align-items: center; flex-wrap: wrap; }
 .gw-text { font-size: 17px; line-height: 1.4; color: var(--text); }
 .gw-hint { font-size: 14px; line-height: 1.4; color: var(--muted); }
-html.gate-ready .gate-wake { background: rgba(123, 224, 195, 0.12); border-color: rgba(123, 224, 195, 0.55); }
+html.gate-ready .gate-wake { background: rgb(var(--mint-rgb) / 0.12); border-color: rgb(var(--mint-rgb) / 0.55); }
 html.gate-ready .gw-face { animation: gw-hop 0.7s ease-out 1; }
 html.gate-ready .gw-text { color: var(--mint); }
 html.gate-ready .gate-wake .wd, html.gate-ready .gw-hint { display: none; }
-html.gate-failed .gate-wake { background: rgba(255, 211, 122, 0.1); border-color: rgba(255, 211, 122, 0.5); }
+html.gate-failed .gate-wake { background: rgb(var(--warn-rgb) / 0.1); border-color: rgb(var(--warn-rgb) / 0.5); }
 html.gate-failed .gw-face { animation: none; }
 html.gate-failed .gate-wake .wd, html.gate-failed .gw-hint { display: none; }
 html.gate-failed .gw-text { color: var(--warn); }
 @keyframes gw-hop { 0% { transform: scale(var(--gw-s)) translateY(0); } 40% { transform: scale(var(--gw-s)) translateY(-7px); } 100% { transform: scale(var(--gw-s)) translateY(0); } }
 /* 押せる印: 光の輪がゆっくり出る(押せる間だけ。押せない間は薄いまま) */
 .gate .primary { position: relative; }
-.gate .primary::after { content: ""; position: absolute; inset: -5px; border-radius: 21px; border: 2px solid #c9a8ff; opacity: 0; pointer-events: none; }
+.gate .primary::after { content: ""; position: absolute; inset: -5px; border-radius: 21px; border: 2px solid var(--accent); opacity: 0; pointer-events: none; }
 html.gate-ready .gate .primary:not(:disabled)::after { animation: gw-ring 1.8s ease-in-out infinite; }
 @keyframes gw-ring { 0%, 100% { opacity: 0; transform: scale(0.97); } 50% { opacity: 0.9; transform: scale(1.02); } }
 
 /* 押した後〜最初の一言・話しかけた後〜返事の最初の文字: 字幕の場所の「…」。字幕の箱(.subs)の中、字幕の所に置く(仮の頭脳の知らせ・注意書きと重ならない)。
    箱は下に寄せてあるので、キャラの置き方は変わらない(下の余白は字幕の文字が出た時の高さで測る)。最初の文字が出たら消える(main.js)。はじめての会話の札・入口・テレビ表示の間は出さない */
 .wait-bubble { display: flex; align-items: center; justify-content: center;
-  width: max-content; max-width: 100%; margin: 0; padding: 10px 20px; border-radius: 22px 22px 22px 6px; background: rgba(12, 10, 22, 0.78); border: 1px solid rgba(183, 168, 255, 0.4);
+  width: max-content; max-width: 100%; margin: 0; padding: 10px 20px; border-radius: 22px 22px 22px 6px; background: rgb(var(--scrim-rgb) / 0.78); border: 1px solid rgb(var(--accent-rgb) / 0.4);
   color: var(--text); font-size: clamp(16px, 4.4vw, 22px); font-weight: 700; line-height: 1.4; pointer-events: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .wait-bubble[hidden] { display: none; }
 html.fr-open .wait-bubble, html.gate-up .wait-bubble, html.tv-mode .wait-bubble, html.is-led .wait-bubble, html.is-headset .wait-bubble { display: none; }

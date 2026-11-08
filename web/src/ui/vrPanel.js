@@ -1,5 +1,7 @@
 // VR・ヘッドセットの AR の中の文字。ページの文字(DOM)は見えないので、いまの状態と話した言葉を、キャラの横の板に描く。
 import * as THREE from 'three';
+// 板の地と字・状態の色は「いろ」で替わる(theme.js が CSS の変数を読む)。下の VR_STATES の color は、読めない時の値(むらさき)
+import { getTheme, onThemeChange, readVrColors, rgbCss } from '../theme.js';
 
 const W = 1024;
 const H = 480;
@@ -61,11 +63,12 @@ export function createVrPanel({ scene }) {
 
   function draw() {
     g.clearRect(0, 0, W, H);
-    g.fillStyle = 'rgba(20, 18, 31, 0.86)';
+    const vr = readVrColors();
+    g.fillStyle = rgbCss(vr.panelRgb, 0.86);
     roundRect(0, 0, W, H, 36);
     g.fill();
     const st = VR_STATES[shown.state] ?? VR_STATES.idle;
-    g.fillStyle = st.color;
+    g.fillStyle = vr.states[shown.state === 'transcribing' ? 'thinking' : shown.state] ?? st.color;
     g.beginPath();
     g.arc(PADDING + 14, PADDING + 18, 14, 0, Math.PI * 2);
     g.fill();
@@ -85,11 +88,16 @@ export function createVrPanel({ scene }) {
       }
       y += 10;
     };
-    if (shown.error) block(shown.error, '#ff8d8d', 36, 3);
-    if (shown.user) block(`あなた: ${shown.user}`, '#b9b3d6', 34, 2);
-    if (shown.reply) block(shown.reply, '#ffffff', 42, 4);
+    if (shown.error) block(shown.error, vr.error, 36, 3);
+    if (shown.user) block(`あなた: ${shown.user}`, vr.user, 34, 2);
+    if (shown.reply) block(shown.reply, vr.reply, 42, 4);
     texture.needsUpdate = true;
   }
+
+  onThemeChange(() => {
+    drawn = '';
+    draw();
+  });
 
   return {
     mesh,
@@ -100,7 +108,7 @@ export function createVrPanel({ scene }) {
     /** @param {{state?:string, user?:string, reply?:string, error?:string}} next 変わった時だけ描き直す(毎フレーム描くと、VR では重い) */
     set(next) {
       Object.assign(shown, next);
-      const key = JSON.stringify(shown);
+      const key = JSON.stringify(shown) + getTheme();
       if (key !== drawn) {
         drawn = key;
         draw();
