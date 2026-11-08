@@ -16,6 +16,7 @@ import argparse
 import copy
 import json
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -76,8 +77,45 @@ def tag(e):
     return e.tag.split("}")[-1]
 
 
+# ---- 絵の消毒(読んだ SVG は人が描いた物とは限らない。測る前・書き出す前に、動く物と外への参照を落とす) ----
+DROP_TAGS = {"script", "foreignobject", "meta", "link", "iframe", "frame", "object", "embed", "audio", "video", "base",
+             "handler", "listener"}
+ANIMATE_TAGS = {"set", "animate"}  # href などの向き先を書き換えられるので、attributeName が href 系の時だけ落とす
+EXTERNAL = re.compile(r"(javascript:|vbscript:|https?:|ftp:|file:|data:text|data:application|@import|expression\(|"
+                      r"url\(\s*['\"]?\s*(?!#|data:image/(?:png|jpeg|gif|webp)))", re.I)
+SAFE_HREF = re.compile(r"^\s*(#|data:image/(?:png|jpeg|gif|webp)[;,])", re.I)
+
+
+def _local(name):
+    return name.rsplit("}", 1)[-1].lower() if isinstance(name, str) else ""
+
+
+def sanitize_root(root):
+    """root の中から、script・foreignObject・meta(refresh)・iframe など、on… の属性、
+    外への参照(#・小さな画像の data: 以外の href、外の url(...))を落とす。root を直して返す。"""
+    for parent in list(root.iter()):
+        for ch in list(parent):
+            name = _local(ch.tag)
+            hostile_style = name == "style" and EXTERNAL.search("".join(ch.itertext()))
+            animates_href = name in ANIMATE_TAGS and "href" in (ch.get("attributeName") or "").lower()
+            if name in DROP_TAGS or hostile_style or animates_href:
+                parent.remove(ch)
+    for e in root.iter():
+        for k in list(e.attrib):
+            v = e.attrib[k]
+            name = _local(k)
+            if name.startswith("on") or (name == "href" and not SAFE_HREF.match(v)) or EXTERNAL.search(v):
+                del e.attrib[k]
+    return root
+
+
+def clean_svg(svg_text):
+    """SVG の文字を消毒した写しにして返す(読めない形なら ET.ParseError)。元の文字は変えない"""
+    return ET.tostring(sanitize_root(ET.fromstring(svg_text)), encoding="unicode")
+
+
 def load(svg_path):
-    root = ET.parse(svg_path).getroot()
+    root = sanitize_root(ET.parse(svg_path).getroot())
     vb = [float(v) for v in (root.get("viewBox") or "0 0 1254 1254").replace(",", " ").split()]
     defs = [e for e in root if tag(e) == "defs"]
     char = next((e for e in root.iter() if tag(e) == "g" and e.get("id") == "char"), root)
@@ -112,11 +150,15 @@ def wrap(new_id, elements, xf, dy=0.0):
 
 
 def measure(svg_text, ids):
-    """ヘッドレスの Chrome で、部品ごとの箱(getBBox。transform を入れた後の座標)を測る。"""
+    """ヘッドレスの Chrome で、部品ごとの箱(getBBox。transform を入れた後の座標)を測る。
+    開くのは消毒した写し(clean_svg)だけ。ページには CSP を付け、自分の測るスクリプト(nonce つき)以外は動かさず、外へは読みに行かせない。"""
     chrome = find_chrome()
     if not chrome:
         raise RuntimeError("Chrome が見つかりません(CHROME_PATH)")
-    html = ("<!doctype html><html><body>" + svg_text + "<pre id='out'></pre><script>"
+    nonce = secrets.token_hex(16)
+    csp = f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"
+    html = ("<!doctype html><html><head><meta http-equiv=\"Content-Security-Policy\" content=\"" + csp + "\"></head><body>"
+            + clean_svg(svg_text) + "<pre id='out'></pre><script nonce=\"" + nonce + "\">"
             "const r={};for(const id of " + json.dumps(ids) + "){const g=document.getElementById(id);"
             "if(!g)continue;const b=g.getBBox();r[id]=[b.x,b.y,b.width,b.height];}"
             "document.getElementById('out').textContent='BOX'+JSON.stringify(r)+'XOB';</script></body></html>")
@@ -124,7 +166,8 @@ def measure(svg_text, ids):
         page = Path(tmp) / "m.html"
         page.write_text(html, encoding="utf-8")
         out = subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-first-run", f"--user-data-dir={tmp}/u",
-                              "--dump-dom", page.as_uri()], capture_output=True, text=True, encoding="utf-8", timeout=MEASURE_TIMEOUT_S)
+                              "--host-resolver-rules=MAP * ~NOTFOUND", "--dump-dom", page.as_uri()],
+                             capture_output=True, text=True, encoding="utf-8", timeout=MEASURE_TIMEOUT_S)
     m = re.search(r"BOX(\{.*?\})XOB", out.stdout or "")
     if not m:
         raise RuntimeError("箱を測れませんでした")

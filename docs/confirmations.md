@@ -18,7 +18,7 @@
 会話で別に「いい?」とは聞きません(同じことを 2 回聞きません)。
 
 - 例(覚えさせる): 「この変わる所をこのはちゃんに覚えさせます。はい → すぐ、覚えたことで案内します。戻す → 『覚えたことを戻して』。次に出る画面が、その確認です。」
-- 「覚えたことを戻して」は、確認なしで 1 つ前の版に戻します。戻す前の版も残すので、また戻せます。
+- 「覚えたことを戻して」も、キャラの知っていることが変わるので、戻す前に 1 回聞きます(何が変わるかを見せて、はい、で戻します。資料の中の命令で黙って戻されないため)。戻す前の版も、使った前の版も、消さずに残すので、また戻せます。
 
 ## 初めての準備で、何回聞かれるか
 
@@ -64,7 +64,7 @@ Reading, drafting, checking, drawing, showing what would change, listing and run
 Each confirmation comes after one line that says what will happen and how to undo it, ending with "the next screen is that confirmation".
 It does not also ask "OK?" in the chat, so you are never asked the same thing twice.
 
-"Undo what you taught it" goes back one version without asking. The version it replaces is kept, so you can undo that too.
+"Undo what you taught it" also asks once, because it changes what the character knows. It shows what will change and only restores after a yes, so instructions hidden in a document cannot roll it back silently. Both the version it replaces and the backup it used are kept, so you can undo that too.
 
 ## How many asks in a first setup
 

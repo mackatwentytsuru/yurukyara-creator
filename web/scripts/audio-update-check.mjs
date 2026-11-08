@@ -65,7 +65,7 @@ function silentWav(path, seconds = 3, rate = 16000) {
 
 const servers = [];
 async function startServer(port = PORT, host = '127.0.0.1') {
-  const env = { ...process.env, PORT: String(port), HOST: host, LOG_DIR: mkdtempSync(join(tmpdir(), 'bux-log-')), YURU_UPDATE_UI: '1' };
+  const env = { ...process.env, PORT: String(port), HOST: host, LOG_DIR: mkdtempSync(join(tmpdir(), 'bux-log-')), YURU_UPDATE_UI: '1', YC_ALLOWED_HOSTS: 'yc-lan.test' };
   delete env.ANTHROPIC_API_KEY; // 本物の頭脳・声を呼ばない
   delete env.ELEVENLABS_API_KEY;
   delete env.APP_PASSPHRASE;
