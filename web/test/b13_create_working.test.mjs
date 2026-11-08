@@ -587,6 +587,42 @@ test('待つ吹き出しは、選んだことばで出る。きらきらの動�
   assert.equal(tracked.filter((x) => x[0] === 'end').length, 2, '終われば必ず外す');
 });
 
+test('全員あわせた 1 日の失敗の上限(既定 20・YC_DRAW_FAIL_DAILY)。人を変えても、越えたら上流を呼ばない。枚数は減らない', async () => {
+  let calls = 0;
+  const f = async () => {
+    calls += 1;
+    return { ok: false, status: 500, json: async () => ({}) };
+  };
+  const { d, dir } = drawerWith({ YC_BROWSER_DRAW: '1', YC_DRAW_FAIL_DAILY: '4' }, f);
+  try {
+    for (let i = 0; i < 4; i++) assert.equal((await d.draw({ words: 'ひつじ' }, `10.0.0.${i}`)).status, 502, '別々の人なので、1 人の上限には当たらない');
+    const stop = await d.draw({ words: 'ひつじ' }, '10.0.0.99');
+    assert.deepEqual([stop.status, stop.json.reason], [429, 'fails'], '全体で 4 回失敗したら、新しい人も今日は止める');
+    assert.equal(calls, 4, '止めた回は上流を呼ばない');
+    assert.equal(d.status().left, 20, '枠(枚数)は減っていない');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('全員あわせた失敗の上限の既定は 20 回。成功は数えない', async () => {
+  let ok = false;
+  let calls = 0;
+  const f = async () => {
+    calls += 1;
+    return ok ? { ok: true, json: async () => ({ content: [{ type: 'text', text: GOOD }], usage: {} }) } : { ok: false, status: 500, json: async () => ({}) };
+  };
+  const { d, dir } = drawerWith({ YC_BROWSER_DRAW: '1', YC_DRAW_DAILY: '50', YC_DRAW_PER_VISITOR: '50' }, f);
+  try {
+    for (let i = 0; i < 20; i++) assert.equal((await d.draw({ words: 'ひつじ' }, `11.0.${i}.1`)).status, 502);
+    ok = true;
+    const stop = await d.draw({ words: 'ひつじ' }, '11.9.9.9');
+    assert.deepEqual([stop.status, stop.json.reason], [429, 'fails'], '20 回失敗したあとは、描けるはずの回も止める(お金の上限)');
+    assert.equal(calls, 20);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 test('作る札の「はたらいている」1 行は、会話が長くなっても縮まない(flex: none)', () => {
   assert.match(WORK_CSS, /\.fr-working\s*\{\s*flex:\s*none;/);
 });

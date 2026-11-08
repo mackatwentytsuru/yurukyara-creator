@@ -111,6 +111,8 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
   let busy = false;
   // 1 人が 1 日に、描けずに終わってよい回数(枚数には数えない。呼んだ分のお金の使いきりを止めるだけ)
   const failLimit = Math.max(3, perVisitor * 3);
+  // 全員あわせて 1 日に、描けずに終わってよい回数(1 人の上限だけでは、大勢が失敗を重ねた時にお金の上限がかからない。YC_DRAW_FAIL_DAILY で変える)
+  const failDaily = Math.max(1, Number(env.YC_DRAW_FAIL_DAILY ?? 20) | 0);
 
   const run2d = to2d ?? ((svgPath, id, name, trait = '') => new Promise((resolve, reject) => {
     const p = spawn('python', build2dArgs({ script: join(root, 'creator', 'review', 'to_2d.py'), svgPath, id, name, out: join(root, 'characters'), trait }), { cwd: root });
@@ -148,6 +150,7 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
       if (u.count >= daily) return { status: 429, json: { error: '今日 描ける 枚数を つかいきったよ。見本の子で ためしてね', reason: 'daily' } };
       if ((u.by[who] ?? 0) >= perVisitor) return { status: 429, json: { error: '1 人が 描ける 枚数を つかいきったよ。見本の子で ためしてね', reason: 'visitor' } };
       if (busy) return { status: 429, json: { error: 'いま ほかの子を 描いているよ。少し まってね', reason: 'busy' } };
+      if ((u.failCount ?? 0) >= failDaily) return { status: 429, json: { error: 'きょうは うまく 描けない ことが 続いたよ。見本の子で ためしてね', reason: 'fails' } };
       if ((u.fails?.[who] ?? 0) >= failLimit) return { status: 429, json: { error: 'きょうは うまく 描けない ことが 続いたよ。見本の子で ためしてね', reason: 'fails' } };
       busy = true;
       const t0 = now();
@@ -185,6 +188,7 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
           latest.by[who] = (latest.by[who] ?? 0) + 1;
         } else {
           latest.fails = { ...latest.fails, [who]: (latest.fails?.[who] ?? 0) + 1 };
+          latest.failCount = (latest.failCount ?? 0) + 1;
         }
         write(latest);
         busy = false;
