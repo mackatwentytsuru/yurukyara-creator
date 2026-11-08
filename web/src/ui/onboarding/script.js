@@ -13,7 +13,7 @@ import { PRESETS, LENGTHS, normalize } from '../persona/settings.js';
 import { styleLines } from '../persona/preview.js';
 
 import { MAIN_CHARACTER } from '../../character/defaults.js'; // 主役の決まりは 1 か所(S5)。ここでは写さない
-import { ASKS_PLACE, DEFAULT_ROLE, PLACE_MAX, ROLES, ROLE_CHIPS, normalizeRole } from './roles.js';
+import { ASKS_PLACE, DEFAULT_ROLE, PLACE_MAX, ROLES, ROLE_CHIPS, autoWords, normalizeRole } from './roles.js';
 import { COLOR_CHIPS, SHAPE_CHIPS } from './creators.js';
 import { MATERIAL_THUMBS, SHAPE_THUMBS } from './thumbs.js';
 
@@ -74,8 +74,16 @@ const clip = (s, n) => [...String(s ?? '').trim()].slice(0, n).join('');
 
 /** おまかせのくわしい名前(読み上げと、押した時の右の吹き出し)。どの歩みでも出す(本人 11/7: 全部オートでできるパターン) */
 export const OMAKASE_LABEL = 'おまかせ(ぜんぶ じどう)';
-/** おまかせの札に出す短い名前(札を 2 段に収める) */
+/** 問いごとのおまかせの札(その問いだけを おまかせにする。役目・どんな子・ゆるキャラの形など) */
 export const OMAKASE_CHIP = 'おまかせ';
+/**
+ * 全体のおまかせの札の名前。問いごとの「おまかせ」と間違えない言い方(本人 11/8: 駅の名前だけ おまかせのつもりが、全部おまかせになった)。
+ * 押すと、まず「ここから さきを ぜんぶ おまかせに するよ。いい?」と確かめる
+ */
+export const OMAKASE_ALL = 'のこりを ぜんぶ おまかせ';
+export const OMAKASE_ASK = 'ここから さきを ぜんぶ おまかせに するよ。いい?';
+export const OMAKASE_YES = 'はい、ぜんぶ おまかせ';
+export const OMAKASE_NO = 'やめる';
 /** パソコンでの作り方(リンク)の札の名前 */
 export const README_LABEL = 'つくりかた';
 /** 歩みごとの、だいたいの秒(残りの時間の目安)。手元の PC で描く時は、3 歩目に描く時間を足す */
@@ -216,29 +224,79 @@ export class FirstRun {
     }
   }
 
+  /**
+   * 全体のおまかせの札を押した時: すぐ進めず、まず確かめる(本人 11/8: 駅の名前だけ おまかせのつもりが、全部おまかせになった)。
+   * 「はい」で今の選びから後を全部おすすめで決める(omakase_yes)。「やめる」は、今の問いにそのまま戻る(omakase_no)
+   */
+  async omakaseAsk() {
+    if (this.busy || this.done) return false;
+    this.busy = true;
+    try {
+      const back = this.actions;
+      this.d.offer([]);
+      await this._say({ who: 'user', text: OMAKASE_ALL }, { who: 'guide', text: OMAKASE_ASK });
+      this.askBack = back;
+      this._offer([
+        { id: 'omakase_yes', label: OMAKASE_YES, primary: true, noAuto: true },
+        { id: 'omakase_no', label: OMAKASE_NO, noAuto: true },
+      ]);
+      return true;
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async _omakaseBack() {
+    await this._echo('omakase_no');
+    await this._say({ who: 'guide', text: 'じゃあ、さっきの つづきね。' });
+    const back = this.askBack ?? [];
+    this.askBack = null;
+    return this._offer(back.length ? back : this._startActions());
+  }
+
+  /**
+   * 子がまだいない時のおまかせ: 選んだ役目(と場所の名前)から短い説明を作り、言葉で作る道と同じ道で子を作る
+   * (描ける設定なら描く。描けない時は、いちばん近い見本)。役目はそのまま残す。
+   * 前は、役目と関係のない見本(surprise)を出していて、駅を選んだのにロボが出た(本人 11/8)。
+   * @returns {Promise<'reload'|'ok'>} 'reload' は、舞台が読み込み直し中(続きは resume)
+   */
+  async _omakaseChild() {
+    const creator = this.d.creator;
+    const words = autoWords(this.role, this.place);
+    let made = null;
+    if (typeof creator.make === 'function') {
+      this.input = { from: 'words', words };
+      if (this.step < 2) this.skipped.add(2); // 1 歩目からのおまかせはチェックをしていない(歩みの丸は「とばした」に)
+      this._go(3);
+      await this._say({ who: 'note', text: `「${words}」で つくるよ。` });
+      made = await creator.make(this.input, { onProgress: (text) => this._say({ who: 'note', text }) });
+      // 近い見本が案内役そのものなら、別の子を出す(案内役のまま「できあがり!」と言わない。UIR 4)
+      if (made?.sample && made.id === this.guide.id) made = creator.surprise?.() ?? made;
+    }
+    // 作れなかった(見本の一覧が空・手元の PC の道)時は、前のとおり見本から 1 体
+    const pick = made ?? creator.surprise?.() ?? creator.main?.() ?? (creator.list?.() ?? [])[0] ?? null;
+    if (!pick) return 'ok';
+    this.character = pick;
+    if (this.step < 2) this.skipped.add(2);
+    this._go(3);
+    const lines = [];
+    if (pick.drawFailed) lines.push({ who: 'note', text: `${pick.drawFailed}。にた 見本の子を 出すね。` });
+    if (pick.drawn) lines.push({ who: 'guide', text: `おまかせで 描いたのは、${pick.name}! うごく 2D で 舞台に 出すね。` });
+    else if (pick.id === this.guide.id) lines.push({ who: 'guide', text: `${pick.name}で はじめるよ!` });
+    else lines.push({ who: 'guide', text: `おまかせで えらんだのは、${pick.name}!`, ...(pick.img ? { img: pick.img } : {}) });
+    await this._say(...lines);
+    const stay = await (this.d.showCharacter?.(pick) ?? true);
+    if (stay === false) {
+      this.d.save?.(this.snapshot());
+      return 'reload'; // 読み込み直しの後、resume がおまかせの続きをする
+    }
+    return 'ok';
+  }
+
   async _omakaseRest() {
     this.auto = true;
     if (!this.role) this.role = DEFAULT_ROLE; // 役目もおまかせ(おうち)
-    if (!this.character) {
-      // おまかせは、見本の中から案内役とは別の子を本当に出す(前は案内役のまま「できあがり!」と言った。UIR 4)
-      const pick = this.d.creator.surprise?.() ?? this.d.creator.main?.() ?? (this.d.creator.list?.() ?? [])[0] ?? null;
-      if (pick) {
-        this.character = pick;
-        if (this.step < 2) this.skipped.add(2); // 1 歩目からのおまかせはチェックをしていない(歩みの丸は「とばした」に)
-        this._go(3);
-        const isGuide = pick.id === this.guide.id;
-        await this._say(
-          isGuide
-            ? { who: 'guide', text: `${pick.name}で はじめるよ!` }
-            : { who: 'guide', text: `おまかせで えらんだのは、${pick.name}!`, ...(pick.img ? { img: pick.img } : {}) },
-        );
-        const stay = await (this.d.showCharacter?.(pick) ?? true);
-        if (stay === false) {
-          this.d.save?.(this.snapshot());
-          return undefined; // 読み込み直しの後、resume がおまかせの続きをする
-        }
-      }
-    }
+    if (!this.character && (await this._omakaseChild()) === 'reload') return undefined;
     this._go(4);
     const id = this.character?.id ?? 'unknown';
     let s = this.d.persona.get(id);
@@ -390,6 +448,9 @@ export class FirstRun {
     return [
       { id: 'pick', label: '絵を選ぶ', kind: 'file' },
       { id: 'photo', label: '写真を撮る', kind: 'file', capture: true },
+      // 「どんな子?」だけを おまかせに(役目と場所から説明を作って、描く・近い見本を出す)。全体の「のこりを ぜんぶ おまかせ」(点線の札)とは
+      // 名前も見た目も分けてあるので、この問いでは両方出す(本人 11/8: 問いごとと全体を間違えた)
+      { id: 'what_auto', label: OMAKASE_CHIP, aria: 'おまかせ(えらんだ やくめから、どんな子かを きめる)' },
       { id: 'words', label: 'ことばで 書く', kind: 'text', placeholder: '例: 赤い ちょうちんの子', max: WORDS_MAX, submit: '送る', primary: true },
     ];
   }
@@ -405,6 +466,15 @@ export class FirstRun {
         return this._fromPicture(id, p);
       case 'words':
         return this._fromWords(p);
+      case 'what_auto': // 「どんな子?」だけを おまかせに(役目と場所から説明を作る。ほかの選びは自分で決める)
+        await this._echo(id);
+        return this._fromWords({ text: autoWords(this.role ?? DEFAULT_ROLE, this.place) }, { echo: false });
+      case 'omakase_yes': // 全体のおまかせの確かめに「はい」
+        await this._echo(id);
+        this.askBack = null;
+        return this._omakaseRest();
+      case 'omakase_no':
+        return this._omakaseBack();
       case 'kind_yuru':
       case 'kind_human':
       case 'kind_complex':
@@ -454,7 +524,7 @@ export class FirstRun {
         return this._later();
       case 'close':
         return this._finish();
-      case 'begin': // 最後の「はじめる」: 札を閉じるのは、使う人が押した時だけ
+      case 'begin': // 最後の「はなしてみる」: 押すと、作る画面を閉じて話す画面へ(押さなくても 4 秒で閉じる。index.js の FINISH_AUTO_MS)
         this.d.onBegin?.();
         return undefined;
       case 'place_name':
@@ -589,14 +659,15 @@ export class FirstRun {
   }
 
   /* ---------- 1 → 3: 言葉の入口(チェックは絵のときだけ) ---------- */
-  async _fromWords(p) {
+  async _fromWords(p, { echo = true } = {}) {
     const words = clip(p?.text, WORDS_MAX);
     if (!words) {
       await this._say({ who: 'note', text: 'どんな子か、ことばで 書いてね。' });
       return this._offerStart();
     }
     this.input = { from: 'words', words };
-    await this._say({ who: 'user', text: words });
+    if (echo) await this._say({ who: 'user', text: words });
+    else await this._say({ who: 'note', text: `「${words}」で つくるよ。` });
     this.skipped.add(2);
     return this._meet();
   }
@@ -787,7 +858,14 @@ export class FirstRun {
   }
 
   async _talk(text) {
-    const r = await this.d.talk(text, { character: this.character, settings: this.settings, history: this.history });
+    // 頭脳の返事を待つ間は「…」の吹き出し(遅い回線で、返事が来るまで何も無いと、無視されているように見える。CU)
+    this.d.thinking?.(true, { who: 'char', name: this.character?.name ?? 'この子' });
+    let r;
+    try {
+      r = await this.d.talk(text, { character: this.character, settings: this.settings, history: this.history });
+    } finally {
+      this.d.thinking?.(false);
+    }
     const raw = (r?.lines ?? []).map((l) => l.text);
     const lines = r?.brain === 'mock' && !r?.safety ? styleLines(raw, this.settings) : raw;
     const first = r?.lines?.[0] ?? {};
@@ -914,7 +992,7 @@ export class FirstRun {
     if (away && c.local && c.twod) lines.push({ who: 'note', text: c.want3d ? `${c.name}は 2D で 舞台に いるよ。3D の ちゅうもんは 書いたよ。3D は まだ できていないよ。` : `${c.name}は 2D で 舞台に いるよ。` });
     if (away && !c.local) lines.push({ who: 'note', text: `${c.name}は、舞台に立ったままだよ。${this.guideName}にもどしたい時は、「${this.guideName}にもどす」を押してね。` });
     await this._say(...lines);
-    this._offer([{ id: 'begin', label: 'はじめる', primary: true }]);
+    this._offer([{ id: 'begin', label: 'はなしてみる', primary: true }]);
     this.d.onDone?.();
   }
 

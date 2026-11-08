@@ -72,7 +72,7 @@ test('言葉の入口: 7 歩を最後まで通す(仮の頭脳・鍵を入れて
   assert.deepEqual(h.offered, ROLE_IDS);
   assert.equal(h.offeredAll[0].primary, true, '既定は おうち');
   await h.fr.act('role_home');
-  assert.deepEqual(h.offered, ['pick', 'photo', 'words'], 'カメラの「写真を撮る」は主役にしない(UIR 22)');
+  assert.deepEqual(h.offered, ['pick', 'photo', 'what_auto', 'words'], 'カメラの「写真を撮る」は主役にしない(UIR 22)。「おまかせ」は、どんな子かだけを おまかせにする(CU)');
   assert.ok(h.texts('guide').includes('どんな子を生み出そうか?'));
   assert.ok(h.texts('note').some((t) => t.includes('見本の子')), '見本の道だと正直に出す');
 
@@ -156,7 +156,7 @@ test('写真 → 色と形 → 近い子 → やりなおす → 1 つ目のス�
   assert.equal(h.fr.character.id, 'd_lantern', 'あかくて たてに ながい → ちょうちんくん');
   await h.fr.act('again');
   assert.equal(h.fr.step, 1);
-  assert.deepEqual(h.offered, ['pick', 'photo', 'words']);
+  assert.deepEqual(h.offered, ['pick', 'photo', 'what_auto', 'words']);
   const [a, b] = await Promise.all([h.fr.act('words', { text: 'みかん' }), h.fr.act('words', { text: 'ロボ' })]);
   assert.deepEqual([a, b], [true, false], '動いている最中の 2 回目は捨てる');
   assert.equal(h.fr.character.id, 'mikan');
@@ -305,7 +305,7 @@ test('D1(UIR 1): ぴったりの子がいない言葉も、近い子を出して
   const h = harness({ guideUrl: 'https://example.org/readme#make' });
   await h.fr.start();
   await h.fr.act('role_home');
-  assert.deepEqual(h.offered, ['pick', 'photo', 'words']);
+  assert.deepEqual(h.offered, ['pick', 'photo', 'what_auto', 'words']);
   await h.fr.act('words', { text: '空を飛ぶペンギンの郵便屋さん' });
   assert.equal(h.fr.step, 3);
   assert.ok(h.fr.character?.id, '行き止まりにしない');

@@ -67,6 +67,8 @@ export function freeCharacter(ch) {
 export const CLOSED_EVENT = 'yc:firstrun-closed'; // 閉じた時に window へ投げる(detail.reason = done | later)。S5 が使ってよい
 const TALK_TIMEOUT_MS = 20000;
 const STAGE_WAIT_MS = 15000; // 舞台のキャラが読み終わるのを待つ長さ(入れ替えの前)
+/** 作り終わって「はなしてみる」を出してから、押されなくても作る画面を閉じて話す画面へ進むまで(CU) */
+export const FINISH_AUTO_MS = 4000;
 const GATE_HOLD_MS = 3000; // 閉じた後、入口を消しておく長さ(カメラなしの入力が始まるまで。始まれば入口は main.js が隠す)
 // PC と iPad で札(右)が開いている間、舞台の絵を札の左に収める(幅の広い見本の右の端が札に隠れていた。CRITux2 低 13)。
 // 札の左に残る幅がこれより狭い画面では、舞台を狭めない(iPad の縦 768 で 396px 残る)
@@ -725,7 +727,7 @@ export function mountFirstRun({
       voice,
       parent,
       onAct: (id, payload) => engine.act(id, payload),
-      onAuto: () => engine.omakase(), // おまかせ(ぜんぶ じどう): どの歩みからでも、おすすめで最後まで(本人 11/7)
+      onAuto: () => engine.omakaseAsk(), // のこりを ぜんぶ おまかせ: どの歩みからでも、確かめてから、おすすめで最後まで(本人 11/7・11/8)
       openPersona: (onSave) => openPersona({ character: engine.character, initial: engine.settings, onSave }),
       stage: () => (app?.character ? { character: app.character, speaker: app.speaker, guideId: lead.id } : null),
       onClose: (reason) => {
@@ -735,12 +737,13 @@ export function mountFirstRun({
         if (reason === 'later') local?.setItem(DONE_KEY, 'later');
         if (reason === 'done') local?.setItem(DONE_KEY, 'done');
         passGate(); // 入口を消したまま(fr-after)にしてから、fr-open を外す
-        root.classList.remove('fr-open');
+        root.classList.remove('fr-open', 'cc-open');
         fitStage(false);
-        void afterClose(reason);
+        void afterClose(reason).then(() => syncResume());
       },
     });
     root.classList.add('fr-open'); // 入口のゲートを消して、舞台のキャラを見せる(styles.js)
+    root.classList.add('cc-open'); // 作る画面を開いている間は、話す画面の上の段(はなす・かえる・もっと)と下の帯を隠す(ui/style.css。CU)
     if (typeof ResizeObserver === 'function') {
       sizeWatch = new ResizeObserver(() => fitStage(true));
       sizeWatch.observe(sheet.element);
@@ -754,6 +757,7 @@ export function mountFirstRun({
       voice,
       present: (lines, ctx) => sheet.present(lines, ctx),
       offer: (actions) => sheet.offer(actions),
+      thinking: (on, info) => sheet.thinking(on, info),
       pin: (pic) => sheet.pin(pic),
       guideUrl: readGuideUrl(),
       showCharacter: showCharacter ?? defaultShow,
@@ -771,7 +775,8 @@ export function mountFirstRun({
           // 覚えられなくても、会話は続ける
         }
       },
-      // 最後まで行った: 札は自動で閉じない(決めたことと「はじめる」を見せる)。閉じるのは「はじめる」を押した時
+      // 最後まで行った: 決めたことと「はなしてみる」を見せる。押すか、FINISH_AUTO_MS(4 秒)たつと、作る画面を閉じて話す画面へ(CU。
+      // 前は押すまで札が話す画面を覆っていた)。閉じたら、できた子が先に一言あいさつする(main.js の uw5GreetOnOpen)
       onDone: () => {
         local?.setItem(DONE_KEY, 'done');
         try {
@@ -779,6 +784,8 @@ export function mountFirstRun({
         } catch {
           // 消せなくても続ける
         }
+        clearTimeout(finishTimer);
+        finishTimer = setTimeout(() => sheet?.close('done'), FINISH_AUTO_MS);
       },
       onBegin: () => sheet.close('done'),
     });
@@ -812,14 +819,22 @@ export function mountFirstRun({
   // 作る入口の名前は「あたらしい子を つくる」(UIR 16。前の「はじめての会話」は、押すと何が起きるか分からなかった)
   const startBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: START_LABEL, className: buttonHost ? 'place-mode-button fr-launch' : 'fr-launch floating' });
   startBtn.dataset.firstrun = 'start';
-  startBtn.addEventListener('click', () => startOnboarding());
+  // 作りかけがあれば、続きから始める。あることは、ボタンの横の小さな「つづき」で知らせる(CU。自動では開かない)
+  const syncResume = () => {
+    const has = Boolean(readProgress(local));
+    if (has) startBtn.dataset.resume = '1';
+    else delete startBtn.dataset.resume;
+    startBtn.setAttribute('aria-label', has ? `${START_LABEL}(さっきの つづきから できるよ)` : START_LABEL);
+  };
+  startBtn.addEventListener('click', () => startOnboarding({ resume: readProgress(local) }));
+  syncResume();
   if (buttonHost) host.append(personaBtn, startBtn);
   else {
     startBtn.style.right = '84px';
     host.append(personaBtn, startBtn);
   }
 
-  const api = { engine: null, sheet: null, voice, byokReady, creator: made, start: startOnboarding, openPersona, applyPersona, talk, putOnStage, get lead() { return lead; } };
+  const api = { engine: null, sheet: null, voice, byokReady, creator: made, start: (o) => startOnboarding(o ?? { resume: readProgress(local) }), openPersona, applyPersona, talk, putOnStage, get lead() { return lead; } };
 
   // ---- 出すかどうか ----
   const kiosk = ['led', 'autostart', 'headset'].some((k) => params.get(k) === '1');
@@ -841,9 +856,10 @@ export function mountFirstRun({
   }
   // 途中で読み込み直した時は、?onboard=1 が無くても続きから(歩みごとに残した途中経過。高 1)
   const saved = !kiosk && wanted !== '0' && local?.getItem(DONE_KEY) !== 'done' ? readProgress(local) : null;
+  // 作りかけがあっても、自分からは作る画面を開かない(CU: 前は 12 時間、開くたびに作る札が開き直り、「あとで」を押しても止まらなかった。
+  // 本人 11/8「普段もいつも出てくるのが変」)。続きは、使う人が「かえる」→「あたらしい子を つくる」を押した時に、作りかけがあれば続きから始める
   if (wanted === '1') startOnboarding({ resume: snap ?? saved });
-  else if (saved) startOnboarding({ resume: saved });
-  else if (wanted !== '0' && auto && !kiosk && !local?.getItem(DONE_KEY)) startOnboarding();
+  else if (wanted !== '0' && auto && !kiosk && !local?.getItem(DONE_KEY)) startOnboarding({ resume: saved });
 
   globalThis.__firstRun = api; // 試験と開発の確かめ用(main.js の window.__app と同じ考え)
   return api;

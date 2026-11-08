@@ -8,7 +8,7 @@
 // - 文字は textContent だけで入れる。鍵の欄の文字は、押したらすぐ消し、画面のどこにも残さない
 // - 選んだ絵(この端末の中の blob:)と、PC で描いた絵(作る画面の小さな枠)は、上の段の小さな絵の欄に出したままにする(D3・D5)
 import { injectStyles } from './styles.js';
-import { STEPS, countChars, progressText, OMAKASE_LABEL, OMAKASE_CHIP } from './script.js';
+import { STEPS, countChars, progressText, OMAKASE_ALL } from './script.js';
 import { crawl } from './voice.js';
 import { MAIN_CHARACTER } from '../../character/defaults.js';
 
@@ -52,6 +52,9 @@ export function splitBubbles(text, max = BUBBLE_CHARS) {
   return out;
 }
 
+/** 「…」(3 つの点が順に光る。ui/style.css の .wd)。吹き出しの中身がまだ空の間だけ出す。文字を入れる(textContent)と消える */
+const dots = () => el('span', { className: 'wd', ariaHidden: 'true' }, el('i'), el('i'), el('i'));
+
 /** 主役の顔(CSS で描く小さな顔。外の絵を読まない) */
 function mainFace() {
   const f = el('span', { className: 'fr-who fr-face' });
@@ -89,7 +92,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     steps.append(li);
     return li;
   });
-  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'あとで', ariaLabel: 'あとで(あたらしい子を つくるを とじる)' });
+  // 作る画面を出て、話す画面へ戻る(前の名前は「あとで」。作る画面と話す画面を分けたので、行き先が分かる名前に。CU)
+  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'おしゃべりに もどる', ariaLabel: 'おしゃべりに もどる(キャラを つくるを とじて、話す画面へ)' });
   const leftMain = el('b');
   const leftTime = el('span');
   const left = el('p', { className: 'fr-left', ariaLive: 'polite' }, leftMain, leftTime);
@@ -105,8 +109,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   const actions = el('div', { className: 'fr-actions' }, chips, fieldRow);
   const sheet = el(
     'section',
-    { className: 'fr-sheet', role: 'dialog', ariaLabel: 'あたらしい子を つくる' },
-    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, pinBox, el('h2', { textContent: 'あたらしい子を つくる' }), left, closeBtn), bar, steps),
+    { className: 'fr-sheet cc-screen', role: 'dialog', ariaLabel: 'キャラを つくる' },
+    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, pinBox, el('h2', { textContent: 'キャラを つくる' }), left, closeBtn), bar, steps),
     log,
     live,
     actions,
@@ -183,6 +187,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   let fresh = true;
   let lastSide = null; // 続けて同じ側が話す時は、顔と名前を最初の吹き出しだけに出す
   function add(node) {
+    dropThinking(); // 返事が来たので、待つ間の「…」は消す
     log.append(node);
     if (fresh) {
       latest?.classList.remove('fr-latest');
@@ -205,6 +210,28 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     requestAnimationFrame?.(toEnd);
   };
 
+  /**
+   * 返事を待つ間の「…」の吹き出し(頭脳の返事を待つ間。CU)。on = false か、次の吹き出しが出た時に消える。
+   * @param {boolean} on
+   * @param {{who?:'guide'|'char', name?:string}} [o]
+   */
+  let thinkRow = null;
+  function dropThinking() {
+    thinkRow?.remove();
+    thinkRow = null;
+  }
+  function thinking(on, { who = 'char', name = guideName } = {}) {
+    dropThinking();
+    if (!on || closed) return;
+    const face = who === 'guide' && guideId === MAIN_CHARACTER.id ? mainFace() : el('span', { className: 'fr-who', ariaHidden: 'true', textContent: initial(name) });
+    const text = el('p', { className: 'fr-text' }, dots());
+    thinkRow = el('div', { className: `fr-line ${who} fr-typing` }, face, el('div', { className: 'fr-bubble' }, el('b', { className: 'fr-name', textContent: name }), text));
+    thinkRow.setAttribute('aria-hidden', 'true');
+    log.append(thinkRow);
+    lastSide = null;
+    scroll();
+  }
+
   function setStep(n, { skipped = [], local = false } = {}) {
     sheet.dataset.step = String(n);
     for (const li of stepItems) {
@@ -225,6 +252,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     const cont = side === lastSide && side !== 'user';
     lastSide = side;
     const text = el('p', { className: 'fr-text' });
+    if (who !== 'user') text.append(dots()); // 声や文字送りが始まるまでの間は「…」(スマホの遅い回線で、空の吹き出しが固まって見えないように。CU)
     const nameEl = who === 'user' ? null : el('b', { className: 'fr-name', textContent: name });
     const bubble = el('div', { className: 'fr-bubble' }, nameEl, text);
     let face = null;
@@ -570,10 +598,11 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   function autoChip(list) {
     // noAuto: その歩みに、自分の「おまかせ」の札がある(役目・ゆるキャラの形。おまかせが 2 つ並ばないように)
     if (!onAuto || !list.length || list.every((a) => a.id === 'close' || a.id === 'begin') || list.some((a) => a.kind === 'frame' || a.noAuto)) return null;
-    const b = el('button', { type: 'button', className: 'fr-btn fr-chip fr-auto', textContent: OMAKASE_CHIP });
+    // 名前は「のこりを ぜんぶ おまかせ」。問いごとの「おまかせ」(その問いだけ)と見分けるため、見た目も点線のふち・うすい色(styles.js)
+    const b = el('button', { type: 'button', className: 'fr-btn fr-chip fr-auto', textContent: OMAKASE_ALL });
     b.dataset.act = 'omakase';
-    b.setAttribute('aria-label', `${OMAKASE_LABEL}。のこりを ぜんぶ おすすめで きめて、さいごまで すすみます`);
-    b.title = 'のこりを ぜんぶ おすすめで きめて、さいごまで すすみます。あとから かえられます';
+    b.setAttribute('aria-label', `${OMAKASE_ALL}。のこりを ぜんぶ おすすめで きめて、さいごまで すすみます。押すと、はじめに たしかめるよ`);
+    b.title = 'のこりを ぜんぶ おすすめで きめて、さいごまで すすみます。押すと、はじめに たしかめるよ。あとから かえられます';
     b.addEventListener('click', () => {
       voice.unlock();
       onAuto();
@@ -628,6 +657,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     setStep,
     close,
     pin,
+    thinking,
     stats,
     get closed() {
       return closed;

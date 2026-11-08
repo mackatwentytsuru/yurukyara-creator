@@ -185,24 +185,28 @@ test('キーボード(見える範囲だけが縮む): 札は見える範囲に�
   }
 });
 
-test('おまかせで最後まで: 札は自動で閉じず、決めたことと「はじめる」を出す。押した時だけ閉じる(中 5)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+// CU(本人 11/8): 全体のおまかせは、押すとまず確かめる(「はい」で進む)。終わりは「はなしてみる」を押すと、作る画面を閉じて話す画面へ
+test('おまかせで最後まで: 全体のおまかせは確かめてから進み、決めたことと「はなしてみる」を出す。押すと閉じる(中 5・CU)', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が無い');
   try {
     const { ctx, page, errors } = await open(browser, { width: 390, height: 844 });
     await ready(page);
+    assert.equal(await page.locator('.fr-btn.fr-auto').innerText(), 'のこりを ぜんぶ おまかせ', '全体のおまかせは、問いごとの おまかせと名前を分ける');
     await page.click('.fr-btn.fr-auto');
+    await page.waitForSelector('.fr-actions [data-act="omakase_yes"]', { timeout: 20000 });
+    assert.match(await page.locator('.fr-log').innerText(), /ここから さきを ぜんぶ おまかせに するよ。いい\?/, 'まず確かめる');
+    assert.equal(await page.locator('.fr-sheet').count(), 1);
+    await page.click('.fr-actions [data-act="omakase_yes"]');
     await page.waitForSelector('.fr-actions [data-act="begin"]', { timeout: 20000 });
-    await page.click('.fr-log').catch(() => {});
-    await settle(page, 2500); // 昔は 1.6 秒で閉じていた
-    assert.equal(await page.locator('.fr-sheet').count(), 1, '自動では閉じない');
+    assert.equal(await page.locator('.fr-actions [data-act="begin"]').innerText(), 'はなしてみる');
     const text = await page.locator('.fr-log').innerText();
     assert.match(text, /おまかせで えらんだのは、.+!/, 'おまかせは別の子を本当に出す(UIR 4)');
     assert.match(text, /は、.+ 話す 子に したよ。/);
     await shot(page, 'qf4_done_summary');
     await page.click('.fr-actions [data-act="begin"]');
     await page.waitForFunction(() => window.__closed?.reason === 'done');
-    assert.equal(await page.locator('.fr-sheet').count(), 0, '「はじめる」で閉じる');
+    assert.equal(await page.locator('.fr-sheet').count(), 0, '「はなしてみる」で閉じる');
     assert.deepEqual(errors, []);
     await ctx.close();
   } finally {
@@ -210,7 +214,31 @@ test('おまかせで最後まで: 札は自動で閉じず、決めたことと
   }
 });
 
-test('読み込み直し: 途中経過が残り、?onboard=1 が無くても続きから始まる(高 1)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+test('作り終わり: 「はなしてみる」を押さなくても、約 4 秒で作る画面を閉じて話す画面へ(CU。前は押すまで札が話す画面を覆っていた)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が無い');
+  try {
+    const { ctx, page, errors } = await open(browser, { width: 390, height: 844 });
+    await ready(page);
+    await page.click('.fr-btn.fr-auto');
+    await page.click('.fr-actions [data-act="omakase_yes"]');
+    await page.waitForSelector('.fr-actions [data-act="begin"]', { timeout: 20000 });
+    const t0 = Date.now();
+    await settle(page, 2000);
+    assert.equal(await page.locator('.fr-sheet').count(), 1, '2 秒ではまだ閉じない(決めたことを読める)');
+    await page.waitForFunction(() => window.__closed?.reason === 'done', null, { timeout: 8000 });
+    const took = Date.now() - t0;
+    assert.ok(took >= 3000 && took <= 7000, `約 4 秒で閉じる: ${took}ms`);
+    assert.equal(await page.locator('.fr-sheet').count(), 0);
+    assert.equal(await page.evaluate(() => document.documentElement.classList.contains('cc-open')), false, '作る画面の印も外れる(話す画面の上の段・下の帯が戻る)');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+test('読み込み直し: 途中経過が残っても、自分からは作る画面を開かない。「あたらしい子を つくる」に「つづき」が付き、押すと続きから始まる(高 1・CU)', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が無い');
   try {
@@ -221,6 +249,15 @@ test('読み込み直し: 途中経過が残り、?onboard=1 が無くても続�
         character: { id: 'norrie', name: 'ノリー', sample: true, note: '' }, skipped: [2] }));
     });
     await page.goto(`${BASE}/__fr/index.html`); // ?onboard=1 なしで読み込み直す
+    await page.waitForSelector('[data-firstrun="start"]');
+    await page.waitForTimeout(1500);
+    assert.equal(await page.locator('.fr-sheet').count(), 0, '作りかけがあっても、自分からは作る画面を開かない(普段の会話に作る札が出てこない)');
+    assert.equal(await page.evaluate(() => document.documentElement.classList.contains('cc-open')), false);
+    await page.evaluate(() => document.getElementById('gate').classList.add('hidden')); // 試しの画面の入口(本物は main.js が隠す)
+    assert.equal(await page.getAttribute('[data-firstrun="start"]', 'data-resume'), '1', '作りかけの印(小さな「つづき」)');
+    assert.match(await page.getAttribute('[data-firstrun="start"]', 'aria-label'), /つづきから/);
+    assert.equal(await page.innerText('[data-firstrun="start"]'), 'あたらしい子を つくる', '印は文字ではなく見た目だけ(ボタンの名前は変わらない)');
+    await page.click('[data-firstrun="start"]');
     await page.waitForSelector('.fr-sheet');
     await page.waitForSelector('.fr-actions [data-act="persona_ok"]', { timeout: 20000 });
     const text = await page.locator('.fr-log').innerText();

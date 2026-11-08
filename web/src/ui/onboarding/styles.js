@@ -21,8 +21,10 @@ export const CSS = `
 
 /* 上の細い段: 絵の欄(小さな絵)・あと いくつ・あとで。巻いても流れない */
 .fr-head { flex: none; position: relative; padding: 4px 10px 6px 14px; border-bottom: 1px solid var(--fr-line); background: var(--fr-bg); z-index: 2; }
-.fr-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.fr-left { flex: 1 1 auto; min-width: 0; margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 15px; line-height: 1.3; color: var(--fr-muted); white-space: nowrap; overflow: hidden; }
+/* 作る画面の頭(CU): 1 行目 = 見出し「キャラを つくる」と、右に「おしゃべりに もどる」。2 行目 = あと いくつ・何分 */
+.fr-title { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; row-gap: 0; min-width: 0; }
+.fr-title h2 { position: static; width: auto; height: auto; clip: auto; overflow: visible; flex: 1 1 auto; min-width: 0; font-size: 17px; letter-spacing: 0.04em; white-space: nowrap; }
+.fr-left { order: 3; flex: 1 1 100%; min-width: 0; margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 15px; line-height: 1.3; color: var(--fr-muted); white-space: nowrap; overflow: hidden; }
 .fr-left b { font-weight: 800; color: var(--fr-mint); font-size: 16px; }
 .fr-left span { font-size: 14px; }
 .fr-left b:empty, .fr-left span:empty { display: none; }
@@ -51,6 +53,7 @@ export const CSS = `
 .fr-line.note .fr-bubble { background: #26233b; border: 1px dashed rgba(183,168,255,0.40); }
 .fr-name { display: block; font-size: 16px; font-weight: 700; color: var(--fr-muted); margin: 0 0 1px; }
 .fr-text { margin: 0; font-size: 16px; line-height: 1.55; overflow-wrap: anywhere; min-height: 1.55em; }
+.fr-text .wd { margin-left: 0; }
 .fr-line.user { grid-template-columns: minmax(0, 1fr); justify-items: end; }
 .fr-line.user .fr-bubble { justify-self: end; max-width: 82%; border-radius: 18px 6px 18px 18px; background: linear-gradient(135deg, #7d62ff, #a35bff); border: 0; color: #fff; }
 .fr-pic { display: block; max-width: 100%; max-height: 120px; margin-top: 6px; border-radius: 10px; object-fit: contain; background: #fff; }
@@ -86,7 +89,8 @@ export const CSS = `
 .fr-card-img { width: 34px; height: 34px; display: block; pointer-events: none; }
 .fr-pic.fr-pic-small { width: 56px; height: 56px; object-fit: contain; }
 .fr-btn.primary, .yp-save { background: linear-gradient(135deg, #7d62ff, #c15bff); border: 1.5px solid transparent; font-weight: 800; color: #fff; }
-.fr-btn.fr-auto { border: 2px solid var(--fr-mint); background: rgba(123,224,195,0.12); color: var(--fr-text); }
+/* 全体のおまかせ(のこりを ぜんぶ おまかせ): 点線のふち・うすい色。問いごとの「おまかせ」(ふつうの札)と見分ける */
+.fr-btn.fr-auto { border: 2px dashed rgba(123,224,195,0.75); background: rgba(123,224,195,0.06); color: var(--fr-muted); font-weight: 500; }
 .fr-btn:active { transform: translateY(1px); filter: brightness(1.12); }
 @media (hover: hover) { .fr-btn:hover { filter: brightness(1.15); } .fr-close:hover { background: rgba(255,255,255,0.12); } }
 .fr-btn:focus-visible, .fr-close:focus-visible, .fr-field input:focus-visible, .yp-panel button:focus-visible, .yp-panel input:focus-visible,
@@ -110,6 +114,8 @@ export const CSS = `
 .fr-more { display: none !important; }
 .fr-launch { font: inherit; font-size: 14px; padding: 9px 14px; min-height: 40px; border-radius: 999px; cursor: pointer; color: var(--text, #f4f1fb);
   background: var(--glass, rgba(24,21,40,0.62)); border: 1px solid var(--line, rgba(255,255,255,0.12)); }
+/* 作りかけがあるときの小さな「つづき」(かえる の中の あたらしい子を つくる の横。自動では開かない。CU) */
+.fr-launch[data-resume="1"]::after { content: "つづき"; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #1b1630; background: var(--fr-mint, #7be0c3); }
 .fr-launch.floating { position: fixed; top: max(12px, env(safe-area-inset-top)); right: 12px; z-index: 6; }
 
 /* ---------- スマホの形 B: キャラの下の方に会話を重ねる(上へ向かって薄くなる。顔と上半身は見えたまま。押す札は不透明) ---------- */
@@ -144,7 +150,6 @@ export const CSS = `
   .fr-sheet, .fr-sheet[data-layout] { left: auto; right: 16px; bottom: calc(var(--bottom-h, 0px) + 12px); width: min(460px, max(340px, 44vw));
     height: min(680px, calc(100vh - var(--top-h, 64px) - var(--bottom-h, 0px) - 48px)); border-radius: 22px; border-bottom: 1px solid var(--fr-line); }
   @supports (height: 1dvh) { .fr-sheet, .fr-sheet[data-layout] { height: min(680px, calc(100dvh - var(--top-h, 64px) - var(--bottom-h, 0px) - 48px)); } }
-  .fr-title h2 { position: static; width: auto; height: auto; clip: auto; overflow: visible; font-size: 15px; letter-spacing: 0.04em; flex: none; }
   .fr-head { padding: 6px 10px 8px 16px; }
   .fr-pin-img { width: 48px; height: 48px; }
   .fr-pin-frame, .fr-pin-frame .fr-frame { width: 72px; height: 72px; }
