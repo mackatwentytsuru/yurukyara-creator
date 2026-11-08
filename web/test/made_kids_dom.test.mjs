@@ -260,6 +260,26 @@ test('けす: その子が覚えた記憶も(その子の id を付けて)消す
   clearKey();
 });
 
+test('けす: 子を先に消し、記憶はその後に消す。子を消すのが断られた時は、記憶に触れない', async () => {
+  const t = setup();
+  setKey(KEY);
+  await t.kids.refresh();
+  t.kid(B.id).find('mk-del').click();
+  t.kid(B.id).find('mk-sure').click();
+  await until(() => t.state.removed.length === 1);
+  const order = calls.filter((c) => c.method === 'DELETE').map((c) => c.url);
+  assert.deepEqual(order, ['/api/characters', '/api/memory'], '子が先、記憶が後');
+  const refused = setup();
+  server.refuse = true;
+  setKey(KEY);
+  await refused.kids.refresh();
+  refused.kid(B.id).find('mk-del').click();
+  refused.kid(B.id).find('mk-sure').click();
+  await until(() => refused.root.find('mk-note').textContent !== '');
+  assert.equal(calls.some((c) => c.url === '/api/memory' && c.method === 'DELETE'), false, '断られたら、記憶は消さない');
+  assert.deepEqual(refused.state.removed, []);
+  clearKey();
+});
 test('けす: 舞台にいる子を消す時は、先に主役に戻す。戻せなければ消さない', async () => {
   const t = setup({ stage: B.id });
   await t.kids.refresh();

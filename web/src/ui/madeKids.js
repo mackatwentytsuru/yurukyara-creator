@@ -234,9 +234,10 @@ export function mountMadeKids({ root, getStageId, putOnStage, onPicked = () => {
     try {
       // 舞台にいる子を消す時は、先に主役へ戻す(戻せなければ、消さない)
       if (getStageId() === it.id && !(await putOnStage(MAIN_CHARACTER.id))) throw new Error(TEXT.pickFail);
-      await forgetMemoryOf(it.id).catch(() => null); // その子が覚えた事も消す(消せなくても、子は消す)
+      // 先に子を消す。断られた時に、記憶だけが消えないように(記憶は、消せた後で)
       const r = await fetch('/api/characters', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: it.id }) });
       if (!r.ok && r.status !== 404) throw new Error(TEXT.removeFail);
+      await forgetMemoryOf(it.id).catch(() => null); // その子が覚えた事も消す(消せなくても、子は消えている)
       try {
         storage?.removeItem(`${STORE_PREFIX}${it.id}`); // その子の性格の設定
       } catch {

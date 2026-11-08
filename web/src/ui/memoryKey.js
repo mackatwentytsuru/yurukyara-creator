@@ -145,16 +145,6 @@ export async function forgetMemoryOf(id) {
 }
 
 /**
- * 札の「全部わすれる」: 話している子が決まっていれば、その子が覚えた事だけを消す(合鍵と、ほかの子の記憶は残す)。
- * 子が決まっていない時は、前と同じ(全部消して、合鍵も捨てる)
- */
-export async function forgetMine() {
-  if (!character) return forgetAll();
-  if (!getKey()) return { ok: true, forgotten: false };
-  return api.forget({});
-}
-
-/**
  * 別の端末へ渡す 6 桁の番号を作る。合言葉(公開のとき)は画面の入力欄から受け、見出し x-demo-pass で送る(空なら、会話の合言葉を使う)。
  * まだ合鍵が無い(何も覚えていない)時は、サーバーに聞かずに知らせの文で断る(合鍵は作らない)
  */

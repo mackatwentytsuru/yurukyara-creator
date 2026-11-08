@@ -149,7 +149,8 @@ export async function chatMemory(request, rawText, { store, cfg = {}, now = Date
   if (!key) return none;
   const mem = createKvMemory({ store, pepper: memoryConfig(cfg, env).pepper, now });
   try {
-    if (isForgetRequest(text)) return { ...none, handled: true, events: forgetReplyEvents(await mem.forgetAll(key, ch), persona, { scoped: Boolean(ch) }) };
+    // 「わすれて」は、どの子と話していても全部消す(子ごとに消すのは、子を消す時だけ)
+    if (isForgetRequest(text)) return { ...none, handled: true, events: forgetReplyEvents(await mem.forgetAll(key), persona) };
     const memory = await mem.recall(key, ch);
     let learned = [];
     try {

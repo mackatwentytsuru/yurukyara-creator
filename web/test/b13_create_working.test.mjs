@@ -90,6 +90,15 @@ test('描く(1 分ほど)・3D を待つ間は、すぐ出す。終わりの関�
   assert.equal(t.state.visible, false);
 });
 
+test('描く待ちの上限は、サーバーの 2D にする上限(300 秒)より長い。上限の直前までは出ていて、上限で消える', () => {
+  assert.ok(WORK_KINDS.draw.maxMs > 300_000 + 60_000, '絵を描く 1 分 + 2D の 300 秒でも、結果の前に消えない');
+  const { t, timers } = tracker();
+  t.begin('draw');
+  timers.advance(300_000 + 100_000);
+  assert.equal(t.state.visible, true, '6 分 40 秒過ぎても、動きは出たまま');
+  timers.advance(WORK_KINDS.draw.maxMs);
+  assert.equal(t.state.visible, false, '終わりの知らせが来なくても、上限で消える');
+});
 test('歩みの文を差し替えられる(update)。無ければ、種類ごとの文。上限で必ず消える', () => {
   const { t, timers } = tracker();
   const end = t.begin('build');

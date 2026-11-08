@@ -241,7 +241,8 @@ async function handleChat(req, res) {
   const memoryKey = !memoryOff && typeof req.headers['x-memory-key'] === 'string' ? req.headers['x-memory-key'] : '';
   const memoryChar = characterOf(req.headers['x-yc-character']); // 話している子の id(子ごとに記憶を分ける)
   if (memoryKey && isForgetRequest(body.text)) {
-    for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey, memoryChar), body.character?.persona ?? '', { scoped: Boolean(memoryChar) })) send(ev);
+    // 「わすれて」は、どの子と話していても、この合鍵の記憶を全部消す(画面と /api/status の知らせのとおり。子ごとに消すのは、子を消す時だけ)
+    for (const ev of forgetReplyEvents(memory.forgetAll(memoryKey), body.character?.persona ?? '')) send(ev);
     send({ type: 'done', serverMs: Date.now() - t0 });
     return res.end();
   }

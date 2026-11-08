@@ -101,21 +101,6 @@ test('一覧の読み出しにも、いまの子の id が付く(札はその子
   reset();
 });
 
-test('forgetMine: 子が決まっていればその子の分だけ(合鍵は残す)。決まっていなければ前と同じ(全部消して合鍵も捨てる)', async () => {
-  reset();
-  mk.setKey(KEY);
-  mk.setMemoryCharacter('yb261108_aaaaaa');
-  await mk.forgetMine();
-  const del = last('/api/memory', 'DELETE');
-  assert.equal(del.headers['x-yc-character'], 'yb261108_aaaaaa');
-  assert.equal(mk.getKey(), KEY, '合鍵は残る(ほかの子の記憶を読めなくしない)');
-  mk.setMemoryCharacter('');
-  await mk.forgetMine();
-  assert.equal(last('/api/memory', 'DELETE').headers['x-yc-character'], undefined);
-  assert.equal(mk.getKey(), '', '子が決まっていなければ前と同じ');
-  reset();
-});
-
 test('forgetAll(お店の端末の切り替えなど)は、子の id を付けず全部消し、合鍵も捨てる。forgetMemoryOf は指した子だけ', async () => {
   reset();
   mk.setKey(KEY);
@@ -138,7 +123,7 @@ test('forgetAll(お店の端末の切り替えなど)は、子の id を付け�
   reset();
 });
 
-test('札: 「全部わすれる」は、子が決まっていればその子の分だけ。合鍵は残る。会話の「わすれて」も scoped なら合鍵を残す', async () => {
+test('札: 「全部わすれる」は、子が決まっていても、どの子の分も全部消して合鍵も捨てる(確かめの後)。子ごとに消すのは子を消す時だけ', async () => {
   reset();
   mk.setKey(KEY);
   mk.setMemoryCharacter('yb261108_aaaaaa');
@@ -146,13 +131,26 @@ test('札: 「全部わすれる」は、子が決まっていればその子の
   const panel = mountMemoryPanel(parent, { askPass: false });
   await panel.ready;
   panel.root.find('mem-forget').click();
-  panel.root.find('mem-forget-yes').click(); // 1 回目は聞くだけ(作る画面の枝)。「はい」で消す
+  calls.length = 0;
+  panel.root.find('mem-forget-no').click(); // 「やめる」では何も消さない
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(last('/api/memory', 'DELETE'), undefined, '「やめる」では消さない');
+  assert.equal(mk.getKey(), KEY);
+  panel.root.find('mem-forget').click();
+  panel.root.find('mem-forget-yes').click(); // 1 回目は聞くだけ。「はい」で消す
   await new Promise((r) => setTimeout(r, 60));
-  assert.equal(last('/api/memory', 'DELETE').headers['x-yc-character'], 'yb261108_aaaaaa');
-  assert.equal(mk.getKey(), KEY, '札の「全部わすれる」で合鍵を捨てない');
-  panel.onChatEvent({ type: 'memory', forgotten: true, via: 'chat', scoped: true });
-  assert.equal(mk.getKey(), KEY, '会話の「わすれて」(scoped)でも合鍵を捨てない');
+  const del = last('/api/memory', 'DELETE');
+  assert.ok(del, '消す通信が出る');
+  assert.equal(del.headers['x-yc-character'], undefined, '子を指さない = 全部');
+  assert.equal(mk.getKey(), '', '札の「全部わすれる」で、この端末の合鍵も捨てる');
+  reset();
+});
+
+test('会話の「わすれて」の印(scoped なし)で、合鍵を捨てる', () => {
+  reset();
+  mk.setKey(KEY);
+  const panel = mountMemoryPanel(new FakeEl('div'), { askPass: false });
   panel.onChatEvent({ type: 'memory', forgotten: true, via: 'chat' });
-  assert.equal(mk.getKey(), '', 'scoped でない「わすれて」は前と同じ(合鍵を捨てる)');
+  assert.equal(mk.getKey(), '');
   reset();
 });

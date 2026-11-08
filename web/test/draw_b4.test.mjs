@@ -122,3 +122,20 @@ test('描く決まりに、頭と体をつなげること・hat と accessory �
   // hat と accessory は、決まった部品の名前の中(validateSvg が通す)
   assert.deepEqual(validateSvg(GOOD.replace('<g id="body">', '<g id="accessory"></g><g id="hat"></g><g id="body">')), []);
 });
+
+test('2D にする道具(python)を始められない時は、サーバーを落とさず、描けなかった答えにする(失敗として数える)', async () => {
+  const f = fakeFetch(GOOD);
+  const { d, dir } = drawer({ YC_BROWSER_DRAW: '1' }, f); // to2d を渡さない = 本物の始め方(spawn)
+  const saved = process.env.PATH;
+  const savedCase = process.env.Path;
+  try {
+    process.env.PATH = join(dir, 'no-such-bin'); // python が見つからない状態にする
+    await assert.rejects(() => d.draw({ words: 'みかんの子' }, '1.2.3.4'), /2D にできませんでした/);
+  } finally {
+    if (saved === undefined) delete process.env.PATH; else process.env.PATH = saved;
+    if (savedCase !== undefined) process.env.Path = savedCase;
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const again = await d.draw({ words: '' }, '1.2.3.4').catch((e) => e);
+  assert.equal(again?.status, 400, 'サーバーは生きていて、次の呼び出しに答える');
+});

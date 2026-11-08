@@ -1375,6 +1375,9 @@ export class FirstRun {
   async _meetAsk() {
     this._go(3);
     const c = this.character;
+    // 描けた子を途中経過に残す(「この子で いい?」で読み込み直しても、もう 1 体 描かずに、ここから続ける。
+    // 3 歩目に入った時の途中経過には、まだ子がいない)
+    if (c?.id) this.d.progress?.(this.snapshot());
     await this._say({ who: 'guide', text: c?.sample ? `${c.name}だよ。この子は どうかな?` : c?.drawn ? 'この子で いい?' : 'こんな子が できたよ。どうかな?' });
     this._offer([
       { id: 'keep', label: 'この子にする', primary: true },

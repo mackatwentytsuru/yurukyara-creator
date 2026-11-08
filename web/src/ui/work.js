@@ -17,7 +17,8 @@ export const WORK_DELAY_MS = 1500;
  * draw = 絵を描く(1 分ほど)・build = 3D を待つ・stage = 子を舞台に出す・check = 絵を見る・think = 返事を待つ・wait = ほか
  */
 export const WORK_KINDS = Object.freeze({
-  draw: { immediate: true, maxMs: 4 * 60_000 },
+  // 描く待ちは、サーバーの 2D にする上限(300 秒。draw.mjs の TO_2D_TIMEOUT_MS)と、絵を描く時間(1〜2 分)より長くする。短いと、結果が来る前に動きが消える
+  draw: { immediate: true, maxMs: 7 * 60_000 },
   build: { immediate: true, maxMs: 30 * 60_000 },
   stage: { immediate: false, maxMs: 90_000 },
   check: { immediate: false, maxMs: 120_000 },

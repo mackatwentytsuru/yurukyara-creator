@@ -98,6 +98,24 @@ test('描いた子を決めた後の途中経過には、描いた子の印(draw
   assert.equal(g.fr.step, 4, '決めた歩みから続く(描き直さない)');
 });
 
+test('「この子で いい?」で読み込み直しても、もう 1 体 描かずに、「この子で いい?」から続く(描いた子が途中経過に残る)', async () => {
+  const h = harness(drawingCreator());
+  await h.fr.start();
+  await h.fr.act('words', { text: 'みかんの子' });
+  assert.deepEqual(h.offered.slice(0, 1), ['keep'], '「この子にする」の問い');
+  const at3 = h.progress.filter((p) => p.step === 3 && p.character?.id === 'yb261108_aaaaaa').at(-1);
+  assert.ok(at3, '描けた子が、3 歩目の途中経過に残っている');
+  assert.equal(at3.character.drawn, true);
+  const creator = drawingCreator();
+  const g = harness(creator);
+  await g.fr.resume({ ...JSON.parse(JSON.stringify(at3)), reload: true });
+  assert.equal(creator.calls.length, 0, '描き直さない');
+  assert.equal(g.fr.step, 3);
+  assert.equal(g.fr.character.id, 'yb261108_aaaaaa');
+  assert.ok(g.texts('guide').includes('この子で いい?'), '「この子で いい?」から続く');
+  assert.ok(!g.texts().some((t) => t.includes('サーバーが 描いているかも')), '1 歩目に戻って「描いているかも」とは言わない');
+  assert.deepEqual(g.offered.slice(0, 1), ['keep']);
+});
 test('見本の子の途中経過には、描いた子の印を付けない', async () => {
   const h = harness(createSampleCreator({ main: MAIN }));
   await h.fr.start();

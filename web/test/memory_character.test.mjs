@@ -113,7 +113,7 @@ test('公開の関数の入口(handleMemory・chatMemory): 見出し x-yc-charac
   await call('/api/memory/reflect', { method: 'POST', key, ch: 'yb261108_bbbbbb', body: { text: 'ぼくはハナです' } });
   assert.deepEqual((await call('/api/memory', { key, ch: 'yb261108_aaaaaa' })).data.items.map((i) => i.text), ['名前: タロウ']);
   assert.deepEqual((await call('/api/memory', { key, ch: 'yb261108_bbbbbb' })).data.items.map((i) => i.text), ['名前: ハナ']);
-  // 会話の側: その子の分だけ読み、その子の分として覚える。「わすれて」もその子の分だけ(scoped の印が付く)
+  // 会話の側: その子の分だけ読み、その子の分として覚える。「わすれて」は、どの子と話していても全部消す(scoped の印は付かない)
   const req = (ch) => new Request('https://example.test/api/chat', { method: 'POST', headers: { 'x-memory-key': key, ...(ch ? { 'x-yc-character': ch } : {}) } });
   const heard = await chatMemory(req('yb261108_aaaaaa'), 'こんにちは', { store, cfg, env: {} });
   assert.match(heard.memory.text, /タロウ/);
@@ -123,12 +123,17 @@ test('公開の関数の入口(handleMemory・chatMemory): 見出し x-yc-charac
   assert.ok(!(await call('/api/memory', { key, ch: 'yb261108_bbbbbb' })).data.items.some((i) => i.text.includes('カレー')), 'ほかの子には入らない');
   const forgot = await chatMemory(req('yb261108_aaaaaa'), 'わすれて', { store, cfg, env: {} });
   assert.equal(forgot.handled, true);
-  assert.equal(forgot.events[0].scoped, true, 'その子の分だけ消した印');
-  assert.deepEqual((await call('/api/memory', { key, ch: 'yb261108_aaaaaa' })).data.items, []);
-  assert.deepEqual((await call('/api/memory', { key, ch: 'yb261108_bbbbbb' })).data.items.map((i) => i.text), ['名前: ハナ'], 'ほかの子は残る');
-  const del = await call('/api/memory', { method: 'DELETE', key, ch: 'yb261108_bbbbbb', body: {} });
+  assert.equal(Object.hasOwn(forgot.events[0], 'scoped'), false, '全部消したので、その子だけの印は付かない');
+  assert.equal((await call('/api/memory', { key, ch: 'yb261108_aaaaaa' })).status, 404, '合鍵ごと消える');
+  assert.equal((await call('/api/memory', { key, ch: 'yb261108_bbbbbb' })).status, 404, 'ほかの子の分も消える');
+  // 子を指した DELETE(子を消す時の、その子の分だけの消し方)は、いままでどおり残す
+  const made2 = (await call('/api/memory?sub=new', { method: 'POST' })).data.key;
+  await call('/api/memory/reflect', { method: 'POST', key: made2, ch: 'yb261108_aaaaaa', body: { text: 'ぼくはタロウです' } });
+  await call('/api/memory/reflect', { method: 'POST', key: made2, ch: 'yb261108_bbbbbb', body: { text: 'ぼくはハナです' } });
+  const del = await call('/api/memory', { method: 'DELETE', key: made2, ch: 'yb261108_bbbbbb', body: {} });
   assert.deepEqual(del.data, { ok: true, forgotten: true, scoped: true });
-  assert.equal((await call('/api/memory', { key, ch: 'yb261108_bbbbbb' })).status, 200, '合鍵は残っている');
+  assert.equal((await call('/api/memory', { key: made2, ch: 'yb261108_bbbbbb' })).status, 200, '合鍵は残っている');
+  assert.deepEqual((await call('/api/memory', { key: made2, ch: 'yb261108_aaaaaa' })).data.items.map((i) => i.text), ['名前: タロウ'], 'ほかの子は残る');
 });
 
 test('「わすれて」の返事: 子を指さなければ scoped の印を付けない(前と同じ形)', () => {
@@ -198,12 +203,13 @@ test('通し(手元のサーバー): 子 A に名前を話す → 子 B は知�
   // B に話した時、A の名前は頭脳に渡らない(仮の頭脳の返事の中に出ない)
   const bSays = (await chatEvents(base, 'こんにちは', { ...B, 'x-memory-key': key })).filter((e) => e.type === 'say').map((e) => e.text).join('');
   assert.doesNotMatch(bSays, /タロウ/);
-  // A の「わすれて」は、A の分だけ(scoped)
+  // A と話していても、「わすれて」は全部消す(B の分も)
   const gone = await chatEvents(base, 'わすれて', { ...A, 'x-memory-key': key });
-  assert.equal(gone.find((e) => e.type === 'memory')?.scoped, true);
-  assert.deepEqual(await list(A), []);
-  assert.deepEqual(await list(B), ['名前: ハナ'], 'B は残る');
-  // 子を指さずに(前の道具)DELETE すると、前と同じく全部消える
+  assert.equal(gone.find((e) => e.type === 'memory')?.scoped, undefined);
+  assert.equal(gone.find((e) => e.type === 'memory')?.forgotten, true);
+  const after = await fetch(`${base}/api/memory`, { headers: { 'x-memory-key': key, ...B } });
+  assert.ok(!after.ok || (await after.json()).items.length === 0, 'B の分も消えている');
+  // 子を指さずに(前の道具)DELETE しても、もう消す物は無い
   const del = await (await fetch(`${base}/api/memory`, { method: 'DELETE', headers: { 'x-memory-key': key, 'content-type': 'application/json' }, body: '{}' })).json();
-  assert.deepEqual(del, { ok: true, forgotten: true });
+  assert.deepEqual(del, { ok: true, forgotten: false });
 });
