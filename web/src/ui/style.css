@@ -919,6 +919,7 @@ html.tv-mode .tv-exit { opacity: 1; }
 /* 画面は、指のつまみ・2 回タップで拡大しない(拡大すると右が切れて固まって見えた。viewport の meta と ui/noPinchZoom.js も同じ守り)。
    縦・横になぞって動かす(スクロール)だけは残す。キャラの上(#stage)は、これまでどおり touch-action: none */
 html, body { touch-action: pan-x pan-y; }
+input[type="range"] { touch-action: pan-y; } /* つまみを左右に動かす(性格の画面の「元気さ」)。横の動きは、ページの動かしに取られない */
 /* 入力窓は textarea。1 行から、長い文では 3 行まで伸びる(高さは ui/composerInput.js が決め、上限はここ) */
 .composer textarea {
   flex: 1; min-width: 0; font: inherit; font-size: 16px; line-height: 1.4; color: var(--text); padding: 12px 14px; border-radius: 14px;
