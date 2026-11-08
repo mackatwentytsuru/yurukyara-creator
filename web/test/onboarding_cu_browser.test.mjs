@@ -191,7 +191,8 @@ for (const sz of SIZES) {
       // 全体のおまかせ → 確かめる → やめる → 同じ問い(あんないする こと)に戻る
       await page.click('.fr-actions .fr-auto');
       await waitAct(page, 'omakase_yes');
-      assert.deepEqual(await page.$$eval('.fr-actions button', (bs) => bs.map((b) => b.textContent)), ['はい、ぜんぶ おまかせ', 'やめる'], '確かめの 2 択だけ');
+      // 「ひとつ もどる」(小さな下線の札。.fr-back)は選びの外。ふつうの札の 2 択だけを数える
+      assert.deepEqual(await page.$$eval('.fr-actions button:not(.fr-back)', (bs) => bs.map((b) => b.textContent)), ['はい、ぜんぶ おまかせ', 'やめる'], '確かめの 2 択だけ');
       assert.match(await page.$eval('.fr-log', (e) => e.innerText), /ここから さきを ぜんぶ おまかせに するよ。いい\?/);
       await checkLayout(page, `${sz.name} 確かめ`);
       await shot(page, `cu_${sz.name}_auto_confirm`);

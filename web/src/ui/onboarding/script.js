@@ -86,6 +86,22 @@ export const OMAKASE_YES = 'はい、ぜんぶ おまかせ';
 export const OMAKASE_NO = 'やめる';
 /** パソコンでの作り方(リンク)の札の名前 */
 export const README_LABEL = 'つくりかた';
+/**
+ * 「ひとつ もどる」(本人 11/8: つくっている最中にも、ひとつ前に戻れるように)。2 つ目の問いから先の、どの札にも出す(ふつうの札より目立たない小さな札)。
+ * 押すと、ひとつ前の問いに戻り、さっきの こたえに しるしを つける(言葉は欄に入れ直す)。その問いの こたえの 効き目だけを元に戻す
+ */
+export const BACK_LABEL = 'ひとつ もどる';
+export const BACK_ARIA = 'ひとつ もどる(ひとつ まえの しつもんに もどります。さっきの こたえは のこしてあります)';
+export const BACK_ARIA_DONE = 'ひとつ もどる(できあがる まえの しつもんに もどります)';
+export const BACK_ARIA_AUTO = 'ひとつ もどる(のこりを おまかせに する まえの しつもんに もどります)';
+export const BACK_DONE = 'ひとつ もどったよ。';
+export const BACK_PREV = 'さっきの こたえに しるしが ついているよ。';
+/** 戻った先の問いで、さっき描いた子をそのまま使う札(もう一度は描かない) */
+export const REUSE_ID = 'reuse_made';
+/** 戻りの道の長さの上限(古い物から捨てる。1 回の作りで、これを越えることはまず無い) */
+const TRAIL_MAX = 60;
+/** 問いの「かたち」(札の id の並び。『はじめから』は数えない)。同じ並びなら、同じ問いの出し直し(戻りの道には足さない) */
+const sigOf = (actions) => actions.filter((a) => a.id !== 'fresh').map((a) => a.id).join(' ');
 /** 歩みごとの、だいたいの秒(残りの時間の目安)。手元の PC で描く時は、3 歩目に描く時間を足す */
 const STEP_SEC = { 1: 20, 2: 15, 3: 15, 4: 15, 5: 15, 6: 20, 7: 15 };
 const DRAW_SEC = 240;
@@ -122,7 +138,8 @@ export function guideFirstLines(guideName, nori) {
 /**
  * @typedef {{who:'guide'|'char'|'user'|'note', text:string, img?:string, expression?:string, motion?:string, voice?:boolean}} Line
  * @typedef {{id:string, label:string, kind?:'button'|'text'|'file'|'key'|'persona'|'frame', primary?:boolean, capture?:boolean,
- *   placeholder?:string, max?:number, submit?:string, remember?:boolean, url?:string}} Action
+ *   placeholder?:string, max?:number, submit?:string, remember?:boolean, url?:string, prev?:boolean, value?:string}} Action
+ *   prev は「ひとつ もどる」で戻った時の、さっきの こたえ(しるしを つける)。value は言葉の欄に入れ直す、さっきの言葉。
  *   kind 'link' は押すと url を別のタブで開くだけ(台本は進まない)。
  */
 export class FirstRun {
@@ -136,13 +153,16 @@ export class FirstRun {
    * @param {(text:string, ctx:object)=>Promise<{lines:{text:string,expression?:string,motion?:string}[], brain:string, safety?:string|null, notice?:string}>} d.talk
    * @param {object} d.voice 声(voice.js)
    * @param {(lines:Line[], ctx:object)=>Promise<void>} d.present 言った文を画面に出し、出し終わったら解決する
-   * @param {(actions:Action[])=>void} d.offer 選べる物を出す
+   * @param {(actions:Action[], meta?:{back?:{label:string, aria:string}})=>void} d.offer 選べる物を出す。meta.back があれば「ひとつ もどる」の札も出す
    * @param {(character:object)=>Promise<boolean>} [d.showCharacter] できた子を舞台に出す。false なら読み込み直し中(続きは resume)
    * @param {(settings:object, character:object)=>void} [d.onPersona]
    * @param {(step:number, info:object)=>void} [d.onStep]
    * @param {(snapshot:object)=>void} [d.save] 読み込み直しの前に、続きの状態を残す
    * @param {()=>void} [d.onDone]
    * @param {(pic:{img?:string, frame?:string|null, caption:string}|null)=>void} [d.pin] 選んだ絵・描いた絵を札に出したままにする(null で消す)
+   * @param {()=>number|null} [d.mark] 会話の欄の、いまの位置(問いを出した時に控える。「ひとつ もどる」で、その位置まで会話を戻す)
+   * @param {(mark:number|null)=>void} [d.rewind] 会話の欄を、控えた位置まで戻す
+   * @param {()=>void} [d.onUndone] 作り終わった後に「ひとつ もどる」で戻った(終わりで閉じる待ちを止める)
    * @param {string|null} [d.guideUrl] README の作り方の節の URL(画面の index.html の link rel="help")。無ければ文で手順だけ
    */
   constructor(d) {
@@ -172,6 +192,11 @@ export class FirstRun {
     this.place = null; // お店・駅の時だけ { name, about }
     this.convert = null; // 3D 用のゆるキャラ変換の選び { shape, material }(手元の PC の道)
     this.log = []; // 試験と確かめのための、言った文の記録
+    this.trail = []; // 「ひとつ もどる」の道: 出し終えた問いごとの控え(新しい物が後ろ)。問いを出すたびに足す(_offer)
+    this.q = null; // 今出している問いの控え
+    this.askPushed = false; // 「のこりを ぜんぶ おまかせ」の確かめを出す時に、元の問いを道に足したか
+    this.lastMade = null; // 最後に描いた子(戻った先の問いで、もう一度描かずに使えるように残す)
+    this.pinned = null; // 札の上に出したままの絵(戻る時に元へ戻す)
   }
 
   /** 案内役。渡されなければ主役(MAIN_CHARACTER) */
@@ -299,11 +324,64 @@ export class FirstRun {
     }
   }
 
-  _offer(actions) {
+  /**
+   * 選びを出す。新しい問いなら、ひとつ前の問いの控えを戻りの道に足す(「ひとつ もどる」用)。
+   * @param {object} [o]
+   * @param {boolean} [o.transient] 通り道の問い(失敗の「もう一度」・おまかせの確かめ)。次の問いが出ても、道には足さない
+   * @param {boolean} [o.replace] 戻った先の問いの出し直し。道には足さない
+   * @param {number|null} [o.mark] 戻った先の問いの、会話の欄の位置(元のまま使う)
+   */
+  _offer(actions, { transient = false, replace = false, mark } = {}) {
     // 続きから始めた後、最初の 1 つ目の答えを押すまで、選びに「はじめから」を足す(いつも続きからしか始まらないと、作り直せないため。CU3)
     if (this.freshNext && !actions.some((a) => a.id === 'begin' || a.id === 'fresh')) actions = [...actions, { id: 'fresh', label: 'はじめから' }];
     this.actions = actions;
-    this.d.offer(actions);
+    this._track(actions, { transient, replace, mark });
+    this.d.offer(actions, this._backMeta());
+  }
+
+  /** 今出した問いの控えを取る。前の問いと「かたち」が違えば、前の問いを戻りの道に足す */
+  _track(actions, { transient, replace, mark }) {
+    const sig = sigOf(actions);
+    const prev = this.q;
+    if (prev && !replace && !prev.transient && !(prev.step === this.step && prev.sig === sig)) {
+      this.trail.push(prev);
+      if (this.trail.length > TRAIL_MAX) this.trail.shift();
+    }
+    this.q = {
+      sig,
+      transient,
+      step: this.step,
+      actions,
+      mark: mark !== undefined ? mark : (this.d.mark?.() ?? null),
+      skipped: [...this.skipped],
+      input: this.input ? { ...this.input } : null,
+      check: this.check ? { ...this.check } : null,
+      character: this.character,
+      settings: this.settings,
+      role: this.role,
+      place: this.place ? { ...this.place } : null,
+      convert: this.convert ? { ...this.convert } : null,
+      auto: this.auto,
+      history: [...this.history],
+      mockNoted: this.mockNoted,
+      freshNext: this.freshNext,
+      askBack: this.askBack ?? null,
+      waiting2d: Boolean(this.waiting2d),
+      pinned: this.pinned,
+      answer: null,
+    };
+  }
+
+  /** 「ひとつ もどる」の札を出すかと、その名前(最初の問いと、戻る先が無い時は出さない) */
+  _backMeta() {
+    if (!this.trail.length) return undefined;
+    return { back: { label: BACK_LABEL, aria: this.done ? (this.auto ? BACK_ARIA_AUTO : BACK_ARIA_DONE) : BACK_ARIA } };
+  }
+
+  /** 札の上の絵を替える(戻る時に元へ戻せるよう、出している絵を覚える) */
+  _pin(pic) {
+    this.pinned = pic ?? null;
+    this.d.pin?.(pic);
   }
 
   _go(n) {
@@ -328,7 +406,7 @@ export class FirstRun {
       return true;
     } catch (err) {
       await this._say({ who: 'note', text: `うまく すすめなかったよ(${err?.message ?? err})` });
-      this._offer(this._retryActions());
+      this._offer(this._retryActions(), { transient: true });
       return false;
     } finally {
       this.busy = false;
@@ -347,10 +425,16 @@ export class FirstRun {
       this.d.offer([]);
       await this._say({ who: 'user', text: OMAKASE_ALL }, { who: 'guide', text: OMAKASE_ASK });
       this.askBack = back;
-      this._offer([
-        { id: 'omakase_yes', label: OMAKASE_YES, primary: true, noAuto: true },
-        { id: 'omakase_no', label: OMAKASE_NO, noAuto: true },
-      ]);
+      // 確かめは通り道の問い: 元の問い(のこりを ぜんぶ おまかせ を押した時の問い)が戻りの道に入り、最後に「ひとつ もどる」で戻る先になる
+      const before = this.trail.length;
+      this._offer(
+        [
+          { id: 'omakase_yes', label: OMAKASE_YES, primary: true, noAuto: true },
+          { id: 'omakase_no', label: OMAKASE_NO, noAuto: true },
+        ],
+        { transient: true },
+      );
+      this.askPushed = this.trail.length > before;
       return true;
     } finally {
       this.busy = false;
@@ -362,7 +446,10 @@ export class FirstRun {
     await this._say({ who: 'guide', text: 'じゃあ、さっきの つづきね。' });
     const back = this.askBack ?? [];
     this.askBack = null;
-    return this._offer(back.length ? back : this._startActions());
+    // 同じ問いに戻るだけ: 確かめの前に足した控えは道から外す(さもないと、「ひとつ もどる」が同じ問いを 2 回出す)
+    const asked = this.askPushed ? this.trail.pop() : null;
+    this.askPushed = false;
+    return this._offer(back.length ? back : this._startActions(), { replace: true, mark: asked?.mark });
   }
 
   /**
@@ -388,6 +475,7 @@ export class FirstRun {
     const pick = made ?? creator.surprise?.() ?? creator.main?.() ?? (creator.list?.() ?? [])[0] ?? null;
     if (!pick) return 'ok';
     this.character = pick;
+    this._noteMade(pick);
     if (this.step < 2) this.skipped.add(2);
     this._go(3);
     const lines = [];
@@ -426,7 +514,9 @@ export class FirstRun {
 
   /** 押された物を受け取る。今出している選択肢に無い物(古いボタン)と、動いている最中の 2 回押しは捨てる */
   async act(id, payload = {}) {
-    if (this.busy || (this.done && id !== 'begin')) return false;
+    if (this.busy) return false;
+    if (id === 'back') return this._actBack(); // 「ひとつ もどる」。作り終わった後(おまかせの後など)も受ける
+    if (this.done && id !== 'begin') return false;
     // 役目を聞いている間に、ことばや絵が先に来た(呼ぶ側が役目をとばした): 役目は既定の おうち にして、そのまま受ける
     if (!this.role && this.step === 1 && START_IDS.has(id) && this.actions.some((a) => a.id.startsWith('role_'))) {
       this.role = DEFAULT_ROLE;
@@ -434,6 +524,7 @@ export class FirstRun {
     }
     if (!this.actions.some((a) => a.id === id)) return false;
     if (id !== 'fresh') this.freshNext = false; // 続きの答えを 1 つ押したら、「はじめから」は出さない
+    if (this.q) this.q.answer = { id, text: typeof payload?.text === 'string' ? payload.text : null }; // 戻った時に、さっきの こたえに しるしを つける
     this.busy = true;
     this.d.offer([]); // 押した後は、次の選択肢が出るまでボタンを出さない
     try {
@@ -441,7 +532,7 @@ export class FirstRun {
       return true;
     } catch (err) {
       await this._say({ who: 'note', text: `うまく すすめなかったよ(${err?.message ?? err})` });
-      this._offer(this._retryActions());
+      this._offer(this._retryActions(), { transient: true });
       return false;
     } finally {
       this.busy = false;
@@ -450,6 +541,119 @@ export class FirstRun {
 
   _retryActions() {
     return [{ id: 'retry', label: 'もう一度', primary: true }, { id: 'finish', label: 'ここで おわる' }];
+  }
+
+  /* ---------- ひとつ もどる(本人 11/8) ---------- */
+
+  /** 「ひとつ もどる」を押した。動いている最中の押し直しは act が捨てる。戻る先が無ければ何もしない */
+  async _actBack() {
+    if (!this.trail.length) return false;
+    this.busy = true;
+    this.d.offer([]); // 押した後は、次の選択肢が出るまでボタンを出さない
+    try {
+      await this._back();
+      return true;
+    } catch (err) {
+      await this._say({ who: 'note', text: `うまく もどれなかったよ(${err?.message ?? err})` });
+      this._offer(this._retryActions(), { transient: true });
+      return false;
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /**
+   * ひとつ前の問いに戻る。その問いを出した時の状態(歩み・役目・場所・入力・子・性格・札の上の絵など)に戻し、会話の欄もその位置まで戻して、
+   * 同じ問いを出し直す(さっきの こたえに しるしを つけ、言葉は欄に入れ直す)。描いた子は消さず、戻った先で「そのまま使う」札として残す。
+   * 舞台の子が戻る先の子と違う時だけ、舞台の子を入れ替える(長い仕事として待つ。止まりの見張りが出し直さない)
+   */
+  async _back() {
+    const q = this.trail.pop();
+    const leaving = this.character;
+    const wasDone = this.done;
+    this.done = false;
+    clearTimeout(this._finishTimer);
+    this.skipped = new Set(q.skipped);
+    this.input = q.input ? { ...q.input } : null;
+    this.check = q.check ? { ...q.check } : null;
+    this.character = q.character;
+    this.settings = q.settings;
+    this.role = q.role;
+    this.place = q.place ? { ...q.place } : null;
+    this.convert = q.convert ? { ...q.convert } : null;
+    this.auto = q.auto;
+    this.history = [...q.history];
+    this.mockNoted = q.mockNoted;
+    this.freshNext = q.freshNext;
+    this.askBack = q.askBack;
+    this.askPushed = false;
+    this.waiting2d = q.waiting2d;
+    this._pin(q.pinned);
+    if (wasDone) this.d.onUndone?.(); // 作り終わりで閉じる待ちを止める
+    this.d.thinking?.(false);
+    this.d.rewind?.(q.mark);
+    clearTimeout(this.frameTimer);
+    // 性格の控え(この端末に覚えた設定)も、その問いの時の物へ。後の歩みで足した声の出し方などが、控えにだけ残らないように
+    const id = q.character?.id;
+    if (id && q.settings && JSON.stringify(this.d.persona.get?.(id) ?? null) !== JSON.stringify(q.settings)) {
+      this.d.persona.set(id, q.settings);
+      this.d.onPersona?.(q.settings, q.character);
+    }
+    if (q.character && q.character.id !== leaving?.id) {
+      const stay = await this._long(Promise.resolve(this.d.showCharacter?.(q.character) ?? true));
+      if (stay === false) {
+        this.d.save?.(this.snapshot());
+        return; // 読み込み直しの後、resume が続ける
+      }
+    }
+    this.step = q.step;
+    this.d.onStep?.(q.step, { skipped: [...this.skipped], local: this.local });
+    if (q.step <= STEPS.length) this.d.progress?.(this.snapshot());
+    const list = this._restoredActions(q);
+    await this._say({ who: 'note', text: q.answer ? `${BACK_DONE}${BACK_PREV}` : BACK_DONE });
+    this._offer(list, { replace: true, mark: q.mark });
+  }
+
+  /** 戻った先の問いの札: さっきの こたえに しるし(prev)を つけ、言葉の欄には さっきの言葉を入れる。描いた子があれば「そのまま使う」札を足す */
+  _restoredActions(q) {
+    const ans = q.answer;
+    const base = q.actions.map(({ prev, value, ...a }) => a);
+    const m = this.lastMade;
+    if (m && !q.character && !base.some((a) => a.id === REUSE_ID) && base.some((a) => a.id === 'words' || a.kind === 'frame')) {
+      base.push({ id: REUSE_ID, label: `さっきの ${m.character.name}で つづける`, aria: `さっき 描いた ${m.character.name}で つづける(もう一度は 描きません)` });
+    }
+    return base.map((a) => (ans && a.id === ans.id ? { ...a, prev: true, ...(a.kind === 'text' && ans.text ? { value: ans.text } : {}) } : a));
+  }
+
+  /** 最後に描いた子を覚える(戻った先の問いで、もう一度描かずに使える)。描いた子と、手元の PC の道の子だけ(見本は選び直しても何も減らない) */
+  _noteMade(c) {
+    if (!c || !(c.drawn || c.local)) return;
+    this.lastMade = { character: c, input: this.input ? { ...this.input } : null, check: this.check ? { ...this.check } : null, skipped: [...this.skipped], pinned: this.pinned };
+  }
+
+  /** 「さっきの子で つづける」: もう一度は描かない。描いた時の入力・チェック・歩みに戻して、その子の「この子はどうかな?」へ */
+  async _reuseMade() {
+    const m = this.lastMade;
+    if (!m) return this._restart();
+    this.input = m.input ? { ...m.input } : null;
+    this.check = m.check ? { ...m.check } : null;
+    this.skipped = new Set(m.skipped);
+    this.character = m.character;
+    if (m.pinned) this._pin(m.pinned);
+    this._go(3);
+    if (!this.local) return this._show();
+    // 手元の PC の道: 描いた子は決めてあるので、2D があれば 3D にもするかを、まだなら性格へ先に進む札を出す
+    const c = this.character;
+    this.waiting2d = !c.twod;
+    if (c.twod) {
+      await this._say({ who: 'guide', text: ASK_3D }, { who: 'note', text: '2D なら すぐ。3D は あとからでも えらべるよ。' });
+      return this._offer([
+        { id: 'want3d', label: '3D にも する', primary: true },
+        { id: 'no3d', label: 'いまは 2D だけ' },
+      ]);
+    }
+    await this._say({ who: 'guide', text: `${c.name}で つづけるよ。` });
+    return this._offer([{ id: 'keep', label: 'さきに 性格を きめる' }], { transient: true });
   }
 
   /** 押した札を、右の吹き出しで見せる(LINE のように、何を選んだかが会話に残る) */
@@ -618,8 +822,16 @@ export class FirstRun {
         this.check = null;
         this.character = null;
         this.skipped.clear();
-        this.d.pin?.(null);
+        this._pin(null);
+        // 全部やめて 1 歩目から: 戻りの道も、描いた子の控えも空にする(はじめから、の前には戻らない)
+        this.trail = [];
+        this.q = null;
+        this.askPushed = false;
+        this.lastMade = null;
         return this.start();
+      case REUSE_ID:
+        await this._echo(id);
+        return this._reuseMade();
       case 'other':
       case 'again':
         await this._echo(id);
@@ -683,7 +895,7 @@ export class FirstRun {
     this.check = null;
     this.character = null;
     this.skipped.clear();
-    this.d.pin?.(null);
+    this._pin(null);
     this._go(1);
     await this._say({ who: 'guide', text: 'じゃあ、もう一度。どんな子を生み出そうか?' });
     this._offerStart();
@@ -708,7 +920,7 @@ export class FirstRun {
     this.input = { from: 'picture', kind, url: p.url, name: clip(p.name, 40), ...(p.file ? { file: p.file } : {}) };
     const noun = kind === 'photo' ? '写真' : '絵'; // 撮った写真を「絵」と呼ばない
     // 選んだ絵は、札の上に出したままにする(会話の欄が流れても見える。司令塔の決め D3)。絵はこの端末の中だけ
-    this.d.pin?.({ img: p.url, caption: kind === 'photo' ? '撮った写真' : '選んだ絵' });
+    this._pin({ img: p.url, caption: kind === 'photo' ? '撮った写真' : '選んだ絵' });
     await this._say({ who: 'user', text: kind === 'photo' ? '(写真を撮った)' : '(絵を選んだ)', img: p.url });
     this._go(2);
     if (this.d.creator.mode === 'sample' && this.d.creator.canDraw && this.input.file) {
@@ -805,6 +1017,7 @@ export class FirstRun {
     const made = await this._long(this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) }));
     if (!made) return this._noMatch(); // 見本の一覧が空の時だけ
     this.character = made;
+    this._noteMade(made);
     if (made.drawn) {
       // ブラウザから描けた子: もう動く 2D になっている。その場で舞台に出す(B4 12b)
       await this._say({ who: 'guide', text: 'こんな子が できたよ! うごく 2D で 舞台に 出すね。' });
@@ -1188,20 +1401,21 @@ export class FirstRun {
         {
           const name = this.character?.name ?? 'この子';
           // 描いた絵は札の上に出したまま。すぐに動く 2D にして舞台に出す(B4 12b。パソコンが部品から 2D を組む。数秒)
-          this.d.pin?.({ frame: this.d.creator.picUrl ?? null, caption: `${name}(パソコンの Claude Code が描いた絵)` });
+          this._pin({ frame: this.d.creator.picUrl ?? null, caption: `${name}(パソコンの Claude Code が描いた絵)` });
           if (ev.auto) this.auto = true;
           this.waiting2d = true;
+          this._noteMade(this.character);
           await this._say({ who: 'guide', text: `${name}に けってい! いま、うごく 2D に して 舞台に 出すよ。` });
           if (this.twodEarly) return this._twodReady(this.twodEarly);
           // 2D が来ない時(パソコンの作る道が止まっている)でも行き止まりにしない: 先に性格へ進める
-          return this._offer([{ id: 'keep', label: 'さきに 性格を きめる' }]);
+          return this._offer([{ id: 'keep', label: 'さきに 性格を きめる' }], { transient: true });
         }
       case 'restart':
         this.input = null;
         this.check = null;
         this.character = null;
         this.skipped.clear();
-        this.d.pin?.(null);
+        this._pin(null);
         this._go(1);
         return this._say({ who: 'guide', text: 'じゃあ、もう一度。どんな子を生み出そうか?' });
       default:
@@ -1217,6 +1431,7 @@ export class FirstRun {
     }
     if (this.character.twod) return undefined;
     this.character = { ...this.character, twod: true };
+    if (this.lastMade?.character?.id === this.character.id) this.lastMade = { ...this.lastMade, character: this.character };
     const stay = await this._long(Promise.resolve(this.d.showCharacter?.(this.character) ?? true));
     if (stay === false) {
       this.d.save?.(this.snapshot());
