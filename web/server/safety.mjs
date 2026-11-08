@@ -8,6 +8,7 @@
 // 使う人のこれからの時間・独り占め・申しわけなさを求めない。
 // オープンソースを手元で書き換えた場合まで守り切れるとは言わない(README に書く)。
 import { REST_RULE } from '../src/conversation/restRule.js';
+import { classifyForeign, foreignFixedLine, foreignOutputKind, foreignReplacement } from './safetyLang.mjs'; // ML1: 多言語の時だけ使う、英・中・韓の網
 
 // 2: 11-06 判定役の指摘で、自分を傷つけたい話に 119 番、家の中の暴力に家族をすすめない、を足した
 // 3: 11-08 恋愛と依存のライン(つらい話の言い換え・子どもへの暴力の相談先・性的な話の網・引きとめと独り占めの網・個人のこと・休むすすめ)
@@ -114,9 +115,17 @@ export function isSexualInput(text) {
 
 /**
  * 使う人の言葉を分ける。いちばん重い物を 1 つ返す。
+ * lang が 'multi'(多言語)の時だけ、英語・中国語・韓国語の網(safetyLang.mjs)も見る。日本語だけの時は、今までの網だけ(動きは今日と同じ)。
+ * @param {string} text
+ * @param {{lang?: string|null}} [o]
  * @returns {'emergency'|'distress'|'sexual'|'romance'|'dependency'|null}
  */
-export function classifyInput(text) {
+export function classifyInput(text, { lang = null } = {}) {
+  const ja = classifyInputJa(text);
+  return lang === 'multi' ? mostSevere(ja, classifyForeign(text)) : ja;
+}
+
+function classifyInputJa(text) {
   const s = String(text ?? '');
   if (!s) return null;
   const { m, mf } = masked(s);
@@ -161,7 +170,17 @@ export const CHILD_HOTLINES = Object.freeze({ sos: '0120-0-78310', abuse: '189' 
  * @param {{child?:boolean, detail?:'self'|'abuse'|'other', text?:string}} [o] detail はつらい話の中身(distressDetail)、text は分けた元の言葉
  *   (「ママにぶたれる」のように、子どもからの暴力の話かを見る)
  */
-export function fixedReply(kind, { child = false, detail = 'other', text = '' } = {}) {
+export function fixedReply(kind, { visitorLang = 'ja', ...o } = {}) {
+  const lines = fixedReplyJa(kind, o);
+  // ML1: 相手の言葉が英語・中国語・韓国語の時は、相手の言葉の短い 1 行を先に出し、そのあと今の日本語の文をそのまま出す(番号は日本語の窓口のものも日本語の文に残す)
+  const head = foreignFixedLine(kind, visitorLang, o.detail ?? 'other');
+  if (!head) return lines;
+  const [first, ...rest] = lines;
+  const { intent, stage, handoff, safety, ...plain } = first;
+  return [say(head, first.expression, first.motion, { intent, stage, handoff, safety }), plain, ...rest];
+}
+
+function fixedReplyJa(kind, { child = false, detail = 'other', text = '' } = {}) {
   const first = { intent: '安全の案内', stage: 'chat', handoff: false, safety: kind };
   // 子ども: 年が書いてある・人格が子ども、または「ママに」「先生に」のような子どもへの暴力の言い方
   const kid = child || (kind !== 'romance' && kind !== 'dependency' && CHILD_HINT.test(fold(text)));
@@ -271,11 +290,13 @@ export function isUnsafeOutput(text) {
 }
 
 /** 出力を確かめて、反していたら、当たった網のやさしい文に差し替える(表情はうれしい・動きはうなずき) */
-export function guardOutput(ev) {
+export function guardOutput(ev, { multi = false } = {}) {
   if (!ev || ev.type !== 'say') return ev;
-  const kind = outputGuardKind(ev.text);
+  // ML1: 多言語の時だけ、英語・中国語・韓国語の網も見る。差し替える文は、キャラの文と同じ言葉(日本語だけの時は今までと同じ)
+  const kind = outputGuardKind(ev.text) ?? (multi ? foreignOutputKind(ev.text) : null);
   if (!kind) return ev;
-  return { ...ev, text: OUTPUT_REPLACE[kind], expression: 'happy', motion: 'nod', guarded: true, guardKind: kind };
+  const text = (multi ? foreignReplacement(kind, ev.text) : null) ?? OUTPUT_REPLACE[kind];
+  return { ...ev, text, expression: 'happy', motion: 'nod', guarded: true, guardKind: kind };
 }
 
 /** 差し替えの文の一覧(試験と、判定役への説明用) */
@@ -493,7 +514,7 @@ export function mostSevere(...kinds) {
  * 新しく同じ頼みをされた時は、その回の言葉の分け方(classifyTurn → turnGuard・決まった返事)が、また断る。
  * @param {{role:string, content:string}[]} history
  */
-export function classifyHistory(history = []) {
+export function classifyHistory(history = [], { lang = null } = {}) {
   const items = Array.isArray(history) ? history : [];
   const kinds = [];
   items.forEach((m, i) => {
@@ -501,7 +522,7 @@ export function classifyHistory(history = []) {
     const lines = String(m.content ?? '').split('\n');
     const answered = items[i + 1]?.role === 'assistant';
     lines.forEach((line, n) => {
-      const k = classifyInput(line);
+      const k = classifyInput(line, { lang });
       // 答えてある発言の最後の行は、恋人・依存・性的な話だけ数えない(1 回だけの注意)。つらい話・命の言葉は、返事があっても数える:
       // 返事は画面が送る履歴なので、作り物の返事 1 つで注意が外れてはいけない(CRITsec3 L1)
       const done = answered && n === lines.length - 1 && (k === 'romance' || k === 'dependency' || k === 'sexual');
