@@ -16,7 +16,8 @@ import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
 import { warmFirstVisit } from './ttsWarm.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { STT_LANGS, normalizeHearLang } from '../src/conversation/lang.js'; // ML1: 多言語の聞き取り・声の言葉
-import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
+import { createUpdateRoutes, findUpdatePython, isLocalRequest, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
+import { createKioskRoutes } from './kioskRoutes.mjs'; // 接客モード(店の端末): 設定・QR・店の端末の設定・抜ける番号
 import { createLimiter } from './limits.mjs';
 import { createClientEvents, MAX_BODY_BYTES as CLIENT_EVENT_BYTES } from './clientEvents.mjs'; // 声の聞き取りを始められなかった原因の小さな報告(logs/client_events.jsonl)
 import { createDrawer } from './draw.mjs'; // B4(12b): ブラウザから描く。既定は切ってある(YC_BROWSER_DRAW=1 の時だけ)
@@ -306,6 +307,7 @@ const updateRoutes = createUpdateRoutes({
   },
 });
 // ---- BUX ここまで ----
+const kioskRoutes = createKioskRoutes({ config, logDir: LOG_DIR, readBody, json, isLocalRequest });
 
 const useTls = Boolean(config.tlsCert && config.tlsKey);
 const handler = async (req, res) => {
@@ -314,6 +316,7 @@ const handler = async (req, res) => {
   try {
     if (await memoryRoutes(req, res, path, url)) return;
     if (await updateRoutes(req, res, path)) return; // BUX: 画面のアップデート(この PC の中からだけ)
+    if (await kioskRoutes(req, res, path, url)) return; // 接客モード(設定と QR はこの PC の中からだけ)
     if (req.method === 'GET' && path === '/api/status') {
       warmFirstVisit().catch(() => {}); // 初めての訪問の決まった文の声を、前もって作る(全部そろうまで 10 分に 1 回まで。待たない)
       return json(res, 200, {

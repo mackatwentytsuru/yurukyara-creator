@@ -1,0 +1,119 @@
+/* ---------- 接客モード(店の端末) ----------
+   html.is-kiosk の間だけ効く(main.js と stage/kioskEarly.js が付ける)。ふつうの画面には何もしない。
+   来場者に見せるのは、キャラ・AI の表示・マイク・文字の欄・質問のボタン(多言語の時は、ことばの選びも)だけ。ほかは出さない。
+   隠す物の一覧は src/stage/kioskMode.js の HIDDEN。下の 1 つ目の規則と同じ物を並べる(試験 kiosk_mode.test が食い違いを見る)。
+   CSS だけに頼らない: 開く関数のほうも、接客なら何もしない(main.js)。 */
+
+/* 1. 隠す物(1 行に 1 つ。HIDDEN と同じ順) */
+html.is-kiosk #changeBtn,
+html.is-kiosk #moreBtn,
+html.is-kiosk .yc-audio-btn,
+html.is-kiosk #camBtn,
+html.is-kiosk #tvCam,
+html.is-kiosk #memoryDrawer,
+html.is-kiosk #questLink,
+html.is-kiosk #tvBtn,
+html.is-kiosk #tvCast,
+html.is-kiosk #lookSwitch,
+html.is-kiosk #shitsukan,
+html.is-kiosk #modes,
+html.is-kiosk #thought,
+html.is-kiosk .top,
+html.is-kiosk .yc-update-badge,
+html.is-kiosk #kioskSetupBtn,
+html.is-kiosk .yc-sheet,
+html.is-kiosk #camAsk,
+html.is-kiosk #brainNotice,
+html.is-kiosk #shopBadge,
+html.is-kiosk .privacy { display: none !important; }
+
+/* 入口(店の人が 1 回押す所): 大きな「接客を はじめる」だけ。ふつうの入口の文と 2 つのボタンは出さない */
+.kiosk-lead, .kiosk-start { display: none; }
+html.is-kiosk .gate-what,
+html.is-kiosk .gate-guide,
+html.is-kiosk .gate .lead,
+html.is-kiosk .gate-first,
+html.is-kiosk .gate .fine,
+html.is-kiosk .gate .pass,
+html.is-kiosk #startSim,
+html.is-kiosk #startCam { display: none !important; }
+html.is-kiosk .kiosk-lead { display: block; margin: 0; font-size: 17px; line-height: 1.7; color: var(--text); }
+html.is-kiosk .kiosk-lead[hidden], html.is-kiosk .kiosk-start[hidden] { display: none; }
+html.is-kiosk .gate .kiosk-start { display: grid; min-height: 112px; font-size: 26px; border-radius: 22px; }
+html.is-kiosk .gate .kiosk-start[hidden] { display: none; }
+html.is-kiosk .gate .kiosk-start .btn-sub { font-size: 15px; }
+
+/* 2. 見せる物: AI の表示は、どんな時も出す(キーボードが出ている間も、字幕の列の中にいる) */
+html.is-kiosk #aiNotice { display: block !important; }
+html.is-kiosk #aiNoticeTop { display: none !important; }
+
+/* 質問のボタン・マイク・文字の欄は、指で押しやすく。マイクは「聞いている」印(押しても止まらない。止めるのは店の人だけ) */
+html.is-kiosk .choices { gap: 10px; }
+html.is-kiosk .choices button { font-size: 18px; min-height: 48px; padding: 10px 18px; }
+html.is-kiosk .mic { pointer-events: none; }
+html.is-kiosk .mic[aria-pressed="false"] { pointer-events: auto; } /* まだ聞けていない間は、押すと始める(許可の窓を出すため) */
+html.is-kiosk .composer { gap: 10px; }
+
+/* 3. 抜ける入口: 左上の角(見えない)。3 秒長押しすると、輪が満ちて、数字の窓が出る */
+.kx-zone { display: none; }
+html.is-kiosk .kx-zone {
+  display: block; position: fixed; z-index: 40; top: 0; left: 0;
+  width: calc(72px + env(safe-area-inset-left, 0px)); height: calc(72px + env(safe-area-inset-top, 0px));
+  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+.kx-ring {
+  position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px));
+  width: 52px; height: 52px; border-radius: 50%; opacity: 0;
+  background: conic-gradient(var(--lav) calc(var(--p, 0) * 360deg), rgba(255, 255, 255, 0.14) 0); /* --p は .kx-zone の長押しの進み(0〜1。kioskExit.js) */
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+  transition: opacity 120ms;
+}
+.kx-zone.holding .kx-ring { opacity: 1; }
+.kx[hidden] { display: none; }
+.kx {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; overflow: auto;
+  background: rgba(10, 8, 20, 0.82); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.kx-card {
+  width: min(340px, 100%); display: grid; gap: 12px; justify-items: center; padding: 20px 18px 18px; border-radius: 24px;
+  background: var(--ink-2); border: 1px solid var(--line); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5); color: var(--text);
+}
+.kx-card h2 { margin: 0; font-size: 20px; letter-spacing: 0.04em; }
+.kx-lead { margin: 0; font-size: 15px; color: var(--muted); }
+.kx-dots { display: flex; gap: 12px; min-height: 22px; }
+.kx-dots i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--lav); }
+.kx-dots i.on { background: var(--lav); }
+.kx-msg { margin: 0; min-height: 1.5em; font-size: 15px; line-height: 1.5; color: var(--warn); text-align: center; }
+.kx-pad { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.kx-key {
+  font: inherit; font-size: 26px; font-weight: 700; min-height: 64px; border-radius: 18px; cursor: pointer; color: var(--text);
+  background: var(--glass); border: 1px solid var(--line); -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.kx-key:active { transform: scale(0.97); }
+.kx-key:focus-visible, .kx-cancel:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.kx-back { font-size: 17px; }
+.kx-ok { font-size: 17px; border: 0; background: linear-gradient(135deg, #7d62ff, #c15bff); }
+.kx-ok:disabled { opacity: 0.45; }
+.kx-cancel { font: inherit; font-size: 16px; min-height: 48px; padding: 0 24px; border-radius: 16px; cursor: pointer; color: var(--text); background: transparent; border: 1px solid var(--line); }
+.kx.kx-shake .kx-card { animation: kx-shake 320ms; }
+@keyframes kx-shake { 20% { transform: translateX(-8px); } 50% { transform: translateX(8px); } 80% { transform: translateX(-4px); } }
+@media (prefers-reduced-motion: reduce) { .kx.kx-shake .kx-card { animation: none; } .kx-ring { transition: none; } }
+@media (max-height: 560px) { .kx-key { min-height: 48px; font-size: 22px; } .kx-card { gap: 8px; padding: 12px; } }
+
+/* 4. 店の人の窓(PC の「もっと」の中の「接客モード」。来場者には出ない = 上の隠す一覧) */
+.kiosk-setup-btn {
+  font: inherit; font-size: 14px; min-height: 44px; padding: 0 14px; border-radius: 999px; cursor: pointer; color: var(--text); white-space: nowrap;
+  background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); pointer-events: auto;
+}
+.kiosk-setup-btn[aria-expanded="true"] { border-color: var(--lav); }
+.kiosk-setup-btn:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+.kq-body { display: grid; gap: 10px; }
+.kq-note { margin: 0; font-size: 14px; line-height: 1.55; color: var(--muted); }
+.kq-pin { font: inherit; font-size: 18px; letter-spacing: 0.3em; padding: 8px 10px; border-radius: 10px; color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); width: 100%; }
+.kq-pin:focus-visible, .kq-facts:focus-visible { outline: 2px solid var(--lav); outline-offset: 1px; }
+.kq-facts { width: 100%; resize: vertical; font: inherit; font-size: 14px; }
+.kq-qr { display: grid; gap: 8px; justify-items: start; }
+.kq-canvas { display: block; background: #fff; border-radius: 8px; max-width: 100%; }
+.kq-url { margin: 0; font-size: 14px; line-height: 1.4; color: var(--muted); word-break: break-all; }
+/* ---------- 接客モード ここまで ---------- */

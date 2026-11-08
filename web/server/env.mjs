@@ -73,4 +73,11 @@ export const config = {
   get appPass() {
     return process.env.APP_PASSPHRASE ?? '';
   },
+  // 接客モード(店の端末): QR に入れる、店の端末から開ける住所(https。この PC の 127.0.0.1 では店の端末から開けない)と、札の署名の鍵(無ければ logs に自分で作る)
+  get kioskOrigin() {
+    return process.env.KIOSK_ORIGIN ?? '';
+  },
+  get kioskSecret() {
+    return process.env.KIOSK_SECRET ?? '';
+  },
 };
