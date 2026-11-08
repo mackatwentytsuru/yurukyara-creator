@@ -40,7 +40,7 @@
 - 試験: `python -I tools/test_confirmations.py`(決まりとスキルの文)・`python -I creator/learn/test_learn_guard.py`(偽の前の版 + 戻す、読める場所)。
 - 試験の命令は、引数の無い決まった形だけを許しています(`npm --prefix web test` など)。`node --test <ファイル>` のように、書いたファイルをそのまま動かせる形は、確認が出ます。
 - 出力先を自由に決められる道具(段の点検の道具・`t07_talk.py`・`upgrade_offers.py --restore` など)は、許可の一覧に入れていません(好きな所へ書けてしまうため)。ふつうの作る道では `yuru_make.py next` が中で流すので、確認は出ません。
-- `cd` は確認が出ます。許可した命令はリポジトリの頭からの相対の形なので、別のフォルダへ移ると、そこに置いた偽の道具を動かせてしまうためです。命令はリポジトリの頭のまま流します(`npm --prefix web test` など)。
+- 許可した命令はリポジトリの頭からの相対の形です。別のフォルダへ移って(`cd`)そこに置いた偽の道具を動かされないよう、確認なしで書ける場所の中の、リポジトリの形をまねた所(下)は確認が出ます。`python -m` の形は `python -I -m` にして、いまのフォルダの物を読み込ませません。
 - `creator/work/` の中は確認なしで書けますが、覚えさせた前の版(`learn/persona.*`)・確認画面の一言(`review/`)・リポジトリの形をまねた場所(`creator/`・`tools/`・`web/`・`package.json`)は、確認が出ます。
 
 ---
@@ -86,5 +86,5 @@ Make a character, teach it from a PDF and a map photo, and read one web page: 2 
 - Tests: `python -I tools/test_confirmations.py` and `python -I creator/learn/test_learn_guard.py`.
 - Test commands are allowed only in fixed forms without arguments (such as `npm --prefix web test`). Forms that run a file Claude just wrote, such as `node --test <file>`, ask first.
 - Tools that can write to any path they are given (stage checks, `t07_talk.py`, `upgrade_offers.py --restore`) are not on the allow list. In the normal maker flow, `yuru_make.py next` runs them internally, so no ask appears.
-- `cd` asks, because the allowed commands are relative to the repository root and a planted copy in another folder could run instead.
+- Allowed commands are relative to the repository root. So that a `cd` into a writable folder cannot run a planted copy, writing paths that mimic the repository there asks, and `python -m` is allowed only as `python -I -m` (it does not import from the current folder).
 - Writing under `creator/work/` does not ask, except the saved versions of taught knowledge (`learn/persona.*`), the review notes (`review/`) and paths that mimic the repository (`creator/`, `tools/`, `web/`, `package.json`).

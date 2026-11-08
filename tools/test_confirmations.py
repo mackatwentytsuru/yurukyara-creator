@@ -109,7 +109,7 @@ class AllowList(unittest.TestCase):
 
     def test_exact_forms_present(self):
         for e in ("Bash(npm --prefix web test)",
-                  "Bash(python -m unittest discover -s creator/learn)",
+                  "Bash(python -I -m unittest discover -s creator/learn)",
                   "Bash(date +%F)"):
             self.assertIn(e, ALLOW)
 
@@ -203,21 +203,24 @@ class Attacks(unittest.TestCase):
             "python creator/review/upgrade_offers.py --text --restore norrie",
             "python creator/review/review_state.py init norrie",
             "python creator/review/review_state.py init norrie --words x",
-            "cd creator/work/x",
+            "python -m pip install pillow numpy scipy",
+            "python -m unittest discover -s creator/learn",
             "npm test",
             "npm start",
         )
         for cmd in not_allowed:
             self.assertNotEqual(decide("Bash", cmd), "allow", cmd)
-        for cmd in ("cd creator/work/x", "python creator/pipeline/t07_talk.py a b",
+        for cmd in ("python creator/pipeline/t07_talk.py a b",
                     "python creator/review/upgrade_offers.py --restore norrie"):
             self.assertEqual(decide("Bash", cmd), "ask", cmd)
         for cmd in ("python creator/review/yuru_make.py next norrie", "python creator/review/upgrade_offers.py --json",
-                    "python creator/setup/doctor.py", "python creator/review/review_state.py can-start norrie 0"):
+                    "python creator/setup/doctor.py", "python creator/review/review_state.py can-start norrie 0",
+                    "python -I -m unittest discover -s creator/learn"):
             self.assertEqual(decide("Bash", cmd), "allow", cmd)
         for path in ("creator/work/x/creator/review/yuru_make.py", "creator/work/x/package.json",
                      "creator/work/x/tools/test_confirmations.py", "creator/work/x/web/package.json",
-                     "creator/work/x/creator/learn/test_evil.py", "creator/builders/x/creator/review/yuru_make.py"):
+                     "creator/work/x/creator/learn/test_evil.py", "creator/builders/x/creator/review/yuru_make.py",
+                     "characters/kono/2d/creator/review/yuru_make.py", "characters/kono/2d/web/package.json"):
             self.assertEqual(decide("Edit", path), "ask", path)
         self.assertNotEqual(decide("Edit", "creator/draw/gen_x.py"), "allow")
 

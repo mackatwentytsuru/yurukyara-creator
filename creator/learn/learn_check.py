@@ -537,7 +537,7 @@ def cmd_apply(a):
         f.write(new.encode("utf-8"))
     print(report)
     print(f"入れました: characters/{a.id}/persona.md")
-    print(f"入れる前の控え: creator/work/{a.id}/learn/{os.path.basename(bak)}(元に戻す: undo)")
+    print(f"入れる前の版: creator/work/{a.id}/learn/{os.path.basename(bak)}(元に戻す: undo)")
     return 0
 
 
@@ -573,17 +573,17 @@ def backup_problems(backup, current, today):
     それ以外が違う控え・点検を通らない節・決まりに無い役目は、偽の控えか、手で直した後なので戻さない。"""
     reasons = []
     if outside_facts(backup) != outside_facts(current):
-        reasons.append("控えは、2 つの節と役目の行のほかも、いまの persona.md と違います(覚えさせた時の控えではありません)")
+        reasons.append("前の版は、2 つの節と役目の行のほかも、いまの persona.md と違います(覚えさせた時の前の版ではありません)")
     roles = roles_of(backup)
     if len(roles) > 1:
-        reasons.append("控えに「役目」の行が 2 つ以上あります")
+        reasons.append("前の版に「役目」の行が 2 つ以上あります")
     for role in roles:
         if role not in ROLE_LABELS:
-            reasons.append(f"控えの役目「{role[:20]}」は、決まった言葉ではありません")
+            reasons.append(f"前の版の役目「{role[:20]}」は、決まった言葉ではありません")
     for h in odd_fact_headings(backup):
-        reasons.append(f"控えの見出し「{h[:30]}」は、決まった形ではありません")
+        reasons.append(f"前の版の見出し「{h[:30]}」は、決まった形ではありません")
     if HIDDEN.search(backup):
-        reasons.append("控えに見えない文字(向きを変える文字・幅ゼロの文字など)が入っています")
+        reasons.append("前の版に見えない文字(向きを変える文字・幅ゼロの文字など)が入っています")
     problems, info = check_text(backup, today=today)
     for p in problems:
         if p.level != "止める":
@@ -598,7 +598,7 @@ def cmd_undo(a):
     wd = work_dir(a.root, a.id)
     baks = sorted(f for f in (os.listdir(wd) if os.path.isdir(wd) else []) if f.startswith("persona.") and f.endswith(".bak.md"))
     if not baks:
-        print("戻す控えがありません。")
+        print("戻す前の版がありません。")
         return 2
     latest = baks[-1]
     pp = persona_path(a.root, a.id)
