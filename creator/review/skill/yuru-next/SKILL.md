@@ -3,12 +3,16 @@ name: yuru-next
 description: 初めての会話の作る画面(言葉か絵 1 枚)とスマホの確認画面で人が押した物(make.json・request.json)を受け取り、ゆるキャラ作りを 1 つ進める。言葉か絵ならゆるキャラチェックと段 0 の絵を描いて C0 に出す。やり直し+一言なら、その段を申し送りつきで 1 回描き直して、もう一度出す。人が /yuru-next と打ったときだけ使う。
 disable-model-invocation: true
 argument-hint: "[id] [待って]"
-allowed-tools: Read, Bash(python creator/review/yuru_make.py *), Bash(python creator/review/review_state.py *)
+allowed-tools: Read, Bash(python creator/review/yuru_make.py next *), Bash(python creator/review/yuru_make.py show *)
 ---
 
 # /yuru-next — 作る画面・確認画面で押された物を受け取って、1 つ進める
 
 約束(K3)の正: `creator/review/schema/README.md`。ここに書くのは手順だけ。
+
+## 確認は出ない(知らせだけ)
+
+このスキルの道具(`yuru_make.py next`・`show`)は、確認(許可の画面)が出ない(`review_state.py` の `init`・`publish` などの書く形は、確認が出る)。絵を描き始める時だけ、1 行で知らせる: 「絵を描きます。3〜5 分、Claude の使える量を少し使います。」 描き直しの一言(`creator/work/<id>/review/`)は画面のサーバーが書く。Claude は review の中を書かない(書こうとすると確認が出る)。
 
 ## 守ること(先に読む)
 
@@ -120,3 +124,14 @@ allowed-tools: Read, Bash(python creator/review/yuru_make.py *), Bash(python cre
 - **互いを待つ止まり方は、受け付ける所で断る**。直しの 4 回目(4 枚目の絵の後)は、PC の道具が `ask_person` で止まるだけで、画面は「PC に渡しました」のまま待ち続けた。直し: ①`review_state.make_request` が C0 の redo を `redo_limit`(409)で断る(上限は `C0_REDO_MAX = 3`、画面の state の `redo_max` で画面に知らせる)②画面(make.js)は 4 枚目の絵の後、一言の欄と眉の札を畳み「直しは 3 回までです」を出す ③古い画面が直接送った 4 回目は、道具が描かずに `rs.reopen()` で確認を出し直す(新しい番号)。画面は同じ絵のままでも番号が変われば絵の欄を出し直す。試験は test_make.py の 2 本。
 - **来ない 3D を「作っています」と言わない**。「この子にする」の後も 3D は PC の Claude Code の make-character のスキルを始めるまで何も始まらない。札・作る枠・端末の文のどれも「この画面からはまだ始まりません」と言う(「これから作ります」「続けて作ります」は禁句)。
 - 試しの絵(`--fake-draw`)の束には `metrics` に `fake` を入れ、作る画面は「試しの絵です。Claude は呼んでいません」と出す(Claude が描いたと言わない)。
+
+## サーバーが自分で流す・2D・変換(第 12 波 b)
+- `serve_review.py --make` は既定で `--auto-next claude`: 合言葉の門を通った書き込み(作って・選び・判断・変換の頼み・変換の OK)の後に、`claude -p /yuru-next --model claude-sonnet-5-5` をリポジトリの頭で 1 本ずつ流す(`auto_next.py`。1 本 11 分まで、続けて 6 本まで。進められる物が残っていれば続けて流す)。`--auto-next direct` は `yuru_make.py next` を直に。`off` で前と同じ。試験(`YC_REVIEW_TEST=1`)の既定は off。
+  - 子の環境から `CLAUDE_CODE_*` を外す(入れ子の会話と見なされないように)。`ANTHROPIC_API_KEY` を外して起こすと、プランの枠で動く。
+  - `claude -p` は進めても何も無くても 0 を返すので、続けるかは `yuru_make.candidates()` で決める。
+- `yuru_make.py next` の新しい仕事(`did`)。`claimed_ok` の時に次の 3 つ:
+  - `twod`: `to_2d.py` で `characters/<id>/2d` と `looks.2d` を作る(数秒)。
+  - `converted_drawn`: make.json の convert を受けて変換の絵を描く(`stage_run claude --stage 1 --name yuru_convert --review off`)。描き方は yc-0-draw の「3D 用のゆるキャラ変換」。
+  - `handoff`: 変換の絵の OK の後、`creator/work/<id>/convert/handoff.json` と character.json の `looks.3d.material` を書く。3D はこの紙から始める(make-character の「変換の絵から組む」)。
+  - 2D の記録は `run.jsonl`(K6)に足さない(試験が段の行の形を見ている)。`creator/work/<id>/twod.json` に書く。試験(`YC_REVIEW_WORK` を決めた時)は 2D の子をその中の `_characters` に置く(リポジトリの characters に試験の子を残さない)。
+- 書き込みは 1 秒に 1 回まで(サーバー)。作る画面は 429 を 1 回だけ 1.3 秒後に送り直す(おまかせが速すぎて「少し待ってから押してください」で止まっていた)。

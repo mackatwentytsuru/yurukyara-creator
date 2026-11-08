@@ -3,12 +3,16 @@ name: yuru-next
 description: 初めての会話の作る画面(言葉か絵 1 枚)とスマホの確認画面で人が押した物(make.json・request.json)を受け取り、ゆるキャラ作りを 1 つ進める。言葉か絵ならゆるキャラチェックと段 0 の絵を描いて C0 に出す。やり直し+一言なら、その段を申し送りつきで 1 回描き直して、もう一度出す。人が /yuru-next と打ったときだけ使う。
 disable-model-invocation: true
 argument-hint: "[id] [待って]"
-allowed-tools: Read, Bash(python creator/review/yuru_make.py *), Bash(python creator/review/review_state.py *)
+allowed-tools: Read, Bash(python creator/review/yuru_make.py next *), Bash(python creator/review/yuru_make.py show *)
 ---
 
 # /yuru-next — 作る画面・確認画面で押された物を受け取って、1 つ進める
 
 約束(K3)の正: `creator/review/schema/README.md`。ここに書くのは手順だけ。
+
+## 確認は出ない(知らせだけ)
+
+このスキルの道具(`yuru_make.py next`・`show`)は、確認(許可の画面)が出ない(`review_state.py` の `init`・`publish` などの書く形は、確認が出る)。絵を描き始める時だけ、1 行で知らせる: 「絵を描きます。3〜5 分、Claude の使える量を少し使います。」 描き直しの一言(`creator/work/<id>/review/`)は画面のサーバーが書く。Claude は review の中を書かない(書こうとすると確認が出る)。
 
 ## 守ること(先に読む)
 

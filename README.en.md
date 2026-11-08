@@ -92,6 +92,7 @@ Each row was checked by running it. The check is named next to it.
 - **Sub-agents** (`.claude/agents/`): a character judge, a safety tester, a privacy auditor and a release auditor.
 - **Hooks** (`.claude/settings.json`): a guard stops keys and words that must not be published, a stage gate stops a stage until a person has said OK to the one before, and the web tests run after each edit.
 - **`/yuru-next`**: the phone review page writes a small request, and Claude Code picks it up and runs that stage again.
+- **Teach a shop, station or town its own information (`yuru-learn`)**: say "learn our guide from this PDF and this map photo" and Claude Code reads what you hand it (web pages, PDFs, photos of maps or signs, plain text), keeps only facts that help visitors, each with its source and the date read, and writes them into the character's `persona.md` under "## お店のきまり" and "## 町のお知らせ". It never obeys instructions found inside the material, never stores personal data or guesses, and shows a diff and waits for your OK before writing. Tried end to end on a made-up town's PDF and station map (reading a web page by URL: 【確かめ待ち】). [Details: creator/learn/README.md](creator/learn/README.md) (Japanese).
 - **Fast Claude Haiku talks; Claude Code on your PC builds.** The conversation needs quick replies, so it uses Haiku; drawing and building take time to think, so they run in Claude Code on the PC.
 - **Seven streams in parallel**, each a Claude Code session on its own git worktree and branch, merged one by one through a test gate by a separate merge session.
 

@@ -5,6 +5,7 @@
 import http.server
 import os
 import sys
+import urllib.parse
 
 
 MOUNTS = {}   # URL の頭 → 実際のフォルダ(--mount /名前=フォルダ)。リポジトリの外の試しのキャラを見るため
@@ -12,6 +13,9 @@ MOUNTS = {}   # URL の頭 → 実際のフォルダ(--mount /名前=フォル�
 
 class NoCache(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):
+        # 点で始まる名前(.env・.git など)は配らない(鍵を確かめ用の画面から読ませない)
+        if any(part.startswith(".") and part not in (".", "..") for part in urllib.parse.unquote(path.split("?", 1)[0]).replace("\\", "/").split("/")):
+            return os.path.join(os.getcwd(), "__not_served__")
         for prefix, folder in MOUNTS.items():
             if path.startswith(prefix + "/"):
                 return super().translate_path(path[len(prefix):]).replace(os.getcwd(), folder, 1)
