@@ -1,0 +1,56 @@
+/* B13L(11-08): スマホのキーボードと横向きの見せ方。style.css の後に読む(index.html の link の順)。
+   決まり: 画面のキーボードで「上の段・キャラの頭」が押し出されない・横向きでも入力の欄と「送る」が切れない。
+   キーボードの出入りは ui/keyboardInset.js が html の class と変数にする:
+     kb-open  = 見える範囲の高さがキーボードの分だけ縮んでいる(iOS がページごと上へずらしても付く)
+     --kbt    = 見える範囲の上端のずれ(px)   --vvh = 見える範囲の高さ(px)
+     vv-mini  = 見える高さが 260px 未満(横向きの Android のキーボード。ページごと縮むので kb-open は付かない) */
+
+/* ---------- 1. iPhone: キーボードの間、舞台を見える範囲の高さに縮める ----------
+   iOS は、入力欄を見せるためにページを上へずらす。舞台が全画面のままだと、キャラの頭が見える範囲の上の外へ出る。
+   舞台を「見える範囲の上端〜下端」に縮め、キャラ(main.js が舞台の箱で置き直す)・上の段(style.css が --kbt だけ下げる)・
+   下の帯と字幕(--kb だけ上げる)が、同じ見える範囲の中に並ぶ。初めての会話の札(fr-stack)は自分で高さを決めるので、ここでは触らない */
+html.kb-open:not(.fr-stack) #stage { inset: auto 0 auto 0; top: var(--kbt, 0px); height: var(--vvh, 100%); }
+
+/* 縦持ちのキーボードは、見える高さが 400px 未満でも(390x670 のキーボード = 334px)、上の段(はなす・かえる・もっと)を残す。
+   舞台を小さくして見せる(本人: 「上の段と小さな舞台を残す」)。隠すのは横向きだけ(style.css の kb-short のまま) */
+@media (orientation: portrait) {
+  html.kb-open.kb-short:not(.vv-mini) .top { display: flex !important; }
+}
+
+/* ---------- 2. 見える高さが 260px 未満(横向きのキーボード): 舞台と札の見出しをたたむ ----------
+   入力の欄・「送る」・いちばん新しい一言だけを残す(DL_AND2・AS_KON: 欄と「送る」が下に切れた・上の細い帯に半分だけ見えた) */
+html.vv-mini #stage { display: none; }
+html.vv-mini .top, html.vv-mini #thought, html.vv-mini .align, html.vv-mini .xr-wait,
+html.vv-mini .chips, html.vv-mini .privacy, html.vv-mini .choices, html.vv-mini .ai-notice,
+html.vv-mini .brain-notice, html.vv-mini .shop-badge, html.vv-mini .caption.user, html.vv-mini .caption .cap-prev,
+html.vv-mini .caption .cap-next { display: none !important; }
+html.vv-mini .bottom { padding-top: 4px; padding-bottom: calc(4px + var(--safe-b, 0px)); gap: 4px; }
+html.vv-mini .composer { flex-wrap: nowrap; }
+html.vv-mini .composer textarea { order: 0; flex: 1 1 0; min-height: 40px; }
+html.vv-mini .composer .mic, html.vv-mini .composer .cam, html.vv-mini .composer .yc-audio-btn, html.vv-mini .composer .hear-lang { display: none !important; }
+html.vv-mini .caption, html.vv-mini .caption.settled {
+  font-size: 15px; line-height: 1.4; padding: 4px 12px; border-radius: 14px; max-height: calc(1.4em + 8px); overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+html.vv-mini .caption .cap-now { display: inline; }
+/* 初めての会話の札: 見出し(題名・あと何こ・とじる)をたたみ、会話は縮めて最後の一言を見せ、入力の列と「送る」を下に残す */
+html.vv-mini .fr-sheet.fr-sheet { top: 0; bottom: 0; left: 0; right: 0; width: auto; height: auto; border-radius: 0; overflow: hidden; display: flex; }
+html.vv-mini .fr-sheet.fr-sheet .fr-head { display: none !important; }
+html.vv-mini .fr-sheet.fr-sheet .fr-log { flex: 1 1 0; min-height: 0; padding: 4px 10px; }
+html.vv-mini .fr-sheet.fr-sheet .fr-actions { padding: 4px 10px 4px; gap: 4px; }
+html.vv-mini .fr-sheet.fr-sheet .fr-actions:has(.fr-input:not([hidden])) .fr-chips { display: none; }
+html.vv-mini .fr-sheet.fr-sheet .fr-btn { min-height: 40px; }
+html.vv-mini .fr-sheet.fr-sheet .fr-field input[type="text"] { min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
+
+/* ---------- 3. 横向きのスマホ(高さ 500px まで): 押せない物を出す(QA8 #10) ---------- */
+@media (max-height: 500px) {
+  /* 性格の画面: 「返事を試す」の箱が上に貼り付いて、下の 3 つのボタン(くじびき・もどす・これにする)を覆っていた。貼り付けず、流れの中に置く */
+  /* z-index も戻す(panel が grid なので、static でも z-index: 2 が効き、下に貼り付いた 3 つのボタンの上に重なっていた) */
+  html .yp-try { position: static; z-index: auto; box-shadow: none; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  /* 入口: 主ボタン「カメラなしで試す」が画面の下に出て、続きがあると分からなかった。入口の札を縦の並びにして、主ボタンを下に貼り付ける
+     (grid の子は貼り付けても動けないが、flex の子は札の中を動ける) */
+  html .gate-card { display: flex; flex-direction: column; }
+  html .gate .primary { position: sticky; bottom: 4px; z-index: 3; box-shadow: 0 -10px 14px var(--ink-2, #1d1a2e), 0 4px 16px rgba(0, 0, 0, 0.45); }
+}

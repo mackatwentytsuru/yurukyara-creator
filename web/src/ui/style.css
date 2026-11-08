@@ -274,7 +274,7 @@ html.fr-open:not(.kb-open) .ai-notice-top {
   .top { gap: 4px; }
   .top-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .top-row::-webkit-scrollbar { display: none; }
-  .privacy { display: none; }
+  .privacy:not(.listening) { display: none; } /* 声で聞いている間は、声の送り先の注意書きを残す(QA8 #2・#10) */
   .caption, .caption.settled { max-height: calc(2 * 1.45em + 24px); padding: 6px 16px; overflow-y: auto; }
   .caption { font-size: clamp(16px, 4.2vh, 24px); }
   .caption.settled { font-size: clamp(14px, 3.8vh, 20px); }
@@ -557,10 +557,10 @@ html.is-led .drawer { display: none !important; }
 html.fr-open .tv-btn, html.is-led .tv-btn, html.is-headset .tv-btn, html.is-headset .tv-cast { display: none !important; }
 
 /* テレビ表示の間(html.tv-mode。main.js が付ける・?tv=1 でも): 小さな窓(上の段・考え・よくある質問・入力・案内)を隠し、隅の「もどる」だけを残す。
-   カメラかマイクを使っている時の注意書きは、下の端に小さく残す(どちらも使っていない時の文は出さない。.mic は main.js が聞き取りの間に付ける)。
+   カメラかマイクを使っている時の注意書きは、下の端に小さく残す(どちらも使っていない時の文は出さない。.listening は main.js が聞き取りの間に付ける)。
    キャラは main.js が上のすき間(画面の高さの 6%)と字幕の分の間で大きく置く */
 .tv-exit, .tv-rotate { display: none; }
-html.tv-mode .top, html.tv-mode #thought, html.tv-mode #choices, html.tv-mode #composer, html.tv-mode #align, html.tv-mode .privacy.off:not(.mic) { display: none !important; }
+html.tv-mode .top, html.tv-mode #thought, html.tv-mode #choices, html.tv-mode #composer, html.tv-mode #align, html.tv-mode .privacy.off:not(.listening) { display: none !important; }
 html.tv-mode .tv-exit {
   display: inline-flex; align-items: center; justify-content: center; position: fixed; z-index: 9;
   top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right));
@@ -851,10 +851,10 @@ html.top-simple:not(.top-more):not(.top-change) .top .top-row { display: none; }
 /* もっと: かえるの物(子・見た目・しつかん)は出さない(同じ物を 2 か所に出さない) */
 html.top-simple.top-more .top #lookSwitch, html.top-simple.top-more .top #shitsukan,
 html.top-simple.top-more #modes > .fr-launch, html.top-simple.top-more #modes > .fr-return { display: none; }
-/* せまい画面で段を開いている間は、字幕・注意書き・押すだけの例を一時しまい(閉じると戻る)、段は画面の 45% まで(中は巻く)。
+/* せまい画面で段を開いている間は、注意書き・押すだけの例を一時しまい(閉じると戻る)、段は画面の 45% まで(中は巻く)。
+   字幕と「AI のキャラクターと話しています」は、しまわない(B13L・QA8 #7: 「もっと」を開いたまま話すと、返事の字幕と AI の知らせが消え、返事が出ないように見えた)。
    キャラは段の下と入力の列の間に、隠れずに立つ(main.js の fitBottom が字幕の分を空けない) */
 @media (max-width: 900px) {
-  html.top-simple.top-more:not(.tv-mode) .subs, html.top-simple.top-change:not(.tv-mode) .subs,
   html.top-simple.top-more:not(.tv-mode) .privacy, html.top-simple.top-change:not(.tv-mode) .privacy,
   html.top-simple.top-more #choices, html.top-simple.top-change #choices { display: none !important; }
   /* 段に overflow を付けない(付けると「覚えていること」の中身が段の中で切れて見えなかった) */
@@ -888,7 +888,7 @@ html.top-simple.quest-open #tvBtn { display: none !important; }
 }
 /* カメラもマイクも使っていない時の注意書き(「カメラは使っていません…」)は、来場者の段では出さない(2 行が下の帯を高くし、字幕がキャラの足にかかった)。
    カメラかマイクを使っている間は今までどおり出す(テレビ表示と同じ決まり) */
-html.top-simple .privacy.off:not(.mic) { display: none; }
+html.top-simple .privacy.off:not(.listening) { display: none; }
 /* かえるだけの時: 子と見た目の物だけ出す */
 html.top-simple.top-change:not(.top-more) .top .top-row > :not(#modes):not(#lookSwitch):not(#shitsukan) { display: none; }
 html.top-simple.top-change:not(.top-more) #modes > :not(.fr-launch):not(.fr-return) { display: none; }

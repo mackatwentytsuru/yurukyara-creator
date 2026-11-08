@@ -29,6 +29,7 @@ import { langModeOf } from './conversation/lang.js';
 import { effectiveHearLang, getHearLang, setHearLang } from './conversation/hearLang.js';
 import { mountHearLangSelect } from './ui/hearLangSelect.js';
 import { setAiNotice } from './ui/aiNotice.js';
+import { homeScreenLine, isMacDesktop } from './stage/tvHome.js';
 import { createIdleClear, createShopDevice } from './conversation/shopDevice.js';
 import { clearKey, forgetAll, getKey, setKey } from './ui/memoryKey.js';
 import { loadPlaceData, landmarkWorld, promptPlace, SAMPLE_PLACE } from './place.js';
@@ -484,8 +485,9 @@ function updatePrivacy() {
   if (listener?.listening) text += listener.provider === 'server' ? ' 声は、この画面を配っている PC へ送って文字にします。音は保存しません。' : ' 声の聞き取りには、ブラウザの聞き取りのサービスに音が送られます。';
   if (stereoMic?.status === 'stereo') text += ' 声のする向きは、この端末の中で左右の音の差を調べるだけです(音は保存も、この仕組みからの送信もしません)。';
   ui.privacy(text, app.mode !== 'camera');
-  // テレビ表示はカメラを使わない時の注意書きを隠すが、マイクで聞いている間は残す(style.css の .privacy.off:not(.mic))
-  $('privacy')?.classList.toggle('mic', Boolean(listener?.listening));
+  // テレビ表示はカメラを使わない時の注意書きを隠すが、マイクで聞いている間は残す(style.css の .privacy.off:not(.listening))。
+  // 印は .mic でなく .listening(QA8 #2: .mic を付けると、スマホの幅の「.mic span { display: none }」が注意書きの文字まで消し、声の送り先が読めなかった)
+  $('privacy')?.classList.toggle('listening', Boolean(listener?.listening));
   app.camera?.sync?.(); // BCV: カメラの入・切のボタンの見た目を、今の入力に合わせる
 }
 
@@ -842,7 +844,18 @@ const TOP_PANELS = '#thought:not(.collapsed), #questLinkBox:not([hidden])'; // �
 const TOP_PANELS_UW5 = '#memoryDrawer[open] > .drawer-body'; // UW5(UIR 20): 「覚えていること」の中身も数える(開くとキャラを覆っていた)
 const TOP_MAIN = '.top .top-main:not([hidden]) > *, .top .grown-up'; // UW5: 上の段の 3 つのボタン(と「おうちの人へ」の見出し)も横いっぱいに数える
 const TOP_GAP_PX = 14; // 幅 320 で耳が上の段に 6px かかった(P1 低)ので 8 → 14。開いた窓とキャラの頭のすき間(上の段は topClearance = 画面の高さの 6%)
-const rectsOf = (sel) => [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
+/** 舞台(#stage)の上端(px)。キーボードで舞台を見える範囲に縮めた時(上端がずれる時)だけ 0 でない。上の段などの線は、ここからの距離にする */
+function stageTopPx() {
+  if (!document.documentElement.classList.contains('kb-open')) return 0;
+  return Math.max(0, document.getElementById('stage')?.getBoundingClientRect().top || 0);
+}
+const rectsOf = (sel) => {
+  const dy = stageTopPx();
+  return [...document.querySelectorAll(sel)].map((el) => {
+    const r = el.getBoundingClientRect();
+    return dy ? { left: r.left, right: r.right, top: r.top - dy, bottom: r.bottom - dy, width: r.width, height: r.height } : r;
+  });
+};
 
 /** キャラの頭を置いてよいいちばん上の線(px)。[left, right] はキャラの横の範囲。scene.js の frameCharacter が、頭と耳を段の下に収めるのに使う */
 function topGuard(left, right) {
@@ -899,10 +912,14 @@ function watchSheet() {
 }
 new MutationObserver(watchSheet).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
-/** 画面のキーボードの高さ(px。keyboardInset.js が html に入れた --kb。出ていなければ 0) */
+/**
+ * 画面のキーボードが奪っている高さ(px。keyboardInset.js が html に入れた --kbh。出ていなければ 0)。
+ * B13L: iOS がページごと上へずらした時(--kb が 0)も、キーボードは出ているので 0 より大きい。舞台(#stage)は style.css の layoutB13.css が
+ * 見える範囲の高さに縮めるので、この値は「キーボードの時の見せ方にする」印で、字幕と下の帯の高さには足さない
+ */
 function keyboardPx() {
   if (!document.documentElement.classList.contains('kb-open')) return 0;
-  return Math.max(0, parseFloat(document.documentElement.style.getPropertyValue('--kb')) || 0);
+  return Math.max(1, parseFloat(document.documentElement.style.getPropertyValue('--kbh')) || 0);
 }
 
 /**
@@ -947,8 +964,8 @@ function fitBottom() {
     const kb = keyboardPx();
     stage.state.kbInset = kb;
     if (kb > 0) {
-      // 画面のキーボードが出ている間: 見える範囲の下端(= キーボードの上)に入力欄と字幕 1 行が並ぶ。キーボードの裏も下の帯として数え、キャラを見える範囲の中に置く
-      stage.state.bottomInset = h + kb + 8 + subsHeight() + 6;
+      // 画面のキーボードが出ている間: 舞台(#stage)は見える範囲の高さに縮み、その下端(= キーボードの上)に入力欄と字幕 1 行が並ぶ。キャラは縮んだ舞台の中に置く
+      stage.state.bottomInset = h + 8 + subsHeight() + 6;
     } else {
       // 返事が長くて、字幕の箱が見込みより高い時は、その分だけ下の余白を広げる(体にかけない)
       // ただし、キャラに残す高さが画面の 36% を割るほどは広げない(低い画面では、頭のすき間の決まりを先に守る)
@@ -987,7 +1004,7 @@ function showTvGuide() {
   } catch {
     // 覚えられないブラウザ(この頁の間だけ 1 回)
   }
-  const line = fullscreenGuide({ device: TV.device, canFullscreen: false, installed: isInstalledApp({ nav: navigator, matchMedia: window.matchMedia?.bind(window) }), seen });
+  const line = fullscreenGuide({ device: TV.device, canFullscreen: false, installed: isInstalledApp({ nav: navigator, matchMedia: window.matchMedia?.bind(window) }), seen, mac: isMacDesktop(navigator) });
   if (!line) return;
   tvGuideShown = true;
   try {
@@ -1061,7 +1078,9 @@ function fillTvCast(device) {
   const lead = $('tvCastLead');
   if (lead) lead.textContent = castLead();
   const note = $('tvCastNote');
-  if (note) note.textContent = castNote(device);
+  // B13L(TV3 の should): ホーム画面に追加して開く手順も、箱を開くたびに書く(ホーム画面の頁として開いている時は書かない)
+  const home = homeScreenLine({ installed: isInstalledApp({ nav: navigator, matchMedia: window.matchMedia?.bind(window) }) });
+  if (note) note.textContent = home ? `${castNote(device)}\n${home}` : castNote(device);
   const steps = $('tvCastSteps');
   if (steps) {
     steps.replaceChildren(
