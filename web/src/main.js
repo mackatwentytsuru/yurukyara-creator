@@ -28,6 +28,7 @@ import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚
 import { langModeOf } from './conversation/lang.js';
 import { effectiveHearLang, getHearLang, setHearLang } from './conversation/hearLang.js';
 import { mountHearLangSelect } from './ui/hearLangSelect.js';
+import { setAiNotice } from './ui/aiNotice.js';
 import { createIdleClear, createShopDevice } from './conversation/shopDevice.js';
 import { clearKey, forgetAll, getKey, setKey } from './ui/memoryKey.js';
 import { loadPlaceData, landmarkWorld, promptPlace, SAMPLE_PLACE } from './place.js';
@@ -324,7 +325,12 @@ const hearUi = mountHearLangSelect({
     applyHearLang();
   },
 });
+/** 「AI キャラクターの〈名前〉と話しています」を、舞台の子の名前と、いまのことばに合わせる(いつも見せる決まり。子が読み込まれた時・替わった時・ことばが替わった時) */
+function updateAiNotice() {
+  setAiNotice({ name: app.character?.name, lang: effectiveHearLang(currentLangMode()) });
+}
 function applyHearLang() {
+  updateAiNotice();
   speaker.setHearLang(effectiveHearLang(currentLangMode()));
   listener?.setLang();
   hearUi.refresh();
@@ -1252,6 +1258,7 @@ function swapCharacter(next) {
   if (prev !== next) prev.releaseGpu?.();
   app.character = next;
   dialogue.character = next;
+  updateAiNotice();
   document.documentElement.dataset.look = next.look ?? '3d';
   stage.frameCharacter(next, characterView(next), app.place?.loaded?.object3d);
   void refreshLookSwitch(next); // 見た目の切り替えを、今の子に合わせて作り直す(両方ある子だけ出す・押された方を合わせる)
@@ -1655,6 +1662,7 @@ async function boot() {
     app.characterId = id;
     bootLookId = characterKey(character);
     fillGuide(); // 入口の案内役の名前は、読んだすぐ後に書いてから見せる(状態を読むのを待たない)
+    updateAiNotice();
     dialogue.character = character;
     speaker.setVoice({ seed: character.name ?? id ?? '' }); // 声が無い時の「ピッ」の高さと音色をキャラごとに(S3 の speaker)
     document.documentElement.dataset.look = character.look ?? '3d';

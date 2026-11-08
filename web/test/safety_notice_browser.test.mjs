@@ -18,7 +18,15 @@ const SIZES = [
   [1280, 720],
   [1920, 1080],
 ];
-const AI_TEXT = 'AI のキャラクターと話しています';
+// 名前とことばごとの、出る文(ui/aiNotice.js)。長い名前は 16 字で切る
+const LONG = 'とても ながい なまえの ゆるキャラ くんです';
+const VARIANTS = [
+  { name: 'ノリー', lang: 'ja', text: 'AI キャラクターのノリーと話しています' },
+  { name: LONG, lang: 'ja', text: 'AI キャラクターのとても ながい なまえの ゆるキ…と話しています' },
+  { name: 'Norrie', lang: 'en', text: "You're talking with Norrie, an AI character" },
+  { name: '诺里', lang: 'zh', text: '你正在和 AI 角色诺里交谈' },
+  { name: '노리', lang: 'ko', text: 'AI 캐릭터 노리와 대화하고 있어요' },
+];
 
 /** 本物の index.html の本文から、main.js を外した試しの画面 */
 function page() {
@@ -30,6 +38,8 @@ function page() {
 import { injectStyles } from '/src/ui/onboarding/styles.js';
 import { openPersonaPanel } from '/src/ui/persona/panel.js';
 import { defaults, seededRandom } from '/src/ui/persona/settings.js';
+import { setAiNotice } from '/src/ui/aiNotice.js';
+window.__notice = (name, lang) => setAiNotice({ name, lang });
 injectStyles(document);
 window.__openPersona = () => openPersonaPanel({ initial: defaults(), characterName: 'ノリー', random: seededRandom(1), preview: async () => ({ text: 'こんにちは' }), play: () => {}, onSave() {} });
 window.__ready = true;
@@ -159,14 +169,15 @@ test('「AI のキャラクターと話しています」: ふだん・はじめ
   try {
     for (const size of SIZES) {
       const { ctx, page: p, errors } = await open(browser, size);
-      for (const st of ['normal', 'first', 'led', 'tv']) {
+      for (const [st, v] of ['normal', 'first', 'led', 'tv'].flatMap((s) => VARIANTS.map((x) => [s, x]))) {
+        await p.evaluate(([n, l]) => window.__notice(n, l), [v.name, v.lang]);
         await setState(p, st);
         // はじめての会話の間(下を札が覆う)は、上の段の下の #aiNoticeTop。ほかは字幕の列のいちばん下の #aiNotice
         const sel = st === 'first' ? '#aiNoticeTop' : '#aiNotice';
         const f = await noticeFacts(p, sel);
-        const where = `${size.join('x')} ${st}`;
-        await shot(p, `ai_${st}_${size.join('x')}`);
-        assert.equal(f.text, AI_TEXT, where);
+        const where = `${size.join('x')} ${st} ${v.lang}${v.name === LONG ? ' 長い名前' : ''}`;
+        if (v === VARIANTS[0]) await shot(p, `ai_${st}_${size.join('x')}`);
+        assert.equal(f.text, v.text, where);
         assert.ok(f.shown, `${where} 見えている ${JSON.stringify(f)}`);
         assert.ok(f.inside, `${where} 画面の中 ${JSON.stringify(f.box)}`);
         assert.ok(f.onTop, `${where} ほかの物に覆われていない ${JSON.stringify(f.box)}`);

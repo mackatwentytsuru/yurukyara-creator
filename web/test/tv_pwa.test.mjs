@@ -154,7 +154,7 @@ function cssRules(text) {
   return out;
 }
 
-test('テレビ表示でも「AI のキャラクターと話しています」を隠さない(安全の決まり)。上の段・下の入力・窓は隠す', () => {
+test('テレビ表示でも「AI キャラクターの〈名前〉と話しています」を隠さない(安全の決まり)。上の段・下の入力・窓は隠す', () => {
   const rules = cssRules(css);
   const hidden = rules.filter((r) => /\bhtml\.tv-mode\b/.test(r.selector) && /display:\s*none/.test(r.body)).map((r) => r.selector).join(',');
   // 隠すもの: 上の段・考え・よくある質問・入力の帯・案内・カメラかマイクを使っていない時の注意書き
@@ -164,9 +164,9 @@ test('テレビ表示でも「AI のキャラクターと話しています」�
     const bad = rules.filter((r) => /\bhtml\.tv-mode\b/.test(r.selector) && r.selector.includes(sel.replace(':not', '')) && /display:\s*none/.test(r.body) && !/\.cap-(prev|next)/.test(r.selector));
     assert.deepEqual(bad.map((r) => r.selector), [], `${sel} を tv-mode で隠していない`);
   }
-  // 「AI のキャラクターと話しています」は字幕の列の中にあり、テレビ表示では 12px 以上の字で見せる
+  // 「AI キャラクターの〈名前〉と話しています」は字幕の列の中にあり(名前が入るまでは名前なしの文)、テレビ表示では 12px 以上の字で見せる
   const subs = html.match(/<div class="subs">[\s\S]*?<\/div>\s*<p class="ai-notice ai-notice-top"/)?.[0] ?? '';
-  assert.match(subs, /<p class="ai-notice" id="aiNotice" role="note">AI のキャラクターと話しています<\/p>/);
+  assert.match(subs, /<p class="ai-notice" id="aiNotice" role="note">AI キャラクターと話しています<\/p>/);
   assert.match(css, /html\.tv-mode \.ai-notice \{ font-size: max\(12px, 1\.6vh\); opacity: 0\.85; \}/);
   // 「もどる」は隅にずっと見える(押す所 44px 以上。Esc でも戻る)
   assert.match(css, /html\.tv-mode \.tv-exit \{[^}]*min-height: 44px;[^}]*min-width: 44px;/);
