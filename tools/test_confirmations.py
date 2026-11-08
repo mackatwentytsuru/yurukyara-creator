@@ -122,7 +122,7 @@ class AllowList(unittest.TestCase):
             self.assertNotIn("*", core, e)
 
     def test_never_in_allow(self):
-        bad = ("learn_check.py apply", "yuru_update.py apply", "yuru_update.py undo",
+        bad = ("learn_check.py apply", "learn_check.py undo", "yuru_update.py apply", "yuru_update.py undo",
                "run_built", "run_groups", "serve_review", "WebFetch", "git push", "rm ")
         for e in ALLOW:
             for b in bad:
@@ -139,6 +139,9 @@ class AskAndDeny(unittest.TestCase):
             "Bash(python creator/learn/learn_check.py apply *)",
             "Bash(python -I creator/learn/learn_check.py apply *)",
             "Bash(python3 creator/learn/learn_check.py apply *)",
+            "Bash(python creator/learn/learn_check.py undo *)",
+            "Bash(python -I creator/learn/learn_check.py undo *)",
+            "Bash(python3 creator/learn/learn_check.py undo *)",
             "Bash(python tools/yuru_update.py undo *)",
             "Bash(python tools/yuru_update.py undo)",
             "Bash(python tools/yuru_update.py apply *)",
@@ -166,7 +169,7 @@ class Attacks(unittest.TestCase):
             "python tools/yuru_update.py undo": "ask",
             "python creator/learn/learn_check.py apply kono p.md --yes": "ask",
             "python creator/learn/learn_check.py check creator/work/kono/learn/proposal.md --proposal": "allow",
-            "python -I creator/learn/learn_check.py undo kono": "allow",
+            "python -I creator/learn/learn_check.py undo kono --yes": "ask",
             "npm --prefix web test": "allow",
             "date +%F": "allow",
             "curl https://example.com": "deny",
