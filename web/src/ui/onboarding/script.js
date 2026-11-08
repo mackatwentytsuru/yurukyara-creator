@@ -380,7 +380,7 @@ export class FirstRun {
       if (this.step < 2) this.skipped.add(2); // 1 歩目からのおまかせはチェックをしていない(歩みの丸は「とばした」に)
       this._go(3);
       await this._say({ who: 'note', text: `「${words}」で つくるよ。` });
-      made = await creator.make(this.input, { onProgress: (text) => this._say({ who: 'note', text }) });
+      made = await this._long(creator.make(this.input, { onProgress: (text) => this._say({ who: 'note', text }) }));
       // 近い見本が案内役そのものなら、別の子を出す(案内役のまま「できあがり!」と言わない。UIR 4)
       if (made?.sample && made.id === this.guide.id) made = creator.surprise?.() ?? made;
     }
@@ -396,7 +396,7 @@ export class FirstRun {
     else if (pick.id === this.guide.id) lines.push({ who: 'guide', text: `${pick.name}で はじめるよ!` });
     else lines.push({ who: 'guide', text: `おまかせで えらんだのは、${pick.name}!`, ...(pick.img ? { img: pick.img } : {}) });
     await this._say(...lines);
-    const stay = await (this.d.showCharacter?.(pick) ?? true);
+    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(pick) ?? true));
     if (stay === false) {
       this.d.save?.(this.snapshot());
       return 'reload'; // 読み込み直しの後、resume がおまかせの続きをする
@@ -823,7 +823,7 @@ export class FirstRun {
 
   /** できた子・選んだ見本を舞台に出して、3 歩目の「この子はどうかな?」へ。舞台はその場で替える(読み込み直さない。D2) */
   async _show() {
-    const stay = await (this.d.showCharacter?.(this.character) ?? true);
+    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(this.character) ?? true));
     if (stay === false) {
       this.d.save?.(this.snapshot());
       return undefined; // 読み込み直しの後、resume が続ける(前の作り。今の入口は読み込み直さない)
@@ -883,7 +883,7 @@ export class FirstRun {
       { who: 'note', text: `見本: ${main.name}(${main.note})` },
       { who: 'guide', text: main.id === MAIN_CHARACTER.id ? 'じゃあ、ノリーで つづけマス! 性格や あいさつを ためしてくだサイ。' : `じゃあ、${main.name}で つづけるね。` },
     );
-    const stay = await (this.d.showCharacter?.(main) ?? true);
+    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(main) ?? true));
     if (stay === false) {
       this.d.save?.(this.snapshot());
       return undefined;
@@ -1217,7 +1217,7 @@ export class FirstRun {
     }
     if (this.character.twod) return undefined;
     this.character = { ...this.character, twod: true };
-    const stay = await (this.d.showCharacter?.(this.character) ?? true);
+    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(this.character) ?? true));
     if (stay === false) {
       this.d.save?.(this.snapshot());
       return undefined;

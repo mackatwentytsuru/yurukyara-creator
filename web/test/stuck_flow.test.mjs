@@ -163,3 +163,43 @@ test('台本: 終わった(done)後は、見張りは何もしない・動いて
   assert.equal(h.fr.stuckCount, 0, '動いていない間は、出し直さない');
   assert.equal(h.fr._busyTimer, null, '見張りは回っていない');
 });
+
+test('台本: おまかせで描いている間・できた子を舞台に出している間は、見張りが札を出し直さない(M13C must)', async () => {
+  for (const slow of ['make', 'show']) {
+    const base = createSampleCreator({ main: MAIN });
+    const creator = Object.create(base);
+    creator.make = async (input, o) => {
+      if (slow === 'make') await sleep(450); // 描く道は 1 分ほど何も増えない
+      return base.make(input, o);
+    };
+    let showing = 0;
+    const shown = [];
+    const offers = [];
+    const fr = new FirstRun({
+      guide: MAIN,
+      creator,
+      persona: { get: () => null, set() {}, random: () => randomSettings(seededRandom(7)) },
+      talk: async () => ({ lines: [{ text: 'こんにちは。' }], brain: 'mock' }),
+      voice: { realVoice: () => null, canTakeKey: () => true, canRemember: () => false, notice: () => '', useKey: async () => ({ ok: false }) },
+      present: async (lines) => shown.push(...lines),
+      offer: (a) => offers.push(a.map((x) => x.id)),
+      showCharacter: async () => {
+        if (slow === 'show') {
+          showing += 1;
+          await sleep(450); // iPhone で舞台に子を読み込むのが遅い
+        }
+        return true;
+      },
+      stuckMs: 40,
+    });
+    await fr.start();
+    const running = fr.omakase();
+    await sleep(300); // 見張りの間隔の 7 倍以上、描いている最中
+    assert.equal(fr.stuckCount, 0, `${slow}: 描いている・出している最中は止まりと見ない`);
+    assert.equal(fr.busy, true, `${slow}: 動いている印が下りない(札が二重に押せる状態にならない)`);
+    assert.equal(offers.at(-1)?.length ?? 0, 0, `${slow}: 札は空のまま(前の札を出し直さない)`);
+    await running;
+    assert.equal(fr.stuckCount, 0, `${slow}: 最後まで 1 回も出し直さない`);
+    assert.equal(fr.busy, false);
+  }
+});
