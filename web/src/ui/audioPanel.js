@@ -5,6 +5,7 @@
 // - 押してから何秒か音が来ない時(listener.js が知らせる)は「こえが とどいていないみたい」と、この窓への道を出す。文字で話す道はいつも残す。
 // - 音は、この窓の中で大きさを測るだけ(保存しない)。「はなしてみてね」の文字は、ふだんの聞き取りと同じ道で作る。
 import { Listener, webSpeechSupported } from '../conversation/listener.js';
+import { beginRecording, createRecordingHold, endRecording, getMicWithSession } from '../conversation/audioSession.js';
 import { AUDIO_WORDS, NOTE_EVENT, SILENT_EVENT, canPickSpeaker, decideListening, isDefaultMic, loadChoice, resolveDevice, saveChoice, serverSttAvailable, setServerSttCheck, splitDevices } from '../conversation/audioDevices.js';
 import { micFailureText, micUnavailableText } from '../stage/micNotice.js';
 import { createNote, createSheet, el } from './sheet.js';
@@ -197,10 +198,20 @@ export function mountAudioPicker({ app, update = null } = {}) {
     if (meterCtx.state !== 'running') meterCtx.resume().catch(() => {});
   }
 
+  // iPhone: 音の使い方が「再生用」のままだと、メーターの getUserMedia も断られる(11-08 見直し)。
+  // 開く前に「録音も再生も」へ、閉じたら戻す。数えは共通なので、会話のマイクと同時でも壊れない。
+  const meterHold = createRecordingHold();
+  let meterToken = 0;
+  const meterBegin = () => meterHold.begin();
+  const meterEnd = () => meterHold.end();
+  const openMic = (audio) => getMicWithSession((c) => navigator.mediaDevices.getUserMedia(c), { audio });
+
   function stopMeter({ keepCtx = false } = {}) {
     cancelAnimationFrame(meterRaf);
+    meterToken += 1; // 待っている途中の取得があれば、結果を捨てる
     meterStream?.getTracks().forEach((t) => t.stop());
     meterStream = null;
+    meterEnd();
     if (!keepCtx) {
       meterCtx?.close().catch(() => {});
       meterCtx = null;
@@ -212,13 +223,22 @@ export function mountAudioPicker({ app, update = null } = {}) {
   async function startMeter() {
     stopMeter({ keepCtx: true });
     const mic = chosenMic();
+    const my = meterToken;
+    meterBegin();
+    let stream;
     try {
-      meterStream = await navigator.mediaDevices.getUserMedia({ audio: mic && mic.id !== 'default' ? { deviceId: { exact: mic.id } } : true });
+      stream = await openMic(mic && mic.id !== 'default' ? { deviceId: { exact: mic.id } } : true);
     } catch (err) {
+      if (my === meterToken) meterEnd();
       unavailable.hidden = false;
       unavailable.textContent = micFailureText(err);
       return;
     }
+    if (my !== meterToken) { // 待っている間に、閉じた・別のマイクを選んだ
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    meterStream = stream;
     if (!sheet.isOpen()) return stopMeter(); // 待っている間に閉じた
     wakeMeterCtx();
     if (!meterCtx) return;
@@ -317,14 +337,17 @@ export function mountAudioPicker({ app, update = null } = {}) {
 
   allowBtn.addEventListener('click', async () => {
     wakeMeterCtx();
+    beginRecording();
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const s = await openMic(true);
       s.getTracks().forEach((t) => t.stop());
       unavailable.hidden = true;
     } catch (err) {
       unavailable.hidden = false;
       unavailable.textContent = micFailureText(err);
       return;
+    } finally {
+      endRecording();
     }
     if (await readDevices()) void startMeter();
   });

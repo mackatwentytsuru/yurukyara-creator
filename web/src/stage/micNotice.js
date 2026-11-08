@@ -27,5 +27,26 @@ export function micFailureText(err) {
   if (kind === 'NotReadableError' || kind === 'AbortError') return `マイクを使えませんでした(ほかのアプリが使っているかも)。${TEXT_OK}`;
   const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';
   if (message && HAS_JAPANESE.test(message)) return `${message.replace(/[。.]+$/, '')}。${TEXT_OK}`;
-  return `声で話せませんでした。${TEXT_OK}`;
+  // どれにも当たらない時は、原因が画面の写真から分かるように、名前を括弧で添える(英数字だけ・24 字まで。11-08 本人の iPhone の確かめ)
+  return `声で話せませんでした${nameTag(kind)}。${TEXT_OK}`;
+}
+
+/** 括弧つきの名前(「[InvalidStateError]」)。使える文字だけを残し、空なら何も添えない */
+function nameTag(name) {
+  const tag = String(name ?? '').replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 24);
+  return tag ? `[${tag}]` : '';
+}
+
+/**
+ * ブラウザの聞き取り(Web Speech)が出したエラーの名前(e.error)の、やさしい日本語。何も言わなくてよい物(no-speech・aborted)は null。
+ * 当たらない名前は、括弧で添える。
+ * @param {unknown} code
+ */
+export function recognitionErrorText(code) {
+  const name = String(code ?? '');
+  if (name === 'no-speech' || name === 'aborted') return null;
+  if (name === 'not-allowed' || name === 'service-not-allowed') return `ブラウザの聞き取りが許可されていません${nameTag(name)}。${TEXT_OK}`;
+  if (name === 'audio-capture') return `マイクの音を取れませんでした${nameTag(name)}。${TEXT_OK}`;
+  if (name === 'network') return `ブラウザの聞き取りが、ネットワークにつながりませんでした${nameTag(name)}。${TEXT_OK}`;
+  return `声が聞き取れなくなりました${nameTag(name)}。${TEXT_OK}`;
 }

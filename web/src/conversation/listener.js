@@ -6,6 +6,11 @@ import { encodeWav, resample, SegmentCollector, STT_RATE } from './wav.js';
 import { getSttHint, sttHintHeaders } from './sttHint.js';
 // BUX: 「マイクとスピーカー」の窓で選んだマイク。既定でないマイクは PC の聞き取りへ。音が来ない時は画面へ知らせる
 import { AUDIO_WORDS, NOTE_EVENT, SILENT_EVENT, createSilenceWatch, decideListening, isDefaultMic, loadChoice, micConstraints, resolveDevice, serverSttAvailable, splitDevices, tell } from './audioDevices.js';
+// 11-08 本人の iPhone: カメラを入れたまま取り直す・ブラウザの聞き取りが使えない時は PC の聞き取りへ自動で替える・止まった原因の報告
+import { openMicStream } from './micStream.js';
+import { beginRecording, endRecording, getMicWithSession } from './audioSession.js'; // iPhone: マイクを開く前に音の使い方を「録音も再生も」へ。閉じたら再生用へ戻す
+import { FALLBACK_WORDS, isFallbackError, shouldFallToServer } from './sttFallback.js';
+import { recognitionErrorText } from '../stage/micNotice.js';
 
 const MIC_BASE = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 
@@ -48,6 +53,12 @@ export class Listener {
    * @param {(active:boolean)=>void} cb.onVoice 声が出た/止まった(割り込みの判定に使う)
    * @param {(msg:string)=>void} cb.onError
    * @param {()=>void} [cb.onEmpty] server で、声を送ったのに文字にならなかった
+   * @param {(msg:string)=>void} [cb.onNotice] 聞き取りの道を自動で替えた時の、やさしい一言
+   * @param {(provider:'web'|'server')=>void} [cb.onProvider] 聞き取りの道が替わった(注意書きを直す)
+   * @param {()=>void} [cb.onStopped] 聞き取りが自分で止まった(ボタンの見た目を戻す)
+   * @param {()=>boolean} [cb.cameraOn] カメラが入っているか(マイクの取り直しに使う)
+   * @param {()=>(()=>void)} [cb.holdCamera] カメラの映像を一瞬止める。戻す関数を返す
+   * @param {(event:object)=>void} [cb.report] 失敗の報告(名前・提供元・段だけ。音も文字も入れない)
    * @param {object} [opts]
    * @param {'web'|'server'} [opts.provider]
    * @param {()=>boolean} [opts.isBusy] server で、キャラが話している(このあいだの音は聞かない。スピーカーが近いヘッドセットでの自分の声の拾い込みを防ぐ)
@@ -80,36 +91,67 @@ export class Listener {
     const plan = await micPlan(this.baseProvider);
     this.provider = plan.provider;
     if (plan.note) tell(NOTE_EVENT, { text: plan.note });
-    if (this.provider === 'web' && !webSpeechSupported()) throw new Error('このブラウザは声の聞き取りに対応していません');
-    // 声の有無を見るためのマイク(エコーは打ち消す)
+    this._checkWebSupport();
+    // 失敗した時に、どの段で止まったかを名前に添える(画面の写真と報告で原因を探すため。音も文字も入れない)
+    let stage = 'mic-open';
+    // iPhone: 再生用のままだと getUserMedia が InvalidStateError で断られる。開く前に「録音も再生も」へ(閉じる時に stop() が戻す)
+    beginRecording();
+    this._recSession = true;
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(MIC_BASE, plan.chosen, !plan.useChosen) });
-      this.micLabel = plan.useChosen ? plan.chosen.label : '';
+      // 声の有無を見るためのマイク(エコーは打ち消す)。カメラが入っていて失敗したら、1 回だけ取り直す(micStream.js)
+      const open = (audio) => openMicStream((c) => getMicWithSession((x) => navigator.mediaDevices.getUserMedia(x), c),{ audio }, { cameraOn: this.cb.cameraOn?.() === true, holdCamera: this.cb.holdCamera });
+      try {
+        this.stream = await open(micConstraints(MIC_BASE, plan.chosen, !plan.useChosen));
+        this.micLabel = plan.useChosen ? plan.chosen.label : '';
+      } catch (err) {
+        if (!plan.useChosen || !['OverconstrainedError', 'NotFoundError'].includes(err?.name)) throw err;
+        // 選んだマイクが抜かれた: 頼まれた道と既定のマイクに戻す
+        tell(NOTE_EVENT, { text: AUDIO_WORDS.gone });
+        this.provider = this.baseProvider;
+        this._checkWebSupport();
+        this.stream = await open({ ...MIC_BASE });
+        this.micLabel = '';
+      }
+      stage = 'audio-setup';
+      this._silence = createSilenceWatch({ startedAt: performance.now() });
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+      // iPhone では、押した後に作った AudioContext が止まったまま(suspended)で、音が 0 のままになることがある
+      if (this.ctx.state === 'suspended') this.ctx.resume?.().catch(() => {});
+      const src = this.ctx.createMediaStreamSource(this.stream);
+      this.src = src;
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 1024;
+      this.samples = new Float32Array(this.analyser.fftSize);
+      src.connect(this.analyser);
+      this.listening = true;
+      this.vadTimer = setInterval(() => this._vad(), 40);
+      if (this.provider === 'server') {
+        stage = 'capture';
+        await this._startCapture(src);
+        fetch('/api/stt/warm', { method: 'POST' }).catch(() => {}); // 最初の 1 回が遅くならないよう、先に用意してもらう
+      } else {
+        stage = 'recognition';
+        this._startRecognition();
+      }
     } catch (err) {
-      if (!plan.useChosen || !['OverconstrainedError', 'NotFoundError'].includes(err?.name)) throw err;
-      // 選んだマイクが抜かれた: 頼まれた道と既定のマイクに戻す
-      tell(NOTE_EVENT, { text: AUDIO_WORDS.gone });
-      this.provider = this.baseProvider;
-      if (this.provider === 'web' && !webSpeechSupported()) throw new Error('このブラウザは声の聞き取りに対応していません');
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { ...MIC_BASE } });
-      this.micLabel = '';
+      // 途中まで開いた物(マイク・音の場)を残さない(マイクの印が付いたままにならない)
+      this.stop();
+      try {
+        if (err && typeof err === 'object' && !err.stage) err.stage = stage;
+      } catch {
+        // 書き込めない失敗でも、そのまま投げる
+      }
+      throw err;
     }
-    this._silence = createSilenceWatch({ startedAt: performance.now() });
-    const AC = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new AC();
-    const src = this.ctx.createMediaStreamSource(this.stream);
-    this.analyser = this.ctx.createAnalyser();
-    this.analyser.fftSize = 1024;
-    this.samples = new Float32Array(this.analyser.fftSize);
-    src.connect(this.analyser);
-    this.listening = true;
-    this.vadTimer = setInterval(() => this._vad(), 40);
-    if (this.provider === 'server') {
-      await this._startCapture(src);
-      fetch('/api/stt/warm', { method: 'POST' }).catch(() => {}); // 最初の 1 回が遅くならないよう、先に用意してもらう
-    } else {
-      this._startRecognition();
-    }
+  }
+
+  /** ブラウザの聞き取りが無い時は、PC の聞き取りがあればそちらで聞く。どちらも無ければ投げる */
+  _checkWebSupport() {
+    if (this.provider !== 'web' || webSpeechSupported()) return;
+    if (!serverSttAvailable()) throw new Error('このブラウザは声の聞き取りに対応していません');
+    this.provider = 'server';
+    this.cb.onNotice?.(FALLBACK_WORDS.missing);
   }
 
   stop() {
@@ -124,6 +166,10 @@ export class Listener {
     this.stream?.getTracks().forEach((t) => t.stop());
     this.ctx?.close();
     this.voiceActive = false;
+    if (this._recSession) {
+      this._recSession = false;
+      endRecording(); // マイクを閉じた: 声を出す側の「再生用」へ戻す
+    }
   }
 
   _vad() {
@@ -188,10 +234,21 @@ export class Listener {
   /** マイクの音を集める(声の区間だけを、あとでサーバーへ送る) */
   async _startCapture(src) {
     this.collector = new SegmentCollector({ rate: this.ctx.sampleRate });
-    await this.ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: 'text/javascript' })));
-    this.capture = new AudioWorkletNode(this.ctx, 'stt-capture', { numberOfOutputs: 0 });
-    this.capture.port.onmessage = (e) => this.collector.push(e.data);
-    src.connect(this.capture);
+    try {
+      if (!this.ctx.audioWorklet) throw new Error('audioWorklet なし');
+      await this.ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: 'text/javascript' })));
+      this.capture = new AudioWorkletNode(this.ctx, 'stt-capture', { numberOfOutputs: 0 });
+      this.capture.port.onmessage = (e) => this.collector.push(e.data);
+      src.connect(this.capture);
+    } catch (err) {
+      // 音の専用の流れを使えない(古い iPhone のブラウザなど): 同じ音を、古い道(ScriptProcessor)で集める。出力は無音
+      if (typeof this.ctx.createScriptProcessor !== 'function') throw err;
+      const node = this.ctx.createScriptProcessor(4096, 1, 1);
+      node.onaudioprocess = (e) => this.collector.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      src.connect(node);
+      node.connect(this.ctx.destination);
+      this.capture = node;
+    }
   }
 
   _hintNow() {
@@ -252,16 +309,60 @@ export class Listener {
     };
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') return;
+      // 許可されない・音を取れない・つながらない: 作り直しても同じなので、PC の聞き取りへ替える(無ければ、止めて知らせる)
+      if (isFallbackError(e.error)) {
+        void this._recognitionFailed(e.error, e);
+        return;
+      }
       this.cb.onError(`聞き取りでエラー: ${e.error}`);
     };
     rec.onend = () => {
-      if (this.listening) setTimeout(() => this._startRecognition(), 200);
+      if (this.listening && !this._recognitionDead) setTimeout(() => this._startRecognition(), 200);
     };
     this.recognition = rec;
     try {
       rec.start();
     } catch (err) {
-      this.cb.onError(err.message);
+      void this._recognitionFailed('start-failed', err);
     }
+  }
+
+  /**
+   * ブラウザの聞き取りが始められない・止まった時。PC の聞き取りがあれば、自動でそちらへ替えて一言そえる。
+   * 無ければ、やさしい一言を出して聞くのをやめる(同じ失敗を 0.2 秒ごとに繰り返さない)。どちらも報告に残す(名前・提供元だけ)
+   */
+  async _recognitionFailed(code, err) {
+    if (this._recognitionDead || !this.listening) return;
+    this._recognitionDead = true;
+    const rec = this.recognition;
+    this.recognition = null;
+    if (rec) {
+      rec.onend = null;
+      rec.onerror = null;
+      try {
+        rec.abort?.();
+      } catch {
+        // すでに止まっている
+      }
+    }
+    const fell = shouldFallToServer({ provider: this.provider, errorCode: code, serverOk: serverSttAvailable() });
+    this.cb.report?.({ kind: fell ? 'voice-fallback' : 'voice-start-failed', error: { name: code, message: err?.message ?? '' }, provider: 'web', stage: 'recognition', fellBack: fell });
+    if (fell) {
+      try {
+        this.provider = 'server';
+        await this._startCapture(this.src);
+        fetch('/api/stt/warm', { method: 'POST' }).catch(() => {});
+        this.cb.onProvider?.('server');
+        this.cb.onNotice?.(FALLBACK_WORDS.toServer);
+        return;
+      } catch {
+        this.provider = 'web'; // 替えられなかった: 下で止めて知らせる
+      }
+    }
+    const text = recognitionErrorText(code) ?? recognitionErrorText('start-failed');
+    this.cb.onError(text);
+    this.cb.onNotice?.(text); // スマホでも見える所へ(onError だけだと、畳まれた欄の中にしか出ない)
+    this.stop();
+    this.cb.onStopped?.();
   }
 }
