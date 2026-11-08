@@ -4,6 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#14121f" />
+  <!-- 「ホーム画面に追加」から開くと、ブラウザの上と下の帯(URL など)が出ない全画面で開く(テレビに映す時の完全な全画面。
+       iPhone・iPad のブラウザの頁は、頁の中から全画面にできない)。表示の決まりは manifest.webmanifest(display: fullscreen、だめなら standalone)。
+       iPhone・iPad は、下の apple- の 3 行(と apple-touch-icon)も読む -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ゆるキャラ" />
   <title>ゆるキャラクリエイター</title>
   <!-- 初めての会話(S4)が、見本に近い子がいない時に 1 回で開く「PC の Claude Code で新しい子を作る」手順。
        画面は日本語だけなので、日本語の README(README.md)の見出し「自分の PC で、Claude Code と自分のキャラを作る」の節を指す -->
@@ -128,6 +137,11 @@
     </div>
   </div>
   <p id="tvRotate" class="tv-rotate" role="note">よこむきにすると、テレビに大きくうつります</p>
+  <!-- 完全な全画面の案内: 頁から全画面にできず、ホーム画面の頁としても開いていない時に、1 回だけ(文は main.js が stage/tvMode.js から入れる)。閉じるボタンか、時間で消える -->
+  <div id="tvGuide" class="tv-guide" role="status" hidden>
+    <p id="tvGuideText" class="tv-guide-text"></p>
+    <button type="button" id="tvGuideClose" class="tv-guide-close" aria-label="案内を とじる" title="案内を とじる">×</button>
+  </div>
   <!-- iPhone・iPad の「テレビに映す」: 画面ミラーリングの 3 つの手順と「テレビ表示にする」。文は main.js が stage/tvMode.js から入れる(外の住所は書かない) -->
   <div id="tvCast" class="tv-cast" role="dialog" aria-modal="true" aria-labelledby="tvCastTitle" hidden>
     <div class="tv-cast-card">

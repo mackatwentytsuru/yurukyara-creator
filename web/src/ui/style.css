@@ -588,6 +588,24 @@ html.tv-mode .brain-notice, html.tv-mode .ui-notice, html.tv-mode .shop-badge { 
   }
 }
 
+/* 完全な全画面の案内(main.js が 1 回だけ出す。stage/tvMode.js の fullscreenGuide): 上の左に 1 行(長ければ 2 行)と、44px の閉じるボタン。
+   「テレビに映す」の札(z-index 11)の上に出る。縦持ちの指で触る端末は、「よこむきに」の一言(.tv-rotate)の下 */
+.tv-guide[hidden] { display: none; }
+.tv-guide {
+  position: fixed; z-index: 12; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); max-width: min(56vw, 560px);
+  display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 14px; border-radius: 16px; color: var(--text);
+  background: rgba(12, 10, 22, 0.82); border: 1px solid var(--lav);
+}
+.tv-guide-text { margin: 0; font-size: 14px; line-height: 1.5; }
+.tv-guide-close {
+  flex: none; min-width: 44px; min-height: 44px; font: inherit; font-size: 22px; line-height: 1; color: var(--text); cursor: pointer;
+  border-radius: 999px; background: transparent; border: 0;
+}
+.tv-guide-close:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .tv-guide { top: calc(max(10px, env(safe-area-inset-top)) + 56px); right: 12px; max-width: none; }
+}
+
 /* 「テレビに映す」(iPhone・iPad): 画面ミラーリングの 3 つの手順と、大きな「テレビ表示にする」。入口と同じ形の真ん中の札(子どもにも読める大きな字) */
 .tv-cast {
   position: fixed; inset: 0; z-index: 11; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
