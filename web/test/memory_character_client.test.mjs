@@ -146,6 +146,7 @@ test('札: 「全部わすれる」は、子が決まっていればその子の
   const panel = mountMemoryPanel(parent, { askPass: false });
   await panel.ready;
   panel.root.find('mem-forget').click();
+  panel.root.find('mem-forget-yes').click(); // 1 回目は聞くだけ(作る画面の枝)。「はい」で消す
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(last('/api/memory', 'DELETE').headers['x-yc-character'], 'yb261108_aaaaaa');
   assert.equal(mk.getKey(), KEY, '札の「全部わすれる」で合鍵を捨てない');
