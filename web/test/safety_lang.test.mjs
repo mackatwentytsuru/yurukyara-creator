@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { classifyHistory, classifyInput, fixedReply, guardOutput, isUnsafeOutput, outputGuardKind } from '../server/safety.mjs';
-import { FOREIGN_REPLACEMENTS, classifyForeign, foreignDistressDetail, foreignFixedLine, foreignOutputKind, foreignReplacement } from '../server/safetyLang.mjs';
+import { FOREIGN_REPLACEMENTS, classifyForeign, classifyForeignCrisis, foreignDistressDetail, foreignFixedLine, foreignOutputKind, foreignReplacement } from '../server/safetyLang.mjs';
 import { cleanSpeech, runTurn } from '../server/brain.mjs';
 
 const MULTI = { lang: 'multi' };
@@ -35,10 +35,12 @@ test('多言語: 5 つの種類を、英・中・韓の言葉で拾う(重い順
 // 今までの日本語の網が、もともと英語の 2 つの言い方を拾っている(6872b3f の値。多言語を足しても変わらない)
 const JA_NET_ALREADY = { 'I am going to kill myself tonight': 'distress', 'I want to die': 'distress', 'do you like sex': 'sexual', 'send nudes': 'sexual' };
 
-test('日本語だけ(lang 無し・ja・知らない値)では、英・中・韓の言葉は、今までの日本語の網の値のまま(新しい網は効かない)', () => {
+test('日本語だけ(lang 無し・ja・知らない値)では、英・中・韓の言葉は、今までの日本語の網の値のまま(新しい網は効かない)。ただし命の危険・つらい話は、日本語だけでも拾う(B13S 11-08 本人の決め)', () => {
   for (const texts of Object.values(CASES)) {
     for (const t of texts) {
-      const want = JA_NET_ALREADY[t] ?? null;
+      // 命の危険・つらい話の英・中・韓の言葉は、日本語だけでも拾う。性的な話・恋人役・依存は、今までの日本語の網の値のまま
+      const crisis = classifyForeignCrisis(t);
+      const want = crisis ?? JA_NET_ALREADY[t] ?? null;
       assert.equal(classifyInput(t), want, t);
       assert.equal(classifyInput(t, {}), want, t);
       assert.equal(classifyInput(t, { lang: 'ja' }), want, t);
@@ -75,10 +77,13 @@ test('classifyForeign: 直接呼んでも同じ。空・文字でない値は nu
   for (const v of ['', null, undefined, 5]) assert.equal(classifyForeign(v), null);
 });
 
-test('履歴にも効く(多言語の時だけ)', () => {
+test('履歴にも効く(多言語の時は全部。日本語だけの時は命の危険・つらい話だけ。B13S)', () => {
   const hist = [{ role: 'user', content: 'my dad hits me' }];
   assert.equal(classifyHistory(hist, MULTI), 'distress');
-  assert.equal(classifyHistory(hist), null);
+  assert.equal(classifyHistory(hist), 'distress');
+  const romance = [{ role: 'user', content: 'be my girlfriend' }];
+  assert.equal(classifyHistory(romance, MULTI), 'romance');
+  assert.equal(classifyHistory(romance), null);
 });
 
 test('つらい話の中身: self・abuse・other(英・中・韓)', () => {
@@ -226,9 +231,11 @@ test('runTurn(仮の頭脳): 多言語の「I want to die」は、英語の 1 �
   assert.equal(events.filter((e) => e.type === 'thought').length, 1, '考えは 1 回だけ');
 });
 
-test('runTurn: 日本語だけ(lang 無し)では、同じ英語の言葉に決まった返事を出さない。日本語の「死にたい」は今までどおり', async () => {
-  const off = await run({ text: '我想自杀', character: { name: 'ミカン', persona: '' } });
+test('runTurn: 日本語だけ(lang 無し)では、恋人役の英語の言葉に決まった返事を出さない(命・つらい話は出す。B13S)。日本語の「死にたい」は今までどおり', async () => {
+  const off = await run({ text: 'be my girlfriend', character: { name: 'ミカン', persona: '' } });
   assert.equal(off.find((e) => e.type === 'meta' && e.safety), undefined);
+  const crisis = await run({ text: '我想自杀', character: { name: 'ミカン', persona: '' } });
+  assert.equal(crisis.find((e) => e.type === 'meta' && e.safety)?.safety, 'distress');
   const ja = await run({ text: '死にたい', character: { name: 'ミカン', persona: '' } });
   const multiJa = await run({ text: '死にたい', lang: 'multi', character: { name: 'ミカン', persona: '' } });
   assert.deepEqual(says(multiJa), says(ja), '多言語でも、日本語で話した人には日本語の返事だけ(英語の行を足さない)');

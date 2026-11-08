@@ -234,7 +234,7 @@ test('入口: 「AI のキャラクターと話します。小学生以下は、
   }
 });
 
-test('性格の画面: 「恋人の役・ひとりじめ・ひきとめる性格は、つけられません」の 1 行が見える(幅 390 と 1280)', { skip: SLOW }, async (t) => {
+test('性格の画面: 「やさしい せいかくから えらんでね。」の 1 行が見える(幅 390 と 1280)。子どもに「恋人の役・ひとりじめ」の言葉は出さない(B13S)', { skip: SLOW }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
   try {
@@ -245,7 +245,8 @@ test('性格の画面: 「恋人の役・ひとりじめ・ひきとめる性格
       await p.waitForSelector('.yp-safety-note');
       await shot(p, `persona_${size.join('x')}`);
       const f = await noticeFacts(p, '.yp-safety-note');
-      assert.match(f.text, /恋人の役・ひとりじめ・ひきとめる性格は、つけられません/);
+      assert.match(f.text, /やさしい せいかくから えらんでね。/);
+      assert.doesNotMatch(f.text, /恋人|ひとりじめ|ひきとめ/);
       assert.ok(f.shown && f.inside, `${size.join('x')} ${JSON.stringify(f)}`);
       assert.ok(f.font >= 12);
       assert.deepEqual(errors, []);

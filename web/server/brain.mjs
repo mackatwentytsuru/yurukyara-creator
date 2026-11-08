@@ -6,8 +6,8 @@ import { config } from './env.mjs';
 import { buildSystemBlocks, buildUserTurn, MOTIONS, safeChoices } from './prompt.mjs';
 import { nearestExpression, oneCustomPerReply } from '../src/character/expressionNames.js';
 import { classifyHistory, classifyInput, distressDetail, fixedReply, guardOutput, historyGuard, mentionsChild, mostSevere, personalWarn, turnGuard, SAFETY_VERSION } from './safety.mjs';
-import { foreignDistressDetail } from './safetyLang.mjs'; // ML1: 多言語の時だけ、英・中・韓の言葉のつらい話の中身を見る
-import { detectLang, langModeOf } from '../src/conversation/lang.js'; // ML1: ことば
+import { classifyForeignCrisis, foreignDistressDetail, visitorLangOf } from './safetyLang.mjs'; // ML1: 多言語の時だけ、英・中・韓の言葉のつらい話の中身を見る(B13S: 命・つらい話は日本語だけの時も)
+import { langModeOf } from '../src/conversation/lang.js'; // ML1: ことば
 import { mentionsRest, restGuard, restLine, restNeed } from './safety.mjs'; // BSF 11-08: 長い会話・夜おそくの「休もうか」(1 回の会話で 1 回)
 import { summarize } from './memory/reflect.mjs';
 import { aizuchiPair, exampleReply, firstGreeting, memoryLine } from './greeting.mjs';
@@ -208,7 +208,7 @@ export function* mockReply(o) {
   const { kind, source } = classifyTurn({ text, trigger, scene: seen, lang });
   if (kind) {
     const multi = lang === 'multi';
-    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: detailOf(source, multi), text: source, visitorLang: multi ? detectLang(text, o.hearLang) : 'ja' });
+    const [first, ...rest] = fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(persona), detail: detailOf(source, multi), text: source, visitorLang: visitorLangFor({ multi, text, source, hearLang: o.hearLang }) });
     const { intent, stage, handoff, safety, ...line } = first;
     yield { type: 'thought', seen: seen || '', intent, stage, handoff, safety };
     yield line;
@@ -218,10 +218,16 @@ export function* mockReply(o) {
   for (const ev of mockLines(o)) yield ev.type === 'say' ? guardOutput(ev, { multi: lang === 'multi' }) : ev;
 }
 
-/** つらい話の中身(self・abuse・other)。多言語の時は、日本語の網で other だった言葉を、英・中・韓の網でも見る */
+/** つらい話の中身(self・abuse・other)。多言語の時(と、日本語だけでも英・中・韓の命・つらい話の言葉の時)は、日本語の網で other だった言葉を、英・中・韓の網でも見る */
 function detailOf(source, multi) {
   const d = distressDetail(source);
-  return multi && d === 'other' ? foreignDistressDetail(source) : d;
+  return d === 'other' && (multi || classifyForeignCrisis(source)) ? foreignDistressDetail(source) : d;
+}
+
+/** 決まった返事の先頭の 1 行の言葉。多言語の時は使う人の言葉。日本語だけの時は、英・中・韓の命・つらい話の言葉の時だけその言葉(それ以外は ja = 今まで通り) */
+function visitorLangFor({ multi, text, source, hearLang }) {
+  if (multi) return visitorLangOf(text, hearLang);
+  return classifyForeignCrisis(source) ? visitorLangOf(source, 'ja') : 'ja';
 }
 
 /** 人格の初めてのあいさつ(3 文まで)を、おじぎ → うなずき → 手をふる で言う */
@@ -365,6 +371,8 @@ function* mockLines({ text, trigger, landmarks = [], seen, memory = null, learne
   yield { type: 'say', text: lines[1], expression: 'happy', motion: 'tilt', gaze: 'person' };
 }
 
+/** 本物の頭脳が答えられず、仮の頭脳に替えた時の知らせ(公開の関数の FALLBACK_NOTICE['brain-error'] と同じ文) */
+export const BRAIN_ERROR_NOTICE = '仮の頭脳です(本物の頭脳が答えられませんでした)';
 export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で流れて見えるように)。まとめて返す公開の関数は 0 にする
 
 /**
@@ -372,7 +380,7 @@ export const MOCK_PACE_MS = 120; // 仮の頭脳の 1 文ごとの間(画面で�
  * 仮の頭脳を強制するときは brain: 'mock'(forceMock: true と同じ)。鍵があっても本物を呼ばず、安全の層はいつも通す。
  * paceMs は仮の頭脳の 1 文ごとの間(既定 120ms)。
  */
-export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, memory = null, learned = [], forceMock = false, brain: want = 'auto', paceMs = MOCK_PACE_MS }) {
+export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, take: () => false }, memory = null, learned = [], forceMock = false, brain: want = 'auto', paceMs = MOCK_PACE_MS, onBrainFailed = () => {} }) {
   const { text = '', trigger = null, scene = '', character = {}, place = {} } = body;
   // UIR 19: 住所・電話・学校の名前などを書いた発言は、前の話からも消す(頭脳にもう渡さない・覚えない・記録しない)
   const history = (Array.isArray(body.history) ? body.history : []).map((m) => (m?.role === 'user' && personalWarn(String(m.content ?? '')) ? { ...m, content: PERSONAL_HISTORY_MASK } : m));
@@ -426,9 +434,13 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
   const historyKind = classifyHistory(history, { lang });
   // 性的な話は、どちらの頭脳でも呼ばずに決まった返事(BSF 11-08)
   const fixed = kind === 'emergency' || kind === 'distress' || kind === 'sexual' || (brain === 'mock' && (kind === 'romance' || kind === 'dependency'));
+  // 決まった返事(頭脳を呼ばない)。本物の頭脳が答えられなかった回の、恋人役・依存の言葉にも、同じ返事を使う(B13S)
+  const sayFixed = (brainName) => {
+    onEvent({ type: 'meta', brain: brainName, safety: kind, safetyVersion: SAFETY_VERSION });
+    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: detailOf(source, multi), text: source, visitorLang: visitorLangFor({ multi, text, source, hearLang: body.hearLang }) })) emit(obj);
+  };
   if (fixed) {
-    onEvent({ type: 'meta', brain, safety: kind, safetyVersion: SAFETY_VERSION });
-    for (const obj of fixedReply(kind, { child: mentionsChild(source) || mentionsChild(text) || mentionsChild(character.persona), detail: detailOf(source, multi), text: source, visitorLang: multi ? detectLang(text, body.hearLang) : 'ja' })) emit(obj);
+    sayFixed(brain);
     return;
   }
   // UIR 19(UW3 11-08): 住所・電話・メール・学校の名前・本名を書いたら、頭脳を呼ばずに、やさしく「書かないでね」と言う。どちらの頭脳でも同じ。覚えない・記録しない
@@ -448,7 +460,7 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
     onEvent({ type: 'meta', rest });
   };
 
-  if (brain === 'mock') {
+  const runMock = async () => {
     onEvent({ type: 'meta', brain: 'mock' });
     // BCV: 仮の頭脳は絵を見ない。絵がついていたら知らせ、絵について聞かれていたら、やさしく「本物の頭脳の時だけ見られる」と答える
     if (image) {
@@ -467,13 +479,13 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       emit(obj);
     }
     emitRest();
-    return;
-  }
+  };
+  if (brain === 'mock') return runMock();
 
   onEvent({ type: 'meta', brain: 'haiku', model: config.model, ...(kind ? { safety: kind } : {}), ...(historyKind ? { historySafety: historyKind } : {}), ...(image ? { camera: 'sent' } : {}) });
   // ML1: ことば(multi の時だけ節が足される)・お店のきまり・町のお知らせ(facts)・お店の端末(memory:'off' = 覚えない節に替える)。無い時は今までと同じ指示文
   const system = buildSystemBlocks({ character, place, expressions, expressionHints: body.expressionHints, motions, interview: body.interview === true, lang: body.lang, facts: body.facts, memoryOff: body.memory === 'off' });
-  const guard = [turnGuard(kind), historyKind && historyKind !== kind ? historyGuard(historyKind) : '', restGuard(rest)].filter(Boolean).join('\n');
+  const guard = [turnGuard(kind, { multi }), historyKind && historyKind !== kind ? historyGuard(historyKind) : '', restGuard(rest)].filter(Boolean).join('\n');
   const messages = [
     ...history.slice(-12).map((m) => ({ role: m.role, content: String(m.content) })),
     // BCV: 絵がついた回は [絵, 絵の決まり + この回の言葉](server/camera.mjs)。ついていない回は、今までどおりの文字だけ
@@ -489,17 +501,42 @@ export async function runTurn(body, { onEvent, signal, hedge = { afterMs: 0, tak
       emit(obj);
     }
   });
-  const info = await callHaikuHedged({
-    system,
-    messages,
-    signal,
-    onText: (t) => {
-      raw += t;
-      splitter.push(t);
-    },
-    hedgeMs: image ? 0 : hedge.afterMs, // BCV: 絵のついた回は 2 本目を送らない(絵を 2 回送らない)
-    takeExtra: hedge.take,
-  });
+  let info;
+  try {
+    info = await callHaikuHedged({
+      system,
+      messages,
+      signal,
+      onText: (t) => {
+        raw += t;
+        splitter.push(t);
+      },
+      hedgeMs: image ? 0 : hedge.afterMs, // BCV: 絵のついた回は 2 本目を送らない(絵を 2 回送らない)
+      takeExtra: hedge.take,
+    });
+  } catch (err) {
+    // B13S(QA8 #1): 本物の頭脳が 429・5xx・時間切れで答えられなかった回は、画面を無言にしない。止められた回(signal)だけは、そのまま投げる
+    if (signal?.aborted) throw err;
+    // 鍵が違う・本文が悪い(400・401・403・404 など)は、設定の間違いなので今までどおり例外にする(直す人に分かる言葉で)。上限・混雑・サーバーの不調・時間切れ・つながらない、だけ替える
+    const status = Number(/\((\d{3})\)/.exec(String(err?.message ?? ''))?.[1]);
+    if (status && status !== 408 && status !== 429 && status < 500) throw err;
+    console.warn(`[頭脳] 本物の頭脳が答えられませんでした。仮の頭脳で答えます: ${String(err?.message ?? err).slice(0, 120)}`);
+    splitter.flush();
+    onBrainFailed(err); // 呼べなかった回の数えを返す(server/index.mjs)
+    if (said > 0) {
+      // 途中まで話せていたら、そこまでにする(同じ話を仮の頭脳で重ねない)
+      emitRest();
+      onEvent({ type: 'meta', brainError: true });
+      return;
+    }
+    onEvent({ type: 'meta', brain: 'mock', fallback: true, reason: 'brain-error', notice: BRAIN_ERROR_NOTICE });
+    // つらい話・恋人役・依存の言葉は、決まった返事を必ず返す(仮の頭脳の台本は、この 3 つを持たない)
+    if (kind) {
+      sayFixed('mock');
+      return;
+    }
+    return runMock();
+  }
   splitter.flush();
   // 1 文も取り出せなかったときは、モデルの生の出力を、サーバーの画面に残す(直すための手がかり)
   if (!said) {

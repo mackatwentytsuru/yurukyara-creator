@@ -21,10 +21,16 @@ export const SECRET_NOTICE = '鍵らしい文字は送らなかったよ。声�
 export const TEXT_MAX_CHARS = 500; // 1 回の発言の長さの上限(サーバーの validate と同じ 500 字)
 export const OFFLINE_NOTICE = 'いま つながらないよ。もう一度ためしてね';
 export const TOO_LONG_NOTICE = `ながすぎるよ。${TEXT_MAX_CHARS} 字までで言ってね`;
+export const BUSY_NOTICE = 'いま こみあっているよ。すこし まってね';
 
-/** 通信の失敗を、子どもに読める言葉にする(英語の Failed to fetch などは出さない)。送った言葉が長すぎた(413)時は、その言葉 */
+/**
+ * 通信の失敗を、子どもに読める言葉にする(英語の Failed to fetch などは出さない)。
+ * 送った言葉が長すぎた(413)時は、その言葉。混んでいる・上限(429。サーバーの文に (429) が入る時も)は「こみあっているよ」。
+ */
 export function friendlyChatError(err) {
-  return Number(err?.status) === 413 ? TOO_LONG_NOTICE : OFFLINE_NOTICE;
+  if (Number(err?.status) === 413) return TOO_LONG_NOTICE;
+  if (Number(err?.status) === 429 || /\(429\)/.test(String(err?.message ?? ''))) return BUSY_NOTICE;
+  return OFFLINE_NOTICE;
 }
 
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
@@ -290,7 +296,10 @@ export class Dialogue {
               });
           } else if (ev.type === 'error') {
             failed = true;
-            this.ui.error(ev.message);
+            // B13S(QA8 #1): 英語と JSON の文を「あたまの なか」にだけ出して無言にしない。字幕の所に、やさしい日本語で
+            const msg = friendlyChatError({ status: ev.status, message: ev.message });
+            this.ui.error(msg);
+            this.ui.caption(msg, 6000);
           }
         },
         ac.signal,

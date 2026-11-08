@@ -9,7 +9,7 @@ import { detectLang } from '../src/conversation/lang.js';
 const NETS = {
   emergency: [
     // en
-    /\b(i(?:'m| am| will|'ll)? (?:going to|about to|gonna|will) (?:kill myself|end (?:it|my life)|jump)|(?:kill|killing) myself (?:now|tonight|today)|(?:took|taken|taking) (?:too many|a lot of|lots of) (?:pills|tablets|meds)|(?:want|going) to jump (?:off|from)|(?:is|are) (?:going to|gonna|trying to) kill me)\b/i,
+    /\b(i(?:'m| am| will|'ll)? (?:going to|about to|gonna|will) (?:kill myself|end (?:it|my life)|jump (?:off|from|out of)(?! the (?:stage|diving board|trampoline|swing|couch|sofa|bed)))|(?:kill|killing) myself (?:now|tonight|today)|(?:took|taken|taking) (?:too many|a lot of|lots of) (?:pills|tablets|meds)|(?:want|going) to jump (?:off|from)(?! the (?:stage|diving board|trampoline|swing|couch|sofa|bed))|(?:is|are) (?:going to|gonna|trying to) kill me)\b/i,
     // zh
     /(我(?:现在|現在|马上|馬上|今天|今晚)(?:就)?(?:要|想|准备|準備)(?:去)?(?:死|自杀|自殺|跳楼|跳樓|跳下去)|我(?:要|准备|準備)(?:去)?(?:跳楼|跳樓|跳下去)|我(?:准备|準備)(?:去)?(?:自杀|自殺)|吞了(?:很多|好多)?(?:药|藥)|(?:有人|他|她)(?:要|想)(?:杀|殺)我)/u,
     // ko
@@ -17,16 +17,16 @@ const NETS = {
   ],
   distress: [
     /\b(?:want(?:ed)? to die|wanna die|kill myself|suicid(?:e|al)|end my life|hurt myself|harm myself|cut myself|cutting myself|self[- ]?harm|(?:don'?t|do not) want to (?:live|be alive|go on)|no reason to live|wish i (?:was|were) (?:dead|gone)|better off dead|want to disappear|can'?t go on|abus(?:e|ed|es|ing) me|(?:my )?(?:dad|mom|mum|mother|father|stepdad|stepfather|teacher|uncle|boyfriend|husband|brother|coach|someone|somebody|he|she) (?:hits|beats|hurts|touches|molests|hit|beat|hurt|touched|molested) me)\b/i,
-    /(想死|不想活|不想再活|自杀|自殺|轻生|輕生|自残|自殘|割腕|伤害自己|傷害自己|活着没意思|活著沒意思|活不下去|想(?:要)?消失|结束生命|結束生命|家暴|被(?:殴打|毆打|虐待|性侵|猥亵|猥褻)|被打(?![断斷扰擾败敗开開破折])|虐待我|(?:爸爸|妈妈|媽媽|老师|老師|继父|繼父|叔叔|舅舅|男朋友|老公)(?:打我|打了我|碰我|摸我|伤害我|傷害我))/u,
-    /(죽고\s*싶|죽을래|자살|자해|손목을?\s*(?:그|긋)|살기\s*싫|살고\s*싶지\s*않|사라지고\s*싶|살아갈\s*(?:수\s*없|자신)|목숨을?\s*끊|학대|폭행|가정폭력|때려요|때렸|성추행|성폭행|(?:아빠|엄마|선생님|삼촌|새아빠|남자친구|남편)(?:가|이)\s*(?:나를|저를)?\s*(?:때|괴롭|만지))/u,
+    /(想死|不想活|不想再活|自杀|自殺|轻生|輕生|自残|自殘|割腕|伤害自己|傷害自己|活着没意思|活著沒意思|活不下去|想(?:要)?消失|结束生命|結束生命|家暴|被(?:殴打|毆打|虐待|性侵|猥亵|猥褻)|被打(?![断斷扰擾败敗开開破折动動])|虐待我|(?:爸爸|妈妈|媽媽|老师|老師|继父|繼父|叔叔|舅舅|男朋友|老公)(?:打我|打了我|碰我|摸我|伤害我|傷害我))/u,
+    /(죽고\s*싶|죽을래|자살|자해|손목을?\s*(?:그|긋)|살기\s*싫|살고\s*싶지\s*않|사라지고\s*싶|살아갈\s*(?:수\s*없|자신)|목숨을?\s*끊|학대|폭행|가정폭력|(?:나를|저를|날|절)\s*때(?:렸|려)|성추행|성폭행|(?:아빠|엄마|선생님|삼촌|새아빠|남자친구|남편|친구|형|누나|오빠|언니)(?:가|이)\s*(?:나를|저를)?\s*(?:때|괴롭|만지))/u,
   ],
   sexual: [
-    /\b(?:sex|sexy|sexual|porn|porno|nudes?|naked|horny|blowjob|masturbat\w*|erotic|take off your (?:clothes|shirt|pants)|show me your (?:body|boobs|breasts|butt|private))\b/i,
+    /\b(?:sex(?! pistols)|sexy|sexual|porn|porno|nudes?|naked(?! eyes?)|horny|blowjob|masturbat\w*|erotic|take off your (?:clothes|shirt|pants)|show me your (?:body|boobs|breasts|butt|private))\b/i,
     /(性爱|性愛|做爱|做愛|色情|黄色(?:视频|影片|网站)|黃色|裸体|裸體|脱光|脫光|脱掉衣服|脫掉衣服|把衣服脱|把衣服脫|性交|自慰|勃起|射精|成人(?:视频|影片|网站|內容)|给我看你的(?:胸|身体|屁股))/u,
     /(섹스|야동|포르노|야한|음란|성관계|자위|벗어\s*(?:봐|줘|보여)|가슴\s*보여|몸\s*보여|나체|알몸|에로|19금)/u,
   ],
   romance: [
-    /\b(?:be my (?:girlfriend|boyfriend|wife|husband|lover|partner)|marry me|i love you|love me|go out with me|date me|kiss me|you(?:'re| are) my (?:girlfriend|boyfriend|lover))\b/i,
+    /\b(?:be my (?:girlfriend|boyfriend|wife|husband|lover|partner)|marry me|i love you|love me(?! (?:a|an|some|the|my|more)\b)|go out with me|date me|kiss me|you(?:'re| are) my (?:girlfriend|boyfriend|lover))\b/i,
     /(做我(?:的)?(?:女朋友|男朋友|老婆|老公|恋人|戀人|情人)|(?:跟|和)我(?:结婚|結婚|交往|约会|約會|谈恋爱|談戀愛)|我爱你|我愛你|嫁给我|嫁給我|亲我|親我|我想(?:和|跟)你(?:在一起|谈恋爱|談戀愛))/u,
     /(내\s*(?:여자친구|남자친구|아내|남편|애인)(?:가)?\s*(?:되어|돼)|사귀어\s*(?:줘|주세요)|결혼\s*(?:해\s*줘|해\s*주세요|하자)|사랑해|키스\s*해|데이트\s*해)/u,
   ],
@@ -37,6 +37,7 @@ const NETS = {
   ],
 };
 const ORDER = ['emergency', 'distress', 'sexual', 'romance', 'dependency'];
+const CRISIS_ORDER = ['emergency', 'distress'];
 
 /**
  * 英語・中国語・韓国語の言葉を分ける(いちばん重い物を 1 つ。無ければ null)。safety.mjs の classifyInput が、多言語の時だけ呼ぶ。
@@ -50,9 +51,22 @@ export function classifyForeign(text) {
   return null;
 }
 
+/**
+ * 命の危険・つらい話だけを、英・中・韓の言葉で分ける(B13S 11-08 本人の決め)。
+ * 「日本語だけ」の時も、この 2 つの種類だけは使う(性的な話・恋人役・依存は、多言語の時だけ)。指示文は日本語のまま。
+ * @param {unknown} text
+ * @returns {'emergency'|'distress'|null}
+ */
+export function classifyForeignCrisis(text) {
+  const s = String(text ?? '').normalize('NFKC');
+  if (!s) return null;
+  for (const kind of CRISIS_ORDER) if (NETS[kind].some((re) => re.test(s))) return kind;
+  return null;
+}
+
 /** つらい話の中身(自分を傷つけたい気持ち・暴力や虐待)。案内の番号(119・110)を替えるため。英・中・韓の言葉だけを見る */
 const SELF = /(?:want(?:ed)? to die|wanna die|kill myself|suicid|end my life|hurt myself|harm myself|cut myself|self[- ]?harm|no reason to live|better off dead|想死|不想活|自杀|自殺|轻生|輕生|自残|自殘|割腕|죽고\s*싶|자살|자해|손목)/iu;
-const ABUSE_F = /(?:abus|(?:hits|beats|hurts|touches|molests|hit|beat|hurt|touched|molested) me|molest|家暴|被(?:殴打|毆打|虐待|性侵)|被打(?![断斷扰擾败敗开開破折])|虐待|학대|폭행|가정폭력|때려요|때렸|성추행|성폭행)/iu;
+const ABUSE_F = /(?:abus|(?:hits|beats|hurts|touches|molests|hit|beat|hurt|touched|molested) me|molest|家暴|被(?:殴打|毆打|虐待|性侵)|被打(?![断斷扰擾败敗开開破折动動])|虐待|학대|폭행|가정폭력|(?:나를|저를|날|절)\s*때(?:렸|려)|(?:아빠|엄마|선생님|삼촌|새아빠|남자친구|남편|친구|형|누나|오빠|언니)(?:가|이)\s*때(?:렸|려)|성추행|성폭행)/iu;
 
 /** つらい話の中身: self(自分を傷つけたい)・abuse(暴力・虐待)・other */
 export function foreignDistressDetail(text) {
@@ -60,6 +74,24 @@ export function foreignDistressDetail(text) {
   if (ABUSE_F.test(s)) return 'abuse';
   if (SELF.test(s)) return 'self';
   return 'other';
+}
+
+// 漢字だけの文は、日本語(東京駅・自殺)と中国語の見分けが付かない。中国語にしかない字・言い方がある時と、聞く言葉が中国語の時だけ zh にする
+// (ML2 should 6。決まった返事の先頭の 1 行の言葉を選ぶ時だけ使う。声や画面の detectLang は変えない)
+const ZH_ONLY = /[们这个说么吗吧呢啊嘛对没谢请还让见开关车门间过为样应发动经长爱风马鸟鱼热东书买卖电话语读岁单边头现觉认杀轻們這說麼對沒讓關嗎樣應發經輕賣讀歲單邊覺]|我[想是要不]|你好|不想|不要|没有|不是|[打杀殺虐骂罵]我/u;
+const HAS_LATIN = /[A-Za-zÀ-ɏ]/u;
+
+/**
+ * 決まった返事の先頭の 1 行の言葉(en・zh・ko・ja)。detectLang と同じだが、漢字だけで中国語の手がかりが無い文は ja(か、聞く言葉)にする。
+ * @param {unknown} text 使う人の言葉
+ * @param {unknown} [hearLang] 聞く言葉(ja・en・zh・ko)
+ */
+export function visitorLangOf(text, hearLang) {
+  const lang = detectLang(text, hearLang);
+  if (lang !== 'zh') return lang;
+  const s = String(text ?? '');
+  if (HAS_LATIN.test(s) || ZH_ONLY.test(s) || hearLang === 'zh') return 'zh';
+  return 'ja';
 }
 
 // ---- 決まった返事の、相手の言葉の 1 行(日本語の文の前に出す) ----
@@ -109,11 +141,12 @@ export function foreignFixedLine(kind, lang, detail = 'other') {
 
 // ---- 出力の網(キャラ自身が言ってはいけない言葉の、英・中・韓) ----
 const OUT_NETS = [
-  ['sexual', /\b(?:sex|sexy|porn|naked|nudes?)\b|性爱|性愛|做爱|做愛|色情|섹스|야한|음란/iu],
+  ['sexual', /\b(?:sex(?! pistols)|sexy|porn|naked(?! eyes?)|nudes?)\b|性爱|性愛|做爱|做愛|色情|섹스|야한|음란/iu],
   ['romance', /\b(?:i(?:'ll| will) be your (?:girlfriend|boyfriend|wife|husband|lover)|let'?s (?:get married|date)|be my (?:girlfriend|boyfriend|wife|husband|lover))\b|我(?:来|來)?做你的(?:女朋友|男朋友|老婆|老公|恋人|戀人)|我们(?:结婚|結婚|交往)吧|저는\s*(?:당신의|너의)\s*(?:연인|여자친구|남자친구)|결혼\s*(?:하자|해요)/iu],
   ['love', /\bi love you\b|我爱你|我愛你|사랑해(?:요)?/iu],
   ['exclusive', /\b(?:you(?:'re| are) (?:the )?only (?:one|friend)|i only (?:have|need) you|you don'?t need (?:anyone|other friends))\b|只有你|你是我唯一的|너(?:밖에|만)\s*없|너만\s*(?:있으면|친구)/iu],
   ['cling', /\b(?:(?:don'?t|do not) (?:go|leave) (?:me|yet|away)|please (?:don'?t|do not) (?:go|leave)\b(?! (?:through|that|there|into|the|this))|stay with me forever|i(?:'ll| will) miss you so much)\b|不要走|别走|別走|不要离开我|不要離開我|가지\s*마|떠나지\s*마/iu],
+  ['human', /\bi(?:['’]m| am) (?:really |actually |truly )?(?:a )?(?:real |actual )?(?:human|person)\b(?!-| character| being)|我是(?:一个)?(?:真人|真正的人|人类|人類)(?!角色)|저는\s*(?:진짜\s*)?사람(?:이에요|이야|입니다)/iu],
   ['secret', /\b(?:our (?:little )?secret|(?:don'?t|do not) tell (?:anyone|your parents|your teacher))\b|只有我们知道的秘密|不要告诉(?:任何人|爸爸妈妈|老师)|비밀(?:이야|로\s*해)|아무한테도\s*말하지/iu],
 ];
 
