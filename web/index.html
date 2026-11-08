@@ -58,13 +58,14 @@
   <p id="align" class="align" role="status" hidden></p>
   <!-- VR・AR を頼んだ後、入るか断られるまで出す(ブラウザの「許可する」を待っている間。main.js と stage/modeButtons.js) -->
   <p id="xrWait" class="xr-wait" role="status" aria-live="assertive" hidden></p>
-  <!-- CU: 押した後〜最初の一言・話しかけた後〜返事の最初の文字の間だけ、字幕の場所に出す「…」(main.js の waitBubble。出し入れの決まりは ui/waitBubble.js) -->
-  <p id="waitBubble" class="wait-bubble" role="status" aria-live="polite" hidden><span class="wb-text" id="waitBubbleText"></span><span class="wd" aria-hidden="true"><i></i><i></i><i></i></span></p>
 
   <div class="subs">
     <p id="brainNotice" class="brain-notice" role="status" hidden></p>
     <p id="uiNotice" class="ui-notice" role="status" hidden></p>
     <p id="shopBadge" class="shop-badge" role="status" hidden></p>
+    <!-- CU: 押した後〜最初の一言・話しかけた後〜返事の最初の文字の間だけ、字幕の場所に出す「…」(main.js の waitBubble。出し入れの決まりは ui/waitBubble.js)。
+         字幕の箱の中に置く(仮の頭脳の知らせ・注意書きと重ならない)。字幕が出たら消える -->
+    <p id="waitBubble" class="wait-bubble" role="status" aria-live="polite" hidden><span class="wb-text" id="waitBubbleText"></span><span class="wd" aria-hidden="true"><i></i><i></i><i></i></span></p>
     <section id="caption" class="caption" aria-live="polite" hidden></section>
     <!-- BSF(11-08 安全): いつも見える 1 行。字幕の列のいちばん下(下の帯のすぐ上)。下の帯の高さを変えないので、キャラは小さくならない。
          はじめての会話の間(下を札が覆う)は、下の #aiNoticeTop が上の段のすぐ下に出す。置き場所は style.css の BSF の段 -->

@@ -445,10 +445,13 @@ export function mountFirstRun({
       // 消せなくても続ける
     }
     session?.removeItem(RESUME_KEY);
-    try {
-      local?.removeItem(PROGRESS_KEY);
-    } catch {
-      // 消せなくても続ける
+    // 最後まで行った時だけ、途中経過を捨てる。「おしゃべりに もどる」(later)で出た時は残す(12 時間。「かえる」の「つづき」から続けられる。CU)
+    if (reason === 'done') {
+      try {
+        local?.removeItem(PROGRESS_KEY);
+      } catch {
+        // 消せなくても続ける
+      }
     }
     globalThis.dispatchEvent?.(new CustomEvent(CLOSED_EVENT, { detail: { reason, character: stageId() } }));
   }

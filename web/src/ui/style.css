@@ -957,15 +957,13 @@ html.gate-failed .gw-text { color: var(--warn); }
 html.gate-ready .gate .primary:not(:disabled)::after { animation: gw-ring 1.8s ease-in-out infinite; }
 @keyframes gw-ring { 0%, 100% { opacity: 0; transform: scale(0.97); } 50% { opacity: 0.9; transform: scale(1.02); } }
 
-/* 押した後〜最初の一言・話しかけた後〜返事の最初の文字: 字幕の場所の「…」。字幕・知らせ(.subs)の高さを変えない(固定で置く)ので、キャラは動かない。
-   字幕の箱の中の注意書き(1 行)の上に出す。最初の文字が出たら消える(main.js)。はじめての会話の札・入口・テレビ表示の間は出さない */
-.wait-bubble { position: fixed; z-index: 6; left: 50%; bottom: calc(var(--bottom-h, 112px) + 44px); transform: translateX(-50%); display: flex; align-items: center; justify-content: center;
-  width: max-content; max-width: calc(100vw - 32px); margin: 0; padding: 10px 20px; border-radius: 22px 22px 22px 6px; background: rgba(12, 10, 22, 0.78); border: 1px solid rgba(183, 168, 255, 0.4);
+/* 押した後〜最初の一言・話しかけた後〜返事の最初の文字: 字幕の場所の「…」。字幕の箱(.subs)の中、字幕の所に置く(仮の頭脳の知らせ・注意書きと重ならない)。
+   箱は下に寄せてあるので、キャラの置き方は変わらない(下の余白は字幕の文字が出た時の高さで測る)。最初の文字が出たら消える(main.js)。はじめての会話の札・入口・テレビ表示の間は出さない */
+.wait-bubble { display: flex; align-items: center; justify-content: center;
+  width: max-content; max-width: 100%; margin: 0; padding: 10px 20px; border-radius: 22px 22px 22px 6px; background: rgba(12, 10, 22, 0.78); border: 1px solid rgba(183, 168, 255, 0.4);
   color: var(--text); font-size: clamp(16px, 4.4vw, 22px); font-weight: 700; line-height: 1.4; pointer-events: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .wait-bubble[hidden] { display: none; }
 html.fr-open .wait-bubble, html.gate-up .wait-bubble, html.tv-mode .wait-bubble, html.is-led .wait-bubble, html.is-headset .wait-bubble { display: none; }
-html.kb-open .wait-bubble { translate: 0 calc(var(--kb, 0px) * -1); }
-@media (max-width: 900px) { html.top-simple.top-more .wait-bubble, html.top-simple.top-change .wait-bubble { display: none; } }
 @media (prefers-reduced-motion: reduce) {
   .wd i { animation: none; opacity: 0.8; }
   .wd i:nth-child(2) { opacity: 0.55; }

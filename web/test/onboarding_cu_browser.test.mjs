@@ -222,3 +222,33 @@ for (const sz of SIZES) {
     }
   });
 }
+
+test('作る途中で「おしゃべりに もどる」を押しても作りかけは残り、「あたらしい子を つくる」の「つづき」から続けられる(自動では開かない)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が無い');
+  try {
+    const { ctx, page, errors } = await open(browser, { width: 390, height: 844 });
+    await waitAct(page, 'role_station');
+    await page.click('.fr-actions [data-act="role_station"]');
+    await waitAct(page, 'place_name');
+    await page.click('.fr-actions [data-act="place_skip"]');
+    await waitAct(page, 'what_auto');
+    await page.click('.fr-actions [data-act="what_auto"]');
+    await waitAct(page, 'keep');
+    await page.click('.fr-close');
+    await page.waitForFunction(() => window.__closed?.reason === 'later');
+    await page.waitForFunction(() => document.querySelector('[data-firstrun="start"]')?.dataset.resume === '1');
+    await page.goto(`${BASE}/__fr/index.html`); // 読み込み直しても(?onboard=1 なし)、自分からは開かない
+    await page.waitForSelector('[data-firstrun="start"]');
+    await page.waitForTimeout(1200);
+    assert.equal(await page.locator('.fr-sheet').count(), 0);
+    assert.equal(await page.getAttribute('[data-firstrun="start"]', 'data-resume'), '1', '作りかけの印が残る');
+    await page.click('[data-firstrun="start"]');
+    await waitAct(page, 'keep');
+    assert.match(await page.$eval('.fr-log', (e) => e.innerText), /さっきの つづきからだよ/);
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
