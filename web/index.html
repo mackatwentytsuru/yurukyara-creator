@@ -76,6 +76,8 @@
 
   <div class="subs">
     <p id="brainNotice" class="brain-notice" role="status" hidden></p>
+    <!-- 仮の頭脳の間だけ出る、小さな案内リンク「本物の Claude で話すには」(ui/brainGuide.js が中を作る)。AI の表示(下の #aiNotice)の上に出る -->
+    <div id="brainGuide" class="brain-guide" hidden></div>
     <p id="uiNotice" class="ui-notice" role="status" hidden></p>
     <p id="shopBadge" class="shop-badge" role="status" hidden></p>
     <!-- CU: 押した後〜最初の一言・話しかけた後〜返事の最初の文字の間だけ、字幕の場所に出す「…」(main.js の waitBubble。出し入れの決まりは ui/waitBubble.js)。

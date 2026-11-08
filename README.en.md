@@ -47,6 +47,16 @@ npm start        # then open http://127.0.0.1:8787/
 - We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: (not checked yet)
 - `npm ci` also downloads the face-tracking model into `web/public/mediapipe/`; it is not stored in this repository.
 
+## Adding keys the easy way
+
+Run `npm run start:keys` in the `web` folder. It asks for your Claude key and your voice key with hidden input; press Enter alone to skip either one. The keys are passed only to the started app's environment, and are never written to a file.
+
+- Make a Claude key (official): <https://platform.claude.com/settings/keys>
+- Make a voice key (ElevenLabs, official): <https://elevenlabs.io/app/api/api-keys>
+- Voice pricing and any trial plan (ElevenLabs, official): <https://elevenlabs.io/pricing/api>. Whether a trial plan exists, and what it includes, changes over time, so check the official page.
+
+In the app, while the stand-in brain is answering, the “本物の Claude で話すには” link opens the same steps. A voice key can also be typed on this device only, at the “voice” step of the creation flow.
+
 ## What works today
 
 Each row was checked by running it. The check is named next to it.

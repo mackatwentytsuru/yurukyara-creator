@@ -23,6 +23,7 @@ import { Reconnector, probeServer } from './conversation/reconnect.js'; // 11-08
 import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
 import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink, latencyNote } from './ui/panel.js';
+import { mountBrainGuide, shouldShowGuide } from './ui/brainGuide.js';
 import { questLinkPlan } from './stage/questLink.js'; // 「VR(Quest)で開く」: この画面の QR に入れてよい物の決まり
 import { getDemoPass, setDemoPass } from './conversation/demoPass.js'; // 合言葉(S3。会話と記憶の通信に見出し x-demo-pass で付く)
 import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
@@ -112,6 +113,7 @@ let firstRunReady = Promise.resolve(null);
 let firstRunDoneKey = FIRST_RUN_DONE_KEY;
 const firstRunWanted = () => !KIOSK.on && shouldOpenFirstRun({ params, storage: siteMemory, doneKey: firstRunDoneKey, headset: IS_HEADSET }); // 接客モードでは、作る・はじめての会話は出さない
 const ui = createUi();
+const brainGuide = $('brainGuide') ? mountBrainGuide({ root: $('brainGuide') }) : null; // 「本物の Claude で話すには」(仮の頭脳の間だけ出る。updateBrainNotice が出し入れする)
 // CU: 起動中・返事待ちの表示(出し入れの決まりは ui/waitBubble.js。画面の文字と「…」は index.html の #waitBubble と入口の #gateWake)
 import { createWaitBubble, wakeHint, wakeLine } from './ui/waitBubble.js';
 import { beginWork, configureWork } from './ui/work.js'; // はたらいている間のきらきらと小さな印(描く・舞台に出す・3D を待つ・1.5 秒より長い待ち)
@@ -252,7 +254,10 @@ function currentBrain() {
 
 /** 仮の頭脳で話している間は、字幕の上に知らせを出す(契約 K5: 断らずに話し続け、そうだと分かるようにする) */
 function updateBrainNotice() {
-  ui.brainNotice(currentBrain() === 'mock' ? (brainNoticeText ?? FALLBACK_BRAIN_NOTICE) : null);
+  const mock = currentBrain() === 'mock';
+  ui.brainNotice(mock ? (brainNoticeText ?? FALLBACK_BRAIN_NOTICE) : null);
+  // 「本物の Claude で話すには」は、鍵が入っていないだけの仮の頭脳の時(理由つきの知らせが無い時)だけ。上限・合言葉などの理由の時は出さない
+  brainGuide?.show(shouldShowGuide(currentBrain(), brainNoticeText));
 }
 
 // 記憶の引き出しを開いた時は、合鍵を確かめて一覧を読み直す(別の端末で消した・番号で受け取った後でも合うように)。

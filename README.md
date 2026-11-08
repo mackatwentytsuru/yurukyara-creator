@@ -46,6 +46,16 @@ npm start        # http://127.0.0.1:8787/ を開く
 - この 3 行は、新しく取ってきた写しで、Windows の Node.js 22 で流して確かめました。Mac と Linux は【確かめ待ち】。
 - `npm ci` は顔の追従のモデルも `web/public/mediapipe/` に取ります(このリポジトリには入れていません)。
 
+## 鍵をかんたんに入れる
+
+`web` のフォルダで `npm run start:keys` を流すと、Claude の鍵と声の鍵を(画面に出さずに)聞かれます。どちらも Enter だけなら入れません。入れた鍵は、起こすアプリの環境変数にだけ渡し、ファイルには書きません。
+
+- Claude の鍵を作る(公式): <https://platform.claude.com/settings/keys>
+- 声の鍵を作る(ElevenLabs の公式): <https://elevenlabs.io/app/api/api-keys>
+- 声の料金とお試しのプラン(ElevenLabs の公式): <https://elevenlabs.io/pricing/api> 。お試しのプランがあるかどうか・中身は変わるので、必ず公式のページで確かめてください。
+
+アプリの画面でも、仮の頭脳の間は「本物の Claude で話すには」から同じ手順を開けます。声の鍵は、作る画面の「声」の歩みで、この端末だけに入れることもできます。
+
 ## 今できること
 
 どの行も、実際に動かして確かめました。確かめ方を右に書いています。

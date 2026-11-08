@@ -24,6 +24,7 @@ html.is-kiosk #kioskSetupBtn,
 html.is-kiosk .yc-sheet,
 html.is-kiosk #camAsk,
 html.is-kiosk #brainNotice,
+html.is-kiosk #brainGuide,
 html.is-kiosk #shopBadge,
 html.is-kiosk .privacy { display: none !important; }
 

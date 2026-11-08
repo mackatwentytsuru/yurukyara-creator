@@ -38,6 +38,7 @@ export const HIDDEN = Object.freeze([
   { name: '店の人の設定の窓', selector: '.yc-sheet' },
   { name: 'カメラの知らせ', selector: '#camAsk' },
   { name: '仮の頭脳の知らせ', selector: '#brainNotice' },
+  { name: '本物の Claude で話すには(案内)', selector: '#brainGuide' },
   { name: '店のバッジ', selector: '#shopBadge' },
   { name: '注意書き(カメラ・マイクの説明)', selector: '.privacy' },
 ]);

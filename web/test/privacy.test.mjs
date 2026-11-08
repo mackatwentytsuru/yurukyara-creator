@@ -123,9 +123,15 @@ export function unmask(source) {
 // 外の住所の形: http:// https:// ws:// wss://、と、文字や括弧・= の直後から始まる //名前(この頁と同じ https で外へ行く住所)
 const EXTERNAL_ADDRESS = /\b(?:https?|wss?):\/\/[^\s'"`<>]*|(?<=['"`(=])\/\/[A-Za-z0-9][^\s'"`<>)]*/g;
 
+// 押した時に新しいタブで開くだけの、公式のページへのリンク(鍵を作る頁・料金の頁。ui/keyLinks.js)。fetch・import・画像には使わない(下の試験が見る)。
+// 決まった 3 つの住所だけで、ほかの住所・ほかのファイルは通さない
+const LINK_ONLY_OK = Object.freeze({
+  'ui/keyLinks.js': ['https://platform.claude.com/settings/keys', 'https://elevenlabs.io/app/api/api-keys', 'https://elevenlabs.io/pricing/api'],
+});
+
 /** そのファイル(src からの道)のコードにある外の住所のうち、許していない物(コメントは数えない) */
 function forbiddenAddresses(rel, source) {
-  return [...unmask(source).matchAll(EXTERNAL_ADDRESS)].map((m) => m[0]).filter((url) => url !== EXTERNAL_OK[rel]);
+  return [...unmask(source).matchAll(EXTERNAL_ADDRESS)].map((m) => m[0]).filter((url) => url !== EXTERNAL_OK[rel] && !(LINK_ONLY_OK[rel] ?? []).includes(url));
 }
 
 // index.html の外の住所は、help のリンク(GitHub の README の 1 つ)だけ。CSS には 1 つも無い
@@ -148,6 +154,16 @@ test('外のサーバーの住所(http:// https:// ws://)を、画面のコー�
     const rel = relative(SRC, f).split('\\').join('/');
     assert.deepEqual(forbiddenAddresses(rel, code(f)), [], `${rel} に外の住所があります`);
   }
+});
+
+test('リンクだけの例外(ui/keyLinks.js): 決まった 3 つの公式の住所だけ通り、ほかの住所・ほかのファイルは落ちる。そのファイルは通信を一切しない', () => {
+  const [claude, voice, pricing] = LINK_ONLY_OK['ui/keyLinks.js'];
+  for (const u of [claude, voice, pricing]) assert.deepEqual(forbiddenAddresses('ui/keyLinks.js', `const a = '${u}';`), [], u);
+  assert.deepEqual(forbiddenAddresses('ui/keyLinks.js', `const a = 'https://evil.example/x';`), ['https://evil.example/x'], '別の住所は落ちる');
+  assert.deepEqual(forbiddenAddresses('ui/panel.js', `const a = '${claude}';`), [claude], '別のファイルでは落ちる');
+  const real = code(join(SRC, 'ui', 'keyLinks.js'));
+  assert.deepEqual([...real.matchAll(/\b(?:https?|wss?):\/\/[^\s'`"]*/g)].map((m) => m[0]).sort(), [...LINK_ONLY_OK['ui/keyLinks.js']].sort(), '本物の keyLinks.js は決まった 3 つだけ');
+  assert.equal(/\bfetch\s*\(|\bimport\s*\(|XMLHttpRequest|WebSocket|sendBeacon|new Image|EventSource/.test(real), false, 'keyLinks.js は通信しない');
 });
 
 test('index.html と CSS にも、外の住所が無い(例外は index.html の help のリンク 1 つ = GitHub の README だけ)', () => {

@@ -366,6 +366,27 @@ html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
   padding: 5px 12px; border-radius: 999px; background: rgb(var(--scrim-rgb) / 0.74); border: 1px solid var(--warn); color: var(--warn);
 }
 .brain-notice[hidden] { display: none; }
+/* 「本物の Claude で話すには」(仮の頭脳の間だけ。ui/brainGuide.js)。字幕の列の中、AI の表示の上。押せるように pointer-events を戻す。AI の表示には重ならない(列の中で上に伸びる) */
+.brain-guide { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: auto; }
+.brain-guide[hidden] { display: none; }
+.brain-guide-btn {
+  font: inherit; font-size: 14px; line-height: 1.3; min-height: 44px; padding: 0 14px; border: 0; background: transparent; cursor: pointer;
+  color: var(--text); text-decoration: underline; text-underline-offset: 3px; -webkit-tap-highlight-color: transparent;
+}
+.brain-guide-btn:focus-visible, .bg-link:focus-visible { outline: 2px solid var(--focus, #b7a8ff); outline-offset: 2px; }
+.brain-guide-panel {
+  width: 100%; max-height: min(40vh, 320px); overflow-y: auto; text-align: left; font-size: 14px; line-height: 1.55;
+  padding: 10px 14px; border-radius: 16px; background: rgb(var(--scrim-rgb) / 0.86); border: 1px solid var(--lav); color: var(--text);
+}
+.brain-guide-panel[hidden] { display: none; }
+.brain-guide-panel p { margin: 0 0 6px; }
+.bg-link { color: var(--lav); text-decoration: underline; text-underline-offset: 3px; }
+.bg-cmd { display: grid; gap: 2px; margin: 0 0 8px; }
+.bg-cmd-label { font-size: 13px; color: var(--muted); }
+.bg-cmd code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; padding: 6px 8px; border-radius: 8px; background: rgb(var(--shadow-rgb) / 0.35); overflow-wrap: anywhere; user-select: all; }
+.bg-safe { color: var(--muted); }
+html.tv-mode .brain-guide { display: none; }
+html.kb-tight .brain-guide, html.vv-mini .brain-guide { display: none !important; }
 /* 短い知らせ(会話の側の ui.notice。鍵らしい文字を送らなかった、など)。数秒で消える */
 .ui-notice {
   width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(14px, 1.6vw, 15px); line-height: 1.4;
