@@ -1,6 +1,6 @@
 """聞き取りの係。faster-whisper を読み込んだまま待ち、1 行ずつ WAV のパスを受けて、文字を 1 行の JSON で返す。
 
-stt.mjs が起動する。標準入力が閉じたら終わる。1 行 = WAV のパス、または「パス<タブ>手がかりの言葉」(話しかけているキャラの名前。聞き違いを減らす)。環境変数: STT_MODEL(既定 small)・STT_DEVICE(cpu)・STT_THREADS(4)・STT_LANG(ja)。
+stt.mjs が起動する。標準入力が閉じたら終わる。1 行 = WAV のパス、または「パス<タブ>手がかりの言葉」(話しかけているキャラの名前。聞き違いを減らす)、または「パス<タブ>手がかり<タブ>聞く言葉」(auto・ja・en・zh・ko。多言語の時だけ。ja 以外は手がかりを使わない)。環境変数: STT_MODEL(既定 small)・STT_DEVICE(cpu)・STT_THREADS(4)・STT_LANG(ja)。
 """
 import json
 import os
@@ -28,6 +28,18 @@ def hint_options(hint):
     return {"initial_prompt": f"{hint}さん。{hint}。", "hotwords": hint}
 
 
+SPOKEN_LANGS = ("ja", "en", "zh", "ko")
+
+
+def language_for(lang):
+    """聞く言葉を、faster-whisper の language にする。auto は None(自動で見分ける)。無い・知らない値は、今までの STT_LANG(既定 ja)"""
+    if lang == "auto":
+        return None
+    if lang in SPOKEN_LANGS:
+        return lang
+    return os.environ.get("STT_LANG", "ja")
+
+
 def is_prompt_echo(text, hint):
     """無音や雑音で、手がかりの言葉だけを返してしまった時は、聞き取れなかったことにする"""
     if not hint:
@@ -45,18 +57,25 @@ def main():
                          cpu_threads=int(os.environ.get("STT_THREADS", "4")))
     print(json.dumps({"ready": True}), flush=True)
     for line in sys.stdin:
-        path, _, hint = line.rstrip("\r\n").partition("\t")
-        path, hint = path.strip(), hint.strip()
+        parts = line.rstrip("\r\n").split("\t")
+        path = parts[0].strip()
+        hint = parts[1].strip() if len(parts) > 1 else ""
+        lang = parts[2].strip() if len(parts) > 2 else ""  # 聞く言葉(auto・ja・en・zh・ko)。無い時は今までの STT_LANG
         if not path:
             continue
         t0 = time.time()
         try:
+            language = language_for(lang)
+            # 日本語以外(auto も)では、キャラの名前の手がかり(日本語)を使わない
+            if lang not in ("", "ja"):
+                hint = ""
+            hints = hint_options(hint)
             # temperature=0 で、聞き取れない音でのやり直しを止める(2.8 秒の音に 45 秒かかった実例)
-            kw = dict(language=os.environ.get("STT_LANG", "ja"), beam_size=1, condition_on_previous_text=False, temperature=0.0)
+            kw = dict(language=language, beam_size=1, condition_on_previous_text=False, temperature=0.0)
             try:
-                segments, _ = model.transcribe(path, **kw, **hint_options(hint))
+                segments, _ = model.transcribe(path, **kw, **hints)
             except TypeError:  # 古い faster-whisper(hotwords が無い版)は、initial_prompt だけで聞く
-                segments, _ = model.transcribe(path, **kw, **{k: v for k, v in hint_options(hint).items() if k == "initial_prompt"})
+                segments, _ = model.transcribe(path, **kw, **{k: v for k, v in hints.items() if k == "initial_prompt"})
             text = "".join(s.text for s in segments if is_speech(s)).strip()
             if is_prompt_echo(text, hint):
                 text = ""

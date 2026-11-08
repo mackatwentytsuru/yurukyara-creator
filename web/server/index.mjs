@@ -14,6 +14,7 @@ import { extractFacts, memoryAddedEvent, selfNamesOf } from './memory/reflect.mj
 import { streamSpeech, ttsStatus, voiceForRequest } from './tts.mjs';
 import { warmFirstVisit } from './ttsWarm.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
+import { STT_LANGS, normalizeHearLang } from '../src/conversation/lang.js'; // ML1: 多言語の聞き取り・声の言葉
 import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
 import { createLimiter } from './limits.mjs';
 import { createDrawer } from './draw.mjs'; // B4(12b): ブラウザから描く。既定は切ってある(YC_BROWSER_DRAW=1 の時だけ)
@@ -288,7 +289,10 @@ const handler = async (req, res) => {
       const ac = new AbortController();
       res.on('close', () => ac.abort());
       // 声は話す役ごと(本文の voice: 'auto'|'male'|'female' と、その子自身の声 voiceId。形の違う値は使わない)
-      return await streamSpeech(body.text, res, ac.signal, voiceForRequest(body));
+      // ML1: 多言語の時だけ、画面が文の言葉(en・zh・ko)を足して送る。日本語・無い値は、今までと同じ呼び方
+      const lang = normalizeHearLang(body.lang);
+      const voice = voiceForRequest(body);
+      return await streamSpeech(body.text, res, ac.signal, lang && lang !== 'ja' ? { ...voice, lang } : voice);
     }
     if (req.method === 'POST' && path === '/api/stt/warm') {
       stt.warm();
@@ -305,7 +309,9 @@ const handler = async (req, res) => {
       } catch {
         // 形の違う値は、手がかり無しで聞く
       }
-      return json(res, 200, await stt.transcribe(await readRaw(req, MAX_WAV_BYTES + 1024), { hint }));
+      // ML1: 聞く言葉(見出し x-stt-lang: auto・ja・en・zh・ko)。多言語の時だけ画面が送る。無い・知らない値は、今までの STT_LANG のまま
+      const lang = STT_LANGS.includes(String(req.headers['x-stt-lang'] ?? '')) ? String(req.headers['x-stt-lang']) : '';
+      return json(res, 200, await stt.transcribe(await readRaw(req, MAX_WAV_BYTES + 1024), { hint, lang }));
     }
     if (req.method === 'POST' && path === '/api/metrics') {
       const body = await readBody(req);

@@ -13,16 +13,18 @@ export const DEFAULT_VOICE_ID = 'fUjY9K2nAIwlALOwSiwc'; // 手元のサーバー
 export const DEFAULT_MODEL_ID = MODEL_DEFAULTS.voice;
 export const SAMPLE_RATE = 24000;
 const MAX_TEXT = 300;
+// ML1: 声の言葉(language_code)。多言語の時だけ、画面が en・zh・ko を渡す。形の違う値・無い値は、今までと同じ 'ja'(この部品は lang.js を読まない)
+const LANGUAGE_CODE = /^[a-z]{2}$/;
 
 /** 頼む中身を作る(試験で、送る物がこれだけなのを確かめる) */
-export function elevenRequest(text, { key, voiceId = DEFAULT_VOICE_ID, modelId = DEFAULT_MODEL_ID }) {
+export function elevenRequest(text, { key, voiceId = DEFAULT_VOICE_ID, modelId = DEFAULT_MODEL_ID, languageCode = 'ja' }) {
   const id = /^[A-Za-z0-9]{8,40}$/.test(String(voiceId)) ? voiceId : DEFAULT_VOICE_ID;
   return {
     url: `${ELEVEN_TTS}${id}/stream?output_format=pcm_${SAMPLE_RATE}`,
     init: {
       method: 'POST',
       headers: { 'xi-api-key': key, 'content-type': 'application/json' },
-      body: JSON.stringify({ text: String(text ?? '').trim().slice(0, MAX_TEXT), model_id: modelId, language_code: 'ja' }),
+      body: JSON.stringify({ text: String(text ?? '').trim().slice(0, MAX_TEXT), model_id: modelId, language_code: LANGUAGE_CODE.test(String(languageCode)) ? languageCode : 'ja' }),
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
     },
@@ -42,8 +44,8 @@ export function describeElevenError(status) {
  * @param {string} text
  * @param {{key:string, voiceId?:string, modelId?:string, signal?:AbortSignal}} o
  */
-export function fetchElevenPcm(text, { key, voiceId, modelId, signal }) {
-  const { url, init } = elevenRequest(text, { key, voiceId, modelId });
+export function fetchElevenPcm(text, { key, voiceId, modelId, signal, languageCode }) {
+  const { url, init } = elevenRequest(text, { key, voiceId, modelId, languageCode });
   return fetch(url, { ...init, signal });
 }
 

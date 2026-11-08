@@ -8,6 +8,7 @@ import { config, REPO_ROOT } from './env.mjs';
 import { toSpeechText } from '../src/conversation/speechReading.js';
 import { cacheKey, createTtsCache } from './ttsCache.mjs';
 import { ROLE_DEFAULT_VOICES, isVoiceId, normalizeVoiceChoice, personaVoice } from '../src/conversation/voiceRole.js';
+import { VOICE_LANG_CODE, normalizeHearLang } from '../src/conversation/lang.js'; // ML1: 多言語の声の言葉
 
 const LOG_DIR = config.logDir;
 const USAGE_FILE = join(LOG_DIR, 'tts_usage.json');
@@ -118,7 +119,8 @@ export function refundChars(n) {
 export const ttsCache = createTtsCache({ dir: join(LOG_DIR, 'tts_cache') });
 const inflight = new Map(); // おぼえ書きの名前 → 取っている最中の音 { chunks, state: 'pending'|'streaming'|'done'|'failed', status, waiters }
 
-const speechBody = (clean) => JSON.stringify({ text: clean, model_id: config.ttsModel, language_code: 'ja' });
+/** 声のサービスへ頼む本文。lang(ML1。多言語の時だけ en・zh・ko)が無ければ、今までと同じ 'ja' */
+const speechBody = (clean, lang = 'ja') => JSON.stringify({ text: clean, model_id: config.ttsModel, language_code: VOICE_LANG_CODE[lang] ?? 'ja' });
 
 /** 取っている最中の音の変わり目を待つ(signal が止まったら、待つのをやめる) */
 function waitChange(entry, signal) {
@@ -137,7 +139,7 @@ function waitChange(entry, signal) {
  * 声のサービスから音を取り始める(頼んだ人が切れても、最後まで取って、おぼえ書きに入れる。文字数は先に引いてある)。
  * 失敗して 1 つも取れなかった時は、文字数を返す。
  */
-function startSynthesis(key, clean, voiceId) {
+function startSynthesis(key, clean, voiceId, lang = 'ja') {
   const entry = { chunks: [], state: 'pending', status: 0, waiters: new Set() };
   inflight.set(key, entry);
   const wake = () => {
@@ -149,7 +151,7 @@ function startSynthesis(key, clean, voiceId) {
         method: 'POST',
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
         headers: { 'xi-api-key': config.elevenKey, 'content-type': 'application/json' },
-        body: speechBody(clean),
+        body: speechBody(clean, lang),
       });
       if (!upstream.ok || !upstream.body) {
         refundChars(clean.length);
@@ -194,7 +196,9 @@ const OK_HEADERS = (role, how) => ({
  */
 export async function streamSpeech(text, res, signal, voice = {}) {
   const { role, voiceId } = isVoiceId(voice.voiceId) ? { role: voice.role === 'male' ? 'male' : 'female', voiceId: voice.voiceId } : voiceForRequest({ voice: voice.role });
-  const clean = toSpeechText(text).trim().slice(0, 300);
+  // ML1: 多言語の時だけ、画面が文の言葉(en・zh・ko)を送る。日本語・無い・知らない値は 'ja'(今までと同じ)。日本語以外には、日本語の読み替え表を当てない
+  const lang = normalizeHearLang(voice.lang) ?? 'ja';
+  const clean = (lang === 'ja' ? toSpeechText(text) : String(text ?? '')).trim().slice(0, 300);
   if (!clean) {
     res.writeHead(400, { 'content-type': 'application/json' }).end('{"error":"text が空です"}');
     return;
@@ -205,7 +209,7 @@ export async function streamSpeech(text, res, signal, voice = {}) {
     res.writeHead(204, { 'x-tts': 'off', 'x-tts-reason': 'no-key', 'cache-control': 'no-store' }).end();
     return;
   }
-  const key = cacheKey(voiceId, config.ttsModel, clean);
+  const key = cacheKey(voiceId, config.ttsModel, clean, lang);
   const hit = ttsCache.get(key);
   if (hit) {
     res.writeHead(200, { ...OK_HEADERS(role, 'hit'), 'content-length': String(hit.length) }).end(hit);
@@ -218,7 +222,7 @@ export async function streamSpeech(text, res, signal, voice = {}) {
       res.writeHead(429, { 'content-type': 'application/json' }).end('{"error":"今日の声は使い切りました。あしたまた声で話せるよ","reason":"cap"}');
       return;
     }
-    entry = startSynthesis(key, clean, voiceId);
+    entry = startSynthesis(key, clean, voiceId, lang);
   }
   while (entry.state === 'pending' && !signal?.aborted) await waitChange(entry, signal);
   if (signal?.aborted) return;

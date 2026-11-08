@@ -10,9 +10,10 @@ export const DISK_CACHE_BYTES = 64 * 1024 * 1024;
 export const ENTRY_MAX_BYTES = 4 * 1024 * 1024; // 1 文の音の上限(300 字でも 2MB に届かない)
 
 /** 声の id・モデル・文から、おぼえ書きの名前を作る(区切りに文字が混ざっても別の物になるよう、長さつきで) */
-export function cacheKey(voiceId, modelId, text) {
+export function cacheKey(voiceId, modelId, text, lang = 'ja') {
   const raw = `${String(voiceId).length}:${voiceId}|${String(modelId).length}:${modelId}|${text}`;
-  return createHash('sha256').update(raw).digest('hex');
+  // ML1: 日本語以外の言葉の声は、言葉も名前に足す(同じ文字でも言葉が違えば、別の声)。日本語の名前は今までと同じ(今のおぼえ書きをそのまま使える)
+  return createHash('sha256').update(lang && lang !== 'ja' ? `${raw}|lang:${lang}` : raw).digest('hex');
 }
 
 const NAME = /^[0-9a-f]{64}\.pcm$/;
