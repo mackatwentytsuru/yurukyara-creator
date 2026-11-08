@@ -2,6 +2,8 @@
 
 <p align="center"><b>Your own yuru-chara, from a few words or one picture, talking in about two minutes.</b></p>
 
+<p align="center"><img src="docs/images/cast.png" alt="Norrie and Yokoso-kun, two of the yuru-chara" width="1000"></p>
+
 <p align="center">
 <img src="https://img.shields.io/badge/Built_with-Claude_Code-D97757?style=flat" alt="Built with Claude Code">
 <img src="https://img.shields.io/badge/talk-Claude_Haiku_5.5-D97757?style=flat" alt="Claude Haiku 5.5 (talk)">
@@ -15,6 +17,17 @@
 # Yuru-chara Creator
 
 > **Just choose and answer.** Your own yuru-chara (or your town's) starts talking in about two minutes.
+
+> Norrie: "Nice to meet you! I'm Norrie, a butler in training. I'll do my best! Let's make a yuru-chara together, okay?"
+
+## Meet the cast
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/images/face_norrie.png" width="128" alt="Norrie"><br><b>Norrie</b><br>"I'll do my best! I help everyone at home, step by step."</td>
+<td align="center" width="50%"><img src="docs/images/face_yokoso.png" width="128" alt="Yokoso-kun"><br><b>Yokoso-kun</b><br>"I love waving to people who come for the first time. I'll show you how to play."</td>
+</tr>
+</table>
 
 ## Just choose and answer (3 steps)
 
@@ -532,6 +545,10 @@ Versions and licences of every part: [THIRD_PARTY.md](THIRD_PARTY.md).
 The work from before the turn to yuru-chara is kept on the `before-pivot` branch.
 
 <a name="license"></a>
+
+## What's next
+
+We aim to import any kind of character, such as VRM models and Unreal Engine MetaHumans, and make them all able to hold a conversation here. (No dates yet; what works today is what this README describes.)
 
 ## Licence
 
