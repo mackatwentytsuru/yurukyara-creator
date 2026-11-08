@@ -777,13 +777,17 @@ export function mountFirstRun({
       talk,
       voice,
       present: (lines, ctx) => sheet.present(lines, ctx),
-      offer: (actions) => sheet.offer(actions),
+      offer: (actions, meta) => sheet.offer(actions, meta), // meta.back = 「ひとつ もどる」の札(台本が戻る先のある時に付ける)
       thinking: (on, info) => sheet.thinking(on, info),
       work: (kind, opt) => beginWork(kind, opt),
       // 止まりの見張り(script.js の _watch。BP1): 話している間と、吹き出しが増えている間は、止まりと見ない
       playing: () => Boolean(app?.speaker?.speaking) || Boolean(globalThis.speechSynthesis?.speaking),
       activity: () => sheet?.stats?.bubbles ?? 0,
       pin: (pic) => sheet.pin(pic),
+      // 「ひとつ もどる」: 問いを出した時の会話の欄の位置を控え、戻る時にそこまで会話を戻す
+      mark: () => sheet?.mark?.() ?? null,
+      rewind: (m) => sheet?.rewind?.(m),
+      onUndone: () => clearTimeout(finishTimer), // 作り終わりで閉じる待ちを止める(戻ったのに閉じない)
       guideUrl: readGuideUrl(),
       showCharacter: showCharacter ?? defaultShow,
       onPersona: (s, c) => applyPersona(s, c),

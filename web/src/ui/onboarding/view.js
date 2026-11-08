@@ -111,7 +111,11 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   const live = el('p', { className: 'fr-sr', ariaLive: 'polite' });
   const chips = el('div', { className: 'fr-chips', role: 'group', ariaLabel: 'へんじを えらぶ' });
   const fieldRow = el('div', { className: 'fr-input', hidden: true });
-  const actions = el('div', { className: 'fr-actions' }, chips, fieldRow);
+  // 「ひとつ もどる」: 2 つ目の問いから先に出す小さな札。ふつうの札(fr-btn)より目立たせない(線だけ・小さい字)。名前は台本が渡す
+  const backBtn = el('button', { type: 'button', className: 'fr-back', textContent: 'ひとつ もどる' });
+  backBtn.dataset.act = 'back';
+  const backRow = el('div', { className: 'fr-backrow', hidden: true }, backBtn);
+  const actions = el('div', { className: 'fr-actions' }, chips, fieldRow, backRow);
   const sheet = el(
     'section',
     { className: 'fr-sheet cc-screen', role: 'dialog', ariaLabel: CREATE_TITLE },
@@ -185,6 +189,10 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     for (const ms of [120, 450, 900]) setTimeout(fitKeyboard, ms);
   });
   closeBtn.addEventListener('click', () => close('later'));
+  backBtn.addEventListener('click', () => {
+    voice.unlock();
+    onAct('back');
+  });
   log.addEventListener('click', () => skip?.abort()); // 押すと、文字送りと間を飛ばす
 
   // 今のまとまり(台本が 1 回に言う文。present 1 回分)の最初の行に印 fr-latest(試験と練習の道具が見る)
@@ -485,8 +493,10 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     }
   }
 
+  /** 戻ってきた時の、さっき選んだ札(しるしと、読み上げの一言) */
+  const prevName = (a) => (a.prev ? `${a.aria ?? a.label}(さっき えらんだ こたえ)` : (a.aria ?? a.label));
   function chipButton(a) {
-    const b = el('button', { type: 'button', className: `fr-btn fr-chip${a.primary ? ' primary' : ''}${a.id === 'again' ? ' fr-again' : ''}${a.img ? ' fr-card' : ''}`, textContent: a.label, ariaLabel: a.aria ?? a.label });
+    const b = el('button', { type: 'button', className: `fr-btn fr-chip${a.primary ? ' primary' : ''}${a.id === 'again' ? ' fr-again' : ''}${a.img ? ' fr-card' : ''}${a.prev ? ' fr-prev' : ''}`, textContent: a.label, ariaLabel: prevName(a) });
     // 小さな絵つきの札(見本の子の顔・ゆるキャラの形・しつかんの見本。B4 12b)。絵は data: の URL だけ(外の住所は使わない)
     if (a.img && /^data:image\/svg\+xml/.test(a.img)) {
       const pic = el('img', { className: 'fr-card-img', alt: '' });
@@ -508,8 +518,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   function fileAction(a) {
     const input = el('input', { type: 'file', accept: 'image/*', className: 'fr-file' });
     if (a.capture) input.setAttribute('capture', 'environment');
-    input.setAttribute('aria-label', a.label);
-    const label = el('label', { className: `fr-btn fr-chip${a.primary ? ' primary' : ''}` }, input, a.label);
+    input.setAttribute('aria-label', prevName(a));
+    const label = el('label', { className: `fr-btn fr-chip${a.primary ? ' primary' : ''}${a.prev ? ' fr-prev' : ''}` }, input, a.label);
     label.dataset.act = a.id;
     label.addEventListener('click', () => voice.unlock());
     input.addEventListener('change', () => {
@@ -578,13 +588,19 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     const form = el('form', { className: 'fr-field', autocomplete: 'off' }, input, submit);
     form.dataset.act = a.id;
     const over = () => a.max && countChars(input.value.trim()) > a.max;
-    input.addEventListener('input', () => {
+    const sync = () => {
       if (!a.max) return;
       const n = countChars(input.value.trim());
       count.textContent = `${n} / ${a.max}`;
       count.classList.toggle('over', n > a.max);
       submit.disabled = n > a.max;
-    });
+    };
+    input.addEventListener('input', sync);
+    // 戻ってきた時は、さっきの言葉を欄に入れ直す(そのまま送っても、直して送ってもよい)
+    if (a.value) {
+      input.value = a.value;
+      sync();
+    }
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       voice.unlock();
@@ -642,8 +658,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     return b;
   }
 
-  /** 台本の offer: 選べる物を出す(空なら消す)。押す札は上、言葉の欄は下(LINE の入力の欄と同じ所) */
-  function offer(list) {
+  /** 台本の offer: 選べる物を出す(空なら消す)。押す札は上、言葉の欄は下(LINE の入力の欄と同じ所)。meta.back があれば「ひとつ もどる」も出す */
+  function offer(list, meta = {}) {
     const chipEls = [];
     const fields = [];
     for (const a of list) {
@@ -660,12 +676,36 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     chips.hidden = !chipEls.length;
     fieldRow.replaceChildren(...fields);
     fieldRow.hidden = !fields.length;
+    const back = list.length ? meta?.back : null;
+    backRow.hidden = !back;
+    if (back) {
+      backBtn.textContent = back.label ?? 'ひとつ もどる';
+      backBtn.setAttribute('aria-label', back.aria ?? back.label ?? 'ひとつ もどる');
+    }
     if (list.length) stats.actionsShown += 1;
     sheet.dataset.actions = list.map((a) => a.id).join(' ');
     sheet.dataset.input = fields.length ? (list.some((a) => a.kind === 'frame') ? 'frame' : 'field') : 'none';
     fitChips();
     requestAnimationFrame?.(fitChips);
     scroll(); // 選ぶ所の高さが変わると、会話の欄の見える高さも変わる。いつも最後の吹き出しが見えるようにする
+  }
+
+  /** 会話の欄の、いまの位置(問いを出した時に台本が控える。「ひとつ もどる」で、その位置まで会話を戻す) */
+  function mark() {
+    return log.children.length;
+  }
+
+  /** 控えた位置より後の吹き出しを消す(戻った先の問いが、いちばん下に見えるように) */
+  function rewind(n) {
+    if (closed || !Number.isInteger(n) || n < 0) return;
+    skip?.abort();
+    dropThinking();
+    while (log.children.length > n) log.lastElementChild.remove();
+    const marked = log.querySelectorAll('.fr-latest');
+    latest = marked.length ? marked[marked.length - 1] : null;
+    fresh = true;
+    lastSide = null; // 次の吹き出しは、顔と名前から出す
+    scroll();
   }
 
   function close(reason = 'done') {
@@ -691,6 +731,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     offer,
     setStep,
     close,
+    mark,
+    rewind,
     pin,
     thinking,
     stats,

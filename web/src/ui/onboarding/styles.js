@@ -91,6 +91,16 @@ export const CSS = `
 .fr-btn.primary, .yp-save { background: linear-gradient(135deg, var(--btn-from, #7d62ff), var(--btn-to, #c15bff)); border: 1.5px solid transparent; font-weight: 800; color: var(--on-btn, #ffffff); }
 /* 全体のおまかせ(のこりを ぜんぶ おまかせ): 点線のふち・うすい色。問いごとの「おまかせ」(ふつうの札)と見分ける */
 .fr-btn.fr-auto { border: 2px dashed rgb(var(--mint-rgb, 123 224 195) / 0.75); background: rgb(var(--mint-rgb, 123 224 195) / 0.06); color: var(--fr-muted); font-weight: 500; }
+/* 「ひとつ もどる」でもどってきた時の、さっき選んだ札: ふちを黄色にする(色だけに頼らず、読み上げには「さっき えらんだ こたえ」を足している) */
+.fr-btn.fr-prev { border-color: var(--warn, #ffd666); box-shadow: 0 0 0 1px var(--warn, #ffd666) inset; }
+/* 「ひとつ もどる」: ふつうの札より目立たせない(ふち・色なし。小さな字で下線)。押す所は 44px 以上のまま */
+.fr-backrow { display: flex; justify-content: flex-start; min-width: 0; }
+.fr-backrow[hidden] { display: none; }
+.fr-back { font: inherit; font-size: 13px; min-height: 44px; padding: 0 12px; margin: -4px 0 -6px -4px; background: none; border: 0; border-radius: 12px; cursor: pointer;
+  color: var(--fr-muted); text-decoration: underline; text-underline-offset: 3px; -webkit-tap-highlight-color: transparent; }
+.fr-back:active { opacity: 0.7; }
+.fr-back:focus-visible { outline: 3px solid var(--focus, #fff); outline-offset: 2px; }
+@media (hover: hover) { .fr-back:hover { color: var(--fr-text); } }
 .fr-btn:active { transform: translateY(1px); filter: brightness(1.12); }
 @media (hover: hover) { .fr-btn:hover { filter: brightness(1.15); } .fr-close:hover { background: rgb(var(--tint-rgb, 255 255 255) / 0.12); } }
 .fr-btn:focus-visible, .fr-close:focus-visible, .fr-field input:focus-visible, .yp-panel button:focus-visible, .yp-panel input:focus-visible,
