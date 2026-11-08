@@ -114,6 +114,11 @@ html.is-kiosk .kx-zone {
 .kq-pin:focus-visible, .kq-facts:focus-visible { outline: 2px solid var(--lav); outline-offset: 1px; }
 .kq-facts { width: 100%; resize: vertical; font: inherit; font-size: 14px; }
 .kq-qr { display: grid; gap: 8px; justify-items: start; }
-.kq-canvas { display: block; background: #fff; border-radius: 8px; max-width: 100%; }
+/* QR は窓の一番上に置く。窓の高さ(PC の 720〜800 でも)にスクロールなしで収まるように、見える大きさを高さに合わせる(下限 150px。上の見出しなどが約 124px) */
+.kq-canvas { display: block; background: #fff; border-radius: 8px; max-width: 100%; height: auto; aspect-ratio: 1; image-rendering: pixelated; width: clamp(150px, calc(46vh - 130px), 224px); width: clamp(150px, calc(46dvh - 130px), 224px); }
+@media (max-width: 640px) { .kq-canvas { width: clamp(150px, calc(40vh - 130px), 224px); width: clamp(150px, calc(40dvh - 130px), 224px); } }
+@media (min-width: 1200px) { .kq-canvas { width: clamp(150px, calc(100vh - 420px), 224px); width: clamp(150px, calc(100dvh - 420px), 224px); } }
+.kq-lock { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.kq-lock .yc-au-msg { margin: 0; }
 .kq-url { margin: 0; font-size: 14px; line-height: 1.4; color: var(--muted); word-break: break-all; }
 /* ---------- 接客モード ここまで ---------- */
