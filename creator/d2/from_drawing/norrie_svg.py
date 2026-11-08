@@ -282,7 +282,7 @@ spec = {
 # ---------- SVG ----------
 head = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{f1(vx)} {vy} {vw} {vh}" width="{vw}" height="{vh}">\n'
         '<!-- ノリー(セスジキノボリカンガルーの執事見習い)の 2D。協力者が手で描いた正面の絵から、色と形をそのままに部品へ分けて描き直した。\n'
-        '     部品は <g id>。顔は face.<表情>.<枠>(枠 = eyes・brows・mouth_closed・mouth_half・mouth_open)、鼻は muzzle。色は元の絵の 6 色だけ。\n'
+        '     部品は <g id>。顔は face.<表情>.<枠>(枠 = eyes・brows・mouth_closed・mouth_half・mouth_open)、鼻は muzzle。色は元の絵の 6 色だけ(ほおのぼかしだけ #F08694)。\n'
         '     腕は上腕(arm_*)と前腕(forearm_*)の 2 枚。back は三面図の後ろ姿の絵から(向こうを向いた時に出す板。背中の筋)。 -->\n')
 order = ['tail', 'arm_r', 'arm_l', 'body', 'forearm_r', 'forearm_l', 'bowtie', 'head']
 body = ''.join(f'<g id="{k}">{groups[k]}</g>\n' for k in order)
