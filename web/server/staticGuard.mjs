@@ -97,13 +97,17 @@ export function hostAllowed(header, names) {
   return names.has(name) || TAILNET.test(name);
 }
 
-/** 状態を変える頼み(POST・PUT・DELETE)の Origin。付いていれば、その名前も同じ表で見る。付いていない頼み(curl など)はそのまま通す */
-export function originAllowed(origin, names) {
+/** 状態を変える頼み(POST・PUT・DELETE)の Origin。付いていれば、その名前も同じ表で見る。付いていない頼み(curl など)はそのまま通す。
+ *  .ts.net の Origin は、その頼みの Host と同じ名前の時だけ通す(よそが出した .ts.net のページから、この PC の Claude を使わせない) */
+export function originAllowed(origin, names, requestHost = undefined) {
   if (origin === undefined) return true;
   const value = String(origin).trim();
   if (!/^https?:\/\//i.test(value)) return false; // "null"(囲われた枠)や変な形は断る
   try {
-    return hostAllowed(new URL(value).host, names);
+    const originHost = new URL(value).host;
+    if (!hostAllowed(originHost, names)) return false;
+    const originName = hostNameOf(originHost);
+    return !TAILNET.test(originName) || originName === hostNameOf(requestHost);
   } catch {
     return false;
   }

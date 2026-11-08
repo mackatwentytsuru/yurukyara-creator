@@ -80,7 +80,11 @@ const CHAT = JSON.stringify({ text: 'こんにちは', history: [] });
 test('originAllowed: Origin が無ければ通り、表の名前と .ts.net だけが通る', () => {
   const names = allowedHostNames({ bindHost: '127.0.0.1', extra: '', nets: {}, machine: 'mybox' });
   assert.equal(originAllowed(undefined, names), true);
-  for (const o of ['http://localhost:8787', 'http://127.0.0.1:8787', 'http://[::1]:8787', 'https://pc.example.ts.net', 'http://pc.example.ts.net:8787']) assert.equal(originAllowed(o, names), true, o);
+  for (const o of ['http://localhost:8787', 'http://127.0.0.1:8787', 'http://[::1]:8787']) assert.equal(originAllowed(o, names), true, o);
+  // .ts.net の Origin は、その頼みの Host と同じ名前の時だけ通る
+  assert.equal(originAllowed('https://pc.example.ts.net', names, 'pc.example.ts.net'), true);
+  assert.equal(originAllowed('http://pc.example.ts.net:8787', names, 'pc.example.ts.net:8787'), true);
+  for (const host of ['127.0.0.1:8787', 'other.example.ts.net', 'localhost', undefined]) assert.equal(originAllowed('https://<端末名>.<tailnet>.ts.net', names, host), false, `Origin 別の .ts.net / Host ${host}`);
   for (const o of ['http://evil.example:8787', 'null', '', 'file://', 'http://127.0.0.1.evil.example', 'https://evilts.net', 'chrome-extension://abc', 'http://[bad']) assert.equal(originAllowed(o, names), false, o);
 });
 
@@ -116,6 +120,10 @@ test('本物のサーバー: よその Host は /api/chat も配るファイル�
     assert.notEqual(same.status, 403, '同じ場所の Origin は通る');
     const viaTs = await send(port, 'POST', '/api/chat', { host: 'pc.example.ts.net', origin: 'https://pc.example.ts.net', body: CHAT });
     assert.notEqual(viaTs.status, 403, '.ts.net の Origin は通る');
+    // SC4: Host は 127.0.0.1 のまま、Origin だけ別の .ts.net(よそが出したページ)は 403 で、頭脳に届かない
+    const before = brain.state.hits;
+    for (const o of ['https://<端末名>.<tailnet>.ts.net', 'https://evil.ts.net']) assert.equal((await send(port, 'POST', '/api/chat', { origin: o, body: CHAT })).status, 403, `別の .ts.net の Origin ${o}`);
+    assert.equal(brain.state.hits, before, '別の .ts.net の Origin は頭脳に届かない');
     const noOrigin = await send(port, 'POST', '/api/chat', { body: CHAT });
     assert.notEqual(noOrigin.status, 403, 'Origin が無い(curl)は通る');
   } finally {
@@ -139,6 +147,21 @@ test('本物のサーバー: --lan(HOST=0.0.0.0)なら、この端末の LAN の
     assert.equal((await send(port, 'GET', '/api/status', { host: 'pc.example.ts.net' })).status, 200);
     assert.equal((await send(port, 'GET', '/api/status', { host: '192.0.2.99' })).status, 403, '他人の住所は断る');
     assert.equal((await send(port, 'GET', '/api/status', { host: 'evil.example' })).status, 403);
+  } finally {
+    proc.kill();
+    await new Promise((r) => setTimeout(r, 300));
+    rmSync(logs, { recursive: true, force: true });
+  }
+});
+
+test('本物のサーバー: GET // のような URL にならない形は 400 で断り、落ちずに次の頼みに答える(SR1 HIGH-1)', async () => {
+  const logs = mkdtempSync(join(tmpdir(), 'hog-url-'));
+  const { proc, port } = await startServer({ LOG_DIR: logs, MEMORY_DIR: join(logs, 'm'), FILLER_DIR: join(logs, 'f') });
+  try {
+    for (const bad of ['//', '//:', '//[']) {
+      assert.equal((await send(port, 'GET', bad)).status, 400, `GET ${bad}`);
+      assert.equal((await send(port, 'GET', '/api/status')).status, 200, `${bad} のあとも生きている`);
+    }
   } finally {
     proc.kill();
     await new Promise((r) => setTimeout(r, 300));

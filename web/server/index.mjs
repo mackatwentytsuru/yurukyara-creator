@@ -321,10 +321,11 @@ const STATE_CHANGING = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 const handler = async (req, res) => {
   // 名前の向け直し(DNS rebinding)と、よそのページからの書き込みは、どの道(/api/ も配るファイルも)でも先に断る
   if (!hostAllowed(req.headers.host, hostNames)) return json(res, 403, { error: 'この名前では受けません' });
-  if (STATE_CHANGING.has(req.method) && !originAllowed(req.headers.origin, hostNames)) return json(res, 403, { error: 'このページからは受けません' });
-  const url = new URL(req.url, 'http://localhost');
+  if (STATE_CHANGING.has(req.method) && !originAllowed(req.headers.origin, hostNames, req.headers.host)) return json(res, 403, { error: 'このページからは受けません' });
+  let url;
   let path;
   try {
+    url = new URL(req.url, 'http://localhost'); // GET // のような形は new URL が投げる。落とさず 400
     path = decodeURIComponent(url.pathname);
   } catch {
     return json(res, 400, { error: 'パスが読めません' }); // 戻せない形(%E0 など)で落ちない
