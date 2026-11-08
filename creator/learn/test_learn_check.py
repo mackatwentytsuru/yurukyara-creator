@@ -191,10 +191,10 @@ class ApplyTest(unittest.TestCase):
 
     def test_undo_restores(self):
         self.run_main("apply", "kono", self.proposal, "--today", "2026-11-08", "--yes")
-        code, _ = self.run_main("undo", "kono")
+        code, _ = self.run_main("undo", "kono", "--yes")
         self.assertEqual(code, 0)
         self.assertEqual(lc.read_text(self.persona), self.before)
-        code, _ = self.run_main("undo", "kono")
+        code, _ = self.run_main("undo", "kono", "--yes")
         self.assertEqual(code, 2)
 
     def test_replace_in_place_and_leave_the_other_section(self):
@@ -417,7 +417,7 @@ class RoleTest(unittest.TestCase):
         self.assertEqual(after.count("役目"), 1)
         code, out = self.run_main("list", "kono", "--today", "2026-11-08")
         self.assertIn("役目: 駅や町の案内", out)
-        self.run_main("undo", "kono")
+        self.run_main("undo", "kono", "--yes")
         self.assertEqual(lc.read_text(self.persona), self.HOME)  # 節と役目の行が、一緒に戻る
 
     def test_role_line_is_added_when_missing_and_nothing_else_changes(self):

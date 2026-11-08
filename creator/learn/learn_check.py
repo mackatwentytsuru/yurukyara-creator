@@ -19,9 +19,10 @@ characters/<id>/persona.md の 2 つの節(「## お店のきまり」「## 町�
            案の中で中身が空の節は、その節を消す意味になる(空の見出しだけは残さない)。
   --role <言葉>: 「- 役目: …」の行も変える(差分に出る。undo で、節と一緒に戻る)。おうち・お店の案内・駅や町の案内・学校や施設。
   --root <場所>: リポジトリの代わりの場所(試しのとき。<場所>/characters/<id>/persona.md を見る)。サブコマンドの前に書く。
-  undo   : いちばん新しい控えに戻す。
+  undo   : いちばん新しい前の版に戻す。--yes が無ければ戻さず、何が変わるかを見せる(聞いてから --yes で流す)。
+           使った前の版は .restored.md として残し(消さない)、いまの版は .undone.md に残す。
   list   : いま入っている物の出どころと、読んだ日からの日数。
-終わりの番号: 0 できた / 2 使い方・ファイルの誤り / 3 点検で止めた / 4 --yes が無いので入れなかった。
+終わりの番号: 0 できた / 2 使い方・ファイルの誤り / 3 点検で止めた / 4 --yes が無いので入れなかった・戻さなかった。
 """
 import argparse
 import datetime
@@ -613,6 +614,13 @@ def cmd_undo(a):
         print(f"戻しませんでした: {latest} は点検を通りません。persona.md は変えていません。")
         print("\n".join(f"- {r}" for r in reasons[:10]))
         return 3
+    # キャラの知っていることが変わるので、人に聞いてから(apply と同じ。--yes が無ければ戻さない)
+    if not getattr(a, "yes", False):
+        diff = list(difflib.unified_diff(current.splitlines(), backup.splitlines(), "いまの版", "戻した後の版", lineterm="", n=0))
+        print("戻していません。次の版に戻すと、キャラの知っていることが、こう変わります(いまの版も残します)。")
+        print("\n".join(diff[:40]) if diff else "(違いはありません)")
+        print("人の OK を聞いた後に --yes を付けて、もう一度流します。")
+        return 4
     # いまの版も残してから戻す(戻した物も、また戻せる)
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     undone = os.path.join(wd, f"persona.{stamp}.undone.md")
@@ -622,8 +630,9 @@ def cmd_undo(a):
         data = f.read()
     with open(pp, "wb") as f:
         f.write(data)
-    os.remove(os.path.join(wd, latest))
-    print(f"元に戻しました: {latest}")
+    used = os.path.join(wd, latest[: -len(".bak.md")] + ".restored.md")
+    os.replace(os.path.join(wd, latest), used)  # 前の版は消さずに残す(次の undo では選ばれない)
+    print(f"元に戻しました: {latest}(前の版は {os.path.basename(used)} として残しました)")
     print(f"戻す前の版: creator/work/{a.id}/learn/{os.path.basename(undone)}")
     return 0
 
@@ -695,6 +704,7 @@ def main(argv=None):
         s.set_defaults(fn=fn)
     u = sub.add_parser("undo")
     u.add_argument("id")
+    u.add_argument("--yes", action="store_true")
     u.set_defaults(fn=cmd_undo)
     ls = sub.add_parser("list")
     ls.add_argument("id")

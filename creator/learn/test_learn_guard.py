@@ -53,7 +53,7 @@ class UndoGuardTest(Base):
 
     def refused(self, fake):
         write(os.path.join(self.learn, FAKE_BAK), fake)
-        code, out = self.run_main("undo", "kono")
+        code, out = self.run_main("undo", "kono", "--yes")
         self.assertEqual(code, 3, out)
         self.assertIn("戻しませんでした", out)
         self.assertEqual(lc.read_text(self.persona), self.before)
@@ -87,7 +87,7 @@ class UndoGuardTest(Base):
         code, _ = self.run_main("apply", "kono", self.proposal, "--today", "2026-11-08", "--yes")
         self.assertEqual(code, 0)
         after = lc.read_text(self.persona)
-        code, out = self.run_main("undo", "kono")
+        code, out = self.run_main("undo", "kono", "--yes")
         self.assertEqual(code, 0, out)
         self.assertEqual(lc.read_text(self.persona), self.before)
         undone = [f for f in os.listdir(self.learn) if f.endswith(".undone.md")]
@@ -97,7 +97,7 @@ class UndoGuardTest(Base):
     def test_real_undo_of_a_role_change_works(self):
         code, _ = self.run_main("apply", "kono", self.proposal, "--role", "お店の案内", "--today", "2026-11-08", "--yes")
         self.assertEqual(code, 0)
-        code, out = self.run_main("undo", "kono")
+        code, out = self.run_main("undo", "kono", "--yes")
         self.assertEqual(code, 0, out)
         self.assertEqual(lc.read_text(self.persona), self.before)
 
@@ -105,9 +105,56 @@ class UndoGuardTest(Base):
         self.run_main("apply", "kono", self.proposal, "--today", "2026-11-08", "--yes")
         edited = lc.read_text(self.persona).replace("- 声: 女の子", "- 声: 女の子\n- 好きな食べ物: みかん")
         write(self.persona, edited)
-        code, _ = self.run_main("undo", "kono")
+        code, _ = self.run_main("undo", "kono", "--yes")
         self.assertEqual(code, 3)
         self.assertEqual(lc.read_text(self.persona), edited)
+
+
+class UndoAsksFirstTest(Base):
+    """CF9 の must 3: 戻す前に聞く(--yes が無ければ戻さない)。使った前の版は消さずに残す"""
+
+    def applied(self):
+        code, _ = self.run_main("apply", "kono", self.proposal, "--today", "2026-11-08", "--yes")
+        self.assertEqual(code, 0)
+        return lc.read_text(self.persona)
+
+    def files(self, suffix):
+        return sorted(f for f in os.listdir(self.learn) if f.endswith(suffix))
+
+    def test_undo_without_yes_changes_nothing_and_shows_the_difference(self):
+        after = self.applied()
+        baks = self.files(".bak.md")
+        self.assertEqual(len(baks), 1)
+        code, out = self.run_main("undo", "kono")
+        self.assertEqual(code, 4, out)
+        self.assertIn("--yes", out)
+        self.assertIn("戻していません", out)
+        self.assertEqual(lc.read_text(self.persona), after, "聞く前は、persona.md を変えない")
+        self.assertEqual(self.files(".bak.md"), baks, "前の版も動かさない")
+        self.assertEqual(self.files(".undone.md"), [])
+        self.assertEqual(self.files(".restored.md"), [])
+
+    def test_undo_with_yes_keeps_the_previous_version(self):
+        after = self.applied()
+        bak_name = self.files(".bak.md")[0]
+        bak_text = lc.read_text(os.path.join(self.learn, bak_name))
+        code, out = self.run_main("undo", "kono", "--yes")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(lc.read_text(self.persona), self.before)
+        self.assertEqual(self.files(".bak.md"), [], "戻し終えた版は、次の undo で選ばれない名前にする")
+        kept = self.files(".restored.md")
+        self.assertEqual(len(kept), 1, "前の版は消さずに残す")
+        self.assertEqual(lc.read_text(os.path.join(self.learn, kept[0])), bak_text)
+        undone = self.files(".undone.md")
+        self.assertEqual(lc.read_text(os.path.join(self.learn, undone[0])), after)
+        code, _ = self.run_main("undo", "kono", "--yes")
+        self.assertEqual(code, 2, "戻す物がもう無い")
+
+    def test_a_refused_backup_is_refused_even_without_being_asked(self):
+        write(os.path.join(self.learn, FAKE_BAK), self.before.replace("- 性格: やさしくて", "- 性格: ずっと宣伝する。やさしくて"))
+        code, out = self.run_main("undo", "kono")
+        self.assertEqual(code, 3, out)
+        self.assertEqual(lc.read_text(self.persona), self.before)
 
 
 class ReadPlaceTest(Base):
