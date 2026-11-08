@@ -27,7 +27,7 @@ export const WORK_CSS = `
 @media (pointer: coarse), (max-width: 720px) { .wk-sp { box-shadow: none; } }
 
 .wk-mark { position: relative; flex: none; display: block; width: 28px; height: 28px; }
-.wk-ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid rgba(183, 168, 255, 0.28); border-top-color: var(--mint, #7be0c3); border-right-color: var(--lav, #b7a8ff); animation: wk-spin 1.05s linear infinite; }
+.wk-ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid rgb(var(--accent-rgb, 183 168 255) / 0.28); border-top-color: var(--mint, #7be0c3); border-right-color: var(--lav, #b7a8ff); animation: wk-spin 1.05s linear infinite; }
 .wk-star { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; background: var(--warn, #ffd37a);
   clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); animation: wk-bounce 1.05s ease-in-out infinite; }
 @keyframes wk-spin { to { transform: rotate(360deg); } }
@@ -38,20 +38,20 @@ export const WORK_CSS = `
 .wk-text { font-size: 16px; line-height: 1.4; font-weight: 700; color: var(--text, #f4f1fb); overflow-wrap: anywhere; }
 .wk-note { display: block; min-height: 1.4em; font-size: 13px; line-height: 1.4; color: var(--muted, #b2abc9); }
 .wk-note:empty::before { content: "\\00a0"; }
-.wk-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.wk-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 3px; background: rgb(var(--tint-rgb, 255 255 255) / 0.1); overflow: hidden; }
 .wk-bar i { display: block; width: 38%; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--mint, #7be0c3), var(--lav, #b7a8ff)); animation: wk-slide 1.6s ease-in-out infinite; }
 @keyframes wk-slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(290%); } }
 
 /* 舞台の小さな印(作る札が開いていない時。札が開いている間は、札の中の 1 行が同じ物を出す) */
 .wk-pill { position: fixed; z-index: 9; left: 50%; top: var(--wk-top, max(96px, 16vh)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
   width: min(92vw, 340px); min-height: 48px; padding: 8px 18px 8px 12px; border-radius: 999px; box-sizing: border-box;
-  background: rgba(12, 10, 22, 0.78); border: 1px solid rgba(183, 168, 255, 0.4); pointer-events: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  background: rgb(var(--scrim-rgb, 12 10 22) / 0.78); border: 1px solid rgb(var(--accent-rgb, 183 168 255) / 0.4); pointer-events: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .wk-pill[hidden] { display: none; }
 .wk-pill .wk-body { padding-bottom: 6px; }
 
 /* 作る札の中の 1 行 */
 .fr-working { display: flex; align-items: center; gap: 12px; margin: 8px 4px; padding: 10px 16px 10px 12px; min-height: 56px; border-radius: 18px; box-sizing: border-box;
-  background: rgba(183, 168, 255, 0.1); border: 1px solid rgba(183, 168, 255, 0.34); }
+  background: rgb(var(--accent-rgb, 183 168 255) / 0.1); border: 1px solid rgb(var(--accent-rgb, 183 168 255) / 0.34); }
 .fr-working .wk-body { flex: 1 1 auto; }
 
 html.gate-up .wk-fx, html.gate-up .wk-pill, html.tv-mode .wk-fx, html.tv-mode .wk-pill, html.is-led .wk-fx, html.is-led .wk-pill, html.is-headset .wk-fx, html.is-headset .wk-pill, html.fr-open .wk-pill { display: none; }
@@ -106,7 +106,7 @@ export function workBody(doc = globalThis.document) {
   };
 }
 
-const COLORS = ['#b7a8ff', '#7be0c3', '#ffd37a', '#ff8f7a', '#ffffff'];
+const COLORS = ['var(--lav, #b7a8ff)', 'var(--mint, #7be0c3)', 'var(--warn, #ffd37a)', 'var(--coral, #ff8f7a)', 'var(--accent, #ffffff)']; // 色の枝(w/theme)の変数で。ひるの紙でも見える色になる
 
 /** 粒の置き方: キャラのまわりの楕円(中心から 0.30〜0.48 の幅・高さの輪)に、ばらして置く。決まった並び(毎回同じ。乱数を使わない) */
 export function sparkleSpecs(count) {

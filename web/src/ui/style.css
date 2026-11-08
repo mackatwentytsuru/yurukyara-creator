@@ -410,7 +410,7 @@ html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
 .memory-panel .mem-item-forget { min-height: 44px; min-width: 44px; padding: 4px 10px; font-size: 14px; }
 .memory-panel .mem-forget { border-color: var(--coral); color: var(--coral); }
 /* 「全部わすれる」を 1 回押した後の確かめ(はい・やめる)。出ている間、元のボタンは隠れる(高さはほぼ同じ) */
-.mem-forget-ask { gap: 8px; padding: 10px 12px; border: 1px solid var(--coral); border-radius: 12px; background: rgba(255, 143, 122, 0.08); }
+.mem-forget-ask { gap: 8px; padding: 10px 12px; border: 1px solid var(--coral); border-radius: 12px; background: rgb(var(--coral-rgb) / 0.08); }
 .mem-forget-ask-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); }
 .memory-panel .mem-forget-yes { border-color: var(--coral); color: var(--coral); }
 .mem-status { scroll-margin: 8px; }
