@@ -189,6 +189,21 @@ export function createSampleCreator({ main = null, samples = SAMPLE_CHARACTERS }
  */
 export function createDrawCreator({ sample, enabled }) {
   const on = () => Boolean(enabled?.());
+  /** サーバーの /api/draw を 1 回呼ぶ。描けた子か、描けなかった理由(reason は daily・visitor・busy・fails など。サーバーの印) */
+  const callDraw = async (input, note, o) => {
+    try {
+      // 「なおしたい ところ」の一言は、ことばの前に足す(長い時は後ろの元のことばが切れる。一言は捨てない。QA8 #4)
+      const words = note ? clipWords(`なおす: ${note}。${input?.words ?? ''}`) : String(input?.words ?? '');
+      const body = input?.from === 'picture' && input.file ? { ...(note ? { words } : {}), picture: await pictureBody(input.file) } : { words };
+      o.onProgress?.('Claude が 描いているよ。少し まってね(1 分くらい)');
+      const r = await fetch('/api/draw', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && /^[a-z0-9_]{1,32}$/.test(String(j.id ?? ''))) return { ok: true, character: { id: j.id, name: String(j.name ?? 'あたらしい子').slice(0, 20), sample: false, drawn: true, twod: true, note: 'Claude が描いた子' } };
+      return { ok: false, reason: String(j.reason ?? 'fail'), message: String(j.error ?? '描けなかったよ').slice(0, 60) };
+    } catch {
+      return { ok: false, reason: 'fail', message: '描けなかったよ' };
+    }
+  };
   return {
     ...sample,
     mode: 'sample',
@@ -197,21 +212,24 @@ export function createDrawCreator({ sample, enabled }) {
     },
     async make(input, o = {}) {
       if (!on()) return sample.make(input, o);
-      try {
-        const body = input?.from === 'picture' && input.file ? { picture: await pictureBody(input.file) } : { words: String(input?.words ?? '') };
-        o.onProgress?.('Claude が 描いているよ。少し まってね(1 分くらい)');
-        const r = await fetch('/api/draw', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-        const j = await r.json().catch(() => ({}));
-        if (r.ok && /^[a-z0-9_]{1,32}$/.test(String(j.id ?? ''))) return { id: j.id, name: String(j.name ?? 'あたらしい子').slice(0, 20), sample: false, drawn: true, twod: true, note: 'Claude が描いた子' };
-        const fallback = await sample.make(input?.from === 'picture' ? { ...input, colors: input.colors ?? [], shape: input.shape ?? 'any' } : input, o);
-        return fallback ? { ...fallback, drawFailed: String(j.error ?? '描けなかったよ').slice(0, 60) } : null;
-      } catch {
-        const fallback = await sample.make(input, o);
-        return fallback ? { ...fallback, drawFailed: '描けなかったよ' } : null;
-      }
+      const r = await callDraw(input, '', o);
+      if (r.ok) return r.character;
+      const fallback = await sample.make(input?.from === 'picture' ? { ...input, colors: input.colors ?? [], shape: input.shape ?? 'any' } : input, o);
+      return fallback ? { ...fallback, drawFailed: r.message } : null;
+    },
+    /**
+     * 描いた子の「なおしたい ところ」: 一言を足して、もう 1 回描く。見本の子に替えない(替えると、一言が捨てられる)。
+     * @returns {Promise<{ok:boolean, character?:object, reason?:string, message?:string}>}
+     */
+    async redraw(input, note, o = {}) {
+      if (!on()) return { ok: false, reason: 'off', message: 'ここでは 描けないよ' };
+      return callDraw(input, String(note ?? '').trim(), o);
     },
   };
 }
+
+/** ことばの長さ(サーバーの上限 60 字と同じ。長い時は後ろを切る) */
+const clipWords = (s) => [...String(s ?? '').trim()].slice(0, 60).join('');
 
 /** 選んだ絵を、サーバーへ送る形(base64)にする。絵はこの時だけ、この PC のサーバーを通って Claude に送られる */
 async function pictureBody(file) {

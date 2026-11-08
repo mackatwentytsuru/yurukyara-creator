@@ -11,12 +11,16 @@ import { injectStyles } from './styles.js';
 import { STEPS, countChars, progressText, OMAKASE_ALL } from './script.js';
 import { crawl } from './voice.js';
 import { MAIN_CHARACTER } from '../../character/defaults.js';
+import { currentWorkNote, currentWorkText } from '../work.js';
+import { ensureWorkStyles, workBody, workMark } from '../workFx.js';
 
 const el = (tag, props = {}, ...children) => {
   const n = Object.assign(document.createElement(tag), props);
   n.append(...children.filter((c) => c !== null && c !== undefined && c !== false));
   return n;
 };
+/** 作る画面の見出し。入口のボタン(index.js の START_LABEL)と同じ名前にそろえる(同じ物に名前が 2 つあると迷う。CU3_2 should 6) */
+export const CREATE_TITLE = 'あたらしい子を つくる';
 const PICTURE_MAX = 20 * 1024 * 1024;
 const initial = (name) => [...String(name || '?')][0];
 /** 吹き出しと吹き出しの間(ms)。長い文を分けた時も、この間を空ける */
@@ -77,8 +81,9 @@ function mainFace() {
  * @param {()=>Promise<boolean>} [o.onAuto] おまかせ。あれば、どの歩みの札にも出す
  * @param {(typing:boolean)=>void} [o.onTyping] キーボードが出た・下がった
  */
-export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = 'sheet', voice, onAct, onAuto = null, openPersona, onClose = () => {}, onTyping = () => {}, stage = () => null, parent = document.body }) {
+export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = 'sheet', voice, onAct, onAuto = null, openPersona, onClose = () => {}, onTyping = () => {}, stage = () => null, work = null, parent = document.body }) {
   injectStyles(parent.ownerDocument);
+  ensureWorkStyles(parent.ownerDocument);
   const urls = new Set();
   const stats = { lines: 0, crawled: 0, voiced: [], actionsShown: 0, bubbles: 0 };
   let skip = null;
@@ -93,7 +98,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     return li;
   });
   // 作る画面を出て、話す画面へ戻る(前の名前は「あとで」。作る画面と話す画面を分けたので、行き先が分かる名前に。CU)
-  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'おしゃべりに もどる', ariaLabel: 'おしゃべりに もどる(キャラを つくるを とじて、話す画面へ)' });
+  const closeBtn = el('button', { type: 'button', className: 'fr-close', textContent: 'おしゃべりに もどる', ariaLabel: 'おしゃべりに もどる(あたらしい子を つくるを とじて、話す画面へ)' });
   const leftMain = el('b');
   const leftTime = el('span');
   const left = el('p', { className: 'fr-left', ariaLive: 'polite' }, leftMain, leftTime);
@@ -109,8 +114,8 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   const actions = el('div', { className: 'fr-actions' }, chips, fieldRow);
   const sheet = el(
     'section',
-    { className: 'fr-sheet cc-screen', role: 'dialog', ariaLabel: 'キャラを つくる' },
-    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, pinBox, el('h2', { textContent: 'キャラを つくる' }), left, closeBtn), bar, steps),
+    { className: 'fr-sheet cc-screen', role: 'dialog', ariaLabel: CREATE_TITLE },
+    el('header', { className: 'fr-head' }, el('div', { className: 'fr-title' }, pinBox, el('h2', { textContent: CREATE_TITLE }), left, closeBtn), bar, steps),
     log,
     live,
     actions,
@@ -189,6 +194,7 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
   function add(node) {
     dropThinking(); // 返事が来たので、待つ間の「…」は消す
     log.append(node);
+    if (workRow) log.append(workRow); // はたらいている間の 1 行は、いつも会話のいちばん下(新しい吹き出しの後ろ)に置く
     if (fresh) {
       latest?.classList.remove('fr-latest');
       latest = node;
@@ -231,6 +237,32 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     lastSide = null;
     scroll();
   }
+
+  /**
+   * はたらいている間の 1 行(描く・舞台に出す・3D を待つ・長い待ち。ui/work.js の知らせで出し入れする)。
+   * 回る輪の中で星がはずみ、いまの歩みの文と動く点・流れる細い線が付く。札は日本語だけなので、文はいつも日本語
+   */
+  let workRow = null;
+  let workView = null;
+  function syncWork(state) {
+    if (closed || !state.visible || !state.pill) {
+      workRow?.remove();
+      workRow = null;
+      workView = null;
+      return;
+    }
+    if (!workRow) {
+      workView = workBody(document);
+      workRow = el('div', { className: 'fr-working', role: 'status' }, workMark(document), workView.root);
+      workRow.dataset.kind = state.kind;
+      log.append(workRow);
+      lastSide = null;
+      scroll();
+    }
+    workRow.dataset.kind = state.kind;
+    workView.set(currentWorkText(state, 'ja'), currentWorkNote(state, 'ja'));
+  }
+  const workOff = work?.subscribe?.(syncWork) ?? null;
 
   function setStep(n, { skipped = [], local = false } = {}) {
     sheet.dataset.step = String(n);
@@ -640,6 +672,9 @@ export function createSheet({ guideName, guideId = MAIN_CHARACTER.id, layout = '
     if (closed) return;
     closed = true;
     skip?.abort();
+    workOff?.();
+    workRow?.remove();
+    workRow = null;
     globalThis.removeEventListener?.('resize', fitChips);
     vv?.removeEventListener('resize', fitKeyboard);
     vv?.removeEventListener('scroll', fitKeyboard);

@@ -416,6 +416,11 @@ html.is-led .shitsukan, html.tv-mode .shitsukan { display: none !important; }
 .memory-panel button:focus-visible, .memory-panel input:focus-visible { outline: 2px solid var(--lav); outline-offset: 2px; }
 .memory-panel .mem-item-forget { min-height: 44px; min-width: 44px; padding: 4px 10px; font-size: 14px; }
 .memory-panel .mem-forget { border-color: var(--coral); color: var(--coral); }
+/* 「全部わすれる」を 1 回押した後の確かめ(はい・やめる)。出ている間、元のボタンは隠れる(高さはほぼ同じ) */
+.mem-forget-ask { gap: 8px; padding: 10px 12px; border: 1px solid var(--coral); border-radius: 12px; background: rgba(255, 143, 122, 0.08); }
+.mem-forget-ask-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); }
+.memory-panel .mem-forget-yes { border-color: var(--coral); color: var(--coral); }
+.mem-status { scroll-margin: 8px; }
 .memory-panel input {
   font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border-radius: 12px; width: 9.5em;
   color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);

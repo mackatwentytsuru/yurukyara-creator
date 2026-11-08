@@ -71,7 +71,7 @@ test('index.html の入口: 製品の名前・主役ノリー・声は鍵があ�
   assert.match(sim, /カメラなしで試す/, 'ほかの流れの確かめの道具が、この言葉で押す(web_talk_check.mjs など)');
   assert.doesNotMatch(gate, /マウス/, '入口の文はマウスと決めつけない(指かマウスかは main.js が決める。CRITux 15)');
   assert.match(gate, /マイクは「声で話す」を押した時だけ使います/);
-  assert.match(gate, /id="gateFirst" hidden>はじめてなら、このあと「キャラを つくる」が始まります/);
+  assert.match(gate, /id="gateFirst" hidden>はじめてなら、このあと「あたらしい子を つくる」が始まります/);
 });
 
 test('初めての会話(S4)への入口: 舞台のキャラを読み込み直しなしで替える・人格の文を読む・README の作る道の節へのリンク(S4 の頼み。D1・D2・D4)', () => {

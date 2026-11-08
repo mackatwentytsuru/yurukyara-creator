@@ -22,6 +22,9 @@ const shown = (n, on, display = 'block') => {
   css(n, { display: on ? display : 'none' });
 };
 
+/** 「全部わすれる」を 1 回押した後の確かめ(消すと、サーバーの記録も消えて、戻せない) */
+export const FORGET_ASK = 'ほんとうに ぜんぶ わすれる? サーバーの きろくも きえて、もどせないよ';
+
 const KIND_LABEL = { name: '名前', like: '好きなもの', topic: '前の話', note: 'メモ' };
 const HAS_HEAD = /^[^\s:：]{1,10}(?::\s|：)/u; // 「名前: タロウ」「名前：タロウ」のように、見出しがもう付いている文(「12:30」は見出しではない)
 
@@ -96,24 +99,35 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
   const codeIn = el('input', { inputMode: 'numeric', maxLength: 6, pattern: '[0-9]{6}', placeholder: '6 けたの番号', className: 'mem-code-in', autocomplete: 'one-time-code' });
   const claimBtn = el('button', { type: 'button', className: 'mem-claim', textContent: '番号で受け取る' });
   const forgetBtn = el('button', { type: 'button', className: 'mem-forget', textContent: '全部わすれる' });
+  // 全部わすれる(QA8 #8・確認の地図 5): 1 回目は聞くだけ。「はい」で初めて消す(消すと、サーバーの記録も戻せない)
+  const forgetAskText = el('p', { className: 'mem-forget-ask-text', textContent: FORGET_ASK });
+  const forgetYes = el('button', { type: 'button', className: 'mem-forget-yes', textContent: 'はい わすれる' });
+  const forgetNo = el('button', { type: 'button', className: 'mem-forget-no', textContent: 'やめる' });
+  const forgetAsk = el('div', { className: 'mem-forget-ask', role: 'group', ariaLabel: FORGET_ASK }, forgetAskText, el('div', { className: 'mem-row' }, forgetYes, forgetNo));
+  shown(forgetAsk, false);
   css(qrBox, { display: 'none', flexWrap: 'wrap', alignItems: 'center', gap: '10px' });
   const root = el(
     'section',
     { className: 'memory-panel', ariaLabel: '覚えていること' },
     el('h2', { textContent: '覚えていること' }),
     notice,
+    status, // 結果の文は、ボタンの下(窓の下の外)ではなく、見える上の方に出す(QA8 #8)
     list,
     el('div', { className: 'mem-row' }, pass, pairBtn, codeOut),
     qrBox,
     el('div', { className: 'mem-row' }, codeIn, claimBtn),
     forgetBtn,
-    status,
+    forgetAsk,
   );
   root.dataset.ready = '0';
   parent.append(root);
   let timer = null;
 
-  const say = (t) => (status.textContent = t);
+  const say = (t) => {
+    status.textContent = t;
+    if (t) status.scrollIntoView?.({ block: 'nearest' }); // 下へ隠れて、押したのに何も起きないように見えるのを防ぐ
+    return t;
+  };
   let forgottenSaid = false; // 「全部わすれました」を出している間 true。新しく覚えたら消す(覚えているのに「全部わすれました」が残らないように)
   // QR は番号と同じ時に出し、同じ時に消す(番号が切れた・全部わすれた・出し直した)。作っている間に消えたら出さない
   let qrTurn = 0;
@@ -231,8 +245,16 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
       codeIn.value = '';
     }),
   );
-  forgetBtn.addEventListener('click', () =>
+  const askForget = (on) => {
+    shown(forgetBtn, !on);
+    shown(forgetAsk, on, 'grid');
+    if (on) forgetNo.focus?.(); // まちがえて押しても消えないように、先に「やめる」へ
+  };
+  forgetBtn.addEventListener('click', () => askForget(true));
+  forgetNo.addEventListener('click', () => askForget(false));
+  forgetYes.addEventListener('click', () =>
     run(async () => {
+      askForget(false);
       await forgetAll(); // この端末の合鍵も捨てる。次に覚える事が出た時に、会話のイベントで新しい合鍵が届く
       showForgotten('全部わすれました');
     }),

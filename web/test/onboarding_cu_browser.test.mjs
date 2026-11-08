@@ -1,5 +1,5 @@
 // CU(本人 11/8): 作る画面を、画面なしの Chrome で確かめる(幅 390 のスマホと 1280 の PC)。
-// - 作る画面を開いている間は、話す画面の上の段(はなす・かえる・もっと)と下の帯を隠し、見出し「キャラを つくる」と「おしゃべりに もどる」が見える
+// - 作る画面を開いている間は、話す画面の上の段(はなす・かえる・もっと)と下の帯を隠し、見出し「あたらしい子を つくる」と「おしゃべりに もどる」が見える
 // - 声が始まるまでの空の吹き出しは「…」(動く点)。文字が入ると消える
 // - 全体の「のこりを ぜんぶ おまかせ」(点線の札)は確かめる。「やめる」で同じ問いに戻る。問いごとの「おまかせ」は別の札
 // - 押す所は 44px 以上・横にはみ出さない
@@ -118,12 +118,12 @@ for (const sz of SIZES) {
       assert.equal(await hidden('.top'), true, '上の段(はなす・かえる・もっと)は隠れる');
       assert.equal(await hidden('.bottom'), true, '下の帯(はなす・文字で話す)は隠れる');
       const head = await page.$eval('.fr-title h2', (e) => ({ text: e.textContent, w: e.getBoundingClientRect().width, h: e.getBoundingClientRect().height, clip: getComputedStyle(e).clip }));
-      assert.equal(head.text, 'キャラを つくる');
+      assert.equal(head.text, 'あたらしい子を つくる');
       assert.ok(head.w > 60 && head.h > 10, `見出しが見える ${JSON.stringify(head)}`);
       const close = await page.$eval('.fr-close', (e) => ({ text: e.textContent, h: e.getBoundingClientRect().height, right: e.getBoundingClientRect().right }));
       assert.equal(close.text, 'おしゃべりに もどる');
       assert.ok(close.h >= 44 && close.right <= sz.width, `「おしゃべりに もどる」は押せる大きさで、画面に収まる ${JSON.stringify(close)}`);
-      assert.equal(await page.getAttribute('.fr-sheet', 'aria-label'), 'キャラを つくる');
+      assert.equal(await page.getAttribute('.fr-sheet', 'aria-label'), 'あたらしい子を つくる');
       await checkLayout(page, `作る画面 ${sz.name}`);
       await shot(page, `cu_${sz.name}_screen`);
       await page.click('.fr-close');

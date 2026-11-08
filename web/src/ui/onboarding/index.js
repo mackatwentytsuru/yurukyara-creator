@@ -19,6 +19,7 @@
 //   読んだらこのタブの中だけに覚え(sessionStorage)、アドレスの欄から消す。公開の URL・*.ts.net では読まない(CRITsec F4)
 import { FirstRun, README_SECTION } from './script.js';
 import { createSheet } from './view.js';
+import { beginWork, work } from '../work.js'; // はたらいている間のきらきらと小さな印(描く・舞台に出す・3D を待つ・長い待ち)
 import { createVoice, crawl } from './voice.js';
 import { createDrawCreator, createLocalCreator, createSampleCreator, isLocalBase, pageIsLocal, sampleName } from './creators.js';
 import { injectStyles } from './styles.js';
@@ -376,7 +377,12 @@ export function mountFirstRun({
     if (id === home.id) next = home.character;
     else {
       const mod = await import('../../character/index.js');
-      next = await mod.loadCharacter(mod.characterUrl(id), { ...(app.tierOverrides ?? {}) });
+      const endWork = beginWork('stage'); // 子を読み込んで舞台に出す間(1.5 秒より長ければ、きらきらを出す)
+      try {
+        next = await mod.loadCharacter(mod.characterUrl(id), { ...(app.tierOverrides ?? {}) });
+      } finally {
+        endWork();
+      }
     }
     const prevChar = app.character;
     swapIn(next);
@@ -740,7 +746,9 @@ export function mountFirstRun({
       onAuto: () => engine.omakaseAsk(), // のこりを ぜんぶ おまかせ: どの歩みからでも、確かめてから、おすすめで最後まで(本人 11/7・11/8)
       openPersona: (onSave) => openPersona({ character: engine.character, initial: engine.settings, onSave }),
       stage: () => (app?.character ? { character: app.character, speaker: app.speaker, guideId: lead.id } : null),
+      work,
       onClose: (reasonIn) => {
+        engine?.stopWork?.(); // 作る札を閉じたら、出していた動きを外す
         // 作り終わった後に「おしゃべりに もどる」を押しても、「はなしてみる」と同じ(作った子を残す)。終わりの印も 'done'(CU3 must 1)
         const reason = engine?.done ? 'done' : reasonIn;
         clearTimeout(finishTimer);
@@ -770,6 +778,7 @@ export function mountFirstRun({
       present: (lines, ctx) => sheet.present(lines, ctx),
       offer: (actions) => sheet.offer(actions),
       thinking: (on, info) => sheet.thinking(on, info),
+      work: (kind, opt) => beginWork(kind, opt),
       // 止まりの見張り(script.js の _watch。BP1): 話している間と、吹き出しが増えている間は、止まりと見ない
       playing: () => Boolean(app?.speaker?.speaking) || Boolean(globalThis.speechSynthesis?.speaking),
       activity: () => sheet?.stats?.bubbles ?? 0,

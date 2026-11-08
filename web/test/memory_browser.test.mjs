@@ -194,6 +194,10 @@ test('画面なしの Chrome: タブ A → 番号 → タブ B で続きが話�
       }).observe(st, { childList: true, characterData: true, subtree: true });
     });
     await B.page.click('.mem-forget');
+    // 1 回押しただけでは消えない(QA8 #8)。確かめの「はい わすれる」を押して、初めて消える
+    await B.page.waitForSelector('.mem-forget-yes', { state: 'visible' });
+    assert.ok((await items(B.page)).length > 0, '確かめの前は、まだ覚えている');
+    await B.page.click('.mem-forget-yes');
     await B.page.waitForFunction(() => /全部わすれました/.test(document.querySelector('.mem-status').textContent));
     // 読むのは、一覧が空になるのを待ってから(知らせの直後にすぐ読むと、遅い通信の時に古い一覧を読んで揺れた)
     await B.page.waitForFunction(() => document.querySelectorAll('.mem-item').length === 0);

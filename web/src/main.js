@@ -92,8 +92,12 @@ let firstRunDoneKey = FIRST_RUN_DONE_KEY;
 const firstRunWanted = () => shouldOpenFirstRun({ params, storage: siteMemory, doneKey: firstRunDoneKey, headset: IS_HEADSET });
 const ui = createUi();
 // CU: 起動中・返事待ちの表示(出し入れの決まりは ui/waitBubble.js。画面の文字と「…」は index.html の #waitBubble と入口の #gateWake)
-import { WAKE_BUSY, WAKE_FAILED, WAKE_READY, WAKE_HINT, createWaitBubble, wakeLoading } from './ui/waitBubble.js';
+import { createWaitBubble, wakeHint, wakeLine } from './ui/waitBubble.js';
+import { beginWork, configureWork } from './ui/work.js'; // はたらいている間のきらきらと小さな印(描く・舞台に出す・3D を待つ・1.5 秒より長い待ち)
+import { mountWorkFx } from './ui/workFx.js';
 const waitBubble = createWaitBubble({
+  langOf: () => effectiveHearLang(currentLangMode()), // 待つ間の一言は、選んだことばで出す(日本語だけの時は今までどおり)
+  track: beginWork, // 待っている間(1.5 秒を過ぎたら)舞台にきらきらを出す。文は下の吹き出しが出す
   // 舞台に立っている子の名前(作った子や入れ替えた子でも、その子の名前で「かんがえているよ」と出す。CU3 must 2)
   nameOf: () => app.character?.name || document.documentElement.dataset.guideName || 'ノリー',
   render: (visible, text) => {
@@ -139,6 +143,9 @@ app.shopDevice = createShopDevice({
 });
 /** いまのことば(日本語だけ・多言語)。画面の設定 > 性格の画面の節 > persona.md の行 > 日本語だけ */
 const currentLangMode = () => langModeOf({ settings: app.personaSettings, persona: app.persona });
+// はたらいている間のきらきらと小さな印(ui/work.js・ui/workFx.js)。文は、いまのことばと舞台の子の名前に合わせる
+configureWork({ lang: () => effectiveHearLang(currentLangMode()), name: () => app.character?.name || document.documentElement.dataset.guideName || '' });
+mountWorkFx({ stage: $('stage') });
 window.__app = app; // 試験と開発の確認用
 if (IS_HEADSET) document.documentElement.classList.add('is-headset');
 if (params.get('led') === '1') document.documentElement.classList.add('is-led'); // 入口の LED: 顔にかぶる窓と操作の帯を隠す
@@ -332,6 +339,7 @@ function updateAiNotice() {
 }
 function applyHearLang() {
   updateAiNotice();
+  if (document.documentElement.classList.contains('gate-up')) setGateWake(wakeState); // 入口の一言も、選んだことばに替える
   speaker.setHearLang(effectiveHearLang(currentLangMode()));
   listener?.setLang();
   hearUi.refresh();
@@ -1418,11 +1426,12 @@ function setGateWake(state) {
   const text = $('gateWakeText');
   if (!text) return;
   const name = document.documentElement.dataset.guideName || 'ノリー';
-  const line = state === 'ready' ? WAKE_READY : state === 'busy' ? WAKE_BUSY : state === 'failed' ? WAKE_FAILED : wakeLoading(name);
+  const lang = effectiveHearLang(currentLangMode()); // 選んだことばで(日本語だけの時は今までどおり)
+  const line = wakeLine(state, { name, lang });
   if (text.textContent !== line) text.textContent = line;
   const hint = $('gateWakeHint');
   if (hint) {
-    hint.textContent = WAKE_HINT;
+    hint.textContent = wakeHint(lang);
     hint.hidden = state !== 'loading';
   }
 }

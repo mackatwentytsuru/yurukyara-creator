@@ -21,7 +21,7 @@ export const CSS = `
 
 /* 上の細い段: 絵の欄(小さな絵)・あと いくつ・あとで。巻いても流れない */
 .fr-head { flex: none; position: relative; padding: 4px 10px 6px 14px; border-bottom: 1px solid var(--fr-line); background: var(--fr-bg); z-index: 2; }
-/* 作る画面の頭(CU): 1 行目 = 見出し「キャラを つくる」と、右に「おしゃべりに もどる」。2 行目 = あと いくつ・何分 */
+/* 作る画面の頭(CU): 1 行目 = 見出し「あたらしい子を つくる」と、右に「おしゃべりに もどる」。2 行目 = あと いくつ・何分 */
 .fr-title { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; row-gap: 0; min-width: 0; }
 .fr-title h2 { position: static; width: auto; height: auto; clip: auto; overflow: visible; flex: 1 1 auto; min-width: 0; font-size: 17px; letter-spacing: 0.04em; white-space: nowrap; }
 .fr-left { order: 3; flex: 1 1 100%; min-width: 0; margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 15px; line-height: 1.3; color: var(--fr-muted); white-space: nowrap; overflow: hidden; }

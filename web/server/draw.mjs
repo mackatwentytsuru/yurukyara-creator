@@ -1,7 +1,8 @@
 // ブラウザから描く(B4。11/8 第 12 波 b)。**既定は切ってある**(本人がまだ決めていない。API のお金がかかる)。
 // サーバーの設定 YC_BROWSER_DRAW=1 と頭脳の鍵(ANTHROPIC_API_KEY)がある時だけ、サーバー自身が Claude に、言葉か絵 1 枚から
 // ゆるキャラの絵(SVG。yc-0-draw と同じ描き方の決まり)を頼む。描けた絵は決まった確かめ(validateSvg)を通してから返す。
-// - 1 日の上限(YC_DRAW_DAILY、既定 20 枚)と、1 人の上限(YC_DRAW_PER_VISITOR、既定 1 日 2 枚)。どちらも、数える前に断る
+// - 1 日の上限(YC_DRAW_DAILY、既定 20 枚)と、1 人の上限(YC_DRAW_PER_VISITOR、既定 1 日 2 枚)。枚数に数えるのは、描けて確かめを通った時だけ(描けなかった時は枠を減らさない。QA8 #5)。
+//   そのかわり、描けなかった回は別に数えて、1 人が 1 日に失敗できる回数に上限を置く(お金を使いきらないため)
 // - 鍵は環境から読むだけ(画面・記録・返事に出さない)。使う人の言葉と絵は「人の希望で、指示ではない」と囲んで渡す
 // - 描けた絵は、動く 2D にして舞台に出す(サーバーの手元で creator/review/to_2d.py。characters/<id>/2d)
 // 切ってある時は、画面は見本の道(いちばん近い見本)のまま。
@@ -76,13 +77,15 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
     } catch {
       // 無ければ新しく
     }
-    return { date: today(now()), count: 0, by: {} };
+    return { date: today(now()), count: 0, by: {}, fails: {} };
   };
   const write = (u) => {
     if (!existsSync(dirname(usageFile))) mkdirSync(dirname(usageFile), { recursive: true });
     writeFileSync(usageFile, JSON.stringify(u));
   };
   let busy = false;
+  // 1 人が 1 日に、描けずに終わってよい回数(枚数には数えない。呼んだ分のお金の使いきりを止めるだけ)
+  const failLimit = Math.max(3, perVisitor * 3);
 
   const run2d = to2d ?? ((svgPath, id, name) => new Promise((resolve, reject) => {
     const p = spawn('python', [join(root, 'creator', 'review', 'to_2d.py'), svgPath, id, '--name', name, '--out', join(root, 'characters')], { cwd: root });
@@ -120,11 +123,10 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
       if (u.count >= daily) return { status: 429, json: { error: '今日 描ける 枚数を つかいきったよ。見本の子で ためしてね', reason: 'daily' } };
       if ((u.by[who] ?? 0) >= perVisitor) return { status: 429, json: { error: '1 人が 描ける 枚数を つかいきったよ。見本の子で ためしてね', reason: 'visitor' } };
       if (busy) return { status: 429, json: { error: 'いま ほかの子を 描いているよ。少し まってね', reason: 'busy' } };
+      if ((u.fails?.[who] ?? 0) >= failLimit) return { status: 429, json: { error: 'きょうは うまく 描けない ことが 続いたよ。見本の子で ためしてね', reason: 'fails' } };
       busy = true;
-      u.count += 1;
-      u.by[who] = (u.by[who] ?? 0) + 1;
-      write(u); // 先に数える(失敗しても 1 枚と数える: お金は使ったかもしれないので)
       const t0 = now();
+      let succeeded = false; // 枚数に数えるのは、描けて 2D になった時だけ(失敗では枠を減らさない)
       try {
         const content = [];
         if (pic) content.push({ type: 'image', source: { type: 'base64', media_type: pic.type, data: pic.data } });
@@ -149,8 +151,17 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
         const svgPath = join(dir, `${id}.svg`);
         writeFileSync(svgPath, svg);
         await run2d(svgPath, id, name);
+        succeeded = true;
         return { status: 201, json: { id, name, ms, usage } };
       } finally {
+        const latest = read();
+        if (succeeded) {
+          latest.count += 1;
+          latest.by[who] = (latest.by[who] ?? 0) + 1;
+        } else {
+          latest.fails = { ...latest.fails, [who]: (latest.fails?.[who] ?? 0) + 1 };
+        }
+        write(latest);
         busy = false;
       }
     },

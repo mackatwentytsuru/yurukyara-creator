@@ -13,7 +13,7 @@ import { PRESETS, LENGTHS, normalize } from '../persona/settings.js';
 import { styleLines } from '../persona/preview.js';
 
 import { MAIN_CHARACTER } from '../../character/defaults.js'; // 主役の決まりは 1 か所(S5)。ここでは写さない
-import { ASKS_PLACE, DEFAULT_ROLE, PLACE_MAX, ROLES, ROLE_CHIPS, autoWords, normalizeRole } from './roles.js';
+import { ASKS_PLACE, AUTO_PLACE, DEFAULT_ROLE, PLACE_MAX, ROLES, ROLE_CHIPS, autoWords, normalizeRole } from './roles.js';
 import { COLOR_CHIPS, SHAPE_CHIPS } from './creators.js';
 import { MATERIAL_THUMBS, SHAPE_THUMBS } from './thumbs.js';
 
@@ -290,18 +290,40 @@ export class FirstRun {
   }
 
   /** 長くかかる仕事(描く・調べる・返事を待つ)。待っている間は、止まりの見張りが出し直さない */
-  async _long(promise) {
+  async _long(promise, kind = 'wait', opt = {}) {
     this._longWork += 1;
+    // はたらいている動き(きらきらと小さな印。ui/work.js)。kind は draw・check・stage・think・wait。終わったら必ず外す
+    const end = this.d.work?.(kind, opt) ?? null;
     try {
       return await promise;
     } finally {
+      end?.();
       this._longWork -= 1;
     }
   }
 
+  /** 作る札を閉じた時: 出している動きを全部外す */
+  stopWork() {
+    this._makeWait(null);
+  }
+
+  /**
+   * 手元の PC が描く・組む間の動き(「渡した」から「描けた」まで・「決めた」から「2D ができた」まで)。次の知らせが来たら替え、終わりで外す。
+   * 知らせが途切れても、work 側の上限(maxMs)で消える
+   */
+  _makeWait(kind) {
+    this._makeEnd?.();
+    this._makeEnd = kind ? (this.d.work?.(kind) ?? null) : null;
+    return this._makeEnd;
+  }
+
   _offer(actions) {
-    // 続きから始めた後、最初の 1 つ目の答えを押すまで、選びに「はじめから」を足す(いつも続きからしか始まらないと、作り直せないため。CU3)
-    if (this.freshNext && !actions.some((a) => a.id === 'begin' || a.id === 'fresh')) actions = [...actions, { id: 'fresh', label: 'はじめから' }];
+    // 続きから始めた後、最初の 1 つ目の答えを押すまで、選びに「はじめから」を足す(いつも続きからしか始まらないと、作り直せないため。CU3)。
+    // 「ぜんぶ おまかせ? はい・やめる」の確かめの札には足さない(3 つ並ぶと、「やりなおす」との違いが分からない。CU3_2 should 2)
+    const confirming = actions.some((a) => a.id === 'omakase_yes' || a.id === 'omakase_no');
+    if (this.freshNext && !confirming && !actions.some((a) => a.id === 'begin' || a.id === 'fresh')) {
+      actions = [...actions, { id: 'fresh', label: 'はじめから', aria: 'はじめから(いままで 決めたことを やめて、さいしょの しつもんから)' }];
+    }
     this.actions = actions;
     this.d.offer(actions);
   }
@@ -380,7 +402,7 @@ export class FirstRun {
       if (this.step < 2) this.skipped.add(2); // 1 歩目からのおまかせはチェックをしていない(歩みの丸は「とばした」に)
       this._go(3);
       await this._say({ who: 'note', text: `「${words}」で つくるよ。` });
-      made = await this._long(creator.make(this.input, { onProgress: (text) => this._say({ who: 'note', text }) }));
+      made = await this._long(creator.make(this.input, { onProgress: (text) => this._say({ who: 'note', text }) }), 'draw');
       // 近い見本が案内役そのものなら、別の子を出す(案内役のまま「できあがり!」と言わない。UIR 4)
       if (made?.sample && made.id === this.guide.id) made = creator.surprise?.() ?? made;
     }
@@ -396,7 +418,7 @@ export class FirstRun {
     else if (pick.id === this.guide.id) lines.push({ who: 'guide', text: `${pick.name}で はじめるよ!` });
     else lines.push({ who: 'guide', text: `おまかせで えらんだのは、${pick.name}!`, ...(pick.img ? { img: pick.img } : {}) });
     await this._say(...lines);
-    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(pick) ?? true));
+    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(pick) ?? true), 'stage');
     if (stay === false) {
       this.d.save?.(this.snapshot());
       return 'reload'; // 読み込み直しの後、resume がおまかせの続きをする
@@ -490,16 +512,24 @@ export class FirstRun {
       await this._say({ who: 'guide', text: role === 'shop' ? 'おみせの なまえは?' : 'えきや まちの なまえは?' });
       return this._offer([
         { id: 'place_name', label: 'なまえ', kind: 'text', placeholder: role === 'shop' ? '例: ひだまり パン' : '例: みどり駅', max: PLACE_MAX, submit: '送る', primary: true },
+        // この問いだけの「おまかせ」(かりの なまえを入れる)。全体のおまかせの確かめとは別(CU3_2 should 5)
+        { id: 'place_auto', label: OMAKASE_CHIP, aria: `おまかせ(かりの なまえ「${AUTO_PLACE[role]}」を いれる)` },
         { id: 'place_skip', label: 'なまえは とばす' },
       ]);
     }
     return this._askWhat();
   }
 
-  async _placeAnswer(id, p) {
+  async _placeAnswer(id, p, opt = {}) {
+    if (id === 'place_auto') {
+      // かりの なまえ: 本当の名前ではないので、あとで かえられると言う。役目と場所のことばは、ふつうの名前と同じ道へ
+      const name = AUTO_PLACE[this.role] ?? '';
+      await this._say({ who: 'user', text: OMAKASE_CHIP }, { who: 'note', text: `かりに「${name}」と するね。あとから かえられるよ。` });
+      return this._placeAnswer('place_name', { text: name }, { echoed: true });
+    }
     const text = clip(p?.text, PLACE_MAX);
     if (id === 'place_name') {
-      if (text) await this._say({ who: 'user', text });
+      if (text && !opt.echoed) await this._say({ who: 'user', text });
       this.place = { name: text, about: '' };
       await this._say({ who: 'guide', text: this.role === 'shop' ? 'なにを あんないする?' : 'どんな ことを あんないする?' });
       return this._offer([
@@ -619,6 +649,14 @@ export class FirstRun {
         this.character = null;
         this.skipped.clear();
         this.d.pin?.(null);
+        // 舞台も案内役へ戻す(続きで見本の子を出し直していた時、舞台がその子のまま、札では案内役が名乗り直すのを防ぐ。CU3_2 should 1)
+        {
+          const stay = await this._long(Promise.resolve(this.d.showCharacter?.({ id: this.guide.id, name: this.guide.name, sample: true }) ?? true), 'stage');
+          if (stay === false) {
+            this.d.save?.(this.snapshot());
+            return undefined;
+          }
+        }
         return this.start();
       case 'other':
       case 'again':
@@ -655,6 +693,7 @@ export class FirstRun {
         this.d.onBegin?.();
         return undefined;
       case 'place_name':
+      case 'place_auto':
       case 'place_about':
       case 'place_skip':
         return this._placeAnswer(id, p);
@@ -730,7 +769,7 @@ export class FirstRun {
       return this._offer(COLOR_CHIPS.map((c, i) => ({ id: `col_${c.id}`, label: c.label, primary: i === 0 })));
     }
     await this._say({ who: 'guide', text: `${noun}を 見てみるね。ちょっと まってて。` });
-    const result = await this._long(this.d.creator.check(this.input));
+    const result = await this._long(this.d.creator.check(this.input), 'check');
     return this._afterCheck(result);
   }
 
@@ -802,7 +841,7 @@ export class FirstRun {
   /* ---------- 3: できた子 ---------- */
   async _meet() {
     this._go(3);
-    const made = await this._long(this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) }));
+    const made = await this._long(this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) }), 'draw');
     if (!made) return this._noMatch(); // 見本の一覧が空の時だけ
     this.character = made;
     if (made.drawn) {
@@ -823,7 +862,7 @@ export class FirstRun {
 
   /** できた子・選んだ見本を舞台に出して、3 歩目の「この子はどうかな?」へ。舞台はその場で替える(読み込み直さない。D2) */
   async _show() {
-    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(this.character) ?? true));
+    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(this.character) ?? true), 'stage');
     if (stay === false) {
       this.d.save?.(this.snapshot());
       return undefined; // 読み込み直しの後、resume が続ける(前の作り。今の入口は読み込み直さない)
@@ -883,7 +922,7 @@ export class FirstRun {
       { who: 'note', text: `見本: ${main.name}(${main.note})` },
       { who: 'guide', text: main.id === MAIN_CHARACTER.id ? 'じゃあ、ノリーで つづけマス! 性格や あいさつを ためしてくだサイ。' : `じゃあ、${main.name}で つづけるね。` },
     );
-    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(main) ?? true));
+    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(main) ?? true), 'stage');
     if (stay === false) {
       this.d.save?.(this.snapshot());
       return undefined;
@@ -904,10 +943,15 @@ export class FirstRun {
 
   async _fix(p) {
     const c = this.character;
-    if (c?.sample || typeof this.d.creator.review !== 'function') {
+    const creator = this.d.creator;
+    // サーバーが Claude に描いてもらった子: 一言を足して、もう 1 回描く(見本の子の文で、一言を捨てない。QA8 #4)
+    if (c?.drawn && !c.local && typeof creator.redraw === 'function') return this._fixDrawn(c, clip(p?.text, NOTE_MAX));
+    if (c?.sample || typeof creator.review !== 'function') {
       // 行き止まりにしない: ここで変えられる物(性格と話し方)と、形や色を直せる道(PC の Claude Code)を言う(D2)
+      const note = clip(p?.text, NOTE_MAX);
+      if (note) await this._say({ who: 'user', text: note }); // 書いた一言は、吹き出しに残す(捨てない)
       await this._say(
-        { who: 'guide', text: '見本の子の 形や色は、ここでは なおせないんだ。' },
+        { who: 'guide', text: c?.sample ? '見本の子の 形や色は、ここでは なおせないんだ。' : 'この子の 形や色は、ここでは もう なおせないんだ。' },
         { who: 'guide', text: 'でも、性格と話し方は、次のステップで変えられるよ!' },
       );
       return this._offer([
@@ -921,6 +965,32 @@ export class FirstRun {
     await this._say({ who: 'user', text: note });
     const r = await this._long(this.d.creator.review(c.id, 'redo', note));
     await this._say({ who: 'guide', text: r?.ok ? 'パソコンの Claude Code に つたえたよ。なおったら 見せるね。' : `うまく つたえられなかったみたい(${r?.message ?? 'りゆうは わからない'})。` });
+    return this._offer([
+      { id: 'keep', label: 'この子にする', primary: true },
+      { id: 'again', label: 'やりなおす' },
+    ]);
+  }
+
+  /**
+   * 描いた子の「なおしたい ところ」: 一言を吹き出しに出して、一言を足したことばでもう 1 回描く(サーバーに枠が無い時は、できないと正直に言う)。
+   * 描けなかった・枠が無い時も、いまの子のまま「この子にする」へ戻れる(行き止まりにしない)
+   */
+  async _fixDrawn(c, note) {
+    if (!note) return this._meetAsk();
+    await this._say({ who: 'user', text: note }, { who: 'guide', text: 'わかったよ。もう 1 回、描いてみるね。' }, { who: 'note', text: '一言も、この サーバーから Claude(Anthropic)に 送って、描きなおすよ。' });
+    const r = await this._long(this.d.creator.redraw(this.input, note, { onProgress: (text) => this._say({ who: 'note', text }) }), 'draw');
+    if (r?.ok && r.character) {
+      this.character = r.character;
+      await this._say({ who: 'guide', text: 'なおしてみたよ。どうかな?' });
+      const stay = await this._long(Promise.resolve(this.d.showCharacter?.(this.character) ?? true), 'stage');
+      if (stay === false) {
+        this.d.save?.(this.snapshot());
+        return undefined;
+      }
+      return this._meetAsk();
+    }
+    const noRoom = r?.reason === 'daily' || r?.reason === 'visitor' || r?.reason === 'fails';
+    await this._say({ who: 'guide', text: noRoom ? 'きょうは もう かけないよ。せいかくと はなしかたは かえられるよ。' : 'うまく 描けなかったよ。いまの子で つづけても いいよ。' });
     return this._offer([
       { id: 'keep', label: 'この子にする', primary: true },
       { id: 'again', label: 'やりなおす' },
@@ -989,7 +1059,7 @@ export class FirstRun {
     this.d.thinking?.(true, { who: 'char', name: this.character?.name ?? 'この子' });
     let r;
     try {
-      r = await this._long(this.d.talk(text, { character: this.character, settings: this.settings, history: this.history }));
+      r = await this._long(this.d.talk(text, { character: this.character, settings: this.settings, history: this.history }), 'think', { pill: false });
     } finally {
       this.d.thinking?.(false);
     }
@@ -1105,6 +1175,7 @@ export class FirstRun {
 
   async _finish() {
     this.done = true;
+    this._makeWait(null);
     clearTimeout(this.frameTimer);
     this._go(8);
     const c = this.character;
@@ -1136,8 +1207,14 @@ export class FirstRun {
   async _onMake(ev) {
     if (!this.local || this.done || !ev) return;
     // 2D ができた・変換の絵の知らせは、性格のステップに進んだ後でも受ける(3D の選びは、どのステップの後でもよい)
-    if (ev.ev === 'twod') return this._twodReady(ev);
-    if (ev.ev === 'converted') return this._converted(ev);
+    if (ev.ev === 'twod') {
+      this._makeWait(null);
+      return this._twodReady(ev);
+    }
+    if (ev.ev === 'converted') {
+      this._makeWait(null);
+      return this._converted(ev);
+    }
     if (this.step > 3) return;
     switch (ev.ev) {
       case 'ready':
@@ -1156,19 +1233,24 @@ export class FirstRun {
           await this._say({ who: 'user', text: '(絵を わたした)' });
           this._go(2);
         }
+        this._makeWait('draw'); // 描き終わるまで、動きを出す(1 分ほど)
         // 動かし方(パソコンで打つこと)は、作る画面の中に書いてある。ここでは子どもの言葉だけ
         return this._say({ who: 'guide', text: 'パソコンの Claude Code に わたしたよ。描きはじめるまで、少し まってね。' });
       case 'progress':
       case 'error':
+        if (ev.ev === 'error') this._makeWait(null);
+        else if (ev.text) this._makeWait('build')?.update?.(ev.text); // 歩みの文(形・色・骨など)を、動きの文にする
         if (!ev.text || this.progressSeen.has(ev.text)) return undefined;
         this.progressSeen.add(ev.text);
         return this._say({ who: 'note', text: ev.text });
       case 'checked':
         return this._checkedLocal(ev);
       case 'chose':
+        this._makeWait('draw');
         await this._say({ who: 'user', text: ev.choice === 'redraw' ? '主役を 描きなおす' : 'ゆるキャラに してみる' });
         return this._say({ who: 'guide', text: 'パソコンの Claude Code に つたえたよ。描けたら 見せるね。' });
       case 'drawn':
+        this._makeWait(null);
         this._go(3);
         this.character = { id: ev.id, name: ev.name, sample: false, local: true, round: ev.round, note: this.d.creator.note ?? '' };
         return this._say(
@@ -1181,6 +1263,7 @@ export class FirstRun {
         );
       case 'decided':
         if (ev.decision === 'redo') {
+          this._makeWait('draw');
           await this._say({ who: 'user', text: ev.note || '(なおしたい)' });
           return this._say({ who: 'guide', text: 'パソコンの Claude Code に つたえたよ。なおったら 見せるね。' });
         }
@@ -1191,12 +1274,14 @@ export class FirstRun {
           this.d.pin?.({ frame: this.d.creator.picUrl ?? null, caption: `${name}(パソコンの Claude Code が描いた絵)` });
           if (ev.auto) this.auto = true;
           this.waiting2d = true;
+          if (!this.twodEarly) this._makeWait('stage'); // 2D が組み上がるまで(数秒〜)
           await this._say({ who: 'guide', text: `${name}に けってい! いま、うごく 2D に して 舞台に 出すよ。` });
           if (this.twodEarly) return this._twodReady(this.twodEarly);
           // 2D が来ない時(パソコンの作る道が止まっている)でも行き止まりにしない: 先に性格へ進める
           return this._offer([{ id: 'keep', label: 'さきに 性格を きめる' }]);
         }
       case 'restart':
+        this._makeWait(null);
         this.input = null;
         this.check = null;
         this.character = null;
@@ -1217,7 +1302,7 @@ export class FirstRun {
     }
     if (this.character.twod) return undefined;
     this.character = { ...this.character, twod: true };
-    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(this.character) ?? true));
+    const stay = await this._long(Promise.resolve(this.d.showCharacter?.(this.character) ?? true), 'stage');
     if (stay === false) {
       this.d.save?.(this.snapshot());
       return undefined;
