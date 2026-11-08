@@ -438,3 +438,30 @@ test('LF4: 読み直しを待つ間に新しい言葉を言ったら、止まっ
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(backs.length, 1);
 });
+test('LF5: 読み直し(prepare)が返ってこなくても、4 秒たてばつながり直しは進み、止まった言葉は 1 回送り直される', async () => {
+  const rig = wiredRig(() => new Promise(() => {})); // 永遠に終わらない読み直し
+  await withFetch(() => new Response('', { status: 502 }), async () => {
+    await rig.dialogue.send({ text: 'ステージ', mode: 'text' });
+  });
+  await withFetch(() => okChat(), async () => {
+    await rig.c.advance(2000); // 調べが届き、読み直しが始まる
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(rig.resent.length, 0, '4 秒たつ前は待っている');
+    assert.equal(rig.reconnector.probing, true);
+    await rig.c.advance(4000); // 上限
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(rig.resent, ['ステージ']);
+    assert.equal(rig.reconnector.probing, false);
+    assert.equal(rig.reconnector.waiting, false);
+  });
+});
+
+test('LF5: 読み直しが 4 秒より早く終われば、その場で進む(上限の時計は止まる)', async () => {
+  const c = clockRig();
+  const backs = [];
+  const r = new Reconnector({ probe: async () => true, prepare: async () => {}, onBack: (i) => backs.push(i), now: c.now, setTimer: c.setTimer, clearTimer: c.clearTimer });
+  r.begin({ text: 'a', at: c.now() });
+  await c.advance(1500);
+  await new Promise((x) => setTimeout(x, 10));
+  assert.equal(backs.length, 1);
+});

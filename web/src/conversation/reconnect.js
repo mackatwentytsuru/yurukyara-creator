@@ -4,6 +4,7 @@
 
 export const RETRY_FRESH_MS = 90_000; // 止まった言葉を、この間なら自動で送り直す(それより古い言葉は、いま言ったことではないので送らない)
 export const GIVE_UP_MS = 30 * 60_000; // つながり直しを待つのは、この長さまで
+export const PREPARE_TIMEOUT_MS = 4000; // 読み直し(prepare)を待つのは、この長さまで。返ってこなくても、つながり直しの部品は止まらない
 export const PROBE_DELAYS_MS = Object.freeze([1500, 3000, 5000, 8000, 10_000]); // 調べる間隔(最後の長さを繰り返す)
 
 export class Reconnector {
@@ -14,8 +15,8 @@ export class Reconnector {
    * @param {() => Promise<void>} [o.prepare] つながったと分かってから、onBack の前に待つ仕事(声・聞き取りの有無の読み直し)。投げても進む
    * @param {() => number} [o.now]
    */
-  constructor({ probe, onBack, prepare = null, now = () => Date.now(), setTimer = (fn, ms) => setTimeout(fn, ms), clearTimer = (h) => clearTimeout(h), delays = PROBE_DELAYS_MS, freshMs = RETRY_FRESH_MS, giveUpMs = GIVE_UP_MS }) {
-    Object.assign(this, { probe, onBack, prepare, now, setTimer, clearTimer, delays, freshMs, giveUpMs });
+  constructor({ probe, onBack, prepare = null, now = () => Date.now(), setTimer = (fn, ms) => setTimeout(fn, ms), clearTimer = (h) => clearTimeout(h), delays = PROBE_DELAYS_MS, freshMs = RETRY_FRESH_MS, giveUpMs = GIVE_UP_MS, prepareTimeoutMs = PREPARE_TIMEOUT_MS }) {
+    Object.assign(this, { probe, onBack, prepare, now, setTimer, clearTimer, delays, freshMs, giveUpMs, prepareTimeoutMs });
     this.pending = null;
     this.waiting = false;
     this.startedAt = 0;
@@ -85,7 +86,7 @@ export class Reconnector {
       // 読み直しが終わるまで、送り直さない(終わる前に送ると、声のサーバーが「無い」のままで字幕だけになりうる)。待つ間も、新しい言葉(supersede)・やめる(cancel)は効く
       this.probing = true;
       try {
-        await this.prepare();
+        await this._prepareWithLimit();
       } catch {
         // 読み直しの失敗は、送り直しを止めない
       }
@@ -98,6 +99,19 @@ export class Reconnector {
     this.pending = null;
     this.count += 1;
     this.onBack({ pending, fresh });
+  }
+
+  /** prepare を、prepareTimeoutMs までだけ待つ(終わらない読み直しで、つながり直しが止まらないように) */
+  async _prepareWithLimit() {
+    let handle = null;
+    const limit = new Promise((resolve) => {
+      handle = this.setTimer(resolve, this.prepareTimeoutMs);
+    });
+    try {
+      await Promise.race([Promise.resolve().then(() => this.prepare()), limit]);
+    } finally {
+      this.clearTimer(handle);
+    }
   }
 
   _clear() {
