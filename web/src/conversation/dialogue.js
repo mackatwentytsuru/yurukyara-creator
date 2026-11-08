@@ -28,6 +28,12 @@ export function friendlyChatError(err) {
   return Number(err?.status) === 413 ? TOO_LONG_NOTICE : OFFLINE_NOTICE;
 }
 
+/** 送り直せば通る失敗か: 通信が切れた(status なし)か、サーバーが落ちている・再起動中(5xx・429 以外の 4xx は、送り直しても同じなので除く) */
+export function isOutage(err) {
+  const s = Number(err?.status);
+  return !Number.isFinite(s) || s >= 500;
+}
+
 export const NOD_AT_MS = [350, 1700]; // 返事が始まるまで、この時刻にうなずく(話し終わりから)
 const FILLER_FRESH_MS = 4000; // 話し終わりの合図で先に出したあいづちは、この間なら、送るときに出し直さない
 
@@ -78,9 +84,10 @@ export class Dialogue {
    * @param {(ev:object) => void} [deps.onEvent] サーバーから届いたイベントを全部渡す(記憶の札の onChatEvent など)
    *   ui.notice(文) があれば、「仮の頭脳です」などの一言をそこへ出す
    */
-  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false, onEvent = null }) {
+  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false, onEvent = null, onOffline = null }) {
     // interview: インタビューの型(返事 2 文まで・台本にしない)で答えさせる(入口の LED の ?interview=1)
-    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview, onEvent });
+    // onOffline: 通信が切れて返事が 1 つも来なかった回の言葉を渡す(main.js が、つながり直したら送り直す)
+    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview, onEvent, onOffline });
     this.history = [];
     this.abort = null;
     this.timers = [];
@@ -144,8 +151,9 @@ export class Dialogue {
   /**
    * @param {{text?:string, trigger?:string|null, t0?:number, mode?:'voice'|'text'}} turn
    *   t0: ユーザーが話し終えた時刻(performance.now())。声でないときは送信した時刻
+   *   via: 'interim'(確定を待たずに途中の文字を先に送った回)・'replace'(先に送ったあと、違う字の確定で送り直した回)。記録の 1 項目になる(11-08 LF3)
    */
-  async send({ text: raw = '', trigger = null, t0 = performance.now(), mode = 'text' } = {}) {
+  async send({ text: raw = '', trigger = null, t0 = performance.now(), mode = 'text', via = null } = {}) {
     // 鍵らしい文字は、画面にもサーバーにも出さない(声の鍵を会話の欄に貼ってしまったとき)
     let { text, count: secrets } = redactSecrets(raw);
     if (secrets) this.ui.notice?.(SECRET_NOTICE);
@@ -181,7 +189,7 @@ export class Dialogue {
     // ML1: ことば(声は文ごとの言葉で話す)と、聞く言葉(日本語以外の時は、日本語のあいづちを出さない)。日本語だけの時は、どちらも ja
     this.speaker.setLangMode?.(ctx.lang);
     this.speaker.setHearLang?.(ctx.hearLang);
-    const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null };
+    const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null, via };
     // あいづち: 先に出していればそれを、まだなら今出す(声で話しかけられた回だけ)。数字は本当の返事とは別に残す
     let fillerWanted = mode === 'voice' && trigger !== 'approach';
     if (fillerWanted && pre && performance.now() - pre.at < FILLER_FRESH_MS) {
@@ -240,6 +248,7 @@ export class Dialogue {
       ...(cameraImage ? { image: cameraImage } : {}),
     };
 
+    let offline = null; // 通信が切れて、返事が 1 つも無かった回の言葉(送り直しの元)
     let failed = false; // つながらない・断られた回(返事が 1 つも無い)は、履歴に残さない(長すぎる言葉の 413 が、以後ずっと続かないように)
     try {
       await streamChat(
@@ -305,12 +314,15 @@ export class Dialogue {
         const msg = friendlyChatError(err);
         this.ui.error(msg);
         this.ui.caption(msg, 6000);
+        // 通信が切れていた(サーバーが短く止まった等)なら、画面が自分でつながり直して送り直す(reconnect.js)。言葉が長すぎた(413)などは送り直さない
+        if (isOutage(err) && trigger !== 'approach') offline = { text: askText, mode, turnId: id, at: Date.now() };
       }
     }
     if (id !== this.turnId) return;
     this.cur = null;
     if (failed && !sayEvents.length) {
       this.busy = false;
+      if (offline) this.onOffline?.(offline);
       return;
     }
     this.history.push({ role: 'user', content: trigger === 'approach' ? '(使う人が近づいてきた)' : askText });
@@ -351,6 +363,7 @@ export class Dialogue {
       // あいづちの声(話し終わりから、その声が出るまで / 終わるまで)。本当の返事の最初の音(totalMs)とは別の数字
       fillerMs: m.fillerMs,
       fillerEndMs: m.fillerEndMs,
+      ...(m.via ? { via: m.via } : {}),
     };
     entry.valid = entry.brain === 'haiku' && entry.tts === 'eleven';
     this.onMetric(entry);

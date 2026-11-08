@@ -377,6 +377,12 @@ export function createUi() {
       mirror?.({ error: `エラー: ${message}` });
       setCaption(null);
     },
+    /** 「エラー: …」の表示だけを消す(つながり直した時。ふつうの返事の文字は消さない) */
+    clearError() {
+      if (!els.reply.textContent.startsWith('エラー:')) return;
+      els.reply.textContent = '—';
+      mirror?.({ error: '' });
+    },
     foot(text) {
       els.foot.textContent = text;
     },

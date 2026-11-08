@@ -19,6 +19,7 @@ import { Speaker } from './conversation/speaker.js';
 import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
 import { InterimSender } from './conversation/interimSend.js'; // 11-08 LF2: ブラウザの聞き取りの確定が遅い時は、途中の文字を先に送る
+import { Reconnector, probeServer } from './conversation/reconnect.js'; // 11-08 LF3: サーバーが短く止まったあと、リロードなしでつながり直して送り直す
 import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
 import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink, latencyNote } from './ui/panel.js';
@@ -221,6 +222,7 @@ const resyncMemory = () => memory?.onChatEvent({ type: 'memory', forgotten: true
 /** 会話を 1 回送る。どの入口(文字・声・ボタン・近づいた人・VR)も、ここを通す。記憶の一覧は会話のイベントで読み直される */
 function talk(turn) {
   idleClear.touch(); // ML1: お店の端末の、だれも操作しない時間の数え直し
+  if (!turn?.retry) reconnector.supersede(); // 新しい言葉が先。止まっていた前の言葉は、つながり直しても送り直さない
   // どの入口の会話でも「声かけ済み」にする(本人が話した後に、すぐ名乗り直さない。V1-3)
   const t = performance.now() / 1000;
   presence.greetedAt = t;
@@ -251,6 +253,7 @@ const dialogue = new Dialogue({
   setGaze,
   motionChoices,
   onEvent: onChatEvent, // サーバーのイベントが全部届く(記憶の札・仮の頭脳の知らせ)
+  onOffline: (info) => reconnector.begin(info), // 通信が切れて返事が 1 つも来なかった回: つながり直したら送り直す(LF3)
   interview: params.get('interview') === '1', // 入口のインタビューの型(返事 2 文まで)
   getContext: () => ({
     scene: sceneText(),
@@ -285,6 +288,27 @@ const dialogue = new Dialogue({
 
 app.dialogue = dialogue;
 
+// 11-08 LF3: サーバーが短く止まって「いま つながらないよ」が出たら、画面が自分で調べ続け、つながったら止まった言葉を 1 回だけ送り直す。
+// 聞き取り(listener)には触らない = 聞き続ける。聞き取りが通信の切れで止まっていて、使う人が聞かせたい状態のままなら、つながった時に入れ直す
+const reconnector = new Reconnector({
+  probe: () => probeServer(),
+  onBack: ({ pending, fresh }) => {
+    void refreshStatus(); // 声・聞き取りの有無の記録を読み直す(切れている間に null になっている)
+    if (micWanted && !listener) void toggleMic();
+    if (pending && fresh && !dialogue.busy) {
+      ui.notice('つながったよ。さっきの言葉を もう一度 送るね');
+      void talk({ text: pending.text, mode: 'text', retry: true });
+      return;
+    }
+    ui.clearError?.();
+    ui.notice('つながったよ');
+  },
+});
+window.addEventListener('online', () => reconnector.nudge());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') reconnector.nudge();
+});
+
 // ML1: お店の端末で 3 分だれも操作しないと、会話の履歴・字幕・「覚えていること」の窓を空にする(次の人に、前の話を見せない)。ふつうの端末では動かない
 const idleClear = createIdleClear({
   isOn: () => app.shopDevice.isOn(),
@@ -315,6 +339,7 @@ let composerInput = null; // 文字の入力窓(ui/composerInput.js)。送った
 
 /* ---------- 声 ---------- */
 let listener = null;
+let micWanted = false; // 使う人がマイクを入れたままにしたい状態(自分で止めたら false。通信の切れで勝手に止まった時は true のまま)
 // ML1: マイクの横の「聞く言葉」の選び(多言語の時だけ出す)。選びを替えたら、聞き取りを始め直し、日本語以外の間は日本語のあいづちを出さない
 const hearUi = mountHearLangSelect({
   box: $('hearLangBox'),
@@ -361,10 +386,11 @@ const misheard = new MisheardTracker();
 const interimSender = new InterimSender({
   enabled: params.get('interimsend') !== 'off', // ?interimsend=off: 先送りを切る(前後の速さを比べる時だけ)
   send: (text, info) => {
-    if (!listener?.listening) return;
+    if (!listener?.listening) return false; // 送らなかった(マイクが止まっている): 部品に「送った」と覚えさせない
     lastTextAt = performance.now();
     misheard.heard();
-    void talk({ text, t0: info.lastVoicedAt || performance.now(), mode: 'voice' });
+    void talk({ text, t0: info.lastVoicedAt || performance.now(), mode: 'voice', via: 'interim' });
+    return true;
   },
 });
 
@@ -404,8 +430,10 @@ function listenProvider() {
 async function toggleMic() {
   const btn = $('micBtn');
   if (listener?.listening) {
+    micWanted = false;
     listener.stop();
     listener = null;
+    interimSender.reset(); // 止めた時に、待ちと「送った」の覚えを捨てる(止めた後の同じ言葉の確定が、捨てられないように)
     stereoMic?.stop();
     btn.setAttribute('aria-pressed', 'false');
     btn.classList.remove('hearing');
@@ -431,9 +459,10 @@ async function toggleMic() {
       onFinal: (text, info) => {
         lastTextAt = performance.now();
         misheard.heard();
-        if (interimSender.final(text) === 'drop') return; // 途中の文字で、もう送った言葉(2 回送らない)
+        const verdict = interimSender.final(text);
+        if (verdict === 'drop') return; // 途中の文字で、もう送った言葉(2 回送らない)
         const t0 = info.lastVoicedAt || performance.now();
-        void talk({ text, t0, mode: 'voice' });
+        void talk({ text, t0, mode: 'voice', ...(verdict === 'replace' ? { via: 'replace' } : {}) });
       },
       onVoice: (active) => {
         $('micBtn').classList.toggle('hearing', active);
@@ -455,6 +484,7 @@ async function toggleMic() {
       onProvider: () => updatePrivacy(),
       onStopped: () => {
         listener = null;
+        interimSender.reset(); // 聞き取りが自分で止まった時も、待ちと覚えを捨てる
         stereoMic?.stop();
         btn.setAttribute('aria-pressed', 'false');
         btn.classList.remove('hearing');
@@ -469,6 +499,7 @@ async function toggleMic() {
       },
     }, { provider, isBusy: () => speaker.speaking && params.get('bargein') !== '1', lang: () => effectiveHearLang(currentLangMode()) });
     await listener.start();
+    micWanted = true;
     // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く(ヘッドセットの中では、頭の位置が分かるので使わない)
     // 触る端末(スマホ)では始めない: iPhone は 2 本目のマイクの取得で 1 本目が止まることがあり、内蔵マイクは向きも出せない(11-08 見直し)
     if (!IS_HEADSET && !TOUCH) void startStereoMic();

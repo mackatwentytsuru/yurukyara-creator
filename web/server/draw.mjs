@@ -72,6 +72,13 @@ export function pickProfile(text) {
   return { name: name || DEFAULT_NAME, trait: TRAIT_BAD.test(trait) ? '' : trait };
 }
 
+export const TO_2D_TIMEOUT_MS = 300_000; // 2D にする時間の上限。重い機械では 90 秒を超えた(11-08)ので 300 秒まで待つ
+
+/** to_2d.py に渡す引数。値が「-」で始まっても引数の読み取りが失敗しないよう、--名前=値 の 1 つの形で渡す(殻は通さない) */
+export function build2dArgs({ script, svgPath, id, name, out, trait = '' }) {
+  return [script, svgPath, id, `--name=${name}`, `--out=${out}`, ...(trait ? [`--trait=${trait}`] : [])];
+}
+
 const today = (t) => new Date(t).toLocaleDateString('sv-SE');
 
 /**
@@ -103,10 +110,10 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
   let busy = false;
 
   const run2d = to2d ?? ((svgPath, id, name, trait = '') => new Promise((resolve, reject) => {
-    const p = spawn('python', [join(root, 'creator', 'review', 'to_2d.py'), svgPath, id, '--name', name, '--out', join(root, 'characters'), ...(trait ? ['--trait', trait] : [])], { cwd: root });
+    const p = spawn('python', build2dArgs({ script: join(root, 'creator', 'review', 'to_2d.py'), svgPath, id, name, out: join(root, 'characters'), trait }), { cwd: root });
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
-    const timer = setTimeout(() => p.kill(), 90_000);
+    const timer = setTimeout(() => p.kill(), TO_2D_TIMEOUT_MS);
     p.on('close', (code) => {
       clearTimeout(timer);
       try {

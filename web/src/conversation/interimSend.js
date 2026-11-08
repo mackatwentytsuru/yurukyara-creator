@@ -4,7 +4,7 @@
 // 時計と送る関数は外から渡せる(試験で時間を進めるため)。この部品は画面も通信も知らない。
 
 export const FLUSH_MS = 700; // 声が止まってから、確定を待つ長さ
-export const KEEP_MS = 10_000; // 先に送った言葉を「あとの確定と照らす」ために覚えておく長さ
+export const KEEP_MS = 5_000; // 先に送った言葉を「あとの確定と照らす」ために覚えておく長さ(iPhone の確定の遅さは最大 4.3 秒。長く覚えるほど、前の言葉の確定が来なかった時に、次の同じ頭の言葉を捨てる道が広がる)
 const PLACEHOLDER = '…'; // サーバーの聞き取りが、声の出始めと終わりに出す印(中身の文字ではない)
 
 /** 句読点・記号・空白を除き、全角半角をそろえた形(確定と途中の文字が「同じ言葉か」を見る時に使う) */
@@ -18,7 +18,7 @@ export function normalizeSpoken(text) {
 export class InterimSender {
   /**
    * @param {object} o
-   * @param {(text:string, info:{via:'interim'}) => void} o.send 途中の文字を、その言葉として送る
+   * @param {(text:string, info:{via:'interim'}) => (boolean|void)} o.send 途中の文字を、その言葉として送る。送らなかった(マイクが止まっていた等)時は false を返す。その時は「送った」と覚えない
    * @param {() => number} [o.now]
    * @param {number} [o.flushMs]
    */
@@ -62,9 +62,10 @@ export class InterimSender {
     this.interimText = '';
     const norm = normalizeSpoken(text);
     if (!norm) return;
+    // 送れなかった(send が false)時は「送った」と覚えない。覚えると、次の同じ言葉の確定が「もう送った」として捨てられ、何も起きなくなる
+    if (this.send(text, { via: 'interim', lastVoicedAt }) === false) return;
     this.sent = { rest: norm, at: this.now() };
     this.count += 1;
-    this.send(text, { via: 'interim', lastVoicedAt });
   }
 
   /**

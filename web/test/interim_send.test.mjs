@@ -1,16 +1,20 @@
 // 途中の文字を先に送る部品(src/conversation/interimSend.js)の試験。時計と待ちは作り物で進める(実時間は待たない)。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FLUSH_MS, InterimSender, normalizeSpoken } from '../src/conversation/interimSend.js';
+import { FLUSH_MS, KEEP_MS, InterimSender, normalizeSpoken } from '../src/conversation/interimSend.js';
 import { joinWords } from '../src/conversation/dialogue.js';
 
 /** 作り物の時計と待ち */
-function rig() {
+function rig({ sendResult = true } = {}) {
   let t = 1000;
   const timers = [];
   const sent = [];
   const sender = new InterimSender({
-    send: (text, info) => sent.push({ text, at: t, info }),
+    send: (text, info) => {
+      if (sendResult === false) return false; // マイクが止まっていて、送らなかった
+      sent.push({ text, at: t, info });
+      return true;
+    },
     now: () => t,
     setTimer: (fn, ms) => {
       const h = { fn, at: t + ms, live: true };
@@ -139,14 +143,25 @@ test('送ったあとの途中の文字は、次の言葉の物(同じ言葉を 
   assert.equal(r.sent.length, 1, '同じ途中の文字を 2 度送らない');
 });
 
-test('先に送った言葉は 10 秒で忘れる(前の発話の確定を、いつまでも捨てない)', () => {
+test('先に送った言葉は 5 秒で忘れる(前の発話の確定を、いつまでも捨てない)', () => {
   const r = rig();
   r.sender.voice(true);
   r.sender.interim('ひとこと');
   r.sender.voice(false, 1000);
   r.advance(FLUSH_MS);
-  r.advance(11_000);
+  r.advance(KEEP_MS - 1000);
+  assert.equal(r.sender.final('ひとこと'), 'drop', '覚えている間は、同じ言葉の確定を捨てる');
+});
+
+test('KEEP_MS(5 秒)をすぎたら、同じ言葉の確定は新しい発話として送る', () => {
+  const r = rig();
+  r.sender.voice(true);
+  r.sender.interim('ひとこと');
+  r.sender.voice(false, 1000);
+  r.advance(FLUSH_MS);
+  r.advance(KEEP_MS + 100);
   assert.equal(r.sender.final('ひとこと'), 'send');
+  assert.ok(KEEP_MS <= 5000, 'iPhone の確定の遅さは最大 4.3 秒。それより少し長いだけにする');
 });
 
 test('reset で、待っている送りも覚えも消える', () => {
@@ -170,4 +185,29 @@ test('joinWords: 前の言葉を頭に含んだ言葉は重ねない(途中の�
   assert.equal(joinWords('今日の天気、', '今日の 天気を教えて'), '今日の 天気を教えて');
   assert.equal(joinWords('こんにちは', 'ステージはどこ'), 'こんにちは、ステージはどこ', '含まない時は今までどおりつなぐ');
   assert.equal(joinWords('', 'あ'), 'あ');
+});
+
+// ---- 11-08 LF3 の must: 送っていない言葉を「送った」と覚えない ----
+
+test('送れなかった(send が false)時は、「送った」と覚えない。止めた後に同じ言葉を言って確定が早く来ても、捨てない', () => {
+  const r = rig({ sendResult: false });
+  r.sender.voice(true);
+  r.sender.interim('うん');
+  r.sender.voice(false, 1000);
+  r.advance(FLUSH_MS); // 待ちの間にマイクが止まっていて、送られなかった
+  assert.equal(r.sent.length, 0);
+  assert.equal(r.sender.count, 0, '送っていないので、回数にも数えない');
+  assert.equal(r.sender.sent, null, '覚えが残らない');
+  assert.equal(r.sender.final('うん'), 'send', 'マイクを入れ直して同じ言葉を言った時の確定は、そのまま送る');
+});
+
+test('reset のあと(マイクを止めた・聞き取りが止まった)は、先に送った覚えがない', () => {
+  const r = rig();
+  r.sender.voice(true);
+  r.sender.interim('うん');
+  r.sender.voice(false, 1000);
+  r.advance(FLUSH_MS);
+  assert.equal(r.sent.length, 1);
+  r.sender.reset();
+  assert.equal(r.sender.final('うん'), 'send');
 });

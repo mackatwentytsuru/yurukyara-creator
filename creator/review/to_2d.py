@@ -31,6 +31,7 @@ from d01_svg_to_png import find_chrome  # noqa: E402
 SVGNS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVGNS)
 JST = timezone(timedelta(hours=9))
+MEASURE_TIMEOUT_S = 240  # 箱を測る Chrome を待つ長さ。混んだ機械では 90 秒を超えた(11-08)。画面の側の待ち(web/server/draw.mjs の 300 秒)より短くする
 
 # 2D の部品 ← 絵の部品(描く順 = 後ろ → 前)
 BODY_PARTS = [
@@ -123,7 +124,7 @@ def measure(svg_text, ids):
         page = Path(tmp) / "m.html"
         page.write_text(html, encoding="utf-8")
         out = subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-first-run", f"--user-data-dir={tmp}/u",
-                              "--dump-dom", page.as_uri()], capture_output=True, text=True, encoding="utf-8", timeout=90)
+                              "--dump-dom", page.as_uri()], capture_output=True, text=True, encoding="utf-8", timeout=MEASURE_TIMEOUT_S)
     m = re.search(r"BOX(\{.*?\})XOB", out.stdout or "")
     if not m:
         raise RuntimeError("箱を測れませんでした")

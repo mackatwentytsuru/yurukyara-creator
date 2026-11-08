@@ -194,5 +194,7 @@ export function sanitizeMetric(raw) {
     const v = raw[k];
     entry[k] = Number.isFinite(v) && v >= 0 && v < 600_000 ? Math.round(v) : null;
   }
+  // 声の回が、途中の文字を先に送った回('interim')か、先に送ったあと違う字の確定で送り直した回('replace')か(11-08 LF3)。ほかの値は書かない
+  if (raw.via === 'interim' || raw.via === 'replace') entry.via = raw.via;
   return entry;
 }
