@@ -1375,6 +1375,9 @@ export class FirstRun {
   async _meetAsk() {
     this._go(3);
     const c = this.character;
+    // 描けた子を途中経過に残す(「この子で いい?」で読み込み直しても、もう 1 体 描かずに、ここから続ける。
+    // 3 歩目に入った時の途中経過には、まだ子がいない)
+    if (c?.id) this.d.progress?.(this.snapshot());
     await this._say({ who: 'guide', text: c?.sample ? `${c.name}だよ。この子は どうかな?` : c?.drawn ? 'この子で いい?' : 'こんな子が できたよ。どうかな?' });
     this._offer([
       { id: 'keep', label: 'この子にする', primary: true },
@@ -1859,7 +1862,7 @@ export class FirstRun {
       from: this.input?.from ?? null,
       words: this.input?.from === 'words' ? this.input.words : null,
       check: this.check,
-      character: this.character ? { id: this.character.id, name: this.character.name, sample: Boolean(this.character.sample), ...(this.character.local ? { local: true } : {}), ...(this.character.twod ? { twod: true } : {}), note: this.character.note ?? '' } : null,
+      character: this.character ? { id: this.character.id, name: this.character.name, sample: Boolean(this.character.sample), ...(this.character.local ? { local: true } : {}), ...(this.character.twod ? { twod: true } : {}), ...(this.character.drawn ? { drawn: true } : {}), note: this.character.note ?? '' } : null,
       skipped: [...this.skipped],
       ...(this.settings ? { settings: this.settings } : {}),
       ...(this.auto ? { auto: true } : {}),
@@ -1881,6 +1884,13 @@ export class FirstRun {
     for (const n of snap.skipped ?? []) this.skipped.add(n);
     if (!snap.character?.id) {
       // 子を選ぶ前でも、言葉を入れた後(3 歩目)なら、言葉は残っているので、同じ言葉で見本を出し直す。絵は残していないので 1 歩目から
+      if (snap.reload && snap.step >= 3 && snap.from === 'words' && snap.words && this.d.creator?.canDraw) {
+        // 描く道(Claude に描いてもらう・お金がかかる): 読み込み直した時に、同じ言葉で描き直さない。サーバーは描き続けていて、
+        // できた子は「かえる」の「つくった子」に並ぶ(描き直すと、フォルダが増えて、お金も使う)
+        this._go(1);
+        await this._say({ who: 'guide', text: this.nori ? 'おかえりなサイ! さっきの子は、サーバーが 描いているかもしれないよ。' : 'おかえり! さっきの子は、サーバーが 描いているかもしれないよ。' }, { who: 'note', text: '描き終わった子は、「かえる」の「つくった子」に ならぶよ。もういちど 描く時は、下から えらんでね。' });
+        return this._offerStart();
+      }
       if (snap.reload && snap.step >= 3 && snap.from === 'words' && snap.words) {
         this._go(3);
         await this._say({ who: 'guide', text: this.nori ? 'おかえりなサイ! さっきの つづきからだよ。' : 'おかえり! さっきの つづきからだよ。' });

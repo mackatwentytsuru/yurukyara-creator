@@ -119,6 +119,11 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     const timer = setTimeout(() => p.kill(), TO_2D_TIMEOUT_MS);
+    // 始められない時(python が見つからない など)は error の知らせだけが来る。受けないとサーバーごと落ちるので、描けなかった答えにする
+    p.on('error', () => {
+      clearTimeout(timer);
+      reject(new Error('2D にできませんでした(この機械では 2D にする道具を動かせません)'));
+    });
     p.on('close', (code) => {
       clearTimeout(timer);
       try {

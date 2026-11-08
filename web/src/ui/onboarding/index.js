@@ -831,7 +831,8 @@ export function mountFirstRun({
           if (ok && !resume && !showCharacter && stageId() !== lead.id) await putOnStage(lead.id);
           // 読み込み直した後の続き: 決めてあった見本の子を、舞台に出し直す(3D のまだない手元の子は、案内役のまま)
           const rc = resume?.character;
-          if (ok && rc?.id && rc.sample && !rc.local && !showCharacter && stageId() !== rc.id) await putOnStage(rc.id);
+          // ブラウザで描いた子(drawn)も同じ(読み込み直した後、画面がノリーのまま、話だけ新しい子になるのを防ぐ)
+          if (ok && rc?.id && (rc.sample || rc.drawn) && !rc.local && !showCharacter && stageId() !== rc.id) await putOnStage(rc.id);
           if (ok && sheet && !sheet.closed) fitStage(true);
         })
         .catch(() => null);

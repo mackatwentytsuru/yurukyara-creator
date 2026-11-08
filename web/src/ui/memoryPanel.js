@@ -255,7 +255,7 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
   forgetYes.addEventListener('click', () =>
     run(async () => {
       askForget(false);
-      await forgetAll(); // この端末の合鍵も捨てる。次に覚える事が出た時に、会話のイベントで新しい合鍵が届く
+      await forgetAll(); // 画面と /api/status の知らせのとおり、どの子の分も全部消して、この端末の合鍵も捨てる(次に覚える事が出た時に、会話のイベントで新しい合鍵が届く)。子ごとに消すのは、子を消す時だけ(forgetMemoryOf)
       showForgotten('全部わすれました');
     }),
   );
@@ -284,7 +284,7 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
       if (ev?.type !== 'memory') return;
       if (ev.via === 'chat' && Object.hasOwn(ev, 'forgotten')) {
         // サーバーの記録はもう無いので、確かめに行かずに合鍵を捨てる(確かめると 404 が console に赤く出た)。新しい合鍵も作らない
-        clearKey();
+        if (!ev.scoped) clearKey(); // その子の分だけ消した時(scoped)は、合鍵を残す(ほかの子の記憶を読めなくしない)
         showForgotten(ev.forgotten ? '全部わすれました' : '');
         return;
       }

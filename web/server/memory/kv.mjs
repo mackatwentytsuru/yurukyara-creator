@@ -10,7 +10,6 @@ import {
   ITEM_TEXT_MAX,
   LOCK_MS,
   MAX_FAILS,
-  MAX_ITEMS,
   MemoryError,
   NOTICE,
   PAIR_TTL_MS,
@@ -18,6 +17,8 @@ import {
   RETENTION_MS,
   isKey,
   newKey,
+  ofCharacter,
+  trimItems,
 } from './store.mjs';
 
 const CODE_RE = /^[0-9]{6}$/;
@@ -65,8 +66,8 @@ export function createKvMemory({ store, pepper = '', now = Date.now }) {
 
   const save = (key, rec) => store.set(`${P}r:${idOf(key)}`, JSON.stringify(rec), { ttlSeconds: sec(RETENTION_MS) });
 
-  const view = (rec) => ({
-    items: (rec?.items ?? []).map(({ id, kind, text, at }) => ({ id, kind, text, at })),
+  const view = (rec, ch = '') => ({
+    items: (rec?.items ?? []).filter((it) => ofCharacter(it, ch)).map(({ id, kind, text, at }) => ({ id, kind, text, at })),
     notice: NOTICE,
     retentionDays: RETENTION_DAYS,
     expiresAt: rec ? new Date((rec.lastUsedAt ?? now()) + RETENTION_MS).toISOString() : null,
@@ -118,25 +119,26 @@ export function createKvMemory({ store, pepper = '', now = Date.now }) {
     },
 
     /** 一覧(使うたびに、7 日の数え始めが延びる) */
-    async list(key) {
+    async list(key, ch = '') {
       requireKey(key);
       const rec = await load(key);
       if (!rec) throw new MemoryError('この合鍵の記憶はありません(消えたか、7 日たちました)', 404, 'not_found');
       rec.lastUsedAt = now();
       await save(key, rec);
-      return view(rec);
+      return view(rec, ch);
     },
 
-    /** 頭脳に渡す「覚えていること」の文。記録が無ければ空 */
-    async recall(key) {
+    /** 頭脳に渡す「覚えていること」の文。記録が無ければ空。子を指すと、その子が覚えた事だけ */
+    async recall(key, ch = '') {
       if (!isKey(key)) return { text: '', items: [] };
       const rec = await load(key);
       if (!rec) return { text: '', items: [] };
-      return { text: rec.items.map((it) => `- ${it.text}`).join('\n'), items: rec.items };
+      const items = rec.items.filter((it) => ofCharacter(it, ch));
+      return { text: items.map((it) => `- ${it.text}`).join('\n'), items };
     },
 
-    /** 事を書き足す。名前・前の話は置き換える */
-    async add(key, facts) {
+    /** 事を書き足す。名前・前の話は、同じ子の中で置き換える。子を指すと、その子の物として覚える */
+    async add(key, facts, ch = '') {
       requireKey(key);
       const rec = await load(key);
       if (!rec) throw new MemoryError('この合鍵の記憶はありません', 404, 'not_found');
@@ -146,13 +148,13 @@ export function createKvMemory({ store, pepper = '', now = Date.now }) {
         const text = String(f.text ?? '').trim().slice(0, ITEM_TEXT_MAX);
         if (!text) continue;
         const kind = ['name', 'age', 'like', 'topic', 'note'].includes(f.kind) ? f.kind : 'note';
-        if (kind === 'name' || kind === 'age' || kind === 'topic') rec.items = rec.items.filter((it) => it.kind !== kind);
-        if (rec.items.some((it) => it.kind === kind && it.text === text)) continue;
-        const item = { id: randomBytes(6).toString('base64url'), kind, text, at: t };
+        if (kind === 'name' || kind === 'age' || kind === 'topic') rec.items = rec.items.filter((it) => !(it.kind === kind && ofCharacter(it, ch)));
+        if (rec.items.some((it) => it.kind === kind && it.text === text && ofCharacter(it, ch))) continue;
+        const item = { id: randomBytes(6).toString('base64url'), kind, text, at: t, ...(ch ? { ch } : {}) };
         rec.items.push(item);
         added.push(item);
       }
-      if (rec.items.length > MAX_ITEMS) rec.items = rec.items.slice(-MAX_ITEMS);
+      rec.items = trimItems(rec.items);
       rec.lastUsedAt = t;
       await save(key, rec);
       return added;
@@ -170,8 +172,17 @@ export function createKvMemory({ store, pepper = '', now = Date.now }) {
     },
 
     /** 全部消す。その合鍵の番号も取り消す */
-    async forgetAll(key) {
+    async forgetAll(key, ch = '') {
       requireKey(key);
+      if (ch) {
+        // 子を指す時: その子が覚えた事だけを消す(合鍵・ほかの子・番号は残す)
+        const rec = await load(key);
+        if (!rec) return false;
+        const before = rec.items.length;
+        rec.items = rec.items.filter((it) => !ofCharacter(it, ch));
+        await save(key, rec);
+        return before !== rec.items.length;
+      }
       const id = idOf(key);
       const existed = Boolean(await store.get(`${P}r:${id}`));
       await store.del(`${P}r:${id}`);

@@ -8,6 +8,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MEMORY_NOTICE, RETENTION_DAYS } from '../../src/conversation/memoryNotice.js'; // 画面の札と同じ文と日数
+import { MAIN_CHARACTER } from '../../src/character/defaults.js'; // 子の印の無い前の記憶は、主役の物
 
 export { RETENTION_DAYS };
 export const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -21,6 +22,34 @@ export const NOTICE = MEMORY_NOTICE;
 
 const KEY_RE = /^[A-Za-z0-9_-]{43}$/;
 const CODE_RE = /^[0-9]{6}$/;
+const CHARACTER_RE = /^[a-z0-9_]{1,32}$/;
+
+/**
+ * 記憶は、話している子ごとに分ける(1 つの合鍵の中で、1 つ 1 つの事に子の id の印 ch を付ける)。
+ * 子の id は見出し x-yc-character で受ける。形の違う値・無い値は '' = 子を分けない(前と同じ。全部が見える)。
+ */
+export function characterOf(v) {
+  return typeof v === 'string' && CHARACTER_RE.test(v) ? v : '';
+}
+
+/** その事は、この子の物か。子を指さない時(ch が '')は全部。印の無い前の記憶は、主役の物 */
+export function ofCharacter(it, ch) {
+  return !ch || (it.ch ?? MAIN_CHARACTER.id) === ch;
+}
+
+/** 1 つの合鍵に残す事の数: 子ごとに MAX_ITEMS、全部で MAX_ITEMS の 10 倍まで(古い方から落とす) */
+export function trimItems(items) {
+  const per = new Map();
+  const kept = [];
+  for (let i = items.length - 1; i >= 0 && kept.length < MAX_ITEMS * 10; i--) {
+    const who = items[i].ch ?? MAIN_CHARACTER.id;
+    const n = per.get(who) ?? 0;
+    if (n >= MAX_ITEMS) continue;
+    per.set(who, n + 1);
+    kept.push(items[i]);
+  }
+  return kept.reverse();
+}
 
 export class MemoryError extends Error {
   constructor(message, status = 400, reason = 'bad_request') {
@@ -110,8 +139,8 @@ export function createMemoryStore({ backend, pepper = '', now = Date.now }) {
     globalFails = globalFails.filter((at) => t - at < PAIR_TTL_MS);
   };
 
-  const view = (rec) => ({
-    items: (rec?.items ?? []).map(({ id, kind, text, at }) => ({ id, kind, text, at })),
+  const view = (rec, ch = '') => ({
+    items: (rec?.items ?? []).filter((it) => ofCharacter(it, ch)).map(({ id, kind, text, at }) => ({ id, kind, text, at })),
     notice: NOTICE,
     retentionDays: RETENTION_DAYS,
     expiresAt: rec ? new Date((rec.lastUsedAt ?? now()) + RETENTION_MS).toISOString() : null,
@@ -127,25 +156,26 @@ export function createMemoryStore({ backend, pepper = '', now = Date.now }) {
     },
 
     /** 一覧(使うたびに、7 日の数え始めが延びる) */
-    list(key) {
+    list(key, ch = '') {
       requireKey(key);
       const rec = load(key);
       if (!rec) throw new MemoryError('この合鍵の記憶はありません(消えたか、7 日たちました)', 404, 'not_found');
       rec.lastUsedAt = now();
       save(key, rec);
-      return view(rec);
+      return view(rec, ch);
     },
 
-    /** 頭脳に渡す「覚えていること」の文。記録が無ければ空 */
-    recall(key) {
+    /** 頭脳に渡す「覚えていること」の文。記録が無ければ空。子を指すと、その子が覚えた事だけ */
+    recall(key, ch = '') {
       if (!isKey(key)) return { text: '', items: [] };
       const rec = load(key);
       if (!rec) return { text: '', items: [] };
-      return { text: rec.items.map((it) => `- ${it.text}`).join('\n'), items: rec.items };
+      const items = rec.items.filter((it) => ofCharacter(it, ch));
+      return { text: items.map((it) => `- ${it.text}`).join('\n'), items };
     },
 
-    /** 事を書き足す。同じ種類の 1 つだけの事(名前など)は置き換える */
-    add(key, facts) {
+    /** 事を書き足す。同じ種類の 1 つだけの事(名前など)は、同じ子の中で置き換える。子を指すと、その子の物として覚える */
+    add(key, facts, ch = '') {
       requireKey(key);
       const rec = load(key);
       if (!rec) throw new MemoryError('この合鍵の記憶はありません', 404, 'not_found');
@@ -155,13 +185,13 @@ export function createMemoryStore({ backend, pepper = '', now = Date.now }) {
         const text = String(f.text ?? '').trim().slice(0, ITEM_TEXT_MAX);
         if (!text) continue;
         const kind = ['name', 'age', 'like', 'topic', 'note'].includes(f.kind) ? f.kind : 'note';
-        if (kind === 'name' || kind === 'age' || kind === 'topic') rec.items = rec.items.filter((it) => it.kind !== kind);
-        if (rec.items.some((it) => it.kind === kind && it.text === text)) continue;
-        const item = { id: randomBytes(6).toString('base64url'), kind, text, at: t };
+        if (kind === 'name' || kind === 'age' || kind === 'topic') rec.items = rec.items.filter((it) => !(it.kind === kind && ofCharacter(it, ch)));
+        if (rec.items.some((it) => it.kind === kind && it.text === text && ofCharacter(it, ch))) continue;
+        const item = { id: randomBytes(6).toString('base64url'), kind, text, at: t, ...(ch ? { ch } : {}) };
         rec.items.push(item);
         added.push(item);
       }
-      if (rec.items.length > MAX_ITEMS) rec.items = rec.items.slice(-MAX_ITEMS);
+      rec.items = trimItems(rec.items);
       rec.lastUsedAt = t;
       save(key, rec);
       return added;
@@ -178,9 +208,20 @@ export function createMemoryStore({ backend, pepper = '', now = Date.now }) {
       return before !== rec.items.length;
     },
 
-    /** 全部消す。その合鍵の番号も取り消す */
-    forgetAll(key) {
+    /**
+     * 全部消す。その合鍵の番号も取り消す。
+     * 子を指すと(ch)、その子が覚えた事だけを消す(合鍵と、ほかの子の記憶と、番号は残す)。消した事があれば true
+     */
+    forgetAll(key, ch = '') {
       requireKey(key);
+      if (ch) {
+        const rec = load(key);
+        if (!rec) return false;
+        const before = rec.items.length;
+        rec.items = rec.items.filter((it) => !ofCharacter(it, ch));
+        save(key, rec);
+        return before !== rec.items.length;
+      }
       const id = idOf(key);
       const existed = Boolean(backend.get(id));
       backend.del(id);
