@@ -16,6 +16,15 @@ if (existsSync(envFile)) {
   }
 }
 
+/** この PC の中(127.0.0.1・localhost・[::1])の住所か */
+export function isLoopbackUrl(u) {
+  try {
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(u).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 8787),
   // 待ち受ける先。既定は自分の端末だけ。同じネットワークの別の端末(iPhone など)から開くときだけ、HOST=0.0.0.0 にする
@@ -34,6 +43,13 @@ export const config = {
   },
   get anthropicKey() {
     return process.env.ANTHROPIC_API_KEY ?? '';
+  },
+  // 頭脳のつなぎ方: 'claude-code'(使う人自身の Claude Code。npm run start:claude-code が起こした時だけ)・'api-key'(自分の鍵)・'mock'(鍵なし = 仮の頭脳)。
+  // 'claude-code' は、起動の台本の印(YC_BRAIN_VIA)があり、行き先がこの PC の中の時だけ(印だけでは名乗れない)
+  get brainVia() {
+    if (!this.anthropicKey) return 'mock';
+    if (process.env.YC_BRAIN_VIA === 'claude-code' && isLoopbackUrl(this.anthropicUrl)) return 'claude-code';
+    return 'api-key';
   },
   elevenKey: process.env.ELEVENLABS_API_KEY ?? '',
   // 頭脳と声のモデルの名前は src/conversation/models.js の 1 か所(既定)。環境変数 CLAUDE_MODEL・ELEVEN_MODEL_ID で替わる。

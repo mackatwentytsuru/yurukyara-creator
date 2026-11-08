@@ -10,6 +10,7 @@
     "build": "vite build",
     "server": "node server/index.mjs",
     "start": "node scripts/yuru-run.mjs",
+    "start:claude-code": "node scripts/start-claude-code.mjs",
     "yuru": "node scripts/yuru.mjs",
     "test": "node --test",
     "measure": "node scripts/measure-latency.mjs"

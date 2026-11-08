@@ -46,6 +46,20 @@ npm start        # http://127.0.0.1:8787/ を開く
 - この 3 行は、新しく取ってきた写しで、Windows の Node.js 22 で流して確かめました。Mac と Linux は【確かめ待ち】。
 - `npm ci` は顔の追従のモデルも `web/public/mediapipe/` に取ります(このリポジトリには入れていません)。
 
+## Claude Code につなぐ
+
+鍵(API キー)が無くても、**あなた自身の Claude Code のプラン**で、本物の Claude と話せます。Claude にログインした `claude` コマンドが入っていれば、web のフォルダで次を流すだけです。
+
+```bash
+npm run start:claude-code      # npm start の代わり。http://127.0.0.1:8787/ を開く
+```
+
+- 先に `claude` が入っていて、ログインしているかを確かめます。だめなら、理由と直し方を日本語で出して止まります(Claude Code の入れ方は [公式の案内](https://code.claude.com/docs/en/overview))。
+- 小さな中継([`tools/claude-code-relay/`](tools/claude-code-relay/))がこの PC の中(127.0.0.1)だけで待ち、アプリの会話と絵の呼び出しを、あなたの `claude -p` に渡します。`claude` には道具も MCP も付けません。1 日 300 回までで(`RELAY_DAILY_CAP` で替えられます)、Ctrl+C でアプリといっしょに止まります。
+- `ANTHROPIC_API_KEY` は使いません(環境にあっても、アプリにも `claude` にも渡しません)。話した内容は記録しません。使った分は、あなたの Claude Code のプランの枠から引かれます。
+- つながっている時は、状態の知らせ(`/api/status`)が `brainVia: "claude-code"` と答えます(鍵が無く仮の頭脳で話している時は `"mock"`)。
+- 声は別です。声を出すには、いつもどおり自分の ElevenLabs の鍵を入れます([声](#voices))。
+- Windows の Node.js 22 と、この PC の Claude Code で確かめました。Mac と Linux では、まだ動かしていません。
 ## 今できること
 
 どの行も、実際に動かして確かめました。確かめ方を右に書いています。
@@ -221,7 +235,7 @@ python creator/review/serve_review.py --make --web http://127.0.0.1:8787
 | `characters/` | キャラ(`character.json`・モデル・動き・2D の部品・人格)。MIT ライセンスに含まず、再利用は許していません([characters/README.md](characters/README.md)) |
 | `web/` | ブラウザで話す本体と小さなサーバー。`web/api/` は公開の関数 2 つ |
 | `.claude/` | 作るのに使った Claude Code のスキル・作業役・フック |
-| `tools/` | 公開の前の点検・数字の表・フックの試験 |
+| `tools/` | 公開の前の点検・数字の表・フックの試験。`tools/claude-code-relay/` は Claude Code につなぐ中継 |
 | `docs/` | どう作ったか・数字・最初のコミットの表・描画の重さ |
 
 ゆるキャラに絞る前の作業は、`before-pivot` の線に残しています。

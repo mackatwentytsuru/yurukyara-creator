@@ -47,6 +47,20 @@ npm start        # then open http://127.0.0.1:8787/
 - We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: (not checked yet)
 - `npm ci` also downloads the face-tracking model into `web/public/mediapipe/`; it is not stored in this repository.
 
+## Connect it to Claude Code
+
+With no API key, you can still talk with the real Claude on **your own Claude Code plan**. If the `claude` command is installed and logged in, run this in the `web` folder:
+
+```bash
+npm run start:claude-code      # instead of npm start; then open http://127.0.0.1:8787/
+```
+
+- It first checks that `claude` is installed and logged in. If not, it stops and tells you why and how to fix it, in Japanese (to install Claude Code, see the [official guide](https://code.claude.com/docs/en/overview)).
+- A small relay ([`tools/claude-code-relay/`](tools/claude-code-relay/)) listens on this PC only (127.0.0.1) and hands the app's conversation and drawing calls to your own `claude -p`. `claude` gets no tools and no MCP. It allows up to 300 calls a day (change with `RELAY_DAILY_CAP`), and Ctrl+C stops it together with the app.
+- It does not use `ANTHROPIC_API_KEY` (even if one is set, it is passed neither to the app nor to `claude`). What you say is not logged. The usage counts against your Claude Code plan.
+- While connected, the status endpoint (`/api/status`) answers `brainVia: "claude-code"` (it answers `"mock"` when no key is set and the stand-in brain talks).
+- The voice is separate. To hear it, enter your own ElevenLabs key as usual ([Voices](#voices)).
+- Checked on Windows with Node.js 22 and this PC's Claude Code. Not run on Mac or Linux yet.
 ## What works today
 
 Each row was checked by running it. The check is named next to it.
@@ -224,7 +238,7 @@ Versions and licences of every part: [THIRD_PARTY.md](THIRD_PARTY.md).
 | `characters/` | The characters (`character.json`, models, motions, 2D parts, personality). Not covered by the MIT License and not licensed for reuse; see [characters/README.md](characters/README.md) |
 | `web/` | The browser app and its small server; `web/api/` holds the two public functions |
 | `.claude/` | The Claude Code skills, sub-agents and hooks used to build this |
-| `tools/` | Release checks, numbers and hook tests |
+| `tools/` | Release checks, numbers and hook tests; `tools/claude-code-relay/` is the Claude Code relay |
 | `docs/` | How we built it, numbers, the first-commit table, render weights |
 
 The work from before the turn to yuru-chara is kept on the `before-pivot` branch.
