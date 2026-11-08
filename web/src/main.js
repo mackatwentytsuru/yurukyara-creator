@@ -51,7 +51,7 @@ import { installComposerInput } from './ui/composerInput.js'; // 11-08 本人の
 import { reportVoice } from './conversation/clientEvents.js'; // 声を始められなかった原因だけの報告(手元のサーバーの記録へ)
 // 接客モード(店の端末。決まりは stage/kioskMode.js、設計は KD.md): QR で入り、来場者にはキャラ・AI の表示・マイク・文字の欄・質問ボタンだけを見せ、名前は覚えず、放っておくと空に戻る
 import { KIOSK_CLASS, clearKiosk, kioskCharacterId, normalizeKioskConfig, resolveKiosk, saveKiosk, withoutKioskParam } from './stage/kioskMode.js';
-import { createHandsFree, streamAlive } from './conversation/handsFree.js';
+import { createHandsFree, listenerAlive, streamAlive } from './conversation/handsFree.js';
 import { createWakeLock } from './stage/wakeLock.js';
 import { mountKioskExit } from './ui/kioskExit.js';
 import { mountKioskSetup } from './ui/kioskQr.js';
@@ -597,7 +597,7 @@ async function startMicIfIdle() {
   await toggleMic();
 }
 const handsFree = createHandsFree({
-  alive: () => Boolean(listener?.listening) && streamAlive(listener.stream),
+  alive: () => listenerAlive(listener),
   start: startMicIfIdle,
   isBusy: () => speaker.speaking || dialogue.busy,
   isHidden: () => document.visibilityState !== 'visible',

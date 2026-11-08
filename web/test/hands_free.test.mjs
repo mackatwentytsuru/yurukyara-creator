@@ -5,7 +5,7 @@
 // - 抜けたら二度と始めない。始めている最中に抜けても、始め直さない
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BACKOFF_MS, WAIT_MS, WATCH_MS, createHandsFree, streamAlive } from '../src/conversation/handsFree.js';
+import { BACKOFF_MS, WAIT_MS, WATCH_MS, createHandsFree, listenerAlive, streamAlive } from '../src/conversation/handsFree.js';
 
 /** 偽の時計とタイマー */
 function clock() {
@@ -197,4 +197,15 @@ test('streamAlive: すべての線が live の時だけ生きている。線が�
   assert.equal(streamAlive(tracks()), false, '線が 0 本なら切れている');
   assert.equal(streamAlive(undefined), true);
   assert.equal(streamAlive({}), true);
+});
+
+test('listenerAlive: 接客の見張りは、マイクの取り直しの最中(starting)を生きている扱いにする(止めて作り直さない)', () => {
+  const tracks = (...states) => ({ getAudioTracks: () => states.map((readyState) => ({ readyState })) });
+  assert.equal(listenerAlive(null), false, '聞き取りが無い');
+  assert.equal(listenerAlive({}), false, '動いていない');
+  assert.equal(listenerAlive({ starting: true }), true, '取り直しの最中は生きている');
+  assert.equal(listenerAlive({ starting: true, listening: false, stream: tracks('ended') }), true, 'starting なら線が切れていても待つ');
+  assert.equal(listenerAlive({ listening: true, stream: tracks('live') }), true, '聞いていて線が生きている');
+  assert.equal(listenerAlive({ listening: true, stream: tracks('ended') }), false, '聞いていても線が切れていたら止まりとして数える');
+  assert.equal(listenerAlive({ listening: true }), true, '線が分からない聞き取りは止まっていない扱い');
 });

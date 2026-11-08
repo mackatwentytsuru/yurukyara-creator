@@ -104,3 +104,12 @@ export function streamAlive(stream) {
   if (!tracks) return true;
   return tracks.length > 0 && tracks.every((t) => t.readyState === 'live');
 }
+
+/**
+ * 接客の見張りが「マイクは生きている」と見てよいか。聞き取りが動いている(listening)で線が生きているか、
+ * 取り直しの最中(starting)なら生きている扱い(数えないと、見張りが取り直しの途中で止めて作り直し、二重の手間になる)
+ */
+export function listenerAlive(listener) {
+  if (listener?.starting) return true;
+  return Boolean(listener?.listening) && streamAlive(listener.stream);
+}
