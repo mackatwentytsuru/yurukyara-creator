@@ -1202,7 +1202,7 @@ export class FirstRun {
 
   /** ことばで書き直す(描けなかった時の道)。入れ方は 1 つ目のステップの「ことばで 書く」と同じ */
   async _askWords() {
-    this.d.pin?.(null);
+    this._pin(null);
     await this._say({ who: 'guide', text: 'どんな子か、ことばで 教えてね。' });
     return this._offer([
       { id: 'words', label: 'ことばで 書く', kind: 'text', placeholder: '例: 赤い ちょうちんの子', max: WORDS_MAX, submit: '送る', primary: true },
