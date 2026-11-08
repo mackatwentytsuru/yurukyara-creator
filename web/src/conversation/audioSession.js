@@ -10,6 +10,7 @@
 
 export const RECORD_TYPE = 'play-and-record';
 export const PLAYBACK_TYPE = 'playback';
+export const AUTO_TYPE = 'auto';
 
 let recording = 0; // マイクを開いている数(0 なら再生用)
 
@@ -45,6 +46,47 @@ export function endRecording(nav) {
 /** マイクを開き直す直前(取り直し)に、種類をもう一度そろえる(数えは増やさない) */
 export function ensureRecordType(nav) {
   return setType(RECORD_TYPE, nav);
+}
+
+/**
+ * マイクの音を取る(getUserMedia)。種類をそろえてから取り、「この音の使い方では取れない」(InvalidStateError)と断られたら、
+ * 種類を 'auto'(端末に任せる)にして 1 回だけ取り直す。'play-and-record' で通るかは実機でしか分からない保険(11-08 見直し)。
+ * 取り直しても、数えは増やさない(閉じる側の endRecording が 'playback' に戻す)。
+ * @param {(constraints: object) => Promise<MediaStream>} getUserMedia
+ * @param {object} constraints
+ */
+export async function getMicWithSession(getUserMedia, constraints, nav) {
+  ensureRecordType(nav);
+  try {
+    return await getUserMedia(constraints);
+  } catch (err) {
+    if (err?.name !== 'InvalidStateError' || !session(nav)) throw err;
+    setType(AUTO_TYPE, nav);
+    return getUserMedia(constraints);
+  }
+}
+
+/**
+ * 1 回の「開く → 閉じる」を数えちがえずに持つ小さな入れ物(歯車の窓のメーターなど、何度も開き直す所用)。
+ * begin() を何度呼んでも数えは 1 つ・end() は持っている時だけ 1 つ返す。
+ */
+export function createRecordingHold(nav) {
+  let held = false;
+  return {
+    begin() {
+      if (held) return;
+      held = true;
+      beginRecording(nav);
+    },
+    end() {
+      if (!held) return;
+      held = false;
+      endRecording(nav);
+    },
+    get held() {
+      return held;
+    },
+  };
 }
 
 /** 声を出す側(speaker.js)が、タップのたびに呼ぶ。聞いている間は、マイクの種類を壊さないよう何もしない */

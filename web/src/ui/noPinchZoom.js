@@ -8,14 +8,11 @@
 // DOM を直接読む小さな部品(node の試験では偽の document・window で確かめる)。
 
 export const LOCKED_VIEWPORT = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover';
-const ZOOM_EPS = 1.02;
+import { isZoomed } from './keyboardInset.js'; // 拡大の判定は 1 か所(keyboardInset.js)にそろえる
 const RESET_DELAY_MS = 120; // つまんでいる最中は戻さない(指が離れて少しして戻す)
 
 /** 拡大率が 1 を超えているか */
-export function isPinchZoomed(vv) {
-  const s = Number(vv?.scale);
-  return Number.isFinite(s) && s > ZOOM_EPS;
-}
+export const isPinchZoomed = isZoomed;
 
 /**
  * @param {Document} [doc]

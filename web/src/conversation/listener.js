@@ -8,7 +8,7 @@ import { getSttHint, sttHintHeaders } from './sttHint.js';
 import { AUDIO_WORDS, NOTE_EVENT, SILENT_EVENT, createSilenceWatch, decideListening, isDefaultMic, loadChoice, micConstraints, resolveDevice, serverSttAvailable, splitDevices, tell } from './audioDevices.js';
 // 11-08 本人の iPhone: カメラを入れたまま取り直す・ブラウザの聞き取りが使えない時は PC の聞き取りへ自動で替える・止まった原因の報告
 import { openMicStream } from './micStream.js';
-import { beginRecording, endRecording, ensureRecordType } from './audioSession.js'; // iPhone: マイクを開く前に音の使い方を「録音も再生も」へ。閉じたら再生用へ戻す
+import { beginRecording, endRecording, getMicWithSession } from './audioSession.js'; // iPhone: マイクを開く前に音の使い方を「録音も再生も」へ。閉じたら再生用へ戻す
 import { FALLBACK_WORDS, isFallbackError, shouldFallToServer } from './sttFallback.js';
 import { recognitionErrorText } from '../stage/micNotice.js';
 
@@ -99,7 +99,7 @@ export class Listener {
     this._recSession = true;
     try {
       // 声の有無を見るためのマイク(エコーは打ち消す)。カメラが入っていて失敗したら、1 回だけ取り直す(micStream.js)
-      const open = (audio) => openMicStream((c) => { ensureRecordType(); return navigator.mediaDevices.getUserMedia(c); }, { audio }, { cameraOn: this.cb.cameraOn?.() === true, holdCamera: this.cb.holdCamera });
+      const open = (audio) => openMicStream((c) => getMicWithSession((x) => navigator.mediaDevices.getUserMedia(x), c),{ audio }, { cameraOn: this.cb.cameraOn?.() === true, holdCamera: this.cb.holdCamera });
       try {
         this.stream = await open(micConstraints(MIC_BASE, plan.chosen, !plan.useChosen));
         this.micLabel = plan.useChosen ? plan.chosen.label : '';
@@ -359,7 +359,9 @@ export class Listener {
         this.provider = 'web'; // 替えられなかった: 下で止めて知らせる
       }
     }
-    this.cb.onError(recognitionErrorText(code) ?? recognitionErrorText('start-failed'));
+    const text = recognitionErrorText(code) ?? recognitionErrorText('start-failed');
+    this.cb.onError(text);
+    this.cb.onNotice?.(text); // スマホでも見える所へ(onError だけだと、畳まれた欄の中にしか出ない)
     this.stop();
     this.cb.onStopped?.();
   }

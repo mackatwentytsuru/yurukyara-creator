@@ -324,6 +324,7 @@ test('Listener: PC に聞き取りが無い時は、やさしい一言を出し�
   assert.equal(events.stopped, 1);
   assert.equal(events.errors.length, 1);
   assert.match(events.errors[0], /許可されていません\[not-allowed\]/);
+  assert.deepEqual(events.notices, [events.errors[0]], 'スマホで見える所(字幕の上の知らせ)にも、同じ一言を出す');
   assert.equal(events.reports[0].kind, 'voice-start-failed');
   assert.equal(events.reports[0].fellBack, false);
   assert.equal(made.length, 1, '作り直さない');

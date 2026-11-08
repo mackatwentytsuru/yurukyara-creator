@@ -4,13 +4,14 @@
 import { appendFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { redactSecrets } from '../src/conversation/secrets.js';
+import { BROWSER_FAMILIES } from '../src/conversation/clientEvents.js';
 import { ValidationError } from './validate.mjs';
 
 export const MAX_BODY_BYTES = 2048; // 本文の上限
 export const MAX_LOG_BYTES = 512 * 1024; // 記録のファイルの上限(超えたら書かない)
 export const PER_MINUTE = 6; // 1 つの接続元から、1 分に受ける回数
 export const KINDS = ['voice-start-failed', 'voice-fallback'];
-export const BROWSERS = ['ios-chrome', 'ios-safari', 'ios-other', 'android-chrome', 'android-other', 'quest', 'chrome', 'edge', 'firefox', 'safari', 'other'];
+export const BROWSERS = BROWSER_FAMILIES; // 画面側の一覧と同じ物(1 か所)
 export const PROVIDERS = ['web', 'server'];
 
 const name = (v, max) => (typeof v === 'string' ? v.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, max) : '');

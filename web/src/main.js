@@ -240,6 +240,12 @@ function sceneText() {
   return describeScene(a.tracks, { primaryId: a.primaryId, speakerId: a.speakerId });
 }
 
+/** 声の原因の報告は、手元のサーバーがあるとき(/api/status が答えた)だけ送る。公開の URL では 404 を出さない */
+function reportVoiceLocal(fields) {
+  if (!app.status) return;
+  void reportVoice(fields);
+}
+
 let composerInput = null; // 文字の入力窓(ui/composerInput.js)。送った後に 1 行へ戻す
 
 /* ---------- 声 ---------- */
@@ -356,7 +362,7 @@ async function toggleMic() {
       },
       cameraOn: () => app.mode === 'camera',
       holdCamera: () => app.camera?.hold?.(),
-      report: (event) => void reportVoice({ ...event, cameraOn: app.mode === 'camera' }),
+      report: (event) => reportVoiceLocal({ ...event, cameraOn: app.mode === 'camera' }),
       onError: (msg) => ui.error(msg),
       onEmpty: () => {
         if (!speaker.speaking && !dialogue.busy) onMisheard();
@@ -364,12 +370,13 @@ async function toggleMic() {
     }, { provider, isBusy: () => speaker.speaking && params.get('bargein') !== '1' });
     await listener.start();
     // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く(ヘッドセットの中では、頭の位置が分かるので使わない)
-    if (!IS_HEADSET) void startStereoMic();
+    // 触る端末(スマホ)では始めない: iPhone は 2 本目のマイクの取得で 1 本目が止まることがあり、内蔵マイクは向きも出せない(11-08 見直し)
+    if (!IS_HEADSET && !TOUCH) void startStereoMic();
     btn.setAttribute('aria-pressed', 'true');
     updatePrivacy();
   } catch (err) {
     // 原因だけの報告(名前・短い message・どの段か・提供元・カメラの入・https・ブラウザの分類。音も文字も入れない)
-    void reportVoice({ error: err, stage: err?.stage, provider: listener?.provider ?? 'web', cameraOn: app.mode === 'camera' });
+    reportVoiceLocal({ error: err, stage: err?.stage, provider: listener?.provider ?? 'web', cameraOn: app.mode === 'camera' });
     listener = null;
     // 英語の err.message は出さない。字幕の上の知らせに、やさしい日本語で(P1 高)。VR の板にも同じ文
     const text = micFailureText(err);
