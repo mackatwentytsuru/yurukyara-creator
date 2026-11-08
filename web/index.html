@@ -18,6 +18,8 @@
        画面は日本語だけなので、日本語の README(README.md)の見出し「自分の PC で、Claude Code と自分のキャラを作る」の節を指す -->
   <link rel="help" hreflang="ja" href="https://github.com/mackatwentytsuru/yurukyara-creator/blob/HEAD/README.md#自分の-pc-でclaude-code-と自分のキャラを作る" />
   <link rel="stylesheet" href="/src/ui/style.css" />
+  <!-- 接客モード(店の端末)の見せ方。html.is-kiosk の間だけ効く(ふつうの画面には何もしない) -->
+  <link rel="stylesheet" href="/src/ui/kiosk.css" />
 </head>
 <body>
   <canvas id="stage" aria-label="話すキャラクター"></canvas>
@@ -174,6 +176,9 @@
         <span class="gw-face" aria-hidden="true"><i class="ff-ear ff-l"></i><i class="ff-ear ff-r"></i><i class="ff-head"></i><i class="ff-muzzle"></i><i class="ff-eye ff-l"></i><i class="ff-eye ff-r"></i><i class="ff-nose"></i><i class="ff-bow"></i></span>
         <p class="gw-body"><span class="gw-line"><b class="gw-text" id="gateWakeText">ノリーが おきているよ…</b><span class="wd" aria-hidden="true"><i></i><i></i><i></i></span></span><small class="gw-hint" id="gateWakeHint">ボタンが ひかったら、おしてね</small></p>
       </div>
+      <!-- 接客モード(店の端末): 入口は大きな 1 つ。店の人が 1 回押すと、マイクと音の許可を取って、あとは来場者が話しかけるだけ(main.js。ふつうの画面では隠したまま) -->
+      <p class="kiosk-lead" id="kioskLead" hidden>この たんまつを あんないがかりに するよ。きおくは のこらないよ。やめる ときは、ひだりうえを 3 びょう おして ばんごうを いれてね。</p>
+      <button id="kioskStart" class="primary kiosk-start" type="button" hidden disabled><span class="btn-main">接客を はじめる</span><small class="btn-sub">おすと、マイクと 音を つかえるように なります</small></button>
       <button id="startSim" class="primary" type="button" disabled><span class="btn-main">カメラなしで試す</span><small class="btn-sub" id="simSub">読み込んでいます…</small></button>
       <button id="startCam" class="ghost" type="button" disabled><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">読み込んでいます…</small></button>
       <!-- /B4 -->
@@ -187,6 +192,8 @@
     </div>
   </div>
 
+  <!-- 接客モードなら、最初の絵の前に html.is-kiosk を付ける(ふつうの入口が一瞬見えないように。軽い部品だけ読む) -->
+  <script type="module" src="/src/stage/kioskEarly.js"></script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

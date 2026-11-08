@@ -82,7 +82,7 @@ export function createShopDevice({ storage = globalThis.localStorage, memoryApi,
  * @param {object} o
  * @param {()=>boolean} o.isOn
  * @param {()=>void} o.onClear 会話の履歴・字幕・「覚えていること」の窓を空にする
- * @param {number} [o.ms]
+ * @param {number|(()=>number)} [o.ms] 関数なら、数えるたびに読む(接客モードは、サーバーの設定の「放っておく時間」に合わせる)
  * @param {(fn:()=>void, ms:number)=>any} [o.setTimer]
  * @param {(t:any)=>void} [o.clearTimer]
  */
@@ -104,7 +104,7 @@ export function createIdleClear({ isOn, onClear, ms = SHOP_IDLE_CLEAR_MS, setTim
       if (!isOn()) return;
       dirty = true;
       stop();
-      timer = setTimer(fire, ms);
+      timer = setTimer(fire, typeof ms === 'function' ? ms() : ms);
     },
     stop,
     /** 試験用: いま数えている最中か */

@@ -29,7 +29,7 @@ import { langModeOf } from './conversation/lang.js';
 import { effectiveHearLang, getHearLang, setHearLang } from './conversation/hearLang.js';
 import { mountHearLangSelect } from './ui/hearLangSelect.js';
 import { setAiNotice } from './ui/aiNotice.js';
-import { createIdleClear, createShopDevice } from './conversation/shopDevice.js';
+import { SHOP_IDLE_CLEAR_MS, createIdleClear, createShopDevice } from './conversation/shopDevice.js';
 import { clearKey, forgetAll, getKey, setKey } from './ui/memoryKey.js';
 import { loadPlaceData, landmarkWorld, promptPlace, SAMPLE_PLACE } from './place.js';
 import { createArPlacement } from './arPlacement.js';
@@ -45,6 +45,12 @@ import { installKeyboardInset } from './ui/keyboardInset.js'; // 画面のキー
 import { installNoPinchZoom } from './ui/noPinchZoom.js'; // 11-08 本人の iPhone: 指で拡大縮小したら固まった。画面は指では拡大縮小しない
 import { installComposerInput } from './ui/composerInput.js'; // 11-08 本人の iPhone: 文字の入力窓が小さすぎる。大きく・3 行まで伸びる
 import { reportVoice } from './conversation/clientEvents.js'; // 声を始められなかった原因だけの報告(手元のサーバーの記録へ)
+// 接客モード(店の端末。決まりは stage/kioskMode.js、設計は KD.md): QR で入り、来場者にはキャラ・AI の表示・マイク・文字の欄・質問ボタンだけを見せ、名前は覚えず、放っておくと空に戻る
+import { KIOSK_CLASS, clearKiosk, kioskCharacterId, normalizeKioskConfig, resolveKiosk, saveKiosk, withoutKioskParam } from './stage/kioskMode.js';
+import { createHandsFree, streamAlive } from './conversation/handsFree.js';
+import { createWakeLock } from './stage/wakeLock.js';
+import { mountKioskExit } from './ui/kioskExit.js';
+import { mountKioskSetup } from './ui/kioskQr.js';
 
 const params = new URLSearchParams(location.search);
 const GAIN = Number(params.get('gain') ?? 2); // 視線の振れ幅の倍率
@@ -77,6 +83,19 @@ const siteMemory = (() => {
     return null;
   }
 })();
+// 接客モード: ?kiosk=<札> で入る。札は控え(この端末の localStorage)へ移し、URL から消す(読み込み直しても接客のまま。札が古い・壊れていても接客のまま)
+const KIOSK = resolveKiosk({ search: location.search, storage: siteMemory });
+if (KIOSK.on) {
+  document.documentElement.classList.add(KIOSK_CLASS);
+  if (KIOSK.fromUrl) {
+    saveKiosk(siteMemory, KIOSK);
+    try {
+      history.replaceState(history.state, '', withoutKioskParam(location.href));
+    } catch {
+      // 書き換えられなくても、接客モードのまま
+    }
+  }
+}
 // 指で触る端末(スマホ・タブレット)か。ボタンと説明の言葉を「マウス」でなく「指」にする(CRITux 15)
 const TOUCH = (() => {
   try {
@@ -88,7 +107,7 @@ const TOUCH = (() => {
 // 初めての会話(S4 の mountFirstRun の返り値)。読み込みは下の import。入口を閉じた後に、初めての訪問なら出す
 let firstRunReady = Promise.resolve(null);
 let firstRunDoneKey = FIRST_RUN_DONE_KEY;
-const firstRunWanted = () => shouldOpenFirstRun({ params, storage: siteMemory, doneKey: firstRunDoneKey, headset: IS_HEADSET });
+const firstRunWanted = () => !KIOSK.on && shouldOpenFirstRun({ params, storage: siteMemory, doneKey: firstRunDoneKey, headset: IS_HEADSET }); // 接客モードでは、作る・はじめての会話は出さない
 const ui = createUi();
 // CU: 起動中・返事待ちの表示(出し入れの決まりは ui/waitBubble.js。画面の文字と「…」は index.html の #waitBubble と入口の #gateWake)
 import { WAKE_BUSY, WAKE_FAILED, WAKE_READY, WAKE_HINT, createWaitBubble, wakeLoading } from './ui/waitBubble.js';
@@ -136,6 +155,19 @@ app.shopDevice = createShopDevice({
     memory?.resync?.();
   },
 });
+if (KIOSK.on) {
+  // 接客モードの間は、いつも「お店の端末」(お客さんの名前を覚えない)。端末の設定(localStorage)は書き換えない(抜けたら元のまま)
+  app.shopDevice.isOn = () => true;
+  // ことば・お店のきまりは、サーバーの設定(店の人が PC で決めた物)を使う。画面の性格の設定は、この間は使わない
+  let ownSettings = null;
+  Object.defineProperty(app, 'personaSettings', {
+    configurable: true,
+    get: () => ({ ...(ownSettings ?? {}), lang: KIOSK.cfg.lang, facts: KIOSK.cfg.facts }),
+    set: (v) => {
+      ownSettings = v;
+    },
+  });
+}
 /** いまのことば(日本語だけ・多言語)。画面の設定 > 性格の画面の節 > persona.md の行 > 日本語だけ */
 const currentLangMode = () => langModeOf({ settings: app.personaSettings, persona: app.persona });
 window.__app = app; // 試験と開発の確認用
@@ -287,6 +319,7 @@ app.dialogue = dialogue;
 // ML1: お店の端末で 3 分だれも操作しないと、会話の履歴・字幕・「覚えていること」の窓を空にする(次の人に、前の話を見せない)。ふつうの端末では動かない
 const idleClear = createIdleClear({
   isOn: () => app.shopDevice.isOn(),
+  ms: () => (KIOSK.on ? KIOSK.cfg.idleMs : SHOP_IDLE_CLEAR_MS), // 接客モードは、店の人が決めた「放っておく時間」(既定 90 秒)
   onClear: () => {
     dialogue.cancel();
     dialogue.history = [];
@@ -386,7 +419,8 @@ function onMisheard() {
 /** 聞き取りをどの提供元でするか。ブラウザに無ければサーバー。どちらも無ければ null */
 function listenProvider() {
   const serverOk = Boolean(app.status?.stt?.available);
-  if (IS_HEADSET || params.get('stt') === 'server') return serverOk ? 'server' : null;
+  // 接客モード: この PC の聞き取りを先に使う(声の区間だけを送る。ブラウザの聞き取りは、1 分ほどや無言で自分で終わり、始め直すたびに音が鳴る)
+  if (IS_HEADSET || KIOSK.on || params.get('stt') === 'server') return serverOk ? 'server' : webSpeechSupported() && KIOSK.on ? 'web' : null;
   if (webSpeechSupported()) return 'web';
   return serverOk ? 'server' : null;
 }
@@ -424,6 +458,7 @@ async function toggleMic() {
       },
       onVoice: (active) => {
         $('micBtn').classList.toggle('hearing', active);
+        if (active) idleClear.touch(); // 接客モード・お店の端末: 話しかけている間は、放っておいたことにしない
         // 話している最中に声が出たら、止まって聞く
         if (active && speaker.speaking) dialogue.cancel();
         // 声が止まった(話し終わりらしい)ら、確定した文字を待たずに、あいづちの声を先に出す
@@ -468,6 +503,67 @@ async function toggleMic() {
     const text = micFailureText(err);
     ui.notice(text);
     app.vrPanel?.set({ error: text });
+  }
+}
+
+/* ---------- 接客モード: ハンズフリー(店の人が 1 回押したら、あとは来場者が話しかけるだけ)・画面を消さない・抜ける ---------- */
+/** 聞き取りを(止まっていたら)始める。聞いている最中・マイクの線が切れていない時は何もしない。押しても止めない */
+async function startMicIfIdle() {
+  if (listener?.listening && streamAlive(listener.stream)) return;
+  if (listener) {
+    // 聞いているつもりで、マイクの線が切れていた: 古い聞き取りを片づけて、始め直す
+    try {
+      listener.stop();
+    } catch {
+      // すでに止まっている
+    }
+    listener = null;
+    stereoMic?.stop();
+  }
+  await toggleMic();
+}
+const handsFree = createHandsFree({
+  alive: () => Boolean(listener?.listening) && streamAlive(listener.stream),
+  start: startMicIfIdle,
+  isBusy: () => speaker.speaking || dialogue.busy,
+  isHidden: () => document.visibilityState !== 'visible',
+});
+const wakeLock = createWakeLock();
+app.kiosk = { on: KIOSK.on, handsFree, wakeLock, get config() { return KIOSK.cfg; } };
+if (KIOSK.on) {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') handsFree.nudge(); // 戻ったら、待たずに始め直す(画面を消す・裏に回ると、マイクが切れる)
+  });
+  // 角の長押し + 番号で出る。サーバーが番号を確かめた後だけ。出たら、聞くのも画面を消さないのもやめて、ふつうの画面へ読み直す
+  mountKioskExit({
+    onExit: () => {
+      handsFree.disable();
+      try {
+        listener?.stop();
+      } catch {
+        // すでに止まっている
+      }
+      void wakeLock.stop();
+      clearKiosk(siteMemory);
+      location.replace(withoutKioskParam(location.href));
+    },
+  });
+}
+
+/** 接客モードの設定(ことば・お店のきまり・放っておく時間)をサーバーから取る。合わない札・つながらない時は、控えのまま。返事は 3 秒だけ待つ */
+async function loadKioskConfig() {
+  if (!KIOSK.on || !KIOSK.token) return;
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 3000);
+    const res = await fetch('/api/kiosk/config', { cache: 'no-store', headers: { 'x-kiosk-token': KIOSK.token }, signal: ac.signal }).finally(() => clearTimeout(timer));
+    const data = res.ok && /json/i.test(res.headers.get('content-type') ?? '') ? await res.json() : null;
+    if (!data?.valid) return; // 古い・壊れた札: 控えのまま(設定が無ければ既定)。接客モードは続ける
+    KIOSK.cfg = normalizeKioskConfig(data);
+    saveKiosk(siteMemory, KIOSK);
+    if (app.character) applyHearLang(); // ことばが替わったら、聞く言葉・AI の表示も合わせる
+  } catch {
+    // つながらない: 控えのまま
   }
 }
 
@@ -1035,7 +1131,7 @@ function leaveTvFullscreen() {
 
 /** テレビ表示にする・やめる。fullscreen は押した時(使う人の操作の中)だけ真にする */
 function setTvMode(on, { fullscreen = false } = {}) {
-  if (on && !TV.show) return; // ヘッドセットの中・入口の LED などではしない
+  if (on && (!TV.show || KIOSK.on)) return; // ヘッドセットの中・入口の LED・接客モードではしない
   const btn = $('tvBtn');
   if (on !== tvActive()) {
     document.documentElement.classList.toggle(TV_CLASS, on);
@@ -1604,8 +1700,13 @@ app.camera = createCameraUse({
 
 async function boot() {
   const status = $('gateStatus');
-  const buttons = [$('startCam'), $('startSim')];
+  const buttons = [$('startCam'), $('startSim'), ...(KIOSK.on && $('kioskStart') ? [$('kioskStart')] : [])];
   buttons.forEach((b) => (b.disabled = true));
+  if (KIOSK.on) {
+    // 接客モードの入口: 説明 1 つと、大きな「接客を はじめる」1 つ
+    $('kioskLead').hidden = false;
+    $('kioskStart').hidden = false;
+  }
   setGateWake('loading'); // CU: 入口の「ノリーが おきているよ…」(読み込みの間。小さな字の「読み込んでいます」は、これに替えた)
   installKeyboardInset();
   installNoPinchZoom(); // 指のつまみで拡大しない・拡大されたら 1 倍へ戻す(11-08 本人の iPhone)
@@ -1657,7 +1758,18 @@ async function boot() {
     app.tierOverrides = tierOverrides; // 見た目を切り替える時も同じ段で読む
     // ?character= は id(公開の URL)か、この PC の中ならパス・URL も。無ければ主役ノリー → ようこそくんの順に、出せるキャラ。
     // 見た目の方式は ?look=2d|3d → このタブで選んだ物 → looks.default の順
-    const { character, id } = await loadFirstCharacter(charPick.spec, { ...tierOverrides, look: params.get('look') ?? '', lookMemory: tabMemory });
+    // 接客モード: 設定を先に取り(3 秒まで)、QR を作った PC の舞台の子(札に入っている id)を出す。?character= があればそちらが先
+    await loadKioskConfig();
+    const kioskSpec = KIOSK.on && !charPick.spec ? kioskCharacterId(KIOSK) : '';
+    const firstOpts = { ...tierOverrides, look: params.get('look') ?? '', lookMemory: tabMemory };
+    // 札の id の子がこのサーバーに無ければ、いつもの主役で出す(接客モードの入口を、読み込めない画面にしない)
+    const first = kioskSpec
+      ? await loadFirstCharacter(kioskSpec, firstOpts).catch((err) => {
+          console.info(`接客モード: 札の子 ${kioskSpec} は出せませんでした: ${err.message}`);
+          return loadFirstCharacter(charPick.spec, firstOpts);
+        })
+      : await loadFirstCharacter(charPick.spec, firstOpts);
+    const { character, id } = first;
     app.character = character;
     app.characterId = id;
     bootLookId = characterKey(character);
@@ -1687,15 +1799,21 @@ async function boot() {
     setGateWake('failed'); // CU: 「おきているよ…」のまま止まらない(動く点を止めて、やさしく知らせる)
     return;
   }
-  await setupPresentation().catch((e) => console.warn('見せ方の切りかえを用意できませんでした:', e.message));
+  // 接客モード: VR・AR・テレビ・カメラ・記憶・見た目の切り替えは、用意もしない(隠すだけでなく、開く道も作らない)
+  if (!KIOSK.on) await setupPresentation().catch((e) => console.warn('見せ方の切りかえを用意できませんでした:', e.message));
   await refreshStatus();
   setInterval(refreshStatus, 15000);
   setupPass();
-  setupMemory();
-  setupQuestLink(); // 見せ方を調べた後(Quest の中なら出さない)
-  setupTvMode(); // テレビ表示の入口(iPhone・iPad は「テレビに映す」。ヘッドセットの中では出さない)
-  app.camera.setup(); // BCV: カメラの入・切(いつでも。入口だけでなく)
-  void refreshLookSwitch(app.character); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない。舞台の子が替わるたびにも作り直す)
+  if (!KIOSK.on) {
+    setupMemory();
+    setupQuestLink(); // 見せ方を調べた後(Quest の中なら出さない)
+    setupTvMode(); // テレビ表示の入口(iPhone・iPad は「テレビに映す」。ヘッドセットの中では出さない)
+    app.camera.setup(); // BCV: カメラの入・切(いつでも。入口だけでなく)
+    void refreshLookSwitch(app.character); // 3D と 2D の両方があるキャラだけ、上の段に切り替えを出す(待たない。舞台の子が替わるたびにも作り直す)
+    mountKioskSetup({ app, local: isLoopbackPage(location) && Boolean(app.status) }); // PC の「もっと」の中の「接客モード」(番号・設定・QR。この PC の中で開いた時だけ)
+  } else {
+    setInterval(() => void loadKioskConfig(), 5 * 60 * 1000); // 店の人が PC で設定を変えたら、数分で追いつく
+  }
   if (app.status?.shop?.available) showShopChoices(); // 店のデータがあるときだけ、よくある質問のボタンを出す
   speaker.loadFillers().then((n) => console.info(`あいづちの声: ${n} 種類`));
   updatePrivacy();
@@ -1764,6 +1882,12 @@ async function boot() {
     wantBridge ? startSource('bridge', '床のカメラにつないでいます…') : wantPose ? startSource('pose', '準備しています…') : startSource('camera', 'カメラとモデルを準備しています…'),
   );
   $('startSim').addEventListener('click', () => startSource('sim', ''));
+  // 接客モード: 店の人が 1 回押す = 音の許可(startSource の中)と、画面を消さない・聞き取りの見張りの開始。あとは来場者が話しかけるだけ。カメラは使わない
+  $('kioskStart')?.addEventListener('click', async () => {
+    void wakeLock.start();
+    await startSource('sim', '');
+    if (app.source) handsFree.enable();
+  });
   if (wantBridge) {
     $('startCam').textContent = 'はじめる';
     document.querySelector('.gate .fine').textContent = 'この画面はカメラを使いません。床のカメラの機械から、あなたのいる向き(数字)だけを受け取ります。';
@@ -1776,7 +1900,10 @@ async function boot() {
     if (IS_HEADSET) $('startSim').hidden = true;
   }
 
-  $('micBtn').addEventListener('click', toggleMic);
+  $('micBtn').addEventListener('click', () => {
+    if (KIOSK.on && listener?.listening) return; // 接客モード: 来場者が押しても聞くのは止まらない(止めるのは店の人の「出る」だけ)
+    void toggleMic();
+  });
   $('composer').addEventListener('submit', (e) => {
     e.preventDefault();
     const input = $('textInput');
@@ -1807,21 +1934,27 @@ const ycBaseGuard = stage.state.topGuard;
 stage.state.topGuard = (left, right) => Math.max(ycBaseGuard(left, right), sheetGuard(left, right));
 setSheetRoom(() => Math.min(window.innerHeight * (1 - YC_MIN_USABLE) - (stage.state.bottomInset || 0), stage.state.bottomInset || Infinity));
 setSheetLayoutHook(() => reframe());
-const ycUpdate = mountUpdate({ app });
-startUpdateCheck(ycUpdate, app);
-mountAudioPicker({ app, update: ycUpdate });
+// 接客モードでは、歯車(マイクとスピーカー)とアップデートは作らない(店の人の設定の入口は、PC の「接客モード」だけ)
+const ycUpdate = KIOSK.on ? null : mountUpdate({ app });
+if (ycUpdate) {
+  startUpdateCheck(ycUpdate, app);
+  mountAudioPicker({ app, update: ycUpdate });
+}
 // ---- BUX ここまで ----
 // 初めての会話(7 歩)と性格の画面(S4)。#modes に「性格」「はじめての会話」を出す。?onboard=1 で初めての会話を出す。案内役は主役ノリー。
 // 初めての訪問なら、入口を閉じた後に main.js が出す(gateClosed)。印の名前は S4 の DONE_KEY を使う
-firstRunReady = import('./ui/onboarding/index.js')
-  .then((m) => {
-    if (typeof m.DONE_KEY === 'string' && m.DONE_KEY) firstRunDoneKey = m.DONE_KEY;
-    return m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER });
-  })
-  .catch((err) => {
-    console.warn('初めての会話を用意できませんでした:', err.message);
-    return null;
-  });
+// 接客モードでは、作る画面・性格の画面は読み込まない(来場者に作る入口を出さない。開く関数ごと無い)
+firstRunReady = KIOSK.on
+  ? Promise.resolve(null)
+  : import('./ui/onboarding/index.js')
+      .then((m) => {
+        if (typeof m.DONE_KEY === 'string' && m.DONE_KEY) firstRunDoneKey = m.DONE_KEY;
+        return m.mountFirstRun({ app, buttonHost: $('modes'), guide: MAIN_CHARACTER });
+      })
+      .catch((err) => {
+        console.warn('初めての会話を用意できませんでした:', err.message);
+        return null;
+      });
 
 /* ---------- UW5(画面の見直し UIR 5・6・9・11・12・14・17・18): ここから下の 1 塊だけが UW5 ----------
    来場者の上の段は 3 つ(はなす・かえる・もっと。紫は「はなす」)。ヘッドセット・入口の LED・自動で始める画面・重さを測る時は今までの段のまま。
