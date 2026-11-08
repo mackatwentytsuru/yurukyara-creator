@@ -1,3 +1,17 @@
+<p align="center"><img src="docs/images/banner.png" alt="Yuru-chara Creator. Just choose and answer." width="1280"></p>
+
+<p align="center"><b>Your own yuru-chara, from a few words or one picture, talking in about two minutes.</b></p>
+
+<p align="center">
+<img src="https://img.shields.io/badge/Built_with-Claude_Code-D97757?style=flat" alt="Built with Claude Code">
+<img src="https://img.shields.io/badge/talk-Claude_Haiku_5.5-D97757?style=flat" alt="Claude Haiku 5.5 (talk)">
+<img src="https://img.shields.io/badge/draw-Claude_Sonnet_5.5-D97757?style=flat" alt="Claude Sonnet 5.5 (draw)">
+<img src="https://img.shields.io/badge/talks_in-%E6%97%A5%E6%9C%AC%E8%AA%9E_%C2%B7_English_%C2%B7_%E4%B8%AD%E6%96%87_%C2%B7_%ED%95%9C%EA%B5%AD%EC%96%B4-D97757?style=flat" alt="日本語 / English / 中文 / 한국어">
+<img src="https://img.shields.io/badge/license-MIT_%28code_only%29-D97757?style=flat" alt="License">
+</p>
+
+<p align="center">▶ Demo video (3 min): {{VIDEO_URL}}</p>
+
 [日本語](README.md) · **English**
 
 # Yuru-chara Creator
