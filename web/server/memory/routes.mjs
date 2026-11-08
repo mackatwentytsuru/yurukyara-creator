@@ -1,5 +1,5 @@
 // 記憶の入口(K4。くわしくは API.md)。合鍵はヘッダー x-memory-key で受ける(URL に入れない。記録にも書かない)。
-import { MemoryError, isKey, samePass } from './store.mjs';
+import { MemoryError, characterOf, isKey, samePass } from './store.mjs';
 import { extractFacts } from './reflect.mjs';
 import { memoryLine } from '../greeting.mjs';
 import { redactSecrets } from '../../src/conversation/secrets.js';
@@ -18,14 +18,15 @@ export function isForgetRequest(text) {
  * @param {boolean} forgotten
  * @param {string} [persona]
  */
-export function forgetReplyEvents(forgotten, persona = '') {
+export function forgetReplyEvents(forgotten, persona = '', { scoped = false } = {}) {
   const text = forgotten
     ? memoryLine(persona, '全部わすれた') || 'わかった、覚えていたことは全部消したよ。'
     : memoryLine(persona, 'まだ覚えていない') || 'まだ何も覚えていなかったよ。';
   return [
     // via: 'chat' は「会話の言葉で消した」印。画面の札は、この印の時だけ番号と古い知らせを消す
     // (main.js は引き出しを開くたびに {type:'memory', forgotten:true} で読み直しを頼むので、それと見分ける)
-    { type: 'memory', forgotten, via: 'chat' },
+    // scoped: その子が覚えた事だけを消した印(画面は、端末の合鍵を捨てない。ほかの子の記憶はそのまま)
+    { type: 'memory', forgotten, via: 'chat', ...(scoped ? { scoped: true } : {}) },
     { type: 'thought', seen: '', intent: '記憶を消す', stage: 'chat', handoff: false },
     { type: 'say', text, expression: 'happy', motion: 'nod', gaze: 'person' },
   ];
@@ -52,6 +53,8 @@ export function createMemoryRoutes({ store, config, limiter, readBody }) {
     const k = req.headers['x-memory-key'];
     return typeof k === 'string' ? k : '';
   };
+  // 話している子の id(見出し x-yc-character)。無い・形の違う値は '' = 子を分けない
+  const charOf = (req) => characterOf(req.headers['x-yc-character']);
   const send = (res, status, obj) => res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }).end(JSON.stringify(obj));
 
   /** 当たれば true(応答済み)。当たらなければ false */
@@ -64,12 +67,12 @@ export function createMemoryRoutes({ store, config, limiter, readBody }) {
         if (!slot.ok) return send(res, 429, { error: slot.message }), true;
         return send(res, 200, store.create()), true;
       }
-      if (req.method === 'GET' && path === '/api/memory') return send(res, 200, store.list(keyOf(req))), true;
+      if (req.method === 'GET' && path === '/api/memory') return send(res, 200, store.list(keyOf(req), charOf(req))), true;
       if (req.method === 'DELETE' && path === '/api/memory') {
         const body = await readBody(req);
         const id = typeof body.id === 'string' && body.id ? body.id : url.searchParams.get('id');
         if (id) return send(res, 200, { ok: true, removed: store.forgetItem(keyOf(req), id) }), true;
-        return send(res, 200, { ok: true, forgotten: store.forgetAll(keyOf(req)) }), true;
+        return send(res, 200, { ok: true, forgotten: store.forgetAll(keyOf(req), charOf(req)), ...(charOf(req) ? { scoped: true } : {}) }), true;
       }
       if (req.method === 'POST' && path === '/api/memory/pair') {
         if (!isKey(keyOf(req))) throw new MemoryError('合鍵の形が違います', 401, 'bad_key');
@@ -81,11 +84,11 @@ export function createMemoryRoutes({ store, config, limiter, readBody }) {
       if (req.method === 'POST' && path === '/api/memory/claim') {
         const body = await readBody(req);
         const { key } = store.claim(String(body.code ?? ''), client);
-        return send(res, 200, { key, ...store.list(key) }), true;
+        return send(res, 200, { key, ...store.list(key, charOf(req)) }), true;
       }
       if (req.method === 'POST' && path === '/api/memory/reflect') {
         const body = await readBody(req);
-        return send(res, 200, { added: store.add(keyOf(req), extractFacts(redactSecrets(String(body.text ?? '').slice(0, 500)).text)) }), true;
+        return send(res, 200, { added: store.add(keyOf(req), extractFacts(redactSecrets(String(body.text ?? '').slice(0, 500)).text), charOf(req)) }), true;
       }
       return send(res, 405, { error: 'この方法は使えません' }), true;
     } catch (err) {

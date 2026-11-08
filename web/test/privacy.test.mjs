@@ -75,8 +75,9 @@ test('通信先は、自分のサーバー(/api/…)と、キャラ・場所の�
   // memory・memory/new・pair・claim は、端末をまたぐ記憶(合鍵はヘッダーで送り、URL に入れない)
   // draw は、ブラウザから描く設定(サーバーの YC_BROWSER_DRAW=1。既定は切ってある)の時だけ使う(B4 12b)
   // kiosk/config・kiosk/exit は、接客モードの店の端末が、設定を読む・番号を送って出る(番号は本文で送り、URL に入れない。札は見出し)。kiosk/settings・kiosk/qr は PC の窓(kioskQr.js の call(path))
+  // characters は、作った子の一覧・名前の変更・消す(送るのは子の id と名前だけ。手元のサーバーの characters/yb* だけを触る)
   // update・update/… は、この PC の中で開いた画面のアップデート(BUX。手元のサーバーが localhost からだけ受ける。送るのはキャラの id と押したボタンだけ)
-  const allowed = [/^\/api\/(chat|tts|stt|stt\/warm|metrics|status|fillers|gaze\/now|memory|memory\/new|memory\/pair|memory\/claim|draw|update|update\/(check|apply|undo|progress|offer)|kiosk\/(config|exit))$/, /^\/mediapipe\//];
+  const allowed = [/^\/api\/(chat|tts|stt|stt\/warm|metrics|status|fillers|gaze\/now|memory|memory\/new|memory\/pair|memory\/claim|draw|characters|update|update\/(check|apply|undo|progress|offer)|kiosk\/(config|exit))$/, /^\/mediapipe\//];
   for (const f of files) {
     for (const m of code(f).matchAll(/fetch\(\s*(['"`])([^'"`]*)\1/g)) {
       const url = m[2];

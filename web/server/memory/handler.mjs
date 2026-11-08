@@ -3,7 +3,7 @@
 // 合鍵は見出し x-memory-key で受ける(URL に入れない)。返事にも記録にも、合鍵・合言葉を書かない(console も使わない)。
 import { createHash } from 'node:crypto';
 import { createKvMemory } from './kv.mjs';
-import { MemoryError, samePass } from './store.mjs';
+import { MemoryError, characterOf, samePass } from './store.mjs';
 import { extractFacts, memoryAddedEvent, selfNamesOf } from './reflect.mjs';
 import { forgetReplyEvents, isForgetRequest } from './routes.mjs';
 import { redactSecrets } from '../../src/conversation/secrets.js';
@@ -93,6 +93,7 @@ export async function handleMemory(request, { store, cfg = {}, now = Date.now, e
   if (!SUBS.has(sub)) return reply(404, { error: 'この道はありません' });
   const mem = createKvMemory({ store, pepper: conf.pepper, now });
   const key = request.headers.get('x-memory-key') ?? '';
+  const ch = characterOf(request.headers.get('x-yc-character') ?? ''); // 話している子の id。子ごとに記憶を分ける
   const client = memoryClient(request);
   const m = request.method;
   try {
@@ -105,23 +106,23 @@ export async function handleMemory(request, { store, cfg = {}, now = Date.now, e
       if (perMin > NEW_PER_MINUTE || perDay > NEW_PER_DAY) return reply(429, { error: '合鍵を作る回数の上限です。少し待ってね', reason: 'limited' }, { 'retry-after': '60' });
       return reply(200, await mem.create());
     }
-    if (m === 'GET' && sub === '') return reply(200, await mem.list(key));
+    if (m === 'GET' && sub === '') return reply(200, await mem.list(key, ch));
     if (m === 'DELETE' && sub === '') {
       const body = await readBody(request, conf.maxBodyBytes);
       const id = typeof body.id === 'string' && body.id ? body.id : new URL(request.url).searchParams.get('id');
       if (id) return reply(200, { ok: true, removed: await mem.forgetItem(key, id) });
-      return reply(200, { ok: true, forgotten: await mem.forgetAll(key) });
+      return reply(200, { ok: true, forgotten: await mem.forgetAll(key, ch), ...(ch ? { scoped: true } : {}) });
     }
     if (m === 'POST' && sub === 'pair') return reply(200, await mem.pair(key));
     if (m === 'POST' && sub === 'claim') {
       // 合言葉は上で確かめた(試せると、全体の取り消しで、ほかの人の番号まで消せた。F9)
       const body = await readBody(request, conf.maxBodyBytes);
       const { key: got } = await mem.claim(String(body.code ?? ''), client);
-      return reply(200, { key: got, ...(await mem.list(got)) });
+      return reply(200, { key: got, ...(await mem.list(got, ch)) });
     }
     if (m === 'POST' && sub === 'reflect') {
       const body = await readBody(request, conf.maxBodyBytes);
-      return reply(200, { added: await mem.add(key, extractFacts(redactSecrets(String(body.text ?? '').slice(0, 500)).text)) });
+      return reply(200, { added: await mem.add(key, extractFacts(redactSecrets(String(body.text ?? '').slice(0, 500)).text), ch) });
     }
     return reply(405, { error: 'この方法は使えません' });
   } catch (err) {
@@ -142,16 +143,17 @@ export async function handleMemory(request, { store, cfg = {}, now = Date.now, e
  */
 export async function chatMemory(request, rawText, { store, cfg = {}, now = Date.now, env = process.env, persona = '' }) {
   const key = request.headers.get('x-memory-key') ?? '';
+  const ch = characterOf(request.headers.get('x-yc-character') ?? ''); // 話している子の id。その子の記憶だけを読み書きする
   const text = redactSecrets(String(rawText ?? '')).text; // 鍵らしい文字は覚えない
   const none = { handled: false, events: [], memory: null, learned: [] };
   if (!key) return none;
   const mem = createKvMemory({ store, pepper: memoryConfig(cfg, env).pepper, now });
   try {
-    if (isForgetRequest(text)) return { ...none, handled: true, events: forgetReplyEvents(await mem.forgetAll(key), persona) };
-    const memory = await mem.recall(key);
+    if (isForgetRequest(text)) return { ...none, handled: true, events: forgetReplyEvents(await mem.forgetAll(key, ch), persona, { scoped: Boolean(ch) }) };
+    const memory = await mem.recall(key, ch);
     let learned = [];
     try {
-      learned = await mem.add(key, extractFacts(text, { selfNames: selfNamesOf({ persona }) }));
+      learned = await mem.add(key, extractFacts(text, { selfNames: selfNamesOf({ persona }) }), ch);
     } catch {
       learned = []; // 合鍵の記憶が無い(消えた・7 日たった)ときは、覚えずに話す
     }

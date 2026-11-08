@@ -39,10 +39,23 @@ export function clearKey() {
   }
 }
 
-/** 会話や記憶の API に付けるヘッダー(合鍵が無ければ空) */
+// 記憶は、話している子ごとに分ける(合鍵は端末で 1 つ。その中で、子の id ごとに覚える)。いま舞台にいる子の id(main.js が入れる)
+const CHARACTER_RE = /^[a-z0-9_]{1,32}$/;
+let character = '';
+
+/** いま話している子の id を覚える(形の違う値は ''。'' の時は、子を分けずに送る) */
+export function setMemoryCharacter(id) {
+  character = typeof id === 'string' && CHARACTER_RE.test(id) ? id : '';
+}
+
+export const getMemoryCharacter = () => character;
+
+const characterHeader = () => (character ? { 'x-yc-character': character } : {});
+
+/** 会話や記憶の API に付けるヘッダー(合鍵が無ければ合鍵は付けない。話している子の id は、決まっていれば付ける) */
 export function memoryHeaders() {
   const k = getKey();
-  return k ? { 'x-memory-key': k } : {};
+  return { ...(k ? { 'x-memory-key': k } : {}), ...characterHeader() };
 }
 
 /** 返事を読み、だめなら分かる言葉の例外にする */
@@ -60,11 +73,13 @@ const passHeaders = (pass) => {
 };
 // 宛先は、どれも文字で書く(画面の通信先の点検 privacy.test が見る)
 const api = {
-  list: async (key = getKey()) => read(await fetch('/api/memory', { headers: key ? { 'x-memory-key': key } : {} }), '記憶を読めません'),
+  list: async (key = getKey()) => read(await fetch('/api/memory', { headers: { ...(key ? { 'x-memory-key': key } : {}), ...characterHeader() } }), '記憶を読めません'),
   create: async () => read(await fetch('/api/memory/new', { method: 'POST' }), '合鍵を作れません'),
-  forget: async (body) => read(await fetch('/api/memory', { method: 'DELETE', headers: jsonHeaders(), body: JSON.stringify(body) }), '記憶を消せません'),
+  // everyone: この端末の合鍵の記憶を、どの子の分も全部消す(子の id を付けずに送る)。付ければ、いまの子が覚えた事だけ
+  forget: async (body, { everyone = false } = {}) =>
+    read(await fetch('/api/memory', { method: 'DELETE', headers: everyone ? { 'content-type': 'application/json', ...(getKey() ? { 'x-memory-key': getKey() } : {}) } : jsonHeaders(), body: JSON.stringify(body) }), '記憶を消せません'),
   pair: async (pass) => read(await fetch('/api/memory/pair', { method: 'POST', headers: { ...memoryHeaders(), ...passHeaders(pass) } }), '番号を作れません'),
-  claim: async (code, pass) => read(await fetch('/api/memory/claim', { method: 'POST', headers: { 'content-type': 'application/json', ...passHeaders(pass) }, body: JSON.stringify({ code }) }), '番号を受け取れません'),
+  claim: async (code, pass) => read(await fetch('/api/memory/claim', { method: 'POST', headers: { 'content-type': 'application/json', ...characterHeader(), ...passHeaders(pass) }, body: JSON.stringify({ code }) }), '番号を受け取れません'),
 };
 
 /** 合鍵がまだ無い時の、空の一覧(サーバーに聞かない。知らせの文は同じ) */
@@ -118,9 +133,25 @@ export const forgetItem = (id) => api.forget({ id: String(id) });
 /** 全部消して、この端末の合鍵も捨てる。合鍵が無ければ、消す物も無いので聞かない(新しい合鍵も作らない) */
 export async function forgetAll() {
   if (!getKey()) return { ok: true, forgotten: false };
-  const r = await api.forget({});
+  const r = await api.forget({}, { everyone: true });
   clearKey();
   return r;
+}
+
+/** 指した子(id)が覚えた事だけを消す(その子を消す時。合鍵とほかの子の記憶は残す)。合鍵が無ければ、消す物も無い */
+export async function forgetMemoryOf(id) {
+  if (!getKey() || !CHARACTER_RE.test(String(id))) return { ok: true, forgotten: false };
+  return read(await fetch('/api/memory', { method: 'DELETE', headers: { 'content-type': 'application/json', 'x-memory-key': getKey(), 'x-yc-character': String(id) }, body: '{}' }), '記憶を消せません');
+}
+
+/**
+ * 札の「全部わすれる」: 話している子が決まっていれば、その子が覚えた事だけを消す(合鍵と、ほかの子の記憶は残す)。
+ * 子が決まっていない時は、前と同じ(全部消して、合鍵も捨てる)
+ */
+export async function forgetMine() {
+  if (!character) return forgetAll();
+  if (!getKey()) return { ok: true, forgotten: false };
+  return api.forget({});
 }
 
 /**

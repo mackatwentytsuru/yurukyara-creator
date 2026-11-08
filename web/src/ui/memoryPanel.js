@@ -5,7 +5,7 @@
 // QR(本人の案 11/7 18:0x「一回パソコンで立ち上げれば、QR を読んでスマホでも進められるように」): 番号の横に、この画面の場所と
 // '#pair=' + 番号だけの QR を出す(決まりは conversation/pairLink.js、絵は S5 の stage/qrCode.js)。QR で開いた端末は、
 // この部品を読んだすぐ後にアドレスの欄から # を消し、札を付けた時に「パソコンの つづきを はじめる?」と 1 回だけ聞く。
-import { adoptKey, claimCode, clearKey, emptyMemory, forgetAll, forgetItem, loadMemory, pairCode } from './memoryKey.js';
+import { adoptKey, claimCode, clearKey, emptyMemory, forgetItem, forgetMine, loadMemory, pairCode } from './memoryKey.js';
 import { setDemoPass } from '../conversation/demoPass.js';
 import { PAIR_TEXT, isLoopbackLink, pageLook, pairErrorText, pairLinkUrl, takePairFromLocation } from '../conversation/pairLink.js';
 
@@ -255,7 +255,7 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
   forgetYes.addEventListener('click', () =>
     run(async () => {
       askForget(false);
-      await forgetAll(); // この端末の合鍵も捨てる。次に覚える事が出た時に、会話のイベントで新しい合鍵が届く
+      await forgetMine(); // 話している子が決まっていれば、その子の分だけ(合鍵とほかの子の記憶は残す)。決まっていなければ全部消して、この端末の合鍵も捨てる(次に覚える事が出た時に、会話のイベントで新しい合鍵が届く)
       showForgotten('全部わすれました');
     }),
   );
@@ -284,7 +284,7 @@ export function mountMemoryPanel(parent, { askPass = false, linked = takeLinkedP
       if (ev?.type !== 'memory') return;
       if (ev.via === 'chat' && Object.hasOwn(ev, 'forgotten')) {
         // サーバーの記録はもう無いので、確かめに行かずに合鍵を捨てる(確かめると 404 が console に赤く出た)。新しい合鍵も作らない
-        clearKey();
+        if (!ev.scoped) clearKey(); // その子の分だけ消した時(scoped)は、合鍵を残す(ほかの子の記憶を読めなくしない)
         showForgotten(ev.forgotten ? '全部わすれました' : '');
         return;
       }
