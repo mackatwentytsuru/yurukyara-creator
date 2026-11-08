@@ -214,7 +214,7 @@ test('おまかせで最後まで: 全体のおまかせは確かめてから進
   }
 });
 
-test('作り終わり: 「はなしてみる」を押さなくても、約 4 秒で作る画面を閉じて話す画面へ(CU。前は押すまで札が話す画面を覆っていた)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+test('作り終わり: 「はなしてみる」を押さなくても、約 8 秒で作る画面を閉じて話す画面へ(CU。前は押すまで札が話す画面を覆っていた)', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await findChrome();
   if (!browser) return t.skip('Chrome が無い');
   try {
@@ -226,9 +226,9 @@ test('作り終わり: 「はなしてみる」を押さなくても、約 4 秒
     const t0 = Date.now();
     await settle(page, 2000);
     assert.equal(await page.locator('.fr-sheet').count(), 1, '2 秒ではまだ閉じない(決めたことを読める)');
-    await page.waitForFunction(() => window.__closed?.reason === 'done', null, { timeout: 8000 });
+    await page.waitForFunction(() => window.__closed?.reason === 'done', null, { timeout: 14000 });
     const took = Date.now() - t0;
-    assert.ok(took >= 3000 && took <= 7000, `約 4 秒で閉じる: ${took}ms`);
+    assert.ok(took >= 6000 && took <= 11000, `約 8 秒で閉じる: ${took}ms`);
     assert.equal(await page.locator('.fr-sheet').count(), 0);
     assert.equal(await page.evaluate(() => document.documentElement.classList.contains('cc-open')), false, '作る画面の印も外れる(話す画面の上の段・下の帯が戻る)');
     assert.deepEqual(errors, []);

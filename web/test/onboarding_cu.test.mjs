@@ -268,3 +268,50 @@ test('頭脳の返事を待つ間は「…」の吹き出し(thinking)。返事�
   assert.deepEqual(failCalls, [true, false], '失敗しても、「…」を残さない');
   assert.ok(b.texts('note').some((t) => t.startsWith('うまく すすめなかったよ')));
 });
+
+test('駅・お店の名前の問いの「とばす」は、何をとばすか分かる言葉(なまえは とばす)。全体のおまかせと取り違えない(CU3)', async () => {
+  const h = harness();
+  await h.fr.start();
+  await h.fr.act('role_station');
+  assert.deepEqual(h.offeredAll.map((a) => a.label).filter((x) => x.includes('とばす')), ['なまえは とばす']);
+  await h.fr.act('place_name', { text: 'みどり駅' });
+  assert.deepEqual(h.offeredAll.map((a) => a.label).filter((x) => x.includes('とばす')), ['このことは とばす']);
+  await h.fr.act('place_skip');
+  assert.ok(h.texts('user').includes('このことは とばす'), '押した札の言葉が、会話に残る');
+  assert.ok(h.offered.includes('what_auto'), 'どんな子?の問いに進む(問いごとの「おまかせ」がある)');
+});
+
+test('作りかけの続きから始めた最初の選びに「はじめから」が付く。押すと 1 歩目(役目の問い)から。その次の選びには付かない(CU3)', async () => {
+  const snap = { v: 1, step: 3, from: 'words', words: 'ロボ', check: null, character: { id: 'robo', name: 'ロボくん', sample: true, note: '' }, skipped: [], role: 'station', place: { name: 'みどり駅', about: '' }, reload: true };
+  const h = harness();
+  await h.fr.resume(snap);
+  assert.ok(h.offered.includes('fresh'), '続きの最初の選びに「はじめから」');
+  assert.equal(h.offeredAll.find((a) => a.id === 'fresh').label, 'はじめから');
+  assert.ok(h.offered.includes('keep'), '続きの選びは、そのまま出る');
+  assert.equal(await h.fr.act('fresh'), true);
+  assert.equal(h.fr.step, 1);
+  assert.equal(h.fr.role, null, '決めた役目も消える');
+  assert.equal(h.fr.place, null);
+  assert.equal(h.fr.character, null);
+  assert.ok(h.offered.includes('role_station') && !h.offered.includes('fresh'), '役目の問いから。「はじめから」は 1 回だけ');
+
+  // 続きから普通に進めた時、次の選びには付かない
+  const g = harness();
+  await g.fr.resume(snap);
+  await g.fr.act('keep');
+  assert.ok(!g.offered.includes('fresh'));
+  // 全体の おまかせの続き・最後の「はなしてみる」には付けない
+  const done = harness();
+  await done.fr.resume({ ...snap, auto: true });
+  assert.deepEqual(done.offered, ['begin']);
+});
+
+test('子を選ぶ前(言葉だけ)の作りかけから続けた時も、最初の選びに「はじめから」が付く(CU3)', async () => {
+  const snap = { v: 1, step: 3, from: 'words', words: 'えきで みちを あんないする 子', check: null, character: null, skipped: [2], role: 'station', reload: true };
+  const h = harness();
+  await h.fr.resume(snap);
+  assert.ok(h.offered.includes('keep') && h.offered.includes('fresh'), h.offered.join());
+  assert.equal(await h.fr.act('fresh'), true);
+  assert.equal(h.fr.role, null);
+  assert.ok(h.offered.includes('role_station'));
+});

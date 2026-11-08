@@ -83,7 +83,8 @@ const ui = createUi();
 // CU: 起動中・返事待ちの表示(出し入れの決まりは ui/waitBubble.js。画面の文字と「…」は index.html の #waitBubble と入口の #gateWake)
 import { WAKE_BUSY, WAKE_FAILED, WAKE_READY, WAKE_HINT, createWaitBubble, wakeLoading } from './ui/waitBubble.js';
 const waitBubble = createWaitBubble({
-  nameOf: () => document.documentElement.dataset.guideName || 'ノリー',
+  // 舞台に立っている子の名前(作った子や入れ替えた子でも、その子の名前で「かんがえているよ」と出す。CU3 must 2)
+  nameOf: () => app.character?.name || document.documentElement.dataset.guideName || 'ノリー',
   render: (visible, text) => {
     const box = $('waitBubble');
     if (!box) return;

@@ -274,7 +274,7 @@ test('読み込み直しをまたぐ: 3 歩目で状態を残し、続きから�
   await r.fr.resume(snap);
   assert.equal(r.fr.step, 3);
   assert.ok(r.texts('guide').includes('ロボくんだよ。この子は どうかな?'));
-  assert.deepEqual(r.offered, ['keep', 'choose_sample', 'again']);
+  assert.deepEqual(r.offered, ['keep', 'choose_sample', 'again']); // reload でない続きには「はじめから」を付けない(読み込み直し=作りかけの続きの時だけ)
   const bad = harness();
   await bad.fr.resume({ v: 99 });
   assert.equal(bad.fr.step, 1, '形の違う控えは捨てて、はじめから');
@@ -441,7 +441,7 @@ test('QF4 高 1: 歩みごとに途中経過を残し、読み込み直した後
   assert.equal(g.fr.character.id, 'robo');
   assert.ok(g.texts('guide').some((t) => t.includes('さっきの つづきからだよ')));
   assert.ok(!g.texts('guide').includes('どんな子を生み出そうか?'), '1 歩目に戻さない');
-  assert.deepEqual(g.offered, ['to_retro']);
+  assert.deepEqual(g.offered, ['to_retro', 'fresh'], '続きの最初の選びには「はじめから」が付く(CU3)');
 });
 
 test('OL1f: 子を選ぶ前の 3 歩目(見本が出ただけ)で読み込み直しても、同じ言葉で 3 歩目から続く', async () => {

@@ -68,7 +68,7 @@ export const CLOSED_EVENT = 'yc:firstrun-closed'; // 閉じた時に window へ�
 const TALK_TIMEOUT_MS = 20000;
 const STAGE_WAIT_MS = 15000; // 舞台のキャラが読み終わるのを待つ長さ(入れ替えの前)
 /** 作り終わって「はなしてみる」を出してから、押されなくても作る画面を閉じて話す画面へ進むまで(CU) */
-export const FINISH_AUTO_MS = 4000;
+export const FINISH_AUTO_MS = 8000; // 子どもが決めたことを読める長さ(CU3。前は 4 秒)
 const GATE_HOLD_MS = 3000; // 閉じた後、入口を消しておく長さ(カメラなしの入力が始まるまで。始まれば入口は main.js が隠す)
 // PC と iPad で札(右)が開いている間、舞台の絵を札の左に収める(幅の広い見本の右の端が札に隠れていた。CRITux2 低 13)。
 // 札の左に残る幅がこれより狭い画面では、舞台を狭めない(iPad の縦 768 で 396px 残る)
@@ -733,7 +733,9 @@ export function mountFirstRun({
       onAuto: () => engine.omakaseAsk(), // のこりを ぜんぶ おまかせ: どの歩みからでも、確かめてから、おすすめで最後まで(本人 11/7・11/8)
       openPersona: (onSave) => openPersona({ character: engine.character, initial: engine.settings, onSave }),
       stage: () => (app?.character ? { character: app.character, speaker: app.speaker, guideId: lead.id } : null),
-      onClose: (reason) => {
+      onClose: (reasonIn) => {
+        // 作り終わった後に「おしゃべりに もどる」を押しても、「はなしてみる」と同じ(作った子を残す)。終わりの印も 'done'(CU3 must 1)
+        const reason = engine?.done ? 'done' : reasonIn;
         clearTimeout(finishTimer);
         sizeWatch?.disconnect();
         globalThis.removeEventListener?.('resize', onResize);
@@ -778,7 +780,7 @@ export function mountFirstRun({
           // 覚えられなくても、会話は続ける
         }
       },
-      // 最後まで行った: 決めたことと「はなしてみる」を見せる。押すか、FINISH_AUTO_MS(4 秒)たつと、作る画面を閉じて話す画面へ(CU。
+      // 最後まで行った: 決めたことと「はなしてみる」を見せる。押すか、FINISH_AUTO_MS(8 秒)たつと、作る画面を閉じて話す画面へ(CU。
       // 前は押すまで札が話す画面を覆っていた)。閉じたら、できた子が先に一言あいさつする(main.js の uw5GreetOnOpen)
       onDone: () => {
         local?.setItem(DONE_KEY, 'done');

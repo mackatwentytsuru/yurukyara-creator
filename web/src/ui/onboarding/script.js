@@ -155,6 +155,7 @@ export class FirstRun {
     this.actions = [];
     this.busy = false;
     this.done = false;
+    this.freshNext = false; // 作りかけの続きから始めた最初の選びに、「はじめから」を 1 つ足す(CU3)
     this.mockNoted = false;
     this.makeQueue = Promise.resolve(); // 作る画面の知らせを 1 つずつ順に受ける
     this.progressSeen = new Set();
@@ -191,6 +192,8 @@ export class FirstRun {
   }
 
   _offer(actions) {
+    // 続きから始めた後、最初の 1 つ目の答えを押すまで、選びに「はじめから」を足す(いつも続きからしか始まらないと、作り直せないため。CU3)
+    if (this.freshNext && !actions.some((a) => a.id === 'begin' || a.id === 'fresh')) actions = [...actions, { id: 'fresh', label: 'はじめから' }];
     this.actions = actions;
     this.d.offer(actions);
   }
@@ -322,6 +325,7 @@ export class FirstRun {
       this.actions = this._startActions();
     }
     if (!this.actions.some((a) => a.id === id)) return false;
+    if (id !== 'fresh') this.freshNext = false; // 続きの答えを 1 つ押したら、「はじめから」は出さない
     this.busy = true;
     this.d.offer([]); // 押した後は、次の選択肢が出るまでボタンを出さない
     try {
@@ -378,7 +382,7 @@ export class FirstRun {
       await this._say({ who: 'guide', text: role === 'shop' ? 'おみせの なまえは?' : 'えきや まちの なまえは?' });
       return this._offer([
         { id: 'place_name', label: 'なまえ', kind: 'text', placeholder: role === 'shop' ? '例: ひだまり パン' : '例: みどり駅', max: PLACE_MAX, submit: '送る', primary: true },
-        { id: 'place_skip', label: 'とばす' },
+        { id: 'place_skip', label: 'なまえは とばす' },
       ]);
     }
     return this._askWhat();
@@ -392,7 +396,7 @@ export class FirstRun {
       await this._say({ who: 'guide', text: this.role === 'shop' ? 'なにを あんないする?' : 'どんな ことを あんないする?' });
       return this._offer([
         { id: 'place_about', label: 'あんないする こと', kind: 'text', placeholder: this.role === 'shop' ? '例: パンの しゅるいと 店の 中' : '例: 出口と のりかえ', max: PLACE_MAX, submit: '送る', primary: true },
-        { id: 'place_skip', label: 'とばす' },
+        { id: 'place_skip', label: 'このことは とばす' },
       ]);
     }
     if (id === 'place_about') {
@@ -493,6 +497,21 @@ export class FirstRun {
       case 'choose_sample':
         await this._echo(id);
         return this._chooseSample();
+      case 'fresh': // 続きの選びの「はじめから」: 決めたことを全部やめて、1 歩目から
+        this.freshNext = false;
+        await this._echo(id);
+        this.role = null;
+        this.place = null;
+        this.settings = null;
+        this.auto = false;
+        this.askBack = null;
+        this.convert = null;
+        this.input = null;
+        this.check = null;
+        this.character = null;
+        this.skipped.clear();
+        this.d.pin?.(null);
+        return this.start();
       case 'other':
       case 'again':
         await this._echo(id);
@@ -524,7 +543,7 @@ export class FirstRun {
         return this._later();
       case 'close':
         return this._finish();
-      case 'begin': // 最後の「はなしてみる」: 押すと、作る画面を閉じて話す画面へ(押さなくても 4 秒で閉じる。index.js の FINISH_AUTO_MS)
+      case 'begin': // 最後の「はなしてみる」: 押すと、作る画面を閉じて話す画面へ(押さなくても 8 秒で閉じる。index.js の FINISH_AUTO_MS)
         this.d.onBegin?.();
         return undefined;
       case 'place_name':
@@ -1224,6 +1243,7 @@ export class FirstRun {
       if (snap.reload && snap.step >= 3 && snap.from === 'words' && snap.words) {
         this._go(3);
         await this._say({ who: 'guide', text: this.nori ? 'おかえりなサイ! さっきの つづきからだよ。' : 'おかえり! さっきの つづきからだよ。' });
+        this.freshNext = true;
         return this._meet();
       }
       return this.start();
@@ -1235,6 +1255,7 @@ export class FirstRun {
       const n = Math.min(STEPS.length, Math.max(3, snap.step || 3));
       this._go(n);
       await this._say({ who: 'guide', text: this.nori ? 'おかえりなサイ! さっきの つづきからだよ。' : 'おかえり! さっきの つづきからだよ。' });
+      this.freshNext = true;
       return this._resumeAt(n);
     }
     return this._meetAsk();

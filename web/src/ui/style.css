@@ -925,7 +925,7 @@ html.tv-mode .tv-exit { opacity: 1; }
 
 /* 入口: ノリーの顔の丸(CSS の絵。初めての会話の吹き出しの顔と同じ形)が、息をするように上下して、動く点が続く。押せるようになったら顔は止まり、ボタンが光る */
 .gate-wake { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 18px; background: rgba(183, 168, 255, 0.1); border: 1px solid rgba(183, 168, 255, 0.34); }
-.gw-face { position: relative; flex: none; display: block; width: 36px; height: 36px; margin: 9px; border-radius: 50%; overflow: hidden; background: #3a3156; transform: scale(1.5); animation: gw-breathe 2.4s ease-in-out infinite; }
+.gw-face { position: relative; flex: none; display: block; width: 36px; height: 36px; margin: 9px; border-radius: 50%; overflow: hidden; background: #3a3156; --gw-s: 1.5; transform: scale(var(--gw-s)); animation: gw-breathe 2.4s ease-in-out infinite; }
 .gw-face i { position: absolute; display: block; }
 .gw-face .ff-ear { top: 3px; width: 11px; height: 14px; border-radius: 50% 50% 40% 40%; background: #5b463c; }
 .gw-face .ff-ear.ff-l { left: 6px; transform: rotate(-16deg); }
@@ -937,7 +937,7 @@ html.tv-mode .tv-exit { opacity: 1; }
 .gw-face .ff-eye.ff-r { right: 12px; }
 .gw-face .ff-nose { left: 15px; top: 18px; width: 6px; height: 5px; border-radius: 50%; background: #f2a3b3; }
 .gw-face .ff-bow { left: 12px; bottom: 2px; width: 12px; height: 5px; border-radius: 2px; background: #2fa36b; }
-@keyframes gw-breathe { 0%, 100% { transform: scale(1.5) translateY(0); } 50% { transform: scale(1.56) translateY(-1.5px); } }
+@keyframes gw-breathe { 0%, 100% { transform: scale(var(--gw-s)) translateY(0); } 50% { transform: scale(calc(var(--gw-s) * 1.04)) translateY(-1.5px); } }
 .gw-body { margin: 0; display: grid; gap: 2px; min-width: 0; }
 .gw-line { display: flex; align-items: center; flex-wrap: wrap; }
 .gw-text { font-size: 17px; line-height: 1.4; color: var(--text); }
@@ -950,7 +950,7 @@ html.gate-failed .gate-wake { background: rgba(255, 211, 122, 0.1); border-color
 html.gate-failed .gw-face { animation: none; }
 html.gate-failed .gate-wake .wd, html.gate-failed .gw-hint { display: none; }
 html.gate-failed .gw-text { color: var(--warn); }
-@keyframes gw-hop { 0% { transform: scale(1.5) translateY(0); } 40% { transform: scale(1.5) translateY(-7px); } 100% { transform: scale(1.5) translateY(0); } }
+@keyframes gw-hop { 0% { transform: scale(var(--gw-s)) translateY(0); } 40% { transform: scale(var(--gw-s)) translateY(-7px); } 100% { transform: scale(var(--gw-s)) translateY(0); } }
 /* 押せる印: 光の輪がゆっくり出る(押せる間だけ。押せない間は薄いまま) */
 .gate .primary { position: relative; }
 .gate .primary::after { content: ""; position: absolute; inset: -5px; border-radius: 21px; border: 2px solid #c9a8ff; opacity: 0; pointer-events: none; }
@@ -976,3 +976,18 @@ html.fr-open .wait-bubble, html.gate-up .wait-bubble, html.tv-mode .wait-bubble,
    (話す画面と作る画面がまざらない)。隠すのは見た目だけ(visibility)で、高さの測りは変えない = キャラの置き方は変わらない。舞台の子は見せたまま(できた子を見るため) */
 html.cc-open .top, html.cc-open .bottom { visibility: hidden; pointer-events: none; }
 html.cc-open .top *, html.cc-open .bottom * { pointer-events: none; }
+/* 低い画面(スマホで上の枠が出ている時など、高さ 700px 以下)の入口: 起動中の箱と余白を詰めて、「カメラを使って始める」まで最初の画面に収める
+   (CU2 の必須。390x670 で 622〜693px に切れていた)。ひとこと「ボタンが ひかったら、おしてね」は、点が動いていれば足りるので、この高さでは隠す */
+@media (max-height: 700px) {
+  .gate { padding: 12px 16px; }
+  .gate-card { padding: 20px 20px; gap: 10px; }
+  .gate-wake { padding: 6px 12px; gap: 10px; }
+  .gw-face { --gw-s: 1.15; margin: 3px; }
+  .gw-hint { display: none; }
+}
+/* もっと低い画面(高さ 660px 以下。360x640 の小さなスマホなど): 顔の丸を外し(動く点と文字は残る)、押す物の余白を少し詰める。入口の 2 つのボタンが最初の画面に収まるように */
+@media (max-height: 660px) {
+  .gate-card { gap: 8px; }
+  .gw-face { display: none; }
+  .gate button { padding: 10px 16px; }
+}

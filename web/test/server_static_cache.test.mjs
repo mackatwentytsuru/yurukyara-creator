@@ -129,7 +129,8 @@ test('画面の部品(名前に印の入った js・css)は 1 年覚えさせる
 
 test('キャラのフォルダの外には出られない', async () => {
   const r = await get('/characters/../package.json', { 'accept-encoding': 'gzip' });
-  assert.notEqual(r.headers['content-type'], 'application/json; charset=utf-8', 'package.json を返さない');
+  // 見るのは「package.json の中身を返さない」こと(dist の無い所では、404 の誤りが json の型で返るので、型だけでは見ない。CU3 must 3)
+  assert.ok(r.status !== 200 || !String(r.body).includes('"name"'), 'package.json を返さない');
   const r2 = await get('/characters/%2e%2e/web/package.json', { 'accept-encoding': 'gzip' });
   assert.ok(![200].includes(r2.status) || !String(r2.body).includes('"name": "web"'));
 });

@@ -246,6 +246,37 @@ test('作る途中で「おしゃべりに もどる」を押しても作りか�
     await page.click('[data-firstrun="start"]');
     await waitAct(page, 'keep');
     assert.match(await page.$eval('.fr-log', (e) => e.innerText), /さっきの つづきからだよ/);
+    // 続きの最初の選びに「はじめから」が 1 つ付く。押すと役目の問いから始まり、その次の選びには付かない(CU3)
+    await waitAct(page, 'fresh');
+    assert.equal(await page.$eval('.fr-actions [data-act="fresh"]', (e) => e.textContent), 'はじめから');
+    await page.click('.fr-actions [data-act="fresh"]');
+    await waitAct(page, 'role_station');
+    assert.equal(await page.$$eval('.fr-actions [data-act="fresh"]', (b) => b.length), 0, '「はじめから」は最初の 1 回だけ');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+test('作り終わった後に「おしゃべりに もどる」を押しても、「はなしてみる」と同じ(作った子を残し、終わりの印は done。CU3 must)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が無い');
+  try {
+    const { ctx, page, errors } = await open(browser, { width: 390, height: 844 });
+    await waitAct(page, 'role_station');
+    await page.click('.fr-actions [data-act="role_station"]');
+    await waitAct(page, 'place_name');
+    await page.click('.fr-actions [data-act="place_skip"]');
+    await waitAct(page, 'what_auto');
+    await page.click('.fr-btn.fr-auto'); // 全体のおまかせ(確かめてから、最後まで)
+    await page.click('.fr-actions [data-act="omakase_yes"]');
+    await waitAct(page, 'begin');
+    await page.click('.fr-close'); // 8 秒の自動で閉じる前に、上の「おしゃべりに もどる」を押す
+    await page.waitForFunction(() => window.__closed?.reason);
+    assert.equal(await page.evaluate(() => window.__closed.reason), 'done', '作った子を捨てる later にしない');
+    assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done', '済みの印は done(later で上書きしない)');
+    assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarding.progress.v1')), null, '作りかけは消える');
     assert.deepEqual(errors, []);
     await ctx.close();
   } finally {
