@@ -5,6 +5,13 @@
 //   - マイクを開く前に 'play-and-record' にする。聞いている間はそのまま(録音と再生を両方使う種類。スピーカーからも声は出る)
 //   - マイクを閉じたら 'playback' に戻す(消音スイッチが入っていても声が出る、これまでの形)
 //   - 聞いている間は、声を出す側(speaker.js)が 'playback' へ戻さない(マイクの音が途切れるため)
+// 声の出口について(B13V 11-08。公式の資料で確かめた範囲):
+//   - W3C Audio Session API(w3c.github.io/audio-session)は、'play-and-record' を「録音・マイク・ビデオ会議用」と定めるだけで、スピーカーかレシーバー(耳に当てる小さな口)かは決めていない。
+//   - MDN は「端末が音量の割り当てを調整するかもしれない(モバイルでスピーカーでなくイヤピースを使うなど)」とだけ書く。ページから出口を選ぶ道は無い。
+//   - WebKit の実装(Source/WebCore/platform/audio/ios/AudioSessionIOS.mm)は、PlayAndRecord で AVAudioSession に DefaultToSpeaker を付ける
+//     (「レシーバーを優先」の状態のときだけ付けない)。なので ふつうは、聞いている間もスピーカーから出る。付く付かないは iOS の版と接続先(イヤホン・Bluetooth)で変わる。
+//   - 実機の報告(WebKit Bugzilla 282939。2025-02 時点で未対応)では、iPhone で getUserMedia({audio}) を呼ぶと、ふだんのマイクではなく内蔵マイクが返り、ページの音の出口も内蔵スピーカーに替わる。直す手は無く、回避策として audioSession.type を切りかえて出口を取り直す報告がある。
+//   ここでできること = ①取る前に 'play-and-record' ②取った後にもう一度そろえる ③中断から戻った時・ページが前に戻った時にそろえ直す ④閉じたら 'playback' に戻す。それ以上は Web からは決められない。
 // navigator.audioSession が無い端末(PC・Android・古い iOS)では、何もしない。
 // DOM も three も読まない小さな部品(node の試験で、偽の audioSession を使って切りかえの順番を確かめる)。
 
@@ -30,9 +37,40 @@ function setType(type, nav) {
   }
 }
 
+let watched = null; // 'statechange' を見ている audioSession(1 つにつき 1 回だけ付ける)
+
+/**
+ * 電話・Siri・別のタブの音で「中断」されて戻った時、種類が変わっていたら 'play-and-record' に戻す。
+ * マイクを開いている間だけ(数えが 0 なら何もしない)。声がスピーカーから出る形(下の注)を、聞き続ける間たもつため。
+ */
+function watchSession(nav) {
+  const s = session(nav);
+  if (!s || watched === s || typeof s.addEventListener !== 'function') return;
+  watched = s;
+  try {
+    s.addEventListener('statechange', () => {
+      if (recording > 0 && s.state === 'active' && s.type === PLAYBACK_TYPE) setType(RECORD_TYPE, nav);
+    });
+  } catch {
+    // 付けられない端末は、そのまま
+  }
+}
+
 /** マイクを開く直前に呼ぶ(開けなくても、閉じる側で endRecording を呼ぶ)。type を変えられたら true */
 export function beginRecording(nav) {
   recording += 1;
+  watchSession(nav);
+  return setType(RECORD_TYPE, nav);
+}
+
+/**
+ * 聞いている間に、ページが前に戻った時などに呼ぶ。マイクを開いていて、種類が 'play-and-record' でなければ戻す
+ * ('auto' は端末に任せた状態なので、そのまま。開いていない時は何もしない)。
+ */
+export function reassertRecording(nav) {
+  if (recording <= 0) return false;
+  const s = session(nav);
+  if (!s || s.type === AUTO_TYPE) return false;
   return setType(RECORD_TYPE, nav);
 }
 
