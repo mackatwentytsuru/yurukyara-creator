@@ -12,6 +12,7 @@
     "start": "node scripts/yuru-run.mjs",
     "start:keys": "node scripts/start-with-keys.mjs",
     "yuru": "node scripts/yuru.mjs",
+    "start:claude-code": "node scripts/start-claude-code.mjs",
     "test": "node --test",
     "measure": "node scripts/measure-latency.mjs"
   },

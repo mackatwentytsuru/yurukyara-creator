@@ -330,6 +330,7 @@ const handler = async (req, res) => {
       return json(res, 200, {
         memory: { notice: MEMORY_NOTICE, pairing: Boolean(config.appPass) || ['127.0.0.1', '::1', 'localhost'].includes(config.host) },
         brain: config.anthropicKey ? 'haiku' : 'mock',
+        brainVia: config.brainVia, // 'claude-code'(使う人の Claude Code)・'api-key'・'mock'。画面の「おためしモード」は 'mock' の時だけ
         model: config.model,
         tts: ttsStatus(),
         stt: stt.status(),
@@ -429,5 +430,5 @@ ensureFillers()
 
 server.listen(config.port, config.host, () => {
   console.log(`会話サーバー: ${useTls ? 'https' : 'http'}://${config.host}:${config.port}${config.host === '127.0.0.1' ? '(この端末だけ)' : ''}`);
-  console.log(`頭脳: ${config.anthropicKey ? config.model : '仮の頭脳(ANTHROPIC_API_KEY なし)'} / 読み上げ: ${config.elevenKey ? 'あり' : 'なし'}`);
+  console.log(`頭脳: ${config.anthropicKey ? `${config.model}${config.brainVia === 'claude-code' ? '(Claude Code につないでいます)' : ''}` : '仮の頭脳(ANTHROPIC_API_KEY なし)'} /読み上げ: ${config.elevenKey ? 'あり' : 'なし'}`);
 });
