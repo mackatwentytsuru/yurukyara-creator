@@ -18,7 +18,7 @@ test('FCS 1: 韓国語「누가 때렸어요」「그 사람이 때렸어요」�
 });
 
 test('FCS 1: 広げない。ボールや物をたたく話・言い切りでない言い方は拾わない', () => {
-  for (const t of ['공을 때렸어요', '공을 세게 때려요', '골프공을 때렸어', '누가 공을 때렸어요', '그 사람이 공을 때렸어요', '북을 때렸어요', '사람이 때리면 안 돼요', '누가 왔어요?', '그 사람이 왔어요']) {
+  for (const t of ['공을 때렸어요', '공을 세게 때려요', '골프공을 때렸어', '누가 공을 때렸어요', '그 사람이 공을 때렸어요', '북을 때렸어요', '사람이 때리면 안 돼요', '누가 왔어요?', '그 사람이 왔어요', '걔가 때려치웠대']) {
     assert.equal(classifyInput(t, MULTI), null, t);
     assert.equal(classifyInput(t), null, `日本語だけ ${t}`);
   }
@@ -38,7 +38,7 @@ test('FCS 2: 本当に危ない言い方は、今までどおり命の案内(ひ
 });
 
 test('FCS 3: 日本語だけの時、題名・慣用句・日本語の言葉は、外国語の命・つらい話の網に当てない', () => {
-  for (const t of ['Suicide Squad みた', 'Suicide Squad', 'suicide squad、おもしろかった', 'Better Off Dead', 'Better Off Dead って曲', 'I want to die laughing', 'I wanna die of embarrassment', '結束生命', '結束生命保険のCM']) {
+  for (const t of ['Suicide Squad みた', 'Suicide Squad', 'suicide squad、おもしろかった', 'Better Off Dead', 'Better Off Dead って曲', 'I want to die laughing', 'I wanna die of laughter', '結束生命', '結束生命保険のCM']) {
     assert.equal(classifyInput(t), null, t);
     assert.equal(classifyInput(t, { lang: 'ja' }), null, `ja ${t}`);
     assert.equal(classifyForeignCrisis(t), null, t);
@@ -50,6 +50,7 @@ test('FCS 3: 日本語だけでも、本当の外国語の危ない言い方は�
   for (const [t, k] of [
     ['I want to die', 'distress'], ["I'd be better off dead", 'distress'], ["everyone's better off dead", 'distress'], ['I am better off dead', 'distress'], ['I feel suicidal', 'distress'],
     ['I am going to kill myself tonight', 'emergency'], ['my dad hits me', 'distress'], ['I want to die、つらい', 'distress'],
+    ["I'm probably better off dead", 'distress'], ['better off dead', 'distress'], ['I wanna die of shame', 'distress'], ['我決定結束生命', 'distress'],
     ['我想自杀', 'distress'], ['我想死', 'distress'], ['我想結束生命', 'distress'], ['我现在要跳楼', 'emergency'], ['活不下去', 'distress'], ['죽고 싶어요', 'distress'], ['뛰어내리고 싶어요', 'emergency'],
   ]) {
     assert.equal(classifyInput(t), k, t);
@@ -83,4 +84,24 @@ test('FCS 4: 出力の網は「I\'m a human being」「I am a real human being!�
 test('FCS: 日本語の死にたい・暴力の言葉は、これまでどおり(日本語の網は変えていない)', () => {
   for (const t of ['死にたい', 'ほうちょうでさしたいくらいつらい', '先生にぶたれた']) assert.ok(classifyInput(t), t);
   assert.equal(distressDetail('死にたい'), 'self');
+});
+
+test('FCS_2 must 1: 人から刺される話・刃物の「さして/刺して/刺さ」は、命の案内に戻す(食べ物の形だけ外す)', () => {
+  for (const t of ['お父さんが包丁で刺してきた', 'パパがナイフでさしてくる', 'ほうちょうでさしてきた', '包丁で刺して', 'ナイフで刺さった', 'ほうちょうでさして', '包丁で刺してやる']) {
+    assert.equal(classifyInput(t), 'emergency', t);
+    assert.equal(classifyInput(t, MULTI), 'emergency', `多言語 ${t}`);
+  }
+  for (const t of ['ナイフでさしてたべる', 'ほうちょうでさしてたべたい', '包丁で刺して食べる', 'ナイフでさしてね', 'ほうちょうでころころ', '包丁でころっと切れた', '包丁で刺身を切った']) {
+    assert.equal(classifyInput(t), null, t);
+  }
+});
+
+test('FCS_2 must 2: ひらがなの「くすりをたくさんのむ」の形も、命の案内に戻す(買う・もらう・ぬる・薬屋さんは外す)', () => {
+  for (const t of ['くすりをたくさんのむ', 'くすりをたくさんのもう', 'くすりをたくさんのめばしねる', 'くすりをたくさんためてる', '薬をたくさん口にいれた', 'くすりをいっぱいのめば', 'クスリをタクサンのむ']) {
+    assert.equal(classifyInput(t), 'emergency', t);
+    assert.equal(classifyInput(t, MULTI), 'emergency', `多言語 ${t}`);
+  }
+  for (const t of ['くすりをたくさんかった', '薬をたくさん買った', 'くすりをたくさんもらった', 'くすりをたくさんぬった', 'くすりやさんでたくさん']) {
+    assert.equal(classifyInput(t), null, t);
+  }
 });

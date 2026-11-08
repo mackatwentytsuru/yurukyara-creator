@@ -8,7 +8,7 @@ import { detectLang } from '../src/conversation/lang.js';
 // 重い順に: emergency > distress > sexual > romance > dependency(safety.mjs の SEVERITY と同じ)
 // 韓国語: 「누가 때렸어요」「그 사람이 때렸어요」(だれかにたたかれた)。「공을 때렸어요」(ボールを打った)は、主語のあとに別の言葉(공을)が入るので当たらない
 // (FCS 11-08: B13S の狭め直しで、人がたたいた話まで外れていたので、主語が「だれか・その人」の形だけ戻した)
-const KO_HIT_BY = /(?:누가|누군가가?|(?:그|어떤|저)\s*(?:사람|애|아이|녀석|놈)이|사람이|애들이|아이들이|걔가)\s*(?:(?:나를|저를|날|절)\s*)?때(?:렸|려)/u;
+const KO_HIT_BY = /(?:누가|누군가가?|(?:그|어떤|저)\s*(?:사람|애|아이|녀석|놈)이|사람이|애들이|아이들이|걔가)\s*(?:(?:나를|저를|날|절)\s*)?때(?:렸|려)(?!치)/u;
 
 const NETS = {
   emergency: [
@@ -61,11 +61,13 @@ export function classifyForeign(text) {
 // 本当の言い方(I want to die・I'd be better off dead・我想結束生命)は空けない。多言語の時は、この空けを使わない。
 const JA_ONLY_MASKS = [
   /suicide\s+(?:squad|club|silence)/gi,
-  /(?<!(?:\b(?:be|am|are|is|were|was)|['’](?:s|re|m))\s+)better\s+off\s+dead/gi,
-  /(?:want(?:ed)?\s+to|wanna)\s+die\s+(?:laughing|of\s+(?:laughter|embarrassment|shame|boredom))/gi,
-  /(?<!(?:想要|想|要|準備|准备|打算))結束生命/gu,
+  // 題名の「Better Off Dead」は、大文字の時と「って曲」などが続く時だけ空ける。「be 動詞 + better off dead」「better off dead」の 1 行は本当の言い方なので空けない
+  /(?<!(?:\b(?:be|am|are|is|were|was)|['’](?:s|re|m|d))\s+(?:probably\s+|really\s+|just\s+)?)Better\s+Off\s+Dead/g,
+  /better\s+off\s+dead(?=\s*(?:って|という|の(?:曲|歌|映画|バンド)))/gi,
+  /(?:want(?:ed)?\s+to|wanna)\s+die\s+(?:laughing|of\s+laughter)/gi,
+  // 日本語の言葉の「結束生命」だけを空ける。「我想結束生命」「我決定結束生命」のような中国語の言い方は空けない
+  /(?<!(?:想要|想|要|準備|准备|打算|決定|决定|決心|决心|只想|已經|已经|會|会|將|将))結束生命/gu,
 ];
-
 /** 日本語だけの時の、外す言葉の場所を空けた文(1 字ずつ置きかえるので長さは変わらない) */
 export function maskJaOnly(text) {
   let out = String(text ?? '');
