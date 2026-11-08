@@ -27,6 +27,8 @@ import { composePersona, fixesOwnSpeech, loadSettings, normalize, ownSettings, o
 import { MOCK_NOTICE_SHORT, styleLines } from '../persona/preview.js';
 import { applyVoiceRole } from '../persona/voiceChoice.js';
 import { streamChat } from '../../conversation/brainClient.js';
+import { mlBodyFields } from '../../conversation/mlBody.js'; // ML1: 多言語・お店のきまり・お店の端末の欄(試しの返事にも同じ欄を付ける)
+import { getHearLang } from '../../conversation/hearLang.js';
 // 主役で案内役(協力者が手で描いた、セスジキノボリカンガルーの執事見習い。自分のことは「ノリー」と呼ぶ)。three を読まない小さな部品
 import { MAIN_CHARACTER } from '../../character/defaults.js';
 // ?character= の id の形(英小文字・数字・_ の 32 字まで。main.js と同じ決まり。three を読まない小さな部品)
@@ -298,6 +300,7 @@ export function mountFirstRun({
     rawPersonas.set(id, base);
     app.persona = composePersona(base, settings);
     app.personaSettings = normalize(settings);
+    app.onPersonaChange?.(); // ML1: ことばが替わったら、マイクの横の選びを出し入れする(main.js)
   }
 
   // main.js がキャラと persona.md を読み終えたら、覚えている設定を足す(読み込みは非同期なので、人格の文が届くまで少し待つ)
@@ -386,6 +389,7 @@ export function mountFirstRun({
     const saved = loadSettings(local, id);
     app.persona = saved ? composePersona(text, saved) : text;
     app.personaSettings = saved ? normalize(saved) : null;
+    app.onPersonaChange?.(); // ML1: ことばが替わったら、マイクの横の選びを出し入れする(main.js)
     try {
       app.speaker?.setVoice?.({ seed: next.name ?? id });
     } catch {
@@ -521,6 +525,8 @@ export function mountFirstRun({
         trigger: null,
         scene: '',
         character: { name: character?.name ?? 'ゆるキャラ', persona },
+        // ML1: 試しの返事も、いま選んでいることば・お店のきまり・お店の端末で(日本語だけ・欄が空・ふつうの端末なら、何も足さない)
+        ...mlBodyFields({ lang: settings?.lang ?? 'ja', hearLang: getHearLang(), facts: settings?.facts ?? '', shopDevice: Boolean(app?.shopDevice?.isOn?.()), role: settings?.role ?? 'home', persona }),
         place: {},
         ...(app?.character?.expressions?.length ? { expressions: app.character.expressions } : {}),
       },
@@ -587,6 +593,7 @@ export function mountFirstRun({
       play,
       brain: brainNow,
       parent,
+      shopDevice: app?.shopDevice ?? null, // ML1: この端末(お店の端末か)。main.js が作った物。無ければ、この枠は出さない
       // 声の役は、舞台にいる子の時だけ読み上げに渡す(舞台にいない子は覚えるだけ。舞台に出た時に putNow が渡す)
       onVoiceRole: (role) => (app && ch.id === stageId() ? applyVoiceRole(app.speaker, role, rawPersona(ch.id)) : null),
       onSave: (s) => {

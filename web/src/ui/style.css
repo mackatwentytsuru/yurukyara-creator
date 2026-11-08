@@ -172,6 +172,12 @@ html.is-headset .xr-wait { font-size: 30px; }
 .mic { background: var(--glass); border: 1px solid var(--line); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .mic[aria-pressed="true"] { background: rgba(255, 143, 122, 0.22); border-color: var(--coral); color: var(--coral); }
 .mic.hearing { box-shadow: 0 0 0 3px rgba(255, 143, 122, 0.35); }
+/* ML1: 多言語の時だけ出す、聞く言葉の選び(マイクの横)。日本語だけの時は hidden のまま */
+.hear-lang { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-width: 0; padding: 0 8px; border-radius: 14px; background: var(--glass); border: 1px solid var(--line); font-size: 13px; color: var(--muted); white-space: nowrap; }
+.hear-lang[hidden] { display: none; }
+.hear-lang select { font: inherit; font-size: 14px; color: var(--text); background: transparent; border: 0; max-width: 8.5em; padding: 6px 2px; cursor: pointer; }
+.hear-lang select option { color: #1d1a2e; }
+.hear-lang:focus-within { outline: 2px solid var(--lav); outline-offset: 2px; }
 
 /* AR のあいだは、現実が見えるよう、入口の背景も透明にする(背景は場所の柱が透明にする) */
 html[data-presentation="ar"] .gate { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
@@ -241,6 +247,9 @@ html.fr-open:not(.kb-open) .ai-notice-top {
   .caption { font-size: clamp(18px, 5vw, 26px); }
   .caption.settled { font-size: clamp(16px, 4.4vw, 21px); }
   .mic span { display: none; }
+  .hear-lang-cap { display: none; } /* 狭い画面では「聞く言葉」の字は隠す(選びの title と aria-label に残る) */
+  .hear-lang { padding: 0 4px; }
+  .hear-lang select { max-width: 6.5em; }
   /* 「Claude の考え」を開いた時(CRITux 21): 高さを決めて、画面の高さの 45% より上で止める(中は巻いて読む)。
      キャラは main.js が窓の下へ置き直す(上の段の高さの上限も 45%)。見出しの右は見た目の切り替えに空ける(切り替えが手前) */
   .thought:not(.collapsed) {

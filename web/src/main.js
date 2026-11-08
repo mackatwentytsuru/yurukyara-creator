@@ -24,6 +24,12 @@ import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink, latencyNote } from './
 import { questLinkPlan } from './stage/questLink.js'; // 「VR(Quest)で開く」: この画面の QR に入れてよい物の決まり
 import { getDemoPass, setDemoPass } from './conversation/demoPass.js'; // 合言葉(S3。会話と記憶の通信に見出し x-demo-pass で付く)
 import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
+// ML1: 多言語(ことば)・聞く言葉の選び・お店の端末(次のお客さんに、前の人の名前を出さない)
+import { langModeOf } from './conversation/lang.js';
+import { effectiveHearLang, getHearLang, setHearLang } from './conversation/hearLang.js';
+import { mountHearLangSelect } from './ui/hearLangSelect.js';
+import { createIdleClear, createShopDevice } from './conversation/shopDevice.js';
+import { clearKey, forgetAll, getKey, setKey } from './ui/memoryKey.js';
 import { loadPlaceData, landmarkWorld, promptPlace, SAMPLE_PLACE } from './place.js';
 import { createArPlacement } from './arPlacement.js';
 import { createVrStage } from './vrStage.js';
@@ -96,6 +102,16 @@ const app = {
   lastAttention: { tracks: [], primaryId: null, speakerId: null },
   firstFrameAt: null, // キャラの入った最初のコマを描き終えた時刻(ms。?perf=1 の first_frame_ms)
 };
+// ML1: お店の端末(端末ごとの設定。性格の画面の「この端末」が使う)。お店の端末にした時は、この端末の合鍵を捨てる
+app.shopDevice = createShopDevice({
+  memoryApi: { getKey, setKey, clearKey, forgetAll },
+  onChange: () => {
+    idleClear.touch();
+    memory?.resync?.();
+  },
+});
+/** いまのことば(日本語だけ・多言語)。画面の設定 > 性格の画面の節 > persona.md の行 > 日本語だけ */
+const currentLangMode = () => langModeOf({ settings: app.personaSettings, persona: app.persona });
 window.__app = app; // 試験と開発の確認用
 if (IS_HEADSET) document.documentElement.classList.add('is-headset');
 if (params.get('led') === '1') document.documentElement.classList.add('is-led'); // 入口の LED: 顔にかぶる窓と操作の帯を隠す
@@ -177,6 +193,7 @@ const resyncMemory = () => memory?.onChatEvent({ type: 'memory', forgotten: true
 
 /** 会話を 1 回送る。どの入口(文字・声・ボタン・近づいた人・VR)も、ここを通す。記憶の一覧は会話のイベントで読み直される */
 function talk(turn) {
+  idleClear.touch(); // ML1: お店の端末の、だれも操作しない時間の数え直し
   // どの入口の会話でも「声かけ済み」にする(本人が話した後に、すぐ名乗り直さない。V1-3)
   const t = performance.now() / 1000;
   presence.greetedAt = t;
@@ -206,6 +223,11 @@ const dialogue = new Dialogue({
   getContext: () => ({
     scene: sceneText(),
     character: { name: app.character.name, persona: app.persona },
+    // ML1: ことば・聞く言葉・お店のきまり(画面の欄)・お店の端末。日本語だけ・欄が空・ふつうの端末なら、本文には何も足されない(mlBody.js)
+    lang: currentLangMode(),
+    hearLang: effectiveHearLang(currentLangMode()),
+    facts: app.personaSettings?.facts ?? '',
+    shopDevice: app.shopDevice.isOn(),
     // ?place= が無い時(試しの場所)と VR の中では、目印も案内文も送らない(「スタッフさんに聞いてみて」の元。V1)
     place: placeForPrompt(),
   }),
@@ -231,6 +253,19 @@ const dialogue = new Dialogue({
 
 app.dialogue = dialogue;
 
+// ML1: お店の端末で 3 分だれも操作しないと、会話の履歴・字幕・「覚えていること」の窓を空にする(次の人に、前の話を見せない)。ふつうの端末では動かない
+const idleClear = createIdleClear({
+  isOn: () => app.shopDevice.isOn(),
+  onClear: () => {
+    dialogue.cancel();
+    dialogue.history = [];
+    dialogue.carry = null;
+    ui.clearTalk();
+    memory?.resync?.();
+  },
+});
+for (const type of ['pointerdown', 'keydown', 'input', 'touchstart']) window.addEventListener(type, () => idleClear.touch(), { passive: true, capture: true });
+
 let lastSceneText = '';
 function sceneText() {
   const a = app.lastAttention;
@@ -239,6 +274,23 @@ function sceneText() {
 
 /* ---------- 声 ---------- */
 let listener = null;
+// ML1: マイクの横の「聞く言葉」の選び(多言語の時だけ出す)。選びを替えたら、聞き取りを始め直し、日本語以外の間は日本語のあいづちを出さない
+const hearUi = mountHearLangSelect({
+  box: $('hearLangBox'),
+  select: $('hearLang'),
+  getMode: currentLangMode,
+  getLang: getHearLang,
+  setLang: (lang) => {
+    setHearLang(lang);
+    applyHearLang();
+  },
+});
+function applyHearLang() {
+  speaker.setHearLang(effectiveHearLang(currentLangMode()));
+  listener?.setLang();
+  hearUi.refresh();
+}
+app.onPersonaChange = applyHearLang;
 // 声の向き(ステレオのマイク)。機材に依存しない: マイクの間隔などは URL で渡せる(?micspacing=0.06 ?mic=DVR ?micswap=1 ?ild=5)
 let stereoMic = null;
 function startStereoMic() {
@@ -343,7 +395,7 @@ async function toggleMic() {
       onEmpty: () => {
         if (!speaker.speaking && !dialogue.busy) onMisheard();
       },
-    }, { provider, isBusy: () => speaker.speaking && params.get('bargein') !== '1' });
+    }, { provider, isBusy: () => speaker.speaking && params.get('bargein') !== '1', lang: () => effectiveHearLang(currentLangMode()) });
     await listener.start();
     // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く(ヘッドセットの中では、頭の位置が分かるので使わない)
     if (!IS_HEADSET) void startStereoMic();
@@ -1498,6 +1550,7 @@ async function boot() {
     loopStartAt = performance.now();
     stage.renderer.setAnimationLoop(frame); // XR(Quest)の中でも回るよう、requestAnimationFrame でなくこちらを使う
     if (character.personaUrl) app.persona = await readPersona(character);
+    applyHearLang(); // ML1: persona.md の「- ことば: 多言語」の行でも、聞く言葉の選びを出す
     status.textContent = app.urlNotices.join(' '); // 読まなかった ?character= ?place= の知らせ(無ければ空)
   } catch (err) {
     console.error(err);

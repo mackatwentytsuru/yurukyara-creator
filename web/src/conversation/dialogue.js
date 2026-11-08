@@ -3,6 +3,7 @@
 // その文が話し始める瞬間に、表情・動き・視線・字幕を合わせる。
 // 返事が来るまでの間は、うなずきでつなぐ。割り込まれたら cancel() で全部止める。
 import { roleOf } from './role.js'; // B3(第 12 波 b): 役目を会話に付けて送る
+import { mlBodyFields } from './mlBody.js'; // ML1: 多言語・お店のきまり・お店の端末の欄
 import { streamChat } from './brainClient.js';
 import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 import { redactSecrets } from './secrets.js';
@@ -174,6 +175,9 @@ export class Dialogue {
     setSttHint(ctx.character?.name); // 聞き取りの手がかり(今のキャラの名前)
     // 声の役(男の子・女の子)は、今の子の人格の文から決まる(おまかせの時)。返事の声もあいづちも、その役で話す(11-07 第 11 波)
     this.speaker.setVoicePersona?.(ctx.character?.persona);
+    // ML1: ことば(声は文ごとの言葉で話す)と、聞く言葉(日本語以外の時は、日本語のあいづちを出さない)。日本語だけの時は、どちらも ja
+    this.speaker.setLangMode?.(ctx.lang);
+    this.speaker.setHearLang?.(ctx.hearLang);
     const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null };
     // あいづち: 先に出していればそれを、まだなら今出す(声で話しかけられた回だけ)。数字は本当の返事とは別に残す
     let fillerWanted = mode === 'voice' && trigger !== 'approach';
@@ -214,6 +218,7 @@ export class Dialogue {
     // BCV: 使う人がカメラを入れて話しかけた回だけ、その時の絵を 1 枚(決めるのは main.js の getImage。cameraFrame.js が作る)。
     // 近づいた合図の回は送らない。履歴には入れない(次の回に前の絵を送り直さない)
     const cameraImage = trigger === 'approach' ? null : (this.getImage?.({ mode, trigger }) ?? null);
+    const role = roleOf({ settings: ctx.character?.role ? { role: ctx.character.role } : null, character: this.character, persona: ctx.character?.persona });
     const body = {
       session: this.talk.snapshot(), // BSF: 1 回の会話の長さ(休むすすめ。すすめるかはサーバーが決める)
       history: this.history,
@@ -221,7 +226,9 @@ export class Dialogue {
       trigger,
       scene: ctx.scene,
       // 役目(第 12 波 b): 使う人が選んだ値 > character.json の role > 人格の文の行 > おうち(src/conversation/role.js)
-      character: { ...ctx.character, role: roleOf({ settings: ctx.character?.role ? { role: ctx.character.role } : null, character: this.character, persona: ctx.character?.persona }) },
+      character: { ...ctx.character, role },
+      // ML1: 多言語・お店のきまり・お店の端末(日本語だけ・ふつうの端末・欄が空の時は何も足さない = 本文は今日と同じ)
+      ...mlBodyFields({ lang: ctx.lang, hearLang: ctx.hearLang, facts: ctx.facts, shopDevice: ctx.shopDevice, role, persona: ctx.character?.persona }),
       place: ctx.place,
       expressions: this.character.expressions,
       expressionHints: this.character.expressionHints,
