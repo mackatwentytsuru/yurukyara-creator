@@ -173,7 +173,8 @@ test('その問いの効き目だけを戻す: 描いた子のまま「この子
 
   await h.fr.act('back');
   await h.fr.act('back'); // できた子 → 「どんな子?」
-  assert.deepEqual(h.offered, [...START_IDS, REUSE_ID], 'さっき描いた子を、使う札として残す');
+  assert.deepEqual(h.offered, [REUSE_ID, ...START_IDS], 'さっき描いた子を、使う札として残す(札の列の最初)');
+  assert.equal(h.offeredAll[0].primary, true, '目立つ札(おすすめ)');
   assert.equal(h.fr.character, null);
   const words = h.offeredAll.find((a) => a.id === 'words');
   assert.equal(words.value, 'みどりの 子', '言葉を欄に入れ直す');
@@ -522,7 +523,7 @@ test('手元の PC の作る道: 作る画面の問いに戻り、描いた子�
   assert.deepEqual(prevOf(h), ['no3d']);
   assert.equal(h.fr.step, 3);
   await h.fr.act('back'); // 3D の問い → 作る画面の問い
-  assert.deepEqual(h.offered, ['frame', REUSE_ID], '作る画面と、さっきの子を使う札');
+  assert.deepEqual(h.offered, [REUSE_ID, 'frame'], '作る画面と、さっきの子を使う札(札は最初)');
   assert.equal(h.fr.character, null);
   await h.fr.act(REUSE_ID);
   assert.equal(h.fr.character.id, 'yc1108_0001_abcd');
@@ -551,4 +552,124 @@ test('戻り先の札の名前: 戻る札は読み上げの名前を持つ(作�
   assert.equal(h.back.aria, BACK_ARIA);
   assert.match(BACK_ARIA, /^ひとつ もどる/);
   assert.notEqual(BACK_ARIA, BACK_ARIA_AUTO);
+});
+
+/* ---------- BK1_2: 戻って同じ頼みを送り直しても、もう一度は描かない(描くのは 1 人 2 回まで) ---------- */
+
+test('戻って同じ言葉を送り直しても、描かない(さっきの子を使う)。何回くり返しても 1 回のまま', async () => {
+  const d = drawingCreator();
+  const h = harness({ creator: d.creator });
+  await h.fr.start();
+  await h.fr.act('role_home');
+  await h.fr.act('words', { text: 'みどりの かえるの子' });
+  assert.equal(d.made.length, 1);
+  for (let i = 0; i < 4; i++) {
+    await h.fr.act('back'); // できた子 → どんな子(言葉が欄に入り直す)
+    const words = h.offeredAll.find((a) => a.id === 'words');
+    assert.equal(words.value, 'みどりの かえるの子');
+    await h.fr.act('words', { text: words.value }); // 欄に入っている言葉を、そのまま「送る」
+    assert.equal(d.made.length, 1, `${i + 1} 回戻って送り直しても、描かない`);
+    assert.equal(h.fr.character.id, 'yb1', 'さっきの子');
+    assert.equal(h.fr.step, 3);
+    assert.deepEqual(h.offered, ['keep', 'fix', 'again']);
+    assert.ok(h.texts('note').some((t) => t.includes('もう一度は 描かないよ')), '描かずに使うことを言う');
+    assert.equal(h.fr.busy, false);
+  }
+  // 言葉を かえた時と、「やりなおす」の後は、ふつうに描く
+  await h.fr.act('back');
+  await h.fr.act('words', { text: 'あかい 子' });
+  assert.equal(d.made.length, 2);
+  await h.fr.act('again');
+  await h.fr.act('words', { text: 'あかい 子' });
+  assert.equal(d.made.length, 3, '「やりなおす」は、新しく描いてほしいということ');
+});
+
+test('戻って「どんな子?」の おまかせを押し直しても、描かない', async () => {
+  const d = drawingCreator();
+  const h = harness({ creator: d.creator });
+  await h.fr.start();
+  await h.fr.act('role_station');
+  await h.fr.act('place_skip');
+  await h.fr.act('place_skip');
+  await h.fr.act('what_auto');
+  assert.equal(d.made.length, 1);
+  await h.fr.act('back');
+  assert.deepEqual(prevOf(h), ['what_auto'], 'しるしの付いた おまかせ');
+  await h.fr.act('what_auto');
+  assert.equal(d.made.length, 1, '同じ頼みなので、描かない');
+  assert.equal(h.fr.character.id, 'yb1');
+  await h.fr.act('back');
+  await h.fr.act('back'); // 場所の問いまで戻って、進み直す
+  await h.fr.act('place_skip');
+  await h.fr.act('what_auto');
+  assert.equal(d.made.length, 1, 'もっと前に戻っても、頼みが同じなら描かない');
+});
+
+test('戻って「のこりを ぜんぶ おまかせ」を押し直しても、子は描かない', async () => {
+  const d = drawingCreator();
+  const h = harness({ creator: d.creator });
+  await h.fr.start();
+  await h.fr.act('role_home');
+  await h.fr.omakaseAsk();
+  await h.fr.act('omakase_yes');
+  assert.equal(h.fr.done, true);
+  assert.equal(d.made.length, 1);
+  await h.fr.act('back');
+  assert.equal(h.fr.done, false);
+  await h.fr.omakaseAsk();
+  await h.fr.act('omakase_yes');
+  assert.equal(h.fr.done, true);
+  assert.equal(d.made.length, 1, 'おまかせの描き直しをしない');
+  assert.equal(h.fr.character.id, 'yb1');
+});
+
+test('戻って同じ写真を選び直しても、描かない(選び直すと仮の住所は変わる)。べつの写真は描く', async () => {
+  const d = drawingCreator();
+  const h = harness({ creator: d.creator });
+  await h.fr.start();
+  await h.fr.act('role_home');
+  const file = { name: 'cat.png', size: 1234, lastModified: 1700000000000 };
+  await h.fr.act('photo', { url: 'blob:one', name: 'cat.png', file });
+  assert.equal(d.made.length, 1);
+  assert.equal(h.fr.character.id, 'yb1');
+  await h.fr.act('back');
+  assert.deepEqual(h.offered, [REUSE_ID, ...START_IDS].filter((id) => h.offered.includes(id)), 'さっきの子の札が最初');
+  await h.fr.act('photo', { url: 'blob:two', name: 'cat.png', file: { ...file } });
+  assert.equal(d.made.length, 1, '同じ写真(名前・大きさ・日付が同じ)は描かない');
+  assert.equal(h.fr.character.id, 'yb1');
+  await h.fr.act('back');
+  await h.fr.act('photo', { url: 'blob:three', name: 'dog.png', file: { name: 'dog.png', size: 99, lastModified: 1 } });
+  assert.equal(d.made.length, 2, 'べつの写真は、頼んだ時だけ描く');
+});
+
+test('さっきの子の札: 札の列の最初で、おすすめの札(幅の狭い画面で、横に流れる列の外に隠れない)', async () => {
+  const d = drawingCreator();
+  const h = harness({ creator: d.creator });
+  await h.fr.start();
+  await h.fr.act('role_home');
+  await h.fr.act('words', { text: 'みどりの 子' });
+  await h.fr.act('back');
+  const reuse = h.offeredAll[0];
+  assert.equal(reuse.id, REUSE_ID);
+  assert.equal(reuse.primary, true);
+  assert.ok(reuse.aria.includes('もう一度は 描きません'), '名前がある');
+  assert.equal(h.offeredAll.findIndex((a) => a.primary), 0, 'おすすめの札のうち、いちばん最初');
+});
+
+test('描いた子: 戻る・進むを何度くり返しても、描く回数は「ちがう頼みを送った回数」だけ', async () => {
+  const d = drawingCreator();
+  const h = harness({ creator: d.creator });
+  await h.fr.start();
+  await h.fr.act('role_home');
+  const texts = ['あおい子', 'あおい子', 'みどりの 子', 'みどりの 子', 'あおい子'];
+  for (const text of texts) {
+    await h.fr.act('words', { text });
+    await h.fr.act('keep'); // 性格まで進む
+    await h.fr.act('back');
+    await h.fr.act('back'); // 「どんな子?」まで戻る
+    assert.equal(h.fr.busy, false);
+    assert.equal(h.fr.stuckCount, 0);
+  }
+  // あおい子 → みどり → あおい子 と、ちがう頼みに変わった 3 回だけ描く(同じ頼みの送り直しは描かない)
+  assert.equal(d.made.length, 3);
 });

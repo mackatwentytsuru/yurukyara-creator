@@ -20,14 +20,27 @@ const SHOTS = process.env.FR_SHOTS_DIR || '';
 const FINISH_AUTO_MS = Number(/FINISH_AUTO_MS = (\d+)/.exec(readFileSync(join(SRC, 'ui', 'onboarding', 'index.js'), 'utf8'))?.[1] ?? 8000);
 const SLOW = process.env.YC_BROWSER_TESTS === '1' ? false : '画面なしの Chrome の試験は YC_BROWSER_TESTS=1 のときだけ(編集ごとの試験を 30 秒未満にするため。合わせの門で流す)';
 
-const freePort = () =>
+// FR_PORT_RANGE=9520-9529 のように渡すと、その中の空いている番号を使う(ほかの物と重ならないため)。無ければ、空いている番号を OS が選ぶ
+const tryPort = (n) =>
   new Promise((resolve) => {
     const s = createServer();
-    s.listen(0, '127.0.0.1', () => {
+    s.once('error', () => resolve(0));
+    s.listen(n, '127.0.0.1', () => {
       const { port } = s.address();
       s.close(() => resolve(port));
     });
   });
+const freePort = async () => {
+  const m = /^(\d+)-(\d+)$/.exec(process.env.FR_PORT_RANGE ?? '');
+  if (m) {
+    for (let n = Number(m[1]); n <= Number(m[2]); n++) {
+      const p = await tryPort(n);
+      if (p) return p;
+    }
+    throw new Error(`FR_PORT_RANGE ${process.env.FR_PORT_RANGE} に空きがありません`);
+  }
+  return tryPort(0);
+};
 
 async function startServer(env) {
   const port = await freePort();
@@ -63,10 +76,14 @@ const PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <script type="module">
 import { mountFirstRun } from '/__fr/src/ui/onboarding/index.js';
 import { seededRandom } from '/__fr/src/ui/persona/settings.js';
+import { createDrawCreator, createSampleCreator } from '/__fr/src/ui/onboarding/creators.js';
+import { MAIN_CHARACTER } from '/__fr/src/character/defaults.js';
 const params = new URLSearchParams(location.search);
 window.__test = { closed: null };
 addEventListener('yc:firstrun-closed', (e) => { window.__test.closed = e.detail; });
-window.__fr = mountFirstRun({ app: null, params, buttonHost: document.getElementById('modes'), random: seededRandom(5) });
+// ?draw=1: 描ける作り手(/api/draw は試験が数えて、仮の返事を返す。舞台は使わない)
+const creator = params.get('draw') === '1' ? createDrawCreator({ sample: createSampleCreator({ main: () => MAIN_CHARACTER }), enabled: () => true }) : null;
+window.__fr = mountFirstRun({ app: null, params, buttonHost: document.getElementById('modes'), random: seededRandom(5), ...(creator ? { creator, showCharacter: async () => true } : {}) });
 </script></body></html>`;
 
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -282,6 +299,85 @@ test('ひとつ もどる(画面): 最初の問いには出ず、目立たない
         const { ctx, page, errors } = await openPage(browser, server.base, { ...v, query: 'onboard=1' });
         try {
           await walkBack(page, v.label, v);
+          assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
+        } finally {
+          await ctx.close();
+        }
+      });
+    }
+  } finally {
+    await browser.close();
+    server.proc.kill();
+  }
+});
+
+/** 戻って同じ頼みを送り直しても、描かない。さっきの子の札は、幅 390 でも札の列の最初に見える */
+async function walkNoRedraw(page, label, drawCount) {
+  await waitAct(page, 'role_home');
+  await page.click('.fr-actions [data-act="role_home"]');
+  await waitAct(page, 'words');
+  await page.fill('.fr-actions [data-act="words"] input', 'みどりの かえるの子');
+  await page.click('.fr-actions [data-act="words"] button[type="submit"]');
+  await waitAct(page, 'keep');
+  assert.equal(drawCount(), 1, `${label}: 1 回描いた`);
+
+  // 戻る: 言葉は欄に入り直し、さっきの子の札が列の最初に、列の中で見える
+  await clickBack(page);
+  await waitBackDone(page);
+  await waitAct(page, 'words');
+  await waitAct(page, 'reuse_made');
+  const reuse = await page.$eval('.fr-actions [data-act="reuse_made"]', (e) => {
+    const b = e.getBoundingClientRect();
+    const c = e.parentElement.getBoundingClientRect();
+    return { first: e.parentElement.firstElementChild === e, inside: b.left >= c.left - 0.5 && b.right <= c.right + 0.5 && b.width > 20, primary: e.classList.contains('primary'), name: e.getAttribute('aria-label'), text: e.textContent };
+  });
+  assert.equal(reuse.first, true, `${label}: 列の最初`);
+  assert.equal(reuse.inside, true, `${label}: 列の外に隠れていない`);
+  assert.equal(reuse.primary, true, `${label}: 目立つ札`);
+  assert.match(reuse.name, /もう一度は 描きません/);
+  assert.equal(await page.$eval('.fr-actions [data-act="words"] input', (e) => e.value), 'みどりの かえるの子');
+  await checkLayout(page, `${label} さっきの子の札`);
+  await shot(page, `back_${label}_8_reuse_chip`);
+
+  // 欄の言葉をそのまま送る: 描かない(何回でも)
+  for (let i = 0; i < 2; i++) {
+    await page.click('.fr-actions [data-act="words"] button[type="submit"]');
+    await waitAct(page, 'keep');
+    assert.equal(drawCount(), 1, `${label}: 送り直しても描かない(${i + 1} 回目)`);
+    assert.match(await logText(page), /もう一度は 描かないよ/);
+    await clickBack(page);
+    await waitBackDone(page);
+    await waitAct(page, 'words');
+  }
+  // さっきの子で つづける: 描かない
+  await page.click('.fr-actions [data-act="reuse_made"]');
+  await waitAct(page, 'keep');
+  assert.equal(drawCount(), 1, `${label}: 札で続けても描かない`);
+
+  // やりなおすは、新しく描いてほしいということ
+  await page.click('.fr-actions [data-act="again"]');
+  await waitAct(page, 'words');
+  await page.fill('.fr-actions [data-act="words"] input', 'みどりの かえるの子');
+  await page.click('.fr-actions [data-act="words"] button[type="submit"]');
+  await waitAct(page, 'keep');
+  assert.equal(drawCount(), 2, `${label}: やりなおす の後は描く`);
+}
+
+test('ひとつ もどる(画面): 戻って同じ頼みを送り直しても描かない。さっきの子の札は列の最初で見える(幅 390・PC)', { skip: SLOW, timeout: 300_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が見つからない(CHROME_PATH で渡せます)');
+  const server = await startServer({ MEMORY_DIR: mkdtempSync(join(tmpdir(), 'fr-mem-')) });
+  try {
+    for (const v of VIEWS) {
+      await t.test(v.label, async () => {
+        const { ctx, page, errors } = await openPage(browser, server.base, { ...v, query: 'onboard=1&draw=1' });
+        let drawn = 0;
+        await ctx.route(`${server.base}/api/draw`, (route) => {
+          drawn += 1;
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: `drawn_${drawn}`, name: `かいた子${drawn}` }) });
+        });
+        try {
+          await walkNoRedraw(page, v.label, () => drawn);
           assert.deepEqual(errors, [], `画面のエラー: ${errors.join(' / ')}`);
         } finally {
           await ctx.close();

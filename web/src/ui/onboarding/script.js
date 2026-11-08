@@ -102,6 +102,21 @@ export const REUSE_ID = 'reuse_made';
 const TRAIL_MAX = 60;
 /** 問いの「かたち」(札の id の並び。『はじめから』は数えない)。同じ並びなら、同じ問いの出し直し(戻りの道には足さない) */
 const sigOf = (actions) => actions.filter((a) => a.id !== 'fresh').map((a) => a.id).join(' ');
+
+/**
+ * 描く入力の「同じかどうか」の目印(戻って同じ頼みを送り直した時に、もう一度描かないため)。
+ * 写真・絵は、選び直すと仮の住所が変わるので、ファイルの名前・大きさ・日付で見る。言葉は、言葉と「ゆるキャラに してみる」の有無
+ */
+export function inputKey(i) {
+  if (!i) return '';
+  const yuru = i.yurufy ? '1' : '0';
+  if (i.from === 'picture') {
+    const f = i.file;
+    const id = f && typeof f === 'object' && (f.name || f.size) ? `${f.name}|${f.size}|${f.lastModified}` : `${i.url ?? ''}|${i.name ?? ''}`;
+    return ['pic', i.kind ?? '', id, (i.colors ?? []).join(','), i.shape ?? '', yuru].join('~');
+  }
+  return i.words ? ['words', i.words, yuru].join('~') : '';
+}
 /** 歩みごとの、だいたいの秒(残りの時間の目安)。手元の PC で描く時は、3 歩目に描く時間を足す */
 const STEP_SEC = { 1: 20, 2: 15, 3: 15, 4: 15, 5: 15, 6: 20, 7: 15 };
 const DRAW_SEC = 240;
@@ -196,6 +211,7 @@ export class FirstRun {
     this.q = null; // 今出している問いの控え
     this.askPushed = false; // 「のこりを ぜんぶ おまかせ」の確かめを出す時に、元の問いを道に足したか
     this.lastMade = null; // 最後に描いた子(戻った先の問いで、もう一度描かずに使えるように残す)
+    this.reuseArmed = false; // 「ひとつ もどる」で戻った後だけ true。同じ頼みを送り直した時、描かずに lastMade を使う(1 人 2 回までの描く回数を守る)
     this.pinned = null; // 札の上に出したままの絵(戻る時に元へ戻す)
   }
 
@@ -467,7 +483,13 @@ export class FirstRun {
       if (this.step < 2) this.skipped.add(2); // 1 歩目からのおまかせはチェックをしていない(歩みの丸は「とばした」に)
       this._go(3);
       await this._say({ who: 'note', text: `「${words}」で つくるよ。` });
-      made = await this._long(creator.make(this.input, { onProgress: (text) => this._say({ who: 'note', text }) }));
+      const kept = this._sameMade(); // 戻って同じ おまかせを押し直した時は、描かずに さっきの子を使う
+      if (kept) {
+        await this._say(this._reuseNote(kept));
+        made = kept.character;
+      } else {
+        made = await this._long(creator.make(this.input, { onProgress: (text) => this._say({ who: 'note', text }) }));
+      }
       // 近い見本が案内役そのものなら、別の子を出す(案内役のまま「できあがり!」と言わない。UIR 4)
       if (made?.sample && made.id === this.guide.id) made = creator.surprise?.() ?? made;
     }
@@ -588,6 +610,7 @@ export class FirstRun {
     this.askBack = q.askBack;
     this.askPushed = false;
     this.waiting2d = q.waiting2d;
+    this.reuseArmed = Boolean(this.lastMade); // 戻った後に同じ頼みを送り直したら、描かずに さっきの子を使う
     this._pin(q.pinned);
     if (wasDone) this.d.onUndone?.(); // 作り終わりで閉じる待ちを止める
     this.d.thinking?.(false);
@@ -620,7 +643,8 @@ export class FirstRun {
     const base = q.actions.map(({ prev, value, ...a }) => a);
     const m = this.lastMade;
     if (m && !q.character && !base.some((a) => a.id === REUSE_ID) && base.some((a) => a.id === 'words' || a.kind === 'frame')) {
-      base.push({ id: REUSE_ID, label: `さっきの ${m.character.name}で つづける`, aria: `さっき 描いた ${m.character.name}で つづける(もう一度は 描きません)` });
+      // 札の列の最初に、おすすめの札として出す(幅の狭い画面で、横に流れる列の外に隠れないように)
+      base.unshift({ id: REUSE_ID, label: `さっきの ${m.character.name}で つづける`, primary: true, aria: `さっき 描いた ${m.character.name}で つづける(もう一度は 描きません)` });
     }
     return base.map((a) => (ans && a.id === ans.id ? { ...a, prev: true, ...(a.kind === 'text' && ans.text ? { value: ans.text } : {}) } : a));
   }
@@ -628,7 +652,21 @@ export class FirstRun {
   /** 最後に描いた子を覚える(戻った先の問いで、もう一度描かずに使える)。描いた子と、手元の PC の道の子だけ(見本は選び直しても何も減らない) */
   _noteMade(c) {
     if (!c || !(c.drawn || c.local)) return;
-    this.lastMade = { character: c, input: this.input ? { ...this.input } : null, check: this.check ? { ...this.check } : null, skipped: [...this.skipped], pinned: this.pinned };
+    this.lastMade = { character: c, key: inputKey(this.input), input: this.input ? { ...this.input } : null, check: this.check ? { ...this.check } : null, skipped: [...this.skipped], pinned: this.pinned };
+    this.reuseArmed = false; // 描いた(か、決めた)ばかり。戻るまでは、同じ頼みでも ふつうに描く
+  }
+
+  /** 戻った後に、前と同じ頼み(同じ言葉・同じ写真・同じ おまかせ)を送り直した時の、さっき描いた子。違う頼みや、戻っていない時は null */
+  _sameMade() {
+    const m = this.lastMade;
+    if (!this.reuseArmed || !m?.key || m.key !== inputKey(this.input)) return null;
+    return m;
+  }
+
+  /** 描かずに さっきの子を使う時の、ひとこと(ちがう子が ほしい時のやり方も言う) */
+  _reuseNote(m) {
+    const how = this.input?.from === 'picture' ? 'ちがう子が いい時は、べつの 絵を えらんでね。' : 'ちがう子が いい時は、ことばを すこし かえて 送ってね。';
+    return { who: 'note', text: `さっき 描いた ${m.character.name}を つかうよ(もう一度は 描かないよ)。${how}` };
   }
 
   /** 「さっきの子で つづける」: もう一度は描かない。描いた時の入力・チェック・歩みに戻して、その子の「この子はどうかな?」へ */
@@ -828,6 +866,7 @@ export class FirstRun {
         this.q = null;
         this.askPushed = false;
         this.lastMade = null;
+        this.reuseArmed = false;
         return this.start();
       case REUSE_ID:
         await this._echo(id);
@@ -890,6 +929,7 @@ export class FirstRun {
   }
 
   async _restart() {
+    this.reuseArmed = false; // 「やりなおす」は、新しく描いてほしいという こと(同じ言葉でも描く)
     this.convert = null;
     this.input = null;
     this.check = null;
@@ -1014,7 +1054,10 @@ export class FirstRun {
   /* ---------- 3: できた子 ---------- */
   async _meet() {
     this._go(3);
-    const made = await this._long(this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) }));
+    // 戻って同じ頼みを送り直した時は、描かない(描くのは 1 人 2 回まで。さっきの子が残っている)
+    const kept = this._sameMade();
+    if (kept) await this._say(this._reuseNote(kept));
+    const made = kept ? kept.character : await this._long(this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) }));
     if (!made) return this._noMatch(); // 見本の一覧が空の時だけ
     this.character = made;
     this._noteMade(made);
