@@ -104,7 +104,8 @@ test('通し: 中継と会話サーバーが立ち、/api/status が「Claude Co
   await withEnv({
     RELAY_CLAUDE_BIN: FAKE_CLAUDE, FAKE_CLAUDE_LOG: log, FAKE_CLAUDE_AUTH: 'in',
     ANTHROPIC_API_KEY: 'fake-real-looking-value', ANTHROPIC_API_URL: undefined, YC_BRAIN_VIA: undefined,
-    ELEVENLABS_API_KEY: undefined, APP_PASSPHRASE: undefined, YC_BROWSER_DRAW: '1',
+    ELEVENLABS_API_KEY: undefined, APP_PASSPHRASE: undefined, YC_BROWSER_DRAW: undefined, // 絵の道は台本が入れる
+
     LOG_DIR: join(dir, 'logs'), MEMORY_DIR: join(dir, 'memory'), FILLER_DIR: join(dir, 'fillers'), PORT: String(PORT), HOST: '127.0.0.1',
   }, async () => {
     const run = await startClaudeCode({ port: PORT, host: '127.0.0.1', build: false, stateDir: join(dir, 'relay'), log: () => {} });
@@ -114,7 +115,9 @@ test('通し: 中継と会話サーバーが立ち、/api/status が「Claude Co
       const status = await waitFor(async () => (await fetch(`${base}/api/status`)).json());
       assert.equal(status.brain, 'haiku', '鍵ありと同じ道');
       assert.equal(status.brainVia, 'claude-code', '画面の「おためしモード」を出さない印');
-      assert.equal(status.draw.on, true);
+      assert.equal(status.draw.on, true, '絵の道は台本が入れるので、そのまま描ける');
+      assert.equal(status.draw.daily, 20, 'アプリの 1 日の上限(既定)のまま');
+      assert.equal(process.env.YC_BROWSER_DRAW, '1');
 
       // 会話: 画面の呼び出し → 会話サーバー → 中継 → (偽の)claude
       const chat = await fetch(`${base}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'こんにちは' }) });
@@ -160,6 +163,7 @@ test('通し: 中継と会話サーバーが立ち、/api/status が「Claude Co
     assert.equal(process.env.ANTHROPIC_API_KEY, 'fake-real-looking-value');
     assert.equal(process.env.ANTHROPIC_API_URL, undefined);
     assert.equal(process.env.YC_BRAIN_VIA, undefined);
+    assert.equal(process.env.YC_BROWSER_DRAW, undefined, '台本が入れた絵の印も元に戻る');
   });
   cleanup(dir);
 });
