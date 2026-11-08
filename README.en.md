@@ -2,7 +2,7 @@
 
 <p align="center"><b>Your own yuru-chara, from a few words or one picture, talking in about two minutes.</b></p>
 
-<p align="center"><img src="docs/images/cast.png" alt="Norrie and Yokoso-kun, two of the yuru-chara" width="1000"></p>
+<p align="center"><img src="docs/images/cast.png" alt="Six yuru-chara: Norrie, Yokoso-kun, Mikan-chan, Robo-kun, Chochin-kun and Panel-kun" width="1000"></p>
 
 <p align="center">
 <img src="https://img.shields.io/badge/Built_with-Claude_Code-D97757?style=flat" alt="Built with Claude Code">
@@ -24,8 +24,14 @@
 
 <table>
 <tr>
-<td align="center" width="50%"><img src="docs/images/face_norrie.png" width="128" alt="Norrie"><br><b>Norrie</b><br>"I'll do my best! I help everyone at home, step by step."</td>
-<td align="center" width="50%"><img src="docs/images/face_yokoso.png" width="128" alt="Yokoso-kun"><br><b>Yokoso-kun</b><br>"I love waving to people who come for the first time. I'll show you how to play."</td>
+<td align="center" width="33%"><img src="docs/images/face_norrie.png" width="128" alt="Norrie"><br><b>Norrie</b><br>"I'll do my best! I help everyone at home, step by step."</td>
+<td align="center" width="33%"><img src="docs/images/face_yokoso.png" width="128" alt="Yokoso-kun"><br><b>Yokoso-kun</b><br>"I love waving to people who come for the first time. I'll show you how to play."</td>
+<td align="center" width="33%"><img src="docs/images/face_mikan.png" width="128" alt="Mikan-chan"><br><b>Mikan-chan</b><br>"I love sunbathing and chatting with everyone!"</td>
+</tr>
+<tr>
+<td align="center" width="33%"><img src="docs/images/face_robo.png" width="128" alt="Robo-kun"><br><b>Robo-kun</b><br>"I love waving to people who come for the first time. Do praise my bow tie!"</td>
+<td align="center" width="33%"><img src="docs/images/face_d_lantern.png" width="128" alt="Chochin-kun"><br><b>Chochin-kun</b><br>"I love greeting people on their way in the evening with a gentle good evening."</td>
+<td align="center" width="33%"><img src="docs/images/face_f_led.png" width="128" alt="Panel-kun"><br><b>Panel-kun</b><br>"I love spotting someone who talks to me and waving to them."</td>
 </tr>
 </table>
 
@@ -51,6 +57,8 @@
 - **Draw and check**: Claude Sonnet 5.5
 - **Judge**: a separate Claude that did not draw (a separate `claude -p` call; the maker never grades its own work)
 
+**The voice is ElevenLabs** (a separate service, only with your own key): the character speaks aloud. Without a key, it talks with text and a retro sound. The links for making a key are in [the key section](#adding-keys-the-easy-way).
+
 **Meet Norrie (ノリー)**, our main character: a back-striped tree kangaroo who is training to be a butler.
 A collaborator drew Norrie by hand during the hackathon, from the front, the side and the back, and let us use the drawing.
 From that drawing, Claude Code made Norrie's 2D version (SVG parts) and 3D version (built with Blender's Python).
@@ -60,8 +68,6 @@ When you open the app, you meet Norrie first. Norrie speaks Japanese, politely a
 
 *Phone width (390 px). 3D on the left, 2D on the right. Taken with a slightly earlier version.*
 
-- Demo video (under 3 minutes): *link added at submission* (not checked yet)
-- Try it in your browser: *link added at submission* (not checked yet)
 
 [Features](#features) · [Install](#install) · [Open it on a phone](#phone) · [VR](#open-it-on-a-quest-3) · [How we used Claude and Claude Code](#how-we-used-claude-and-claude-code) · [When it asks you (docs/confirmations.md)](docs/confirmations.md) · [How we built it](docs/HOW_WE_BUILT.en.md) · [Third-party parts and licences](THIRD_PARTY.md) · [Licence (code: MIT; characters excluded)](#license)
 
@@ -307,7 +313,7 @@ Run `npm run start:keys` in the `web` folder. It asks for your Claude key and yo
 - Make a voice key (ElevenLabs, official): <https://elevenlabs.io/app/api/api-keys>
 - Voice pricing and any trial plan (ElevenLabs, official): <https://elevenlabs.io/pricing/api>. Whether a trial plan exists, and what it includes, changes over time, so check the official page.
 
-In the app, while it is in おためしモード, the 「本物の Claude にする」 button on the banner opens a guide with two ways: the key steps above, or connecting your own Claude Code on this computer (`npm run start:claude-code`, no key needed). A voice key can also be typed on this device only, at the “voice” step of the creation flow.
+In the app, while it is in おためしモード, the 「本物の Claude にする」 button on the banner opens a guide with two ways: the key steps above, or connecting your own Claude Code on this computer (`npm run start:claude-code`, no key needed). A voice key can also be typed on this device only, at the “voice” step of the creation flow. In reception mode, the entrance says "Please enter a key or Claude Code first", and a notice that visitors can see stays on screen while it runs.
 
 ## Connect it to Claude Code
 
@@ -322,7 +328,7 @@ npm run start:claude-code      # instead of npm start; then open http://127.0.0.
 - It does not use `ANTHROPIC_API_KEY` (even if one is set, it is passed neither to the app nor to `claude`). What you say is not logged. The usage counts against your Claude Code plan.
 - While connected, the status endpoint (`/api/status`) answers `brainVia: "claude-code"` (it answers `"mock"` when there is neither a key nor Claude Code and おためしモード talks).
 - The voice is separate. To hear it, enter your own ElevenLabs key as usual ([Voices](#voices)).
-- Checked on Windows with Node.js 22 and this PC's Claude Code. Not run on Mac or Linux yet.
+- On 8 Nov, checked on Windows with Node.js 22 and Claude Code, through to the real model answering. Not run on Mac or Linux yet.
 
 ## What works today
 
@@ -366,7 +372,7 @@ Each row was checked by running it. The check is named next to it.
 - Talking with the real Claude Haiku with an API key (not checked yet). The real Haiku runs above called the brain in the same form as the product, through Claude Code (`claude -p`) on the development PC.
 - A voice with a voice key, and switching between the boy's and the girl's voice (not checked yet). Without a key, the character talks with text and a retro sound.
 - The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only in おためしモード and keeps no memory) (not checked yet). A real update from the public repository (not checked yet; checked against a local source).
-- In multilingual mode, only the real brain (with `ANTHROPIC_API_KEY`) answers in other languages; the おためしモード (trial mode) used with neither a key nor Claude Code stays in Japanese. The app's screens are in Japanese only.
+- In multilingual mode, only the real brain (when a key is used, or when your own Claude Code is connected) answers in other languages; the おためしモード (trial mode) used with neither a key nor Claude Code stays in Japanese. The app's screens are in Japanese only.
 - `yuru-learn` reading a web page by URL (not checked yet; the PDF and the map picture were tried end to end).
 - 3D does not start from a browser button alone. After the OK on the picture for 3D, start the make-character skill in Claude Code on the PC ([below](#make-your-own-character-on-your-pc-with-claude-code)).
 - Norrie's 3D: seen from behind, a horizontal line shows where the head meets the body. Seen straight from the side, the eyes are hardly visible.
@@ -549,11 +555,11 @@ The work from before the turn to yuru-chara is kept on the `before-pivot` branch
 
 The developer has worked in 3D and video with Unreal Engine, Blender, Cinema 4D and Character Creator, and on live events. At the Japan Mobility Show, the developer also built a system for holding conversations with robots. That experience went into the Claude Code skills in this repository, so that anyone can have a moving, talking yuru-chara from a few words or a single picture.
 
-<a name="license"></a>
-
 ## What's next
 
 We aim to import any kind of character, such as VRM models and Unreal Engine MetaHumans, and make them all able to hold a conversation here. (No dates yet; what works today is what this README describes.)
+
+<a name="license"></a>
 
 ## Licence
 

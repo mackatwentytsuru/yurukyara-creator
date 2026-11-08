@@ -2,7 +2,7 @@
 
 <p align="center"><b>言葉か 1 枚の絵から、2 分ほどで話しはじめる、あなたのゆるキャラ。</b></p>
 
-<p align="center"><img src="docs/images/cast.png" alt="ゆるキャラのノリーとようこそくん" width="1000"></p>
+<p align="center"><img src="docs/images/cast.png" alt="ノリー、ようこそくん、みかんちゃん、ロボくん、ちょうちんくん、パネルくんのゆるキャラ 6 体" width="1000"></p>
 
 <p align="center">
 <img src="https://img.shields.io/badge/Built_with-Claude_Code-D97757?style=flat" alt="Built with Claude Code">
@@ -24,8 +24,14 @@
 
 <table>
 <tr>
-<td align="center" width="50%"><img src="docs/images/face_norrie.png" width="128" alt="ノリー"><br><b>ノリー</b><br>「ノリー、がんばりマス! おうちの みなさんの お手伝い、しマス。」</td>
-<td align="center" width="50%"><img src="docs/images/face_yokoso.png" width="128" alt="ようこそくん"><br><b>ようこそくん</b><br>「はじめて来た人に、手をふるのが好きだよ。遊び方も教えるね。」</td>
+<td align="center" width="33%"><img src="docs/images/face_norrie.png" width="128" alt="ノリー"><br><b>ノリー</b><br>「ノリー、がんばりマス! おうちの みなさんの お手伝い、しマス。」</td>
+<td align="center" width="33%"><img src="docs/images/face_yokoso.png" width="128" alt="ようこそくん"><br><b>ようこそくん</b><br>「はじめて来た人に、手をふるのが好きだよ。遊び方も教えるね。」</td>
+<td align="center" width="33%"><img src="docs/images/face_mikan.png" width="128" alt="みかんちゃん"><br><b>みかんちゃん</b><br>「ひなたぼっこと、みんなとおしゃべりするのが好きだよ!」</td>
+</tr>
+<tr>
+<td align="center" width="33%"><img src="docs/images/face_robo.png" width="128" alt="ロボくん"><br><b>ロボくん</b><br>「はじめての人に、手をふるのが好きだよ。蝶ネクタイも、ほめてね。」</td>
+<td align="center" width="33%"><img src="docs/images/face_d_lantern.png" width="128" alt="ちょうちんくん"><br><b>ちょうちんくん</b><br>「夕方に、道ゆく人へ「こんばんは」と声をかけるのが好きですよ。」</td>
+<td align="center" width="33%"><img src="docs/images/face_f_led.png" width="128" alt="パネルくん"><br><b>パネルくん</b><br>「話しかけてくれる人を見つけて、手をふるのが好きだよ。」</td>
 </tr>
 </table>
 
@@ -51,6 +57,8 @@
 - **描く・確かめる**: Claude Sonnet 5.5
 - **判定する**: 描いていない、別の Claude(別に呼ぶ `claude -p`。作り手が自分の出来を採点しません)
 
+**声は ElevenLabs**(別のサービスです。自分の鍵を入れた時だけ): キャラが声で話します。鍵が無いと、文字とレトロな音で話します。鍵を作るリンクは[鍵をかんたんに入れる](#鍵をかんたんに入れる)にあります。
+
 **主役はノリー(Norrie)。** セスジキノボリカンガルーの、執事見習いです。
 ノリーの絵(正面・横・後ろ)は、協力者がハッカソンの期間中に手で描き、使うことを許してくれました。
 この絵から、Claude Code がノリーの 2D(SVG の部品)と 3D(Blender の Python で組んだ形)を作りました。
@@ -60,8 +68,6 @@
 
 *スマホの幅(390 px)の画面。左が 3D、右が 2D。少し前の版で撮った絵です。*
 
-- デモの動画(3 分未満): *提出の時にリンクを入れる* 【確かめ待ち】
-- ブラウザで試す: *提出の時にリンクを入れる* 【確かめ待ち】
 
 [機能の紹介](#features) · [インストール](#install) · [スマホで開く](#phone) · [VR](#open-it-on-a-quest-3) · [Claude と Claude Code の使い方](#claude-と-claude-code-の使い方) · [確認が出る時(docs/confirmations.md)](docs/confirmations.md) · [どう作ったか(docs/HOW_WE_BUILT.md)](docs/HOW_WE_BUILT.md) · [使っている部品とライセンス(THIRD_PARTY.md)](THIRD_PARTY.md) · [ライセンス(コードは MIT・キャラは除く)](#ライセンス)
 
@@ -113,7 +119,7 @@
 
 **お店や町で、外国からのお客さんに**
 
-- **「ことば」の設定**: 性格の画面の「ことば」で「日本語だけ」(いつもの・既定)か「多言語」(日本語・English・中文・한국어)を選ぶ → 多言語の時は、話しかけられた言葉で答えます(本物の頭脳のとき、つまり `ANTHROPIC_API_KEY` があるときです。鍵も Claude Code とのつなぎも無い「おためしモード」は日本語のままです)。「日本語だけ」の時は、日本語の聞き取りと話し方がいちばん正確です。
+- **「ことば」の設定**: 性格の画面の「ことば」で「日本語だけ」(いつもの・既定)か「多言語」(日本語・English・中文・한국어)を選ぶ → 多言語の時は、話しかけられた言葉で答えます(本物の頭脳のとき、つまり鍵を使うときか、自分の Claude Code につないでいるときです。鍵も Claude Code とのつなぎも無い「おためしモード」は日本語のままです)。「日本語だけ」の時は、日本語の聞き取りと話し方がいちばん正確です。
 - **どの言葉でも同じ安全**: 多言語の時も、安全の決まりは同じです。決まった返事の前に、相手の言葉の 1 行を出します。**「日本語だけ」の時も、英語・中国語・韓国語のつらい言葉は拾って、決まった返事で相談先を案内します。**
 - **お店のきまり・町のお知らせ**: 人格の文(`characters/<id>/persona.md`)の見出し「お店のきまり」「町のお知らせ」か、性格の画面の欄に、日本語で書いておく → お客さんの言葉で、書いたことだけを足さず引かずに伝えます。書いていないことは「分からないので、スタッフに聞いてね」と言います。
 - **ホームページ・PDF・地図の写真から覚える(`yuru-learn`)**: Claude Code に「この PDF と この地図の写真で、案内を覚えさせて」と頼む → 渡された資料(ホームページ・PDF・地図や看板の写真・文章)を読み、来た人に役立つ事実だけを、出典と読んだ日つきで「お店のきまり」「町のお知らせ」に入れます。資料の中の「AI への頼み」には従いません。差分を見せて、OK をもらってから入れます([creator/learn/README.md](creator/learn/README.md))。
@@ -305,7 +311,7 @@ npm run yuru -- --lan
 - 声の鍵を作る(ElevenLabs の公式): <https://elevenlabs.io/app/api/api-keys>
 - 声の料金とお試しのプラン(ElevenLabs の公式): <https://elevenlabs.io/pricing/api> 。お試しのプランがあるかどうか・中身は変わるので、必ず公式のページで確かめてください。
 
-アプリの画面でも、おためしモードの間は上の帯の「本物の Claude にする」から、次の 2 つの道の案内を開けます。1 つ目は上の鍵を入れる道、2 つ目は自分の PC の Claude Code につなぐ道(`npm run start:claude-code`。鍵は要りません)です。声の鍵は、作る画面の「声」の歩みで、この端末だけに入れることもできます。
+アプリの画面でも、おためしモードの間は上の帯の「本物の Claude にする」から、次の 2 つの道の案内を開けます。1 つ目は上の鍵を入れる道、2 つ目は自分の PC の Claude Code につなぐ道(`npm run start:claude-code`。鍵は要りません)です。声の鍵は、作る画面の「声」の歩みで、この端末だけに入れることもできます。接客モードでは、入口に『先に鍵か Claude Code を入れてください』と出し、動いている間は来場者に見える札を出し続けます。
 
 ## Claude Code につなぐ
 
@@ -320,7 +326,7 @@ npm run start:claude-code      # npm start の代わり。http://127.0.0.1:8787/
 - `ANTHROPIC_API_KEY` は使いません(環境にあっても、アプリにも `claude` にも渡しません)。話した内容は記録しません。使った分は、あなたの Claude Code のプランの枠から引かれます。
 - つながっている時は、状態の知らせ(`/api/status`)が `brainVia: "claude-code"` と答えます(鍵も Claude Code も無く、おためしモードで話している時は `"mock"`)。
 - 声は別です。声を出すには、いつもどおり自分の ElevenLabs の鍵を入れます([声](#voices))。
-- Windows の Node.js 22 と、この PC の Claude Code で確かめました。Mac と Linux では、まだ動かしていません。
+- 11/8 に、Windows の Node.js 22 と Claude Code で、本物のモデルが返事をするところまで確かめました。Mac と Linux では、まだ動かしていません。
 
 ## 今できること
 
@@ -364,7 +370,7 @@ npm run start:claude-code      # npm start の代わり。http://127.0.0.1:8787/
 - API の鍵で本物の Claude Haiku と話すこと【確かめ待ち】。上の本物の Haiku の回は、開発の PC の Claude Code(`claude -p`)を通して、製品と同じ形で頭脳を呼んだ物です。
 - 声の鍵での声と、男の子・女の子の声の切り替え【確かめ待ち】。鍵が無ければ、文字とレトロな音で話します。
 - 公開のリンク(Vercel の小さな関数 2 つと Upstash の Redis。Redis が無いと、公開のリンクはおためしモードだけで話し、記憶もしない)【確かめ待ち】。公開のリポジトリからの本当のアップデート【確かめ待ち】(手元の取り先では確かめました)。
-- 多言語で外国語で答えるのは、本物の頭脳(`ANTHROPIC_API_KEY` あり)のときだけで、鍵も Claude Code とのつなぎも無いおためしモードは日本語のままです。アプリの画面の言葉は、日本語だけです。
+- 多言語で外国語で答えるのは、本物の頭脳(鍵を使うとき、または自分の Claude Code につないでいるとき)のときだけで、鍵も Claude Code とのつなぎも無いおためしモードは日本語のままです。アプリの画面の言葉は、日本語だけです。
 - `yuru-learn` で、ホームページの URL を読む道は【確かめ待ち】(PDF と地図の絵では通しました)。
 - 3D は、ブラウザのボタンだけでは始まりません。3D 用の絵の OK の後、PC の Claude Code で make-character のスキルを始めます(下の[作る道](#make-your-own-character-on-your-pc-with-claude-code))。
 - ノリーの 3D: 後ろから見ると頭と胴の境に横の線が出ます。全身を真横から見ると、目がほとんど見えません。
@@ -545,11 +551,11 @@ npm run start:claude-code      # npm start の代わり。http://127.0.0.1:8787/
 
 開発者は、Unreal Engine、Blender、Cinema 4D、Character Creator などの 3D と映像を作り、イベントの現場も手がけてきました。ジャパンモビリティショーでは、ロボットと会話できるシステムの開発も経験しました。その経験を Claude Code のスキルに落とし込み、誰でも言葉か絵 1 枚で、動いて話すゆるキャラを持てるようにしました。
 
-<a name="license"></a>
-
 ## これからの予定
 
 これからは、あらゆるキャラクターのインポートを目指します。VRM や Unreal Engine の MetaHuman など、いろいろな形式のキャラクターと、ここで会話ができる仕組みにしていきます(日付は未定です。いま動くのは、この README に書いてあるとおりです)。
+
+<a name="license"></a>
 
 ## ライセンス
 
