@@ -770,6 +770,9 @@ export function mountFirstRun({
       present: (lines, ctx) => sheet.present(lines, ctx),
       offer: (actions) => sheet.offer(actions),
       thinking: (on, info) => sheet.thinking(on, info),
+      // 止まりの見張り(script.js の _watch。BP1): 話している間と、吹き出しが増えている間は、止まりと見ない
+      playing: () => Boolean(app?.speaker?.speaking) || Boolean(globalThis.speechSynthesis?.speaking),
+      activity: () => sheet?.stats?.bubbles ?? 0,
       pin: (pic) => sheet.pin(pic),
       guideUrl: readGuideUrl(),
       showCharacter: showCharacter ?? defaultShow,

@@ -89,6 +89,8 @@ export const README_LABEL = 'つくりかた';
 /** 歩みごとの、だいたいの秒(残りの時間の目安)。手元の PC で描く時は、3 歩目に描く時間を足す */
 const STEP_SEC = { 1: 20, 2: 15, 3: 15, 4: 15, 5: 15, 6: 20, 7: 15 };
 const DRAW_SEC = 240;
+// 動いている(busy)まま、話してもいない・文字も増えない・長い仕事も無い状態が、この間つづいたら、札と入力欄を出し直す(BP1。止まって空の札のままになるのを防ぐ)
+const STUCK_MS = 8000;
 
 /**
  * いまの歩みから、あと いくつ・あと 何分 で おわるか(本人 11/7: すぐ終わるのに途中でやめる人がいるので、残りを見せる)。
@@ -153,7 +155,13 @@ export class FirstRun {
     this.settings = null;
     this.history = [];
     this.actions = [];
-    this.busy = false;
+    this._busy = false;
+    this._busyTimer = null;
+    this._longWork = 0; // 描く・調べる・返事を待つ、など本当に長くかかる仕事の数(その間は止まりと見ない)
+    this._lastActivity = null;
+    this._saying = 0; // 今 出している最中の文の数(台本が busy でない始まり・続きの文も見張る)
+    this._releases = new Set(); // 止まった文の待ちを外す関数(出し直す時に全部呼ぶ)
+    this.stuckCount = 0;
     this.done = false;
     this.freshNext = false; // 作りかけの続きから始めた最初の選びに、「はじめから」を 1 つ足す(CU3)
     this.mockNoted = false;
@@ -188,7 +196,107 @@ export class FirstRun {
   async _say(...lines) {
     const list = lines.flat().filter(Boolean);
     this.log.push(...list);
-    await this.d.present(list, { step: this.step, character: this.character, settings: this.settings });
+    // 文を出す側(読み上げ)が止まって終わらない時、出し直す仕組み(_unstick)が待ちを外せるように、競争させる
+    let release;
+    const freed = new Promise((resolve) => {
+      release = resolve;
+    });
+    this._releases.add(release);
+    this._saying += 1;
+    this._syncWatch();
+    try {
+      await Promise.race([this.d.present(list, { step: this.step, character: this.character, settings: this.settings }), freed]);
+    } finally {
+      this._releases.delete(release);
+      this._saying -= 1;
+      this._syncWatch();
+    }
+  }
+
+  /** 動いている最中か。立てた時から、止まりの見張り(_watch)を回す */
+  get busy() {
+    return this._busy;
+  }
+
+  set busy(on) {
+    this._busy = Boolean(on);
+    this._stopWatch();
+    this._syncWatch();
+  }
+
+  /** 動いている最中か、文を出している最中なら、見張りを回す(まだ回っていなければ始める) */
+  _syncWatch() {
+    const active = this._busy || this._saying > 0;
+    if (!active) return this._stopWatch();
+    if (this._busyTimer) return;
+    this._lastActivity = this._activityKey();
+    this._armWatch();
+  }
+
+  _armWatch() {
+    const t = setTimeout(() => this._watch(), this.d.stuckMs ?? STUCK_MS);
+    t.unref?.();
+    this._busyTimer = t;
+  }
+
+  _stopWatch() {
+    clearTimeout(this._busyTimer);
+    this._busyTimer = null;
+  }
+
+  /** 今 話している・文字が増えている・長い仕事を待っている印。変われば「進んでいる」 */
+  _activityKey() {
+    let n;
+    try {
+      n = this.d.activity?.();
+    } catch {
+      n = null;
+    }
+    return `${n}|${this.log.length}|${this._longWork}`;
+  }
+
+  _isPlaying() {
+    try {
+      return Boolean(this.d.playing?.());
+    } catch {
+      return false;
+    }
+  }
+
+  /** busy のまま止まっていないかを見る。話している間・長い仕事の間・何かが進んでいる間は待つ */
+  _watch() {
+    this._busyTimer = null;
+    if (!(this._busy || this._saying > 0) || this.done) return;
+    const key = this._activityKey();
+    const moved = key !== this._lastActivity;
+    this._lastActivity = key;
+    if (moved || this._longWork > 0 || this._isPlaying()) return this._armWatch();
+    this._unstick();
+  }
+
+  /**
+   * 止まった時の出し直し: 待ちの文を外し、動いている印を下ろして、いまの選びと入力欄をもう一度出す。
+   * 外された文の続きが進めば、その続きの選びが後から出て上書きする
+   */
+  _unstick() {
+    this.stuckCount += 1;
+    const waiting = this._releases.size;
+    for (const release of [...this._releases]) release();
+    this._releases.clear();
+    this.busy = false;
+    if (this.actions.length) this._offer(this.actions);
+    else if (!waiting) this._offer(this._startActions()); // 外した文があれば、その続きが最初の選びを出す
+    this.d.onStuck?.(this.stuckCount);
+  }
+
+  /** 長くかかる仕事(描く・調べる・返事を待つ)。待っている間は、止まりの見張りが出し直さない */
+  async _long(promise) {
+    this._longWork += 1;
+    try {
+      return await promise;
+    } finally {
+      this._longWork -= 1;
+    }
   }
 
   _offer(actions) {
@@ -622,7 +730,7 @@ export class FirstRun {
       return this._offer(COLOR_CHIPS.map((c, i) => ({ id: `col_${c.id}`, label: c.label, primary: i === 0 })));
     }
     await this._say({ who: 'guide', text: `${noun}を 見てみるね。ちょっと まってて。` });
-    const result = await this.d.creator.check(this.input);
+    const result = await this._long(this.d.creator.check(this.input));
     return this._afterCheck(result);
   }
 
@@ -694,7 +802,7 @@ export class FirstRun {
   /* ---------- 3: できた子 ---------- */
   async _meet() {
     this._go(3);
-    const made = await this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) });
+    const made = await this._long(this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) }));
     if (!made) return this._noMatch(); // 見本の一覧が空の時だけ
     this.character = made;
     if (made.drawn) {
@@ -811,7 +919,7 @@ export class FirstRun {
     const note = clip(p?.text, NOTE_MAX);
     if (!note) return this._meetAsk();
     await this._say({ who: 'user', text: note });
-    const r = await this.d.creator.review(c.id, 'redo', note);
+    const r = await this._long(this.d.creator.review(c.id, 'redo', note));
     await this._say({ who: 'guide', text: r?.ok ? 'パソコンの Claude Code に つたえたよ。なおったら 見せるね。' : `うまく つたえられなかったみたい(${r?.message ?? 'りゆうは わからない'})。` });
     return this._offer([
       { id: 'keep', label: 'この子にする', primary: true },
@@ -881,7 +989,7 @@ export class FirstRun {
     this.d.thinking?.(true, { who: 'char', name: this.character?.name ?? 'この子' });
     let r;
     try {
-      r = await this.d.talk(text, { character: this.character, settings: this.settings, history: this.history });
+      r = await this._long(this.d.talk(text, { character: this.character, settings: this.settings, history: this.history }));
     } finally {
       this.d.thinking?.(false);
     }
@@ -979,7 +1087,7 @@ export class FirstRun {
       await this._say({ who: 'note', text: 'かぎが からっぽだよ。かぎを入れてね。' });
       return this._offerKey();
     }
-    const r = await this.d.voice.useKey(key.trim(), { remember: Boolean(p?.remember) });
+    const r = await this._long(this.d.voice.useKey(key.trim(), { remember: Boolean(p?.remember) }));
     if (!r?.ok) {
       await this._say({ who: 'char', text: 'うまくいかなかったみたい。' }, { who: 'note', text: r?.message ?? 'かぎを たしかめてね。' });
       return this._offerKey();

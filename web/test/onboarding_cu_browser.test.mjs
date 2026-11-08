@@ -29,7 +29,9 @@ import { seededRandom } from '/__fr/src/ui/persona/settings.js';
 const params = new URLSearchParams(location.search);
 const voiceDelay = Number(params.get('voice') || 0);
 // 舞台の読み上げのまね: 声が始まる(onStart)まで voice ms かかる(スマホの遅い回線のまね)。始まるまで、吹き出しの文字は空のまま
-const speaker = { speaking: false, setVoice() {}, prefetch() {}, enqueue: (text, o) => new Promise((res) => setTimeout(() => { o?.onStart?.(text, {}); res(); }, voiceDelay)) };
+// hang=1: 最初の 1 文が、止められて(stop)終わらないまま(本人の iPhone で起きた止まり。BP1)。止まりの見張りが札を出し直す
+let hangFirst = params.get('hang') === '1';
+const speaker = { speaking: false, setVoice() {}, prefetch() {}, enqueue: (text, o) => { if (hangFirst) { hangFirst = false; return new Promise(() => {}); } return new Promise((res) => setTimeout(() => { o?.onStart?.(text, {}); res(); }, voiceDelay)); } };
 const app = { character: { id: 'norrie', name: 'ノリー' }, characterId: 'norrie', persona: '', speaker,
   stage: { state: {}, resize: () => {}, frameCharacter: () => {} }, swapCharacter: () => {} };
 addEventListener('yc:firstrun-closed', (e) => { window.__closed = e.detail; });
@@ -277,6 +279,25 @@ test('作り終わった後に「おしゃべりに もどる」を押しても�
     assert.equal(await page.evaluate(() => window.__closed.reason), 'done', '作った子を捨てる later にしない');
     assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarded.v1')), 'done', '済みの印は done(later で上書きしない)');
     assert.equal(await page.evaluate(() => localStorage.getItem('yc.onboarding.progress.v1')), null, '作りかけは消える');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+test('作る画面: 話の文が止まって終わらなくても、8 秒ほどで札が戻る(下の札が空のままにならない。BP1)', { skip: SLOW, timeout: 120_000 }, async (t) => {
+  const browser = await findChrome();
+  if (!browser) return t.skip('Chrome が無い');
+  try {
+    const { ctx, page, errors } = await open(browser, { width: 390, height: 844, query: 'onboard=1&hang=1' });
+    const t0 = Date.now();
+    assert.equal(await page.$('.fr-actions [data-act="role_home"]'), null, '止まっている間は、札が出ていない');
+    await waitAct(page, 'role_home');
+    const sec = (Date.now() - t0) / 1000;
+    assert.ok(sec >= 6 && sec < 25, `見張りが働いて札が戻る(${sec.toFixed(1)} 秒)`);
+    await page.click('.fr-actions [data-act="role_home"]');
+    await waitAct(page, 'pick');
     assert.deepEqual(errors, []);
     await ctx.close();
   } finally {

@@ -44,6 +44,7 @@ export class Speaker {
     this.pending = 0;
     this.epoch = 0;
     this.timers = new Set();
+    this.waiters = new Set(); // 「この文を話し終わるまで」の待ちの resolve。stop() が全部終わらせる(止めた文の enqueue が永久に終わらず、台本が止まるのを防ぐ)
     this.fakeUntil = 0;
     this._level = 0;
     this.ttsError = null; // 読み上げが使えない理由(使えるなら null)
@@ -550,7 +551,13 @@ export class Speaker {
     }
     // この文が終わるまで待つ(次の文は、その間に先に用意されている)
     const wait = !started ? this._retro(text, epoch, onStart, onCrawl) : this.ctx ? Math.max(0, (this.nextTime - this.ctx.currentTime) * 1000) : 0;
-    await new Promise((resolve) => this._later(resolve, wait));
+    await new Promise((resolve) => {
+      this.waiters.add(resolve);
+      this._later(() => {
+        this.waiters.delete(resolve);
+        resolve();
+      }, wait);
+    });
   }
 
   /**
@@ -648,8 +655,12 @@ export class Speaker {
       }
     }
     this.retroNodes.clear();
+    // 話し終わるのを待っている文は、タイマーを消す前に全部終わらせる(消すと待ちが永久に終わらない)
+    const waiting = [...this.waiters];
+    this.waiters.clear();
     for (const id of this.timers) clearTimeout(id);
     this.timers.clear();
+    for (const resolve of waiting) resolve();
     this.nextTime = 0;
     this.wallNext = 0;
     this.fakeUntil = 0;
