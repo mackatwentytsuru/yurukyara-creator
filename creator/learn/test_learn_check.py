@@ -457,9 +457,10 @@ class AllowedToolsTest(unittest.TestCase):
         self.assertNotIn("Write", joined)
         for e in entries:
             if e.startswith("Bash(python") or e.startswith("Bash(python3"):
-                self.assertRegex(e, r"learn_check\.py (check|diff|list|undo) \*\)$")
-        for sub in ("check", "diff", "list", "undo"):
+                self.assertRegex(e, r"learn_check\.py (check|diff|list) \*\)$")
+        for sub in ("check", "diff", "list"):
             self.assertIn(f"learn_check.py {sub} *", joined)
+        self.assertNotIn("undo", joined)  # 戻すのは、キャラの知っていることが変わるので、1 回ごとに確認が出る
 
     def test_installed_copy_matches_when_it_exists(self):
         root = os.path.dirname(os.path.dirname(HERE))
