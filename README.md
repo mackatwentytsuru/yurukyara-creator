@@ -2,6 +2,8 @@
 
 <p align="center"><b>言葉か 1 枚の絵から、2 分ほどで話しはじめる、あなたのゆるキャラ。</b></p>
 
+<p align="center"><img src="docs/images/cast.png" alt="ゆるキャラのノリーとようこそくん" width="1000"></p>
+
 <p align="center">
 <img src="https://img.shields.io/badge/Built_with-Claude_Code-D97757?style=flat" alt="Built with Claude Code">
 <img src="https://img.shields.io/badge/talk-Claude_Haiku_5.5-D97757?style=flat" alt="Claude Haiku 5.5 (talk)">
@@ -15,6 +17,17 @@
 # ゆるキャラクリエイター
 
 > **えらんで、こたえるだけ。** あなたの(あなたの街の)ゆるキャラが、2 分ほどで話しはじめます。
+
+> ノリー: 「はじめまして! ノリーと申しマス。執事見習いデス。ノリー、がんばりマス! いっしょに、ゆるキャラ、つくりまショウ!」
+
+## なかまたち
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/images/face_norrie.png" width="128" alt="ノリー"><br><b>ノリー</b><br>「ノリー、がんばりマス! おうちの みなさんの お手伝い、しマス。」</td>
+<td align="center" width="50%"><img src="docs/images/face_yokoso.png" width="128" alt="ようこそくん"><br><b>ようこそくん</b><br>「はじめて来た人に、手をふるのが好きだよ。遊び方も教えるね。」</td>
+</tr>
+</table>
 
 ## えらんで、こたえるだけ(3 歩)
 
@@ -533,6 +546,10 @@ npm run start:claude-code      # npm start の代わり。http://127.0.0.1:8787/
 開発者は、Unreal Engine、Blender、Cinema 4D、Character Creator などの 3D と映像を作り、イベントの現場も手がけてきました。ジャパンモビリティショーでは、ロボットと会話できるシステムの開発も経験しました。その経験を Claude Code のスキルに落とし込み、誰でも言葉か絵 1 枚で、動いて話すゆるキャラを持てるようにしました。
 
 <a name="license"></a>
+
+## これからの予定
+
+これからは、あらゆるキャラクターのインポートを目指します。VRM や Unreal Engine の MetaHuman など、いろいろな形式のキャラクターと、ここで会話ができる仕組みにしていきます(日付は未定です。いま動くのは、この README に書いてあるとおりです)。
 
 ## ライセンス
 
