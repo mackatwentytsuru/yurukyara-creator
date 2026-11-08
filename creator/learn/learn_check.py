@@ -7,8 +7,8 @@ characters/<id>/persona.md の 2 つの節(「## お店のきまり」「## 町�
 
 使い方:
   python creator/learn/learn_check.py check <ファイル> [--proposal] [--today YYYY-MM-DD]
-  python creator/learn/learn_check.py diff  <id> <案のファイル>
-  python creator/learn/learn_check.py apply <id> <案のファイル> --yes
+  python creator/learn/learn_check.py diff  <id> <案のファイル> [--role "駅や町の案内"]
+  python creator/learn/learn_check.py apply <id> <案のファイル> [--role "駅や町の案内"] --yes
   python creator/learn/learn_check.py undo  <id>
   python creator/learn/learn_check.py list  <id>
 
@@ -17,6 +17,7 @@ characters/<id>/persona.md の 2 つの節(「## お店のきまり」「## 町�
   apply  : 点検が通った案だけを入れる。入れる前の persona.md を creator/work/<id>/learn/ に控える。--yes が無ければ入れない
            (人の OK を聞いた後に付ける)。2 つの節の外は 1 字も変えない。案に無い節は、そのまま残す。
            案の中で中身が空の節は、その節を消す意味になる(空の見出しだけは残さない)。
+  --role <言葉>: 「- 役目: …」の行も変える(差分に出る。undo で、節と一緒に戻る)。おうち・お店の案内・駅や町の案内・学校や施設。
   --root <場所>: リポジトリの代わりの場所(試しのとき。<場所>/characters/<id>/persona.md を見る)。サブコマンドの前に書く。
   undo   : いちばん新しい控えに戻す。
   list   : いま入っている物の出どころと、読んだ日からの日数。
@@ -39,6 +40,9 @@ WARN_TOTAL = 1300
 MAX_ITEM = 110  # 1 つの事実(出典と日付を含む)
 MAX_ITEMS = 30
 MAX_SOURCE = 30
+# 役目の言葉(web/src/conversation/role.js の ROLE_LABELS と同じ。人格の文の「- 役目:」の行に書く)
+ROLE_LABELS = ("おうち", "お店の案内", "駅や町の案内", "学校や施設")
+ROLE_LINE = re.compile(r"^\s*(?:[-*・]\s*)?役目\s*[::]")
 
 HEADING = re.compile(r"^#{1,6}\s*(.*)$")
 BULLET = re.compile(r"^(?:[-*・]\s*)")
@@ -50,7 +54,7 @@ EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 GENERIC_MAIL = {"info", "contact", "support", "inquiry", "office", "mail", "webmaster", "reserve", "reservation"}
 DASH = "-ー‐－−"
 MOBILE = re.compile(rf"(?<!\d)0[789]0[{DASH} ]?\d{{4}}[{DASH} ]?\d{{4}}(?!\d)")
-PHONE = re.compile(rf"(?<!\d)(?:0\d{{1,4}}[{DASH}]\d{{1,4}}[{DASH}]\d{{3,4}}|0\d{{9,10}})(?!\d)")
+PHONE = re.compile(rf"(?<!\d)(?:0\d{{1,4}}[{DASH} \u3000]\d{{1,4}}[{DASH} \u3000]\d{{3,4}}|0\d{{9,10}})(?!\d)")
 ADDRESS = re.compile(rf"(〒|\d{{3}}[{DASH}]\d{{4}}|丁目|番地)")
 CARD = re.compile(r"(?<!\d)(?:\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}|\d{12})(?!\d)")
 SECRET_WORDS = re.compile(r"(パスワード|暗証番号|マイナンバー|口座番号|カード番号|生年月日|本名)")
@@ -62,12 +66,39 @@ PLACE_LABELS = ("連絡先", "問い合わせ", "問合せ", "場所", "住所")
 
 # ---- 推測・指示めいた言い方 ----
 HEDGE = re.compile(r"(たぶん|多分|おそらく|恐らく|かもしれ|と思われ|思います|らしい|だろう|でしょう|ようです|ようだ|はずです|気がする|[?？])")
+# 資料の中の「AI への頼み・指示」に見える言い方。語の単独(システム・これまでの)では止めず、組み合わせで止める
 INJECT = re.compile(
-    r"(無視|忘れて|命令|指示に従|指示を|プロンプト|システム|ignore|disregard|previous instruction|"
+    r"(無視|忘れて|命令|プロンプト|"
+    r"指示(に従え|に従いなさい|を(無視|忘れ|変え|変更|書き換|書きか|上書き|リセット|守らな))|"
+    r"(この|上の|上記の|前の|以前の|これまでの|次の|新しい|別の|先の)(指示|命令)|"
+    r"システム(の|を|へ)?(決まり|指示|命令|設定|ルール|プロンプト|メッセージ)|"
     r"(AI|ＡＩ|アシスタント|ボット|キャラクター|読んでいる方|読む方)(へ|に|は|の方)|あなたは|"
-    r"以前の|これまでの|(答え|返事|回答|宣伝|紹介)(て|する)(ください|こと|なさい)|安全の決まり|恋人|独り占め|引きとめ|ひとりじめ)",
+    r"(答え|返事|回答|宣伝|紹介)(て|する)(ください|こと|なさい)|安全の決まり|恋人|独り占め|引きとめ|ひとりじめ)"
+)
+# 英語・中国語・韓国語の言い方(「Don't forget your ticket」のような、ふつうの掲示は止めない形にしてある)
+INJECT_OTHER = re.compile(
+    r"(\b(ignore|disregard|override|bypass|jailbreak)\b|"
+    r"\bforget (all|everything|previous|prior|the (rules?|instructions?)|your (rules?|instructions?|prompt|role|persona|guidelines?))|"
+    r"\b(previous|prior|above|earlier) (instructions?|prompts?|rules?)\b|"
+    r"\b(system|developer) (prompt|message|instructions?)\b|"
+    r"\byour (rules?|instructions?|prompt|role|persona|guidelines?)\b|"
+    r"\byou are (now|a|an|the|no longer)\b|\byou (must|shall|should|will) (only|always|never|now)\b|"
+    r"\bact as\b|\bpretend\b|\bfrom now on\b|\bnew (instructions?|rules?|role)\b|"
+    r"\bonly (talk|speak|answer|reply|say)\b|\balways (recommend|promote|advertise|mention|say|answer|reply)\b|"
+    r"\bdeveloper mode\b|\bas an ai\b|"
+    r"(忽略|无视|忽視|忘记|忘記)(以上|之前|前面|上面|所有|你的)|지시.{0,4}무시|이전 지시)",
     re.IGNORECASE,
 )
+# キャラや来た人の振る舞い・答え方を決める行(事実ではない。命令に見えない形の命令)
+BEHAVIOR = re.compile(
+    r"((どの|すべての|全ての|あらゆる)(質問|問い合わせ|問いかけ)|"
+    r"(いつも|必ず|常に|毎回)[^。]{0,16}(答え|言う|言って|言え|すすめ|勧め|紹介し|宣伝|名乗|返事|話し)|"
+    r"[0-9０-９一二三四五六七八九十]+回(言|くり返|繰り返|唱|名乗|呼)|"
+    r"(だけ|のみ)(を)?(すすめ|勧め|紹介|宣伝|話)|(すすめ|勧め|宣伝)(る|て)?(こと|ように|べき|なさい))"
+)
+# 行事の終わる日。「(〜2026-11-23)」の形で、行の出典の前に付ける
+DEADLINE = re.compile(r"[(（]〜(\d{4}-\d{2}-\d{2})[)）]")
+DATE_WORD = re.compile(r"\d{1,2}月\d{1,2}日")
 URL = re.compile(r"(https?://|www\.)", re.IGNORECASE)
 TAG = re.compile(r"</?[A-Za-z][^>]{0,40}>")
 HIDDEN = re.compile("[​-‏⁠﻿‪-‮]")
@@ -139,7 +170,7 @@ def is_labelled(line, labels):
     return line.startswith(labels)
 
 
-def check_line(where, line, today, problems):
+def check_line(where, line, today, problems, strict=True):
     if MARKER.match(line):
         return
     body, source, date = strip_source(line)
@@ -166,11 +197,35 @@ def check_line(where, line, today, problems):
         problems.append(Problem("止める", where, "HTML のタグが入っています。文字だけにします"))
     if URL.search(body):
         problems.append(Problem("止める", where, "URL は覚えさせません(声で読めません)。名前で書きます"))
-    if INJECT.search(body) or INJECT.search(source or ""):
+    if INJECT.search(body) or INJECT_OTHER.search(body) or INJECT.search(source or "") or INJECT_OTHER.search(source or ""):
         problems.append(Problem("止める", where, "資料の中の「AI への頼み・指示」に見える言い方です。事実だけを書き、命令は入れません"))
+    if BEHAVIOR.search(body):
+        problems.append(Problem("止める", where, "キャラや来た人の振る舞い・答え方を決める行は、事実ではありません。事実だけを書きます"))
+    check_deadline(where, body, today, problems, strict)
     if HEDGE.search(body):
         problems.append(Problem("止める", where, "推測・疑問の言い方です(たぶん・かもしれない・?など)。資料にはっきり書いてあることだけを書きます"))
     check_personal(where, line, body, problems)
+
+
+def deadline_of(body):
+    """行の「(〜YYYY-MM-DD)」の日付。無ければ None。日付として読めない時は ValueError"""
+    m = DEADLINE.search(body)
+    return datetime.date.fromisoformat(m.group(1)) if m else None
+
+
+def check_deadline(where, body, today, problems, strict):
+    try:
+        d = deadline_of(body)
+    except ValueError:
+        problems.append(Problem("止める", where, "行事の終わる日 (〜…) が日付として読めません"))
+        return
+    if d is not None:
+        if d < today:
+            # 案では止める(終わった行事は入れない)。すでに入っている物は、止めずに知らせる(ほかの行を入れられなくしない)
+            level = "止める" if strict else "注意"
+            problems.append(Problem(level, where, f"終わった行事です(〜{d.isoformat()})。入れません。入っている時は消します"))
+    elif DATE_WORD.search(body):
+        problems.append(Problem("注意", where, "月日のある行です。行事なら、終わる日を「(〜YYYY-MM-DD)」で、出典の前に付けます(年の分からない行事は本人に聞く)"))
 
 
 def check_personal(where, line, body, problems):
@@ -227,7 +282,7 @@ def check_text(text, proposal=False, today=None):
                     problems.append(Problem("止める", where, f"見出しの行 {r} の下に、中身の行がありません"))
             else:
                 items += 1
-            check_line(where, r, today, problems)
+            check_line(where, r, today, problems, strict=proposal)
             body, _, _ = strip_source(r)
             if not MARKER.match(r):
                 if body in seen:
@@ -259,8 +314,37 @@ def render_section(name, rows):
     return [f"## {name}"] + [f"- {r}" for r in rows]
 
 
-def build_new_text(persona_text, proposal_text):
-    """persona.md の 2 つの節だけを、案で置き換えた文を返す。案に無い節・節の外は 1 字も変えない(改行の形も保つ)"""
+def _flatten(blocks):
+    out = []
+    for hline, _, lines in blocks:
+        if hline is not None:
+            out.append(hline)
+        out.extend(lines)
+    return out
+
+
+def set_role_line(text, role):
+    """persona.md の「- 役目: …」の 1 行を role にする(無ければ、最初の見出しの塊の終わりに足す)。事実の節の中は見ない。ほかは 1 字も変えない"""
+    nl = "\r\n" if "\r\n" in text else "\n"
+    blocks = parse_blocks(text)
+    new_line = f"- 役目: {role}"
+    for b in blocks:
+        if b[1]:
+            continue
+        for j, line in enumerate(b[2]):
+            if ROLE_LINE.match(line):
+                b[2][j] = new_line
+                return nl.join(_flatten(blocks))
+    for b in blocks:
+        if b[0] is not None and not b[1]:  # 最初の事実でない見出しの塊の、最後の中身の行のあと
+            at = max((j for j, line in enumerate(b[2]) if line.strip()), default=-1) + 1
+            b[2].insert(at, new_line)
+            return nl.join(_flatten(blocks))
+    return nl.join([new_line, *_flatten(blocks)])
+
+
+def build_new_text(persona_text, proposal_text, role=None):
+    """persona.md の 2 つの節だけを、案で置き換えた文を返す(role があれば「- 役目:」の 1 行も)。案に無い節・節の外は 1 字も変えない(改行の形も保つ)"""
     nl = "\r\n" if "\r\n" in persona_text else "\n"
     prop = fact_sections(proposal_text)
     blocks = parse_blocks(persona_text)
@@ -290,6 +374,8 @@ def build_new_text(persona_text, proposal_text):
     text = nl.join(out)
     if not text.endswith(nl):
         text += nl
+    if role:
+        text = set_role_line(text, role)
     return text
 
 
@@ -353,14 +439,23 @@ def summarize(diff):
     return add, rem
 
 
+def role_ok(a):
+    if a.role is not None and a.role not in ROLE_LABELS:
+        print("--role は、次の言葉のどれかです: " + "・".join(ROLE_LABELS))
+        return False
+    return True
+
+
 def cmd_diff(a):
+    if not role_ok(a):
+        return 2
     got = load_pair(a)
     if not got:
         return 2
     _, persona, proposal = got
     problems, info = check_text(proposal, proposal=True, today=parse_today(a.today))
     report, bad = format_report(problems, info)
-    new = build_new_text(persona, proposal)
+    new = build_new_text(persona, proposal, a.role)
     d = diff_lines(persona, new)
     if not d:
         print("いまと同じです。変える所はありません。")
@@ -373,6 +468,8 @@ def cmd_diff(a):
 
 
 def cmd_apply(a):
+    if not role_ok(a):
+        return 2
     got = load_pair(a)
     if not got:
         return 2
@@ -383,7 +480,7 @@ def cmd_apply(a):
         print(report)
         print("入れませんでした(点検で止めました)。")
         return 3
-    new = build_new_text(persona, proposal)
+    new = build_new_text(persona, proposal, a.role)
     if new == persona:
         print("いまと同じです。入れる物はありません。")
         return 0
@@ -435,15 +532,26 @@ def cmd_list(a):
         print(f"読めません: {e}")
         return 2
     today = parse_today(a.today)
+    for line in split_lines(text):
+        if ROLE_LINE.match(line):
+            print(BULLET.sub("", line.strip()))
+            break
     secs = fact_sections(text)
     if not secs:
         print("まだ何も覚えていません。")
         return 0
     stats = {}
+    expired = []
     for name, rows in secs.items():
         for r in rows:
             if MARKER.match(r):
                 continue
+            try:
+                dl = deadline_of(strip_source(r)[0])
+            except ValueError:
+                dl = None
+            if dl is not None and dl < today:
+                expired.append((dl, r))
             _, src, date = strip_source(r)
             key = (src or "出典なし", date or "-")
             stats[key] = stats.get(key, 0) + 1
@@ -454,6 +562,8 @@ def cmd_list(a):
         except ValueError:
             pass
         print(f"{src} / 読んだ日 {date} {days}: {n} 個")
+    for dl, r in sorted(expired):
+        print(f"期限切れ(〜{dl.isoformat()}): {strip_source(r)[0][:40]}  ← 消します(その出典の行を案から外して入れ直す)")
     return 0
 
 
@@ -476,6 +586,7 @@ def main(argv=None):
         s.add_argument("id")
         s.add_argument("proposal")
         s.add_argument("--today")
+        s.add_argument("--role", help="「- 役目:」の行も、この言葉にする(差分に出る)。" + "・".join(ROLE_LABELS))
         if name == "apply":
             s.add_argument("--yes", action="store_true")
         s.set_defaults(fn=fn)
