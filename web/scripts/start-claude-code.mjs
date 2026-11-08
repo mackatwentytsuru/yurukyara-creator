@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkClaude, createCliRunner } from '../../tools/claude-code-relay/cli.mjs';
-import { DEFAULT_DAILY_CAP, startRelay } from '../../tools/claude-code-relay/relay.mjs';
+import { parseDailyCap, startRelay } from '../../tools/claude-code-relay/relay.mjs';
 import { runWatcher } from './yuru-run.mjs';
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -38,14 +38,14 @@ export function problemMessage(check) {
   ].join('\n');
 }
 
-const SET_KEYS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_API_URL', 'YC_BRAIN_VIA'];
+const SET_KEYS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_API_URL', 'YC_BRAIN_VIA', 'YC_BROWSER_DRAW'];
 
 /**
  * 確かめ → 中継 → アプリ。戻り値 { ok:false, message } か { ok:true, relay, stop(), done }(done = アプリが止まった時の終わりの番号。止まると中継も閉じ、環境変数を元に戻す)
  * @param {object} [o] @param {NodeJS.ProcessEnv} [o.env] 試験で替える @param {number} [o.port] @param {string} [o.host] @param {boolean} [o.build]
  * @param {string} [o.stateDir] 1 日の回数の置き場所 @param {number} [o.cap] @param {(line:string)=>void} [o.log]
  */
-export async function startClaudeCode({ env = process.env, port, host, build = true, stateDir = join(WEB, 'logs', 'claude-code-relay'), cap = Number(env.RELAY_DAILY_CAP ?? DEFAULT_DAILY_CAP), log = say } = {}) {
+export async function startClaudeCode({ env = process.env, port, host, build = true, stateDir = join(WEB, 'logs', 'claude-code-relay'), cap = parseDailyCap(env.RELAY_DAILY_CAP), log = say } = {}) {
   const check = await checkClaude({ env });
   if (!check.ok) return { ok: false, message: problemMessage(check) };
 
@@ -65,6 +65,8 @@ export async function startClaudeCode({ env = process.env, port, host, build = t
   appEnv.ANTHROPIC_API_KEY = token; // 鍵ではなく、この中継だけで通じる使い捨ての合図(アプリは「鍵あり」として本物の頭脳の道を使う)
   appEnv.ANTHROPIC_API_URL = relay.url;
   appEnv.YC_BRAIN_VIA = 'claude-code';
+  // 絵の呼び出しもこの中継を通るので、そのまま描けるようにする(アプリの 1 日・1 人の上限は変えない。自分で入れた値があれば、それを守る)
+  if (appEnv.YC_BROWSER_DRAW === undefined) appEnv.YC_BROWSER_DRAW = '1';
   const restore = () => {
     for (const k of SET_KEYS) {
       if (saved[k] === undefined) delete appEnv[k];

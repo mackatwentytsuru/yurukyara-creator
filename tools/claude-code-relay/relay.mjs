@@ -14,6 +14,13 @@ import { createCliRunner } from './cli.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_DAILY_CAP = 300;
+
+/** 環境変数などの文字を 1 日の上限にする。正の整数でなければ(空・abc・0・-1・1.5 など)既定に戻す */
+export function parseDailyCap(value, fallback = DEFAULT_DAILY_CAP) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n > 0 ? n : fallback;
+}
 const MAX_BODY = 8 * 1024 * 1024; // 絵(base64。実物 5MB まで)を受けるため
 
 const localDate = (d = new Date()) => d.toLocaleDateString('sv-SE');
@@ -91,7 +98,12 @@ export function createRelayServer({ runner, counter, token, models = allowedMode
   return createServer(async (req, res) => {
     const port = req.socket.localPort;
     if (!hostAllowed(req.headers.host, port)) return sendJson(res, 403, errorJson('permission_error', 'この名前では受けません'));
-    const path = new URL(req.url, 'http://127.0.0.1').pathname;
+    let path;
+    try {
+      path = new URL(req.url, 'http://127.0.0.1').pathname;
+    } catch {
+      return sendJson(res, 400, errorJson('invalid_request_error', '道の形がおかしいです'));
+    }
     if (req.method === 'GET' && path === '/health') return sendJson(res, 200, { ok: true, calls: counter.calls, cap: counter.cap, busy, waiting });
     if (req.method !== 'POST' || path !== '/v1/messages') return sendJson(res, 404, errorJson('not_found_error', 'POST /v1/messages だけです'));
     if (req.headers['x-api-key'] !== token) return sendJson(res, 401, errorJson('authentication_error', 'この中継の合図がちがいます'));
@@ -208,7 +220,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exit(2);
   }
   const stateDir = process.env.RELAY_STATE_DIR ?? join(HERE, '..', '..', 'web', 'logs', 'claude-code-relay');
-  const cap = Number(process.env.RELAY_DAILY_CAP ?? DEFAULT_DAILY_CAP);
+  const cap = parseDailyCap(process.env.RELAY_DAILY_CAP);
   const relay = await startRelay({
     token,
     stateDir,
