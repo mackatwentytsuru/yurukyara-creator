@@ -247,9 +247,10 @@ html.fr-open:not(.kb-open) .ai-notice-top {
   .caption { font-size: clamp(18px, 5vw, 26px); }
   .caption.settled { font-size: clamp(16px, 4.4vw, 21px); }
   .mic span { display: none; }
-  .hear-lang-cap { display: none; } /* 狭い画面では「聞く言葉」の字は隠す(選びの title と aria-label に残る) */
-  .hear-lang { padding: 0 4px; }
-  .hear-lang select { max-width: 6.5em; }
+  /* 狭い画面では、聞く言葉の選びを入力の上の 1 行にする(多言語の時だけ。同じ段に並べると、入力が潰れて「送る」が折れる) */
+  .composer:has(.hear-lang:not([hidden])) { flex-wrap: wrap; }
+  .hear-lang { order: -1; flex: 1 1 100%; min-height: 40px; padding: 0 12px; }
+  .hear-lang select { flex: 1 1 auto; max-width: none; min-height: 40px; }
   /* 「Claude の考え」を開いた時(CRITux 21): 高さを決めて、画面の高さの 45% より上で止める(中は巻いて読む)。
      キャラは main.js が窓の下へ置き直す(上の段の高さの上限も 45%)。見出しの右は見た目の切り替えに空ける(切り替えが手前) */
   .thought:not(.collapsed) {

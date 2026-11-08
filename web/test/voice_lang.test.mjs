@@ -15,6 +15,7 @@ import { elevenRequest } from '../src/conversation/elevenDirect.js';
 import { SR_LANG, VOICE_LANG_CODE } from '../src/conversation/lang.js';
 import { effectiveHearLang, getHearLang, onHearLang, resetHearLang, setHearLang, sttLangHeaders, HEAR_LANG_STORE } from '../src/conversation/hearLang.js';
 import { encodeWav } from '../src/conversation/wav.js';
+import { Listener } from '../src/conversation/listener.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const logDir = mkdtempSync(join(tmpdir(), 'yc-voicelang-'));
@@ -219,4 +220,66 @@ test('係(stt_worker.py): language_for は、auto = None・ja/en/zh/ko = その�
   env.STT_LANG = 'en';
   const r2 = spawnSync(py, ['-I', '-c', code], { encoding: 'utf8', timeout: 20000, env });
   assert.equal(r2.stdout.trim(), "[None, 'ja', 'en', 'zh', 'ko', 'en', 'en']", '言葉の指定が無い時は、今までの STT_LANG のまま');
+});
+
+// ---- ブラウザの聞き取り(偽の SpeechRecognition) ----
+function withFakeSpeech(fn) {
+  const made = [];
+  class FakeSR {
+    constructor() {
+      made.push(this);
+      this.stopped = 0;
+      this.started = 0;
+    }
+    start() {
+      this.started += 1;
+    }
+    stop() {
+      this.stopped += 1;
+    }
+  }
+  const prev = globalThis.window;
+  globalThis.window = { SpeechRecognition: FakeSR };
+  try {
+    return fn(made);
+  } finally {
+    globalThis.window = prev;
+  }
+}
+
+test('ブラウザの聞き取り: 言葉の指定が無い時は今までの ja-JP。多言語の時は選んだ言葉', () => {
+  withFakeSpeech((made) => {
+    new Listener({}, { provider: 'web' })._startRecognition();
+    assert.equal(made.at(-1).lang, 'ja-JP', '言葉の指定なし = 今までと同じ');
+    for (const [lang, want] of [['ja', 'ja-JP'], ['en', 'en-US'], ['zh', 'zh-CN'], ['ko', 'ko-KR'], ['fr', 'ja-JP']]) {
+      new Listener({}, { provider: 'web', lang: () => lang })._startRecognition();
+      assert.equal(made.at(-1).lang, want, lang);
+    }
+    new Listener({}, { provider: 'web', lang: () => { throw new Error('x'); } })._startRecognition();
+    assert.equal(made.at(-1).lang, 'ja-JP', '言葉が取れなくても、日本語で聞く');
+  });
+});
+
+test('聞く言葉を替えたら、ブラウザの聞き取りを止める(終わると新しい言葉で始め直す)。聞いていない時・PC の聞き取りは何もしない', () => {
+  withFakeSpeech((made) => {
+    let lang = 'ja';
+    const l = new Listener({}, { provider: 'web', lang: () => lang });
+    l.setLang();
+    assert.equal(made.length, 0, '聞いていない時は何もしない');
+    l.listening = true;
+    l._startRecognition();
+    const first = made.at(-1);
+    assert.equal(first.lang, 'ja-JP');
+    lang = 'en';
+    l.setLang();
+    assert.equal(first.stopped, 1);
+    l.listening = false; // 試験では始め直し(200ms 後)を待たず、新しい言葉で作った時の lang だけを見る
+    new Listener({}, { provider: 'web', lang: () => lang })._startRecognition();
+    assert.equal(made.at(-1).lang, 'en-US');
+    const server = new Listener({}, { provider: 'server', lang: () => 'en' });
+    server.listening = true;
+    server.recognition = first;
+    server.setLang();
+    assert.equal(first.stopped, 1, 'PC の聞き取りでは止めない(次の区間から新しい言葉で送る)');
+  });
 });

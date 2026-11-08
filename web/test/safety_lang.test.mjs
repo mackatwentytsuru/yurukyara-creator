@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { classifyHistory, classifyInput, fixedReply, guardOutput, isUnsafeOutput, outputGuardKind } from '../server/safety.mjs';
 import { FOREIGN_REPLACEMENTS, classifyForeign, foreignDistressDetail, foreignFixedLine, foreignOutputKind, foreignReplacement } from '../server/safetyLang.mjs';
-import { runTurn } from '../server/brain.mjs';
+import { cleanSpeech, runTurn } from '../server/brain.mjs';
 
 const MULTI = { lang: 'multi' };
 
@@ -142,6 +142,11 @@ test('fixedReply: つらい話は中身(self・abuse)で相手の言葉の 1 行
     }
   }
   for (const t of all) assert.equal(isUnsafeOutput(t), false, t);
+  // 読み上げに使えない文字(かっこ・記号)を入れない: 頭脳の出力の掃除(cleanSpeech)で、文が変わらない
+  for (const lang of ['en', 'zh', 'ko']) {
+    for (const kind of KINDS) for (const detail of ['self', 'abuse', 'other']) assert.equal(cleanSpeech(foreignFixedLine(kind, lang, detail)), foreignFixedLine(kind, lang, detail));
+  }
+  for (const t of all) assert.equal(cleanSpeech(t), t);
 });
 
 test('日本語の窓口(189・子供SOSダイヤル)は、日本語の文にだけ残る', () => {
