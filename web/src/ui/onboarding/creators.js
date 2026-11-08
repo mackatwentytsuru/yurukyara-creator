@@ -238,7 +238,7 @@ const clipWords = (s) => [...String(s ?? '').trim()].slice(0, 60).join('');
 
 /** 描けなかった(絵の道)。見本の子は入れない。status と reason から、台本が理由を言う */
 export function pictureFailure(status, reason) {
-  const why = ['daily', 'visitor', 'busy'].includes(reason) ? reason : status === 400 ? 'unusable' : 'failed';
+  const why = ['daily', 'visitor', 'busy', 'fails'].includes(reason) ? reason : status === 400 ? 'unusable' : 'failed';
   return { failed: true, picture: true, reason: why, status: status || 0, drawFailed: '描けなかったよ' };
 }
 

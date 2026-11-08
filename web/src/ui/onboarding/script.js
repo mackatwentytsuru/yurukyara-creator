@@ -78,6 +78,7 @@ export const drawFailedWhy = (reason) => ({
   daily: 'きょうは もう たくさん 描いたから、これ以上は 描けないんだ。',
   visitor: 'きょう 描ける 枚数を つかいきったんだ。',
   busy: 'いま ほかの子を 描いているよ。',
+  fails: 'きょうは 絵を 描くのは おしまいなんだ。もう一度は 描けないよ。ことばで 書くか、見本から えらんでね。',
   unusable: 'この絵は 大きすぎるか、使えない かたちだったよ。',
 }[reason] ?? 'つながりが うまく いかなかったみたい。');
 /** 3D にするかを聞く(2D は すぐ。B4 12b) */
@@ -1188,7 +1189,7 @@ export class FirstRun {
     this.character = null;
     const picture = this.input?.from === 'picture';
     const noun = this.input?.kind === 'photo' ? '写真' : '絵';
-    const spent = made.reason === 'daily' || made.reason === 'visitor';
+    const spent = made.reason === 'daily' || made.reason === 'visitor' || made.reason === 'fails'; // 今日はもう描けない(押しても必ず止まる「もういちど」は出さない)
     await this._say(
       { who: 'guide', text: drawFailedAsk(picture ? noun : 'ことば', this.nori) },
       { who: 'note', text: drawFailedWhy(made.reason) },

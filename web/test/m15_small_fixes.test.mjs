@@ -4,8 +4,8 @@
 //  (接客の見張りの alive の試験は hands_free.test.mjs)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDrawCreator, createSampleCreator } from '../src/ui/onboarding/creators.js';
-import { FirstRun } from '../src/ui/onboarding/script.js';
+import { createDrawCreator, createSampleCreator, pictureFailure } from '../src/ui/onboarding/creators.js';
+import { FirstRun, drawFailedWhy } from '../src/ui/onboarding/script.js';
 import { MAIN_CHARACTER as MAIN } from '../src/character/defaults.js';
 import { randomSettings, seededRandom } from '../src/ui/persona/settings.js';
 
@@ -53,3 +53,28 @@ test('should 1: 「ことばで 書く」(_askWords)は _pin(null) で札の絵�
   assert.deepEqual(h.offered, ['words', 'again']);
 });
 
+test('should 3: 全体の失敗の上限(reason: fails)の時は、絵の道でも「もういちど 描く」を出さず、今日は描けないと正直に言う', async () => {
+  await withFetch(() => ({ status: 429, json: { error: 'x', reason: 'fails' } }), async () => {
+    const h = harness({ creator: drawing() });
+    await h.fr.start();
+    await h.fr.act('role_home');
+    await h.fr.act('pick', { url: 'blob:own', name: 'own.png', file: fakeFile() });
+    await h.fr.act('rights_yes');
+    assert.deepEqual(h.offered, ['draw_words', 'choose_sample'], '必ず止まる「もういちど 描く」は出さない');
+    assert.ok(h.texts('note').some((t) => t.includes('きょうは 絵を 描くのは おしまい')), '今日は描けないと言う');
+    assert.ok(!h.texts('note').some((t) => t.includes('つながりが うまく')), '「つながりが うまく いかなかった」とは言わない');
+  });
+  assert.equal(pictureFailure(429, 'fails').reason, 'fails', 'fails は理由として残る');
+  assert.match(drawFailedWhy('fails'), /おしまい/);
+});
+
+test('should 3: ふつうの失敗(502)では、これまでどおり「もういちど 描く」を出す', async () => {
+  await withFetch(() => ({ status: 502, json: {} }), async () => {
+    const h = harness({ creator: drawing() });
+    await h.fr.start();
+    await h.fr.act('role_home');
+    await h.fr.act('pick', { url: 'blob:own', name: 'own.png', file: fakeFile() });
+    await h.fr.act('rights_yes');
+    assert.deepEqual(h.offered, ['draw_retry', 'draw_words', 'choose_sample']);
+  });
+});
