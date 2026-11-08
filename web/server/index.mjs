@@ -260,6 +260,14 @@ async function handleChat(req, res) {
       send({ type: 'meta', camera: 'capped', cameraNotice: CAMERA_CAP_NOTICE });
     }
   }
+  // 呼べなかった回は、数えない(B13S: 本物の頭脳が答えられない時は runTurn が仮の頭脳に替えるので、その時もここへ知らせが来る。二重には返さない)
+  let refunded = false;
+  const refundOnce = () => {
+    if (refunded) return;
+    refunded = true;
+    if (paid) claudeLimiter.refund(client);
+    if (imageTaken) claudeLimiter.refundImage(); // BCV: 絵の枚数も返す
+  };
   try {
     const afterMs = config.hedgeExperiment && Number.isFinite(body.hedgeMs) ? body.hedgeMs : config.hedgeMs;
     await runTurn(body, {
@@ -267,6 +275,7 @@ async function handleChat(req, res) {
       memory: recalled,
       learned,
       forceMock: !paid,
+      onBrainFailed: refundOnce,
       onEvent: (ev) => send({ ...ev, serverMs: Date.now() - t0 }),
       // 2 本目も 1 回として、1 日・1 分の上限に数える。足りなければ送らない
       hedge: { afterMs: paid ? afterMs : 0, take: () => claudeLimiter.take(client).ok },
@@ -274,8 +283,7 @@ async function handleChat(req, res) {
     send({ type: 'done', serverMs: Date.now() - t0 });
   } catch (err) {
     if (!ac.signal.aborted) {
-      if (paid) claudeLimiter.refund(client); // 呼べなかった回は、数えない
-      if (imageTaken) claudeLimiter.refundImage(); // BCV: 絵の枚数も返す
+      refundOnce();
       send({ type: 'error', message: err.message });
     }
   }

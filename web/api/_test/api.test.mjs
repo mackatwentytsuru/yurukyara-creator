@@ -216,6 +216,22 @@ test('本物の頭脳が落ちたら、仮の頭脳で答え直す(途中の返�
   assert.ok(said(r.data).length > 0);
 });
 
+test('B13S: 本物の頭脳が 429 などで答えられず runTurn が自分で仮の頭脳に替えた回も、返事の印は「仮の頭脳」(二重に答えない)', async () => {
+  let mockRuns = 0;
+  const runTurn = async (body, opts) => {
+    if (opts.brain === 'mock') { mockRuns += 1; return realRunTurn(body, opts); }
+    opts.onBrainFailed?.(new Error('Claude の呼び出しに失敗しました (429)'));
+    opts.onEvent({ type: 'say', text: '替えた後の返事', expression: 'happy', motion: 'nod', gaze: 'person' });
+  };
+  const { d } = deps({ d: { runTurn } });
+  const r = await read(await handleChat(req({ text: 'こんにちは' }, { pass: PASS }), d));
+  assert.equal(r.data.brain, 'fallback');
+  assert.equal(r.data.reason, 'brain-error');
+  assert.match(r.data.notice, /仮の頭脳/);
+  assert.deepEqual(said(r.data), ['替えた後の返事']);
+  assert.equal(mockRuns, 0, '仮の頭脳をもう一度回さない');
+});
+
 test('仮の頭脳は人格の言葉で話す(ノリーが名乗る)', async () => {
   const { d } = deps();
   const body = { text: 'こんにちは', history: [], character: { name: 'ノリー', persona: NORRIE_PERSONA } };

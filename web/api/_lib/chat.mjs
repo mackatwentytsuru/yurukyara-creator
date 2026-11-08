@@ -62,16 +62,22 @@ export async function handleChat(request, { cfg, store, runTurn, sanitize, remem
     body = rest;
     events.push({ type: 'meta', camera: 'capped', cameraNotice: CAMERA_CAP_NOTICE });
   }
+  let failedInside = false;
   if (brain === 'real') {
     try {
-      await runTurn(body, { onEvent, signal: request.signal, ...recall });
+      // B13S: 上限(429)・混雑・時間切れの時は、runTurn が自分で仮の頭脳に替えて返す。その時も、返事の印は「仮の頭脳」にそろえる
+      await runTurn(body, { onEvent, signal: request.signal, onBrainFailed: () => { failedInside = true; }, ...recall });
+      if (failedInside) {
+        brain = 'fallback';
+        reason = 'brain-error';
+      }
     } catch {
       events.length = 0; // 途中の返事は混ぜない
       brain = 'fallback';
       reason = 'brain-error';
     }
   }
-  if (brain === 'fallback') {
+  if (brain === 'fallback' && !failedInside) {
     try {
       // 仮の頭脳も runTurn を通す: 安全の決まった返事・人格の言葉(あいさつ・話し方の例・あいづち)・覚えていること
       await runTurn(body, { onEvent, brain: 'mock', paceMs: 0, ...recall });
