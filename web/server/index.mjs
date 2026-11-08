@@ -4,7 +4,7 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createReadStream } from 'node:fs';
-import { extname, join, normalize, sep } from 'node:path';
+import { extname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
@@ -24,6 +24,7 @@ import { createDrawer } from './draw.mjs'; // B4(12b): ブラウザから描く�
 import { createMadeRoutes } from './madeCharacters.mjs'; // 作った子の一覧・名前の変更・消す(characters/yb*)
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
+import { allowedHostNames, checkStaticPath, hostAllowed, resolveInside } from './staticGuard.mjs'; // 配るファイルのパスの抜けと、名前の向け直しを断る
 import { CAMERA_CAP_NOTICE, IMAGE_LIMITS, cameraImageCap } from './camera.mjs'; // BCV: カメラの絵(大きさの決まり・1 日の枚数)
 
 const DIST = join(WEB_ROOT, 'dist');
@@ -118,13 +119,11 @@ function servable(full, st, wantsGzip) {
   return { gz, tag, body, mtime: new Date(st.mtimeMs).toUTCString() };
 }
 
-/** root の外に出られないようにしてファイルを返す。req を渡すと、圧縮(gzip)・覚えさせる指示・304 に対応する */
-function sendFile(res, root, rel, req = null) {
-  const full = normalize(join(root, rel));
-  if (full !== root && !full.startsWith(root + sep)) return false;
-  if (!existsSync(full)) return false;
+/** root の外に出られないようにしてファイルを返す(symlink で外へ出る道も断つ)。req を渡すと、圧縮(gzip)・覚えさせる指示・304 に対応する */
+function sendFile(res, root, rel, req = null, tops = null) {
+  const full = resolveInside(root, rel, tops); // 本物の置き場所(realpath)が root の中(tops があれば、その頭のフォルダの中)の時だけ
+  if (!full) return false;
   const st = statSync(full);
-  if (!st.isFile()) return false;
   const type = MIME[extname(full).toLowerCase()] ?? 'application/octet-stream';
   if (!req) {
     res.writeHead(200, { 'content-type': type });
@@ -317,9 +316,15 @@ const updateRoutes = createUpdateRoutes({
 const kioskRoutes = createKioskRoutes({ config, logDir: LOG_DIR, readBody, json, isLocalRequest });
 
 const useTls = Boolean(config.tlsCert && config.tlsKey);
+const hostNames = allowedHostNames({ bindHost: config.host, extra: process.env.YC_ALLOWED_HOSTS ?? '' });
 const handler = async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  const path = decodeURIComponent(url.pathname);
+  let path;
+  try {
+    path = decodeURIComponent(url.pathname);
+  } catch {
+    return json(res, 400, { error: 'パスが読めません' }); // 戻せない形(%E0 など)で落ちない
+  }
   try {
     if (await memoryRoutes(req, res, path, url)) return;
     if (await madeRoutes(req, res, path)) return; // 作った子の一覧・名前の変更・消す
@@ -400,12 +405,17 @@ const handler = async (req, res) => {
     if (req.method === 'GET' && path === '/api/metrics') return json(res, 200, latencySummary());
 
     if (req.method === 'GET' || req.method === 'HEAD') {
-      if (path.startsWith('/characters/') || path.startsWith('/places/')) {
-        if (path === '/characters/_test/model.vrm' && !existsSync(join(REPO_ROOT, path)) && sendDevVrm(res)) return;
-        if (sendFile(res, REPO_ROOT, path, req)) return;
+      // 配るファイルの見張り: 名前の向け直し(DNS rebinding)・%2F などで区切りを隠したパス・.env のような点の名前を、戻す前に断る
+      if (!hostAllowed(req.headers.host, hostNames)) return json(res, 403, { error: 'この名前では受けません' });
+      const checked = checkStaticPath(url.pathname);
+      if (checked.error) return json(res, checked.status, { error: checked.error });
+      const filePath = checked.path;
+      if (filePath.startsWith('/characters/') || filePath.startsWith('/places/')) {
+        if (filePath === '/characters/_test/model.vrm' && !existsSync(join(REPO_ROOT, filePath)) && sendDevVrm(res)) return;
+        if (sendFile(res, REPO_ROOT, filePath, req, ['characters', 'places'])) return;
         return json(res, 404, { error: '見つかりません' });
       }
-      if (sendFile(res, DIST, path === '/' ? 'index.html' : path, req)) return;
+      if (sendFile(res, DIST, filePath === '/' ? 'index.html' : filePath, req)) return;
       if (sendFile(res, DIST, 'index.html', req)) return;
       return json(res, 404, { error: '先に npm run build をしてください' });
     }
