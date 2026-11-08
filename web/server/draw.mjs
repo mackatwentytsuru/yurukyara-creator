@@ -21,7 +21,8 @@ const REQUIRED = ['body', 'eye_L', 'eye_R', 'mouth'];
 
 /** 描く決まり(yc-0-draw の芯を短くした物。製品の SVG の描き方) */
 export const DRAW_RULES = [
-  'あなたは、ゆるキャラの元の絵を SVG で 1 枚描く係です。答えは SVG の文字だけ(説明・前置き・コードの囲みなし)。',
+  'あなたは、ゆるキャラの元の絵を SVG で 1 枚描く係です。答えは、見出しの 2 行と、そのあとの SVG の文字だけ(ほかの説明・前置き・コードの囲みなし)。',
+  '- 見出しの 1 行目は「名前: 」とこの子の名前(ひらがな・カタカナで 2〜8 字。使う人の希望に名前があればそれを使う。有名な作品のキャラの名前は使わない)、2 行目は「性格: 」とこの子の性格の 1 文(40 字まで。希望から決める)。その次の行から SVG。',
   '- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254" width="1254" height="1254"> で始める。白い背景の <rect> を 1 つ。',
   `- キャラは <g id="char"> の中に、部品ごとの <g id> で描く。部品の名前はこの中だけ: ${K1_PARTS.join('・')}。body・eye_R・eye_L・mouth は必ず。`,
   '- 形: 頭でっかちの二足(頭が全身の半分ほど)か、まるい胴。丸い形・はっきりした 3〜6 色・太めの線。手描き風に崩さない。',
@@ -54,6 +55,23 @@ export function pickSvg(text) {
   return m ? m[0] : '';
 }
 
+export const DEFAULT_NAME = 'あたらしい子';
+const NAME_KEEP = /[^\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ーA-Za-z0-9]/gu; // 名前に残す字(ひらがな・カタカナ・漢字・英数字)
+const TRAIT_DROP = /[\p{C}<>{}[\]#`*_|\\"'「」『』]/gu; // 性格の文から外す字(制御・かっこ・見出し・引用符)
+const TRAIT_BAD = /指示|無視|ignore|system|プロンプト/i; // 性格の文が命令に化けた時は使わない
+
+/**
+ * 返事の頭の「名前: …」「性格: …」の行から、名前と性格の 1 文を取り出す(SVG より前だけを見る)。
+ * 画面と人格の文に出る物なので、字の種類と長さを絞る。無い・使えない時は、名前は既定、性格は空。
+ */
+export function pickProfile(text) {
+  const head = String(text ?? '').split('<svg')[0];
+  const field = (label) => head.match(new RegExp(`(?:^|\\n)[ \\t]*${label}[ \\t]*[:：][ \\t]*([^\\n]*)`))?.[1] ?? '';
+  const name = Array.from(field('名前').normalize('NFKC').replace(NAME_KEEP, '')).slice(0, 8).join('');
+  const trait = Array.from(field('性格').normalize('NFKC').replace(TRAIT_DROP, '').trim()).slice(0, 50).join('');
+  return { name: name || DEFAULT_NAME, trait: TRAIT_BAD.test(trait) ? '' : trait };
+}
+
 const today = (t) => new Date(t).toLocaleDateString('sv-SE');
 
 /**
@@ -84,8 +102,8 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
   };
   let busy = false;
 
-  const run2d = to2d ?? ((svgPath, id, name) => new Promise((resolve, reject) => {
-    const p = spawn('python', [join(root, 'creator', 'review', 'to_2d.py'), svgPath, id, '--name', name, '--out', join(root, 'characters')], { cwd: root });
+  const run2d = to2d ?? ((svgPath, id, name, trait = '') => new Promise((resolve, reject) => {
+    const p = spawn('python', [join(root, 'creator', 'review', 'to_2d.py'), svgPath, id, '--name', name, '--out', join(root, 'characters'), ...(trait ? ['--trait', trait] : [])], { cwd: root });
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     const timer = setTimeout(() => p.kill(), 90_000);
@@ -138,17 +156,17 @@ export function createDrawer({ config, root, usageFile, env = process.env, fetch
         const j = await res.json();
         const text = (j.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join('');
         const svg = pickSvg(text);
+        const { name, trait } = pickProfile(text); // この子の名前と性格の 1 文(11-08: 7 体とも「あたらしい子」・同じ性格の文だった)
         const problems = validateSvg(svg);
         const ms = now() - t0;
         const usage = { input: j.usage?.input_tokens ?? null, output: j.usage?.output_tokens ?? null, model: j.model ?? null };
         if (problems.length) return { status: 422, json: { error: '描いた絵が 決まりに あわなかったよ。見本の子で ためしてね', problems, ms, usage } };
         const id = `yb${today(now()).replace(/-/g, '').slice(2)}_${randomBytes(3).toString('hex')}`;
-        const name = 'あたらしい子';
         const dir = join(root, 'creator', 'work', '_browser_draw');
         mkdirSync(dir, { recursive: true });
         const svgPath = join(dir, `${id}.svg`);
         writeFileSync(svgPath, svg);
-        await run2d(svgPath, id, name);
+        await run2d(svgPath, id, name, trait);
         return { status: 201, json: { id, name, ms, usage } };
       } finally {
         busy = false;

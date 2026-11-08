@@ -8,7 +8,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
-import { isAbortError } from './abort.mjs';
+import { logRequestError } from './abort.mjs';
 import { createMemoryStore, fileBackend, NOTICE as MEMORY_NOTICE } from './memory/store.mjs';
 import { createMemoryRoutes, forgetReplyEvents, isForgetRequest } from './memory/routes.mjs';
 import { extractFacts, memoryAddedEvent, selfNamesOf } from './memory/reflect.mjs';
@@ -391,7 +391,7 @@ const handler = async (req, res) => {
     }
     json(res, 405, { error: 'この方法は使えません' });
   } catch (err) {
-    if (!(err instanceof ValidationError) && !isAbortError(err)) console.error(err); // 声を途中で止めた(画面が切った)時の AbortError は、失敗ではない
+    if (!(err instanceof ValidationError)) logRequestError(err); // 声を途中で止めた(画面が切った)時の AbortError は、失敗ではないので、スタックを出さず短い 1 行にする
     if (!res.headersSent) json(res, err instanceof ValidationError ? err.status : 500, { error: err.message });
     else res.end();
   }

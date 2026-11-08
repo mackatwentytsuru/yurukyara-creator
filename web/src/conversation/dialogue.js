@@ -8,6 +8,7 @@ import { streamChat } from './brainClient.js';
 import { createTalkSession } from './restSession.js'; // BSF 11-08: 長い会話・夜おそくの「休もうか」のため、1 回の会話の長さを数える
 import { redactSecrets } from './secrets.js';
 import { setSttHint } from './sttHint.js';
+import { normalizeSpoken } from './interimSend.js'; // 言葉の同じ・違いを見る形(句読点と全角半角を除く)
 import { VOICE_CAP_NOTICE } from './speaker.js';
 
 /** 店の入口の画面(LED・テレビ表示)か。夜に動く画面なので、時間帯の休むすすめは付けない(BSFf) */
@@ -48,6 +49,8 @@ export function joinWords(before, now) {
   const b = String(now ?? '').trim();
   if (!a) return b;
   if (!b) return a;
+  // 今の言葉が、前の言葉を頭に含んでいる(途中の文字を先に送ったあと、確定が全部の言葉で届いた時など)なら、重ねずに今の言葉だけ
+  if (normalizeSpoken(b).startsWith(normalizeSpoken(a))) return b;
   const joined = /[。.!！?？、,]$/u.test(a) ? a + b : `${a}、${b}`;
   return Array.from(joined).slice(-CARRY_MAX_CHARS).join('');
 }

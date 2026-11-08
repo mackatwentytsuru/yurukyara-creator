@@ -135,7 +135,9 @@ test('声を途中で止めた時の AbortError は、失敗ではない(記録�
   assert.equal(isAbortError(null), false);
   assert.equal(isAbortError('AbortError'), false);
   const index = read('web', 'server', 'index.mjs');
-  assert.match(index, /!isAbortError\(err\)\) console\.error\(err\)/, '手元のサーバーが、AbortError を console.error に書かない');
+  // 11-08 LF2: 書かない → 短い 1 行(標準出力)に替えた。エラー用の記録(console.error)には書かない形は test/abort_log.test.mjs で確かめる
+  assert.match(index, /logRequestError\(err\)/, '手元のサーバーが、通信の失敗を logRequestError(AbortError は短い 1 行・スタックなし)で書く');
+  assert.doesNotMatch(index, /console\.error\(err\)/, '手元のサーバーが、AbortError を console.error に書かない');
 });
 
 // ---- (3) 返事が 1 文も来ないまま止めた回の言葉は、次の言葉につなげる ----

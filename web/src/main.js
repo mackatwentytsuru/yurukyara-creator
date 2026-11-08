@@ -18,6 +18,7 @@ import { describeScene } from './tracking/geometry.js';
 import { Speaker } from './conversation/speaker.js';
 import { Dialogue } from './conversation/dialogue.js';
 import { Listener, webSpeechSupported } from './conversation/listener.js';
+import { InterimSender } from './conversation/interimSend.js'; // 11-08 LF2: ブラウザの聞き取りの確定が遅い時は、途中の文字を先に送る
 import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
 import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink, latencyNote } from './ui/panel.js';
@@ -356,6 +357,16 @@ app.startStereo = startStereoMic;
 let lastInterimAt = 0; // 聞き取りの途中の文字が最後に届いた時刻(何か話した、の目印)
 let lastTextAt = 0; // 途中でも確定でも、文字が最後に届いた時刻
 const misheard = new MisheardTracker();
+// 声が止まって 0.7 秒たっても確定が来ない時は、いちばん新しい途中の文字を、その言葉として送る(あとから同じ言葉の確定が来ても、2 回送らない)
+const interimSender = new InterimSender({
+  enabled: params.get('interimsend') !== 'off', // ?interimsend=off: 先送りを切る(前後の速さを比べる時だけ)
+  send: (text, info) => {
+    if (!listener?.listening) return;
+    lastTextAt = performance.now();
+    misheard.heard();
+    void talk({ text, t0: info.lastVoicedAt || performance.now(), mode: 'voice' });
+  },
+});
 
 /** よくある質問のボタン。押した言葉は、そのまま質問になる。店のデータがあるときだけ出す */
 function showShopChoices(emphasis = false) {
@@ -414,16 +425,19 @@ async function toggleMic() {
       onInterim: (t) => {
         lastInterimAt = performance.now();
         lastTextAt = lastInterimAt;
+        interimSender.interim(t);
         ui.caption(t, 0, 'user');
       },
       onFinal: (text, info) => {
         lastTextAt = performance.now();
         misheard.heard();
+        if (interimSender.final(text) === 'drop') return; // 途中の文字で、もう送った言葉(2 回送らない)
         const t0 = info.lastVoicedAt || performance.now();
         void talk({ text, t0, mode: 'voice' });
       },
       onVoice: (active) => {
         $('micBtn').classList.toggle('hearing', active);
+        interimSender.voice(active, listener?.lastVoicedAt ?? 0);
         // 話している最中に声が出たら、止まって聞く
         if (active && speaker.speaking) dialogue.cancel();
         // 声が止まった(話し終わりらしい)ら、確定した文字を待たずに、あいづちの声を先に出す
