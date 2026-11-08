@@ -305,7 +305,7 @@ npm run start:claude-code      # npm start の代わり。http://127.0.0.1:8787/
 ```
 
 - 先に `claude` が入っていて、ログインしているかを確かめます。だめなら、理由と直し方を日本語で出して止まります(Claude Code の入れ方は [公式の案内](https://code.claude.com/docs/en/overview))。
-- 小さな中継([`tools/claude-code-relay/`](tools/claude-code-relay/))がこの PC の中(127.0.0.1)だけで待ち、アプリの会話と絵の呼び出しを、あなたの `claude -p` に渡します。`claude` には道具も MCP も付けません。1 日 300 回までで(`RELAY_DAILY_CAP` で替えられます)、Ctrl+C でアプリといっしょに止まります。
+- 小さな中継([`tools/claude-code-relay/`](tools/claude-code-relay/))がこの PC の中(127.0.0.1)だけで待ち、アプリの会話と絵の呼び出しを、あなたの `claude -p` に渡します。`claude` には道具も MCP も付けません。1 日 300 回までで(`RELAY_DAILY_CAP` で替えられます。正の整数でない値は 300 に戻ります)、絵の呼び出しは `npm run start:claude-code` が `YC_BROWSER_DRAW=1` を入れるので、そのまま使えます(絵の 1 日・1 人の上限はアプリの決まりのまま)。Ctrl+C でアプリといっしょに止まります。
 - `ANTHROPIC_API_KEY` は使いません(環境にあっても、アプリにも `claude` にも渡しません)。話した内容は記録しません。使った分は、あなたの Claude Code のプランの枠から引かれます。
 - つながっている時は、状態の知らせ(`/api/status`)が `brainVia: "claude-code"` と答えます(鍵も Claude Code も無く、おためしモードで話している時は `"mock"`)。
 - 声は別です。声を出すには、いつもどおり自分の ElevenLabs の鍵を入れます([声](#voices))。

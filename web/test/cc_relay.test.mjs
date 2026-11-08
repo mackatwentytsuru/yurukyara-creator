@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { DRAW_MODEL_DEFAULT, MODEL_DEFAULTS } from '../src/conversation/models.js';
 import { IMAGE_MAX_BYTES, RequestError, allowedModels, buildInput, cleanEnv, parseRequest, readCliLine, streamInputLine } from '../../tools/claude-code-relay/lib.mjs';
 import { cliArgs, createCliRunner, resolveClaude } from '../../tools/claude-code-relay/cli.mjs';
-import { createCounter, createRelayServer, hostAllowed, startRelay } from '../../tools/claude-code-relay/relay.mjs';
+import { DEFAULT_DAILY_CAP, createCounter, createRelayServer, hostAllowed, parseDailyCap, startRelay } from '../../tools/claude-code-relay/relay.mjs';
 
 const HANDSHAKE = 'test-relay-handshake-0123456789';
 const BRAIN = MODEL_DEFAULTS.brain;
@@ -221,6 +221,36 @@ test('中継: 合図が違う・別の名前・別の道は断る(モデルは�
     assert.equal(called, 0);
     assert.equal((await getRaw(port, '/health')).status, 200);
   });
+});
+
+test('中継: 変な道(GET // など URL にならない形)は 400 で断り、落ちずに次の呼び出しに答える', async () => {
+  let called = 0;
+  await withRelay(async () => { called += 1; return { text: 'x' }; }, async (port) => {
+    for (const bad of ['//', '//:', '//[']) {
+      const r = await getRaw(port, bad);
+      assert.equal(r.status, 400, `道 ${bad}`);
+      assert.equal(JSON.parse(r.body).error.type, 'invalid_request_error');
+    }
+    assert.equal((await getRaw(port, '/health')).status, 200, '落ちていない');
+    assert.equal((await post(port, brainBody())).status, 200);
+    assert.equal(called, 1);
+  });
+});
+
+test('1 日の上限の読み方: 正の整数だけ通し、数字でない・0・負・小数・空は既定に戻す', () => {
+  assert.equal(parseDailyCap('50'), 50);
+  assert.equal(parseDailyCap(7), 7);
+  assert.equal(parseDailyCap(undefined), DEFAULT_DAILY_CAP);
+  for (const bad of ['abc', '', '  ', '0', '-3', '1.5', 'Infinity', 'NaN', '1e999']) {
+    assert.equal(parseDailyCap(bad), DEFAULT_DAILY_CAP, `値 ${JSON.stringify(bad)}`);
+  }
+  // 数字でない値でも、上限が効かなくならない(NaN のままだと全部通ってしまった)
+  const dir = mkdtempSync(join(tmpdir(), 'cc-cap-'));
+  const c = createCounter(join(dir, 'calls.json'), parseDailyCap('abc'));
+  assert.equal(c.cap, DEFAULT_DAILY_CAP);
+  for (let i = 0; i < DEFAULT_DAILY_CAP; i += 1) assert.ok(c.take());
+  assert.equal(c.take(), false, '既定の上限で止まる');
+  cleanup(dir);
 });
 
 test('中継: 127.0.0.1 だけで待つ。合図が短すぎる起こし方はしない', async () => {
