@@ -103,16 +103,42 @@ export function createKiosk({ file, secret = '', now = Date.now } = {}) {
     return got.length === want.length && timingSafeEqual(got, want);
   };
 
+  /**
+   * 札を確かめる(中身 + 確かめた署名のバイト列 sig)。決まりの綴り(payload.sig、どちらも余りのない base64url)でない札は、署名が合っても通さない。
+   * 同じ札に別の綴りがあると、端末ごとの数えをすり抜けられるため
+   */
+  const checkToken = (token) => {
+    const bad = { ok: false, expired: false };
+    if (typeof token !== 'string') return bad;
+    const [payload, sig, extra] = token.split('.');
+    if (!payload || !sig || extra !== undefined) return bad;
+    const got = fromB64u(sig);
+    if (b64u(got) !== sig) return bad;
+    const body = fromB64u(payload);
+    if (b64u(body) !== payload) return bad;
+    const want = mac(payload);
+    if (got.length !== want.length || !timingSafeEqual(got, want)) return bad;
+    let claims;
+    try {
+      claims = JSON.parse(body.toString('utf8'));
+    } catch {
+      return bad;
+    }
+    if (claims?.v !== 1 || !Number.isFinite(claims.e)) return bad;
+    if (claims.e * 1000 <= now()) return { ok: false, expired: true, sig: got };
+    return { ok: true, claims, sig: got };
+  };
+
   const leftS = (until) => {
     const left = Math.ceil((until - now()) / 1000);
     return left > 0 ? left : 0;
   };
 
-  /** 端末の数えの名前。署名の合った札(期限切れでも)はその札ごと。札が無い・壊れている端末は、まとめて 1 つ(anon) */
+  /** 端末の数えの名前。署名の合った札(期限切れでも)は、確かめた署名のバイト列から作る(綴りの違いで別の端末にならない)。札が無い・壊れている・正しい綴りでない端末は、まとめて 1 つ(anon) */
   const deviceKey = (token) => {
-    const v = api.verifyToken(token);
+    const v = checkToken(token);
     if (!v.ok && !v.expired) return ANON;
-    return `t:${createHash('sha256').update(String(token)).digest('base64url').slice(0, 22)}`;
+    return `t:${createHash('sha256').update(v.sig).digest('base64url').slice(0, 22)}`;
   };
 
   /** 数えの箱を取る。多くなりすぎたら、止まっていない古いものから捨てる */
@@ -230,20 +256,8 @@ export function createKiosk({ file, secret = '', now = Date.now } = {}) {
 
     /** 札を確かめる。署名が合って、期限が切れていなければ中身を返す。古い・壊れた札は { ok:false, expired } */
     verifyToken(token) {
-      const [payload, sig, extra] = String(token ?? '').split('.');
-      if (!payload || !sig || extra !== undefined) return { ok: false, expired: false };
-      const want = mac(payload);
-      const got = fromB64u(sig);
-      if (got.length !== want.length || !timingSafeEqual(got, want)) return { ok: false, expired: false };
-      let claims;
-      try {
-        claims = JSON.parse(fromB64u(payload).toString('utf8'));
-      } catch {
-        return { ok: false, expired: false };
-      }
-      if (claims?.v !== 1 || !Number.isFinite(claims.e)) return { ok: false, expired: false };
-      if (claims.e * 1000 <= now()) return { ok: false, expired: true };
-      return { ok: true, claims };
+      const { sig, ...r } = checkToken(token);
+      return r;
     },
 
     /** QR に入れる URL。origin は店の端末から開ける住所(KIOSK_ORIGIN)。入らない・住所が無い時は理由を返す */
