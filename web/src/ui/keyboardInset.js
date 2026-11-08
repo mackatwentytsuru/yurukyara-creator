@@ -5,11 +5,16 @@
 //   --kb  : ページの下端から、見える範囲の下端までの差(px)。キーボードが無ければ 0
 //   --kbt : 見える範囲の上端のずれ(px。iOS が入力欄を見せようとページごとずらした分)
 //   --vvh : 見える範囲の高さ(px)
+//   --kbh : キーボードが奪っている高さ(px。ページの高さ − 見える高さ。iOS がページごとずらした時も数える。キーボードが無ければ 0)
+// B13L(11-08 本人の iPhone): iOS は、入力欄を見せるためにページごと上へずらす(offsetTop が大きくなり、見える範囲の下端がページの下端に届く)。
+// すると「ページの下端 − 見える範囲の下端 = 0」になり、前は「キーボードは出ていない」と数えて、上の段とキャラの頭が画面の上に押し出されたままだった。
+// 今は、見える高さが縮んだこと(ページの高さ − 見える高さ)でキーボードを数え、舞台(#stage)を見える範囲の高さに縮め、上の段も見える範囲の上に付ける
 // 見える高さが低い間は、html に kb-tight(640px 未満)・kb-short(400px 未満)も付ける(style.css が、字幕を 1 行にし、余分な札を隠す)
 // キーボードが出ている間だけ html に kb-open が付く。PC・テレビ・VR・Chrome の Android(キーボードで画面ごと縮む)では差が 0 で、何も変わらない。
 const MIN_KB = 80; // これより小さい差は、アドレスバーの出入りとみなして、キーボードとは数えない
 const TIGHT_VVH = 640; // 見える高さがこれ未満(px)なら kb-tight(縦持ちの iPhone 全般)
 const SHORT_VVH = 400; // 見える高さがこれ未満(px)なら kb-short(横向きの iPhone・高さの低い縦持ちのキーボード。上の段が見える範囲の半分を占めて、キャラが入力欄の下に隠れた)
+const MINI_VVH = 260; // 見える高さがこれ未満(px)なら vv-mini(横向きの Android のキーボード。舞台と札の見出しをたたみ、入力の欄・送る・最後の一言だけ残す)
 const SETTLE_MS = [60, 250, 600]; // iOS はキーボードのアニメーションの後に見える範囲を確定するので、あとから測り直す
 
 /** 文字を打つ欄か */
@@ -33,13 +38,19 @@ export function isZoomed(vv) {
   return Number.isFinite(scale) && scale > ZOOM_EPS;
 }
 
-/** 見える範囲(visualViewport)から、キーボードの高さ・ずれ・見える高さを出す。純粋な計算(試験用に外へ出す)。拡大している間は、キーボードは 0 */
+/**
+ * 見える範囲(visualViewport)から、キーボードの有無・下の差・ずれ・見える高さ・奪われた高さを出す。純粋な計算(試験用に外へ出す)。拡大している間は、キーボードは 0。
+ * open: ページの高さより見える高さが MIN_KB 以上縮んでいる(iOS がページごとずらして、下の差が 0 になっても、キーボードは出ている)
+ */
 export function measureInset(inner, vv) {
-  if (!vv || !(vv.height > 0)) return { kb: 0, top: 0, height: inner };
-  if (isZoomed(vv)) return { kb: 0, top: 0, height: inner };
+  const none = { open: false, kb: 0, top: 0, height: inner, shrink: 0 };
+  if (!vv || !(vv.height > 0)) return none;
+  if (isZoomed(vv)) return none;
   const top = Math.max(0, Math.round(vv.offsetTop || 0));
-  const kb = Math.max(0, Math.round(inner - vv.height - top));
-  return { kb: kb >= MIN_KB ? kb : 0, top: kb >= MIN_KB ? top : 0, height: Math.round(vv.height) };
+  const shrink = Math.max(0, Math.round(inner - vv.height));
+  const open = shrink >= MIN_KB;
+  const kb = open ? Math.max(0, Math.round(inner - vv.height - top)) : 0;
+  return { open, kb, top: open ? top : 0, height: Math.round(vv.height), shrink: open ? shrink : 0 };
 }
 
 /**
@@ -56,15 +67,22 @@ export function installKeyboardInset(doc = globalThis.document, win = globalThis
 
   const apply = () => {
     const m = measureInset(win.innerHeight, vv);
-    const key = `${m.kb}|${m.top}|${m.height}`;
+    const key = `${m.open}|${m.kb}|${m.top}|${m.height}|${m.shrink}`;
     if (key === last) return;
     last = key;
     root.style.setProperty('--kb', `${m.kb}px`);
     root.style.setProperty('--kbt', `${m.top}px`);
     root.style.setProperty('--vvh', `${m.height}px`);
-    root.classList.toggle('kb-open', m.kb > 0);
-    root.classList.toggle('kb-tight', m.kb > 0 && m.height < TIGHT_VVH); // 縦持ちのキーボード: 字幕は入力欄の上の 1 行・余分な札を隠す
-    root.classList.toggle('kb-short', m.kb > 0 && m.height < SHORT_VVH); // 横向きのキーボード: さらに上の段も隠す
+    root.style.setProperty('--kbh', `${m.shrink}px`);
+    root.classList.toggle('kb-open', m.open);
+    root.classList.toggle('kb-tight', m.open && m.height < TIGHT_VVH); // 縦持ちのキーボード: 字幕は入力欄の上の 1 行・余分な札を隠す
+    root.classList.toggle('kb-short', m.open && m.height < SHORT_VVH); // 横向きのキーボード: さらに上の段も隠す
+    root.classList.toggle('vv-mini', m.height < MINI_VVH); // 見える高さが 260px 未満(Android 横向きのキーボードは、ページごと縮むので kb-open にならない)
+    if (m.height < MINI_VVH) {
+      // 見出しをたたんだ札では、会話の欄が縮む。いちばん新しい一言が見えるよう、いちばん下へ巻く(自分で巻けない Android の横向き用)
+      const log = doc.querySelector?.('.fr-log');
+      if (log) log.scrollTop = log.scrollHeight;
+    }
     win.dispatchEvent(new Event('yc-kb')); // main.js が下の帯の高さを測り直す
   };
   const keepFocusVisible = () => {

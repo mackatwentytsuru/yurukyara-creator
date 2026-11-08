@@ -18,8 +18,8 @@ const css = readFileSync(join(WEB, 'src', 'ui', 'style.css'), 'utf8');
 
 test('拡大している間は、visualViewport が縮んでもキーボードと数えない', () => {
   // 2 倍に拡大: 高さが半分になり、キーボードに見える
-  assert.deepEqual(measureInset(844, { height: 422, offsetTop: 0, scale: 2 }), { kb: 0, top: 0, height: 844 });
-  assert.deepEqual(measureInset(844, { height: 300, offsetTop: 120, scale: 1.5 }), { kb: 0, top: 0, height: 844 });
+  assert.deepEqual(measureInset(844, { height: 422, offsetTop: 0, scale: 2 }), { open: false, kb: 0, top: 0, height: 844, shrink: 0 });
+  assert.deepEqual(measureInset(844, { height: 300, offsetTop: 120, scale: 1.5 }), { open: false, kb: 0, top: 0, height: 844, shrink: 0 });
   assert.equal(isZoomed({ scale: 2 }), true);
   assert.equal(isZoomed({ scale: 1 }), false);
   assert.equal(isZoomed({ scale: 1.01 }), false, '1 倍に近い間は、ふつうに数える');
@@ -28,9 +28,9 @@ test('拡大している間は、visualViewport が縮んでもキーボード�
 });
 
 test('拡大率が約 1 の時は、これまでどおりキーボードの高さを出す', () => {
-  assert.deepEqual(measureInset(932, { height: 596, offsetTop: 0, scale: 1 }), { kb: 336, top: 0, height: 596 });
-  assert.deepEqual(measureInset(932, { height: 596, offsetTop: 0, scale: 1.01 }), { kb: 336, top: 0, height: 596 });
-  assert.deepEqual(measureInset(932, { height: 596, offsetTop: 0 }), { kb: 336, top: 0, height: 596 }, 'scale が無い古い端末');
+  assert.deepEqual(measureInset(932, { height: 596, offsetTop: 0, scale: 1 }), { open: true, kb: 336, top: 0, height: 596, shrink: 336 });
+  assert.deepEqual(measureInset(932, { height: 596, offsetTop: 0, scale: 1.01 }), { open: true, kb: 336, top: 0, height: 596, shrink: 336 });
+  assert.deepEqual(measureInset(932, { height: 596, offsetTop: 0 }), { open: true, kb: 336, top: 0, height: 596, shrink: 336 }, 'scale が無い古い端末');
 });
 
 // ---- つまむ合図を止める ----

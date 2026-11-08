@@ -8,6 +8,8 @@
 //      画面のコードには外の住所を書かない決まり(web/test/privacy.test.mjs)なので、頁の住所は書かない
 // ヘッドセットの中・入口の LED・自動で始める画面・重さを測る時は、入口を出さず、?tv=1 も読まない。
 
+import { pcFullscreenKeys } from './tvHome.js';
+
 /** URL でテレビ表示から始める印(?tv=1) */
 export const TV_PARAM = 'tv';
 /** テレビ表示の間、<html> に付ける印(style.css が見る) */
@@ -191,13 +193,13 @@ export function isInstalledApp({ nav = {}, matchMedia = null } = {}) {
 /**
  * 完全な全画面の案内の文。出さない時は ''。
  * 出すのは、頁から全画面にできず(canFullscreen が偽)、ホーム画面の頁としても開いておらず(installed が偽)、まだ 1 回も出していない時だけ。
- * iPhone・iPad は「共有 →「ホーム画面に追加」から開く」、ほか(PC など)は「F11 か、ブラウザーの全画面」
- * @param {{device?: string, canFullscreen?: boolean, installed?: boolean, seen?: boolean}} o
+ * iPhone・iPad は「共有 →「ホーム画面に追加」から開く」、ほか(PC など)は「F11 か、ブラウザーの全画面」(Mac は control + command + F。B13L)
+ * @param {{device?: string, canFullscreen?: boolean, installed?: boolean, seen?: boolean, mac?: boolean}} o
  */
-export function fullscreenGuide({ device = '', canFullscreen = false, installed = false, seen = false } = {}) {
+export function fullscreenGuide({ device = '', canFullscreen = false, installed = false, seen = false, mac = false } = {}) {
   if (canFullscreen || installed || seen) return '';
   if (device === 'iPhone' || device === 'iPad') {
     return 'ぜんがめんには、共有ボタン →「ホーム画面に追加」から ひらいてね(URL の おびが きえます)。';
   }
-  return 'ぜんがめんには、F11 キーか、ブラウザーの「全画面表示」を つかってね。';
+  return `ぜんがめんには、${pcFullscreenKeys(mac)}か、ブラウザーの「全画面表示」を つかってね。`;
 }

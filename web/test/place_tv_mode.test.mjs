@@ -147,7 +147,7 @@ test('style.css: テレビ表示は小さな窓を隠し、字幕を画面の高
   assert.match(css, /\.tv-btn \{[^}]*min-height: 44px;[^}]*min-width: 44px;/);
   assert.match(css, /\.tv-enter \{[^}]*min-height: 64px;/);
   assert.match(css, /@media \(orientation: portrait\) and \(pointer: coarse\) \{\s*html\.tv-mode \.tv-rotate \{/);
-  assert.match(css, /html\.tv-mode \.privacy\.off:not\(\.mic\) \{ display: none !important; \}/); // カメラかマイクを使っている間の注意書きは残す
+  assert.match(css, /html\.tv-mode \.privacy\.off:not\(\.listening\) \{ display: none !important; \}/); // カメラかマイクを使っている間の注意書きは残す
   assert.match(css, /@media \(max-width: 640px\) \{\s*\.tv-btn \.tv-long \{ display: none; \}\s*\.tv-btn \.tv-short \{ display: inline; \}/);
   // 幅 640 まで: 上の段の行に入れず、畳んだ考えの見出しと同じ行(見た目の切り替えの左)に置く(幅 390 で上の段を 1 行増やさない)
   assert.match(css, /\.tv-btn \{ position: fixed; top: calc\(max\(12px, env\(safe-area-inset-top\)\) \+ var\(--top-h, 64px\) \+ 8px\); right: var\(--tv-right, 12px\); \}/);
@@ -172,7 +172,7 @@ test('main.js: テレビ表示の線・下の余白・入口・全画面は押�
   const calls = [...js.matchAll(/requestTvFullscreen\(\)/g)].length;
   assert.equal(calls, 3, '定義の 1 つ + setTvMode の中 + 入口のボタン(startSource)');
   assert.match(js, /if \(tvActive\(\)\) requestTvFullscreen\(\); \/\/ \?tv=1/);
-  assert.match(js, /\$\('privacy'\)\?\.classList\.toggle\('mic', Boolean\(listener\?\.listening\)\);/); // マイクで聞いている間の印
+  assert.match(js, /\$\('privacy'\)\?\.classList\.toggle\('listening', Boolean\(listener\?\.listening\)\);/); // マイクで聞いている間の印
   assert.match(js, /if \(label\) label\.textContent = name;/); // 見せる言葉も名前に(iPhone・iPad は「テレビに映す」)
   // 幅 640 までの置き場所: 見た目の切り替えの幅を測って --tv-right に(切り替えが無ければ 12px)。出る・隠れる時も置き直す
   assert.match(js, /document\.documentElement\.style\.setProperty\('--tv-right', `\$\{12 \+ \(w > 0 \? w \+ 8 : 0\)\}px`\);/);
