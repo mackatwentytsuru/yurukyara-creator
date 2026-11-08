@@ -10,7 +10,7 @@
 //   - MDN は「端末が音量の割り当てを調整するかもしれない(モバイルでスピーカーでなくイヤピースを使うなど)」とだけ書く。ページから出口を選ぶ道は無い。
 //   - WebKit の実装(Source/WebCore/platform/audio/ios/AudioSessionIOS.mm)は、PlayAndRecord で AVAudioSession に DefaultToSpeaker を付ける
 //     (「レシーバーを優先」の状態のときだけ付けない)。なので ふつうは、聞いている間もスピーカーから出る。付く付かないは iOS の版と接続先(イヤホン・Bluetooth)で変わる。
-//   - 実機の報告(WebKit Bugzilla 282939)では、getUserMedia のあとで出口が変わる・マイクを閉じても 'play-and-record' が残って音が悪くなることがある。
+//   - 実機の報告(WebKit Bugzilla 282939。2025-02 時点で未対応)では、iPhone で getUserMedia({audio}) を呼ぶと、ふだんのマイクではなく内蔵マイクが返り、ページの音の出口も内蔵スピーカーに替わる。直す手は無く、回避策として audioSession.type を切りかえて出口を取り直す報告がある。
 //   ここでできること = ①取る前に 'play-and-record' ②取った後にもう一度そろえる ③中断から戻った時・ページが前に戻った時にそろえ直す ④閉じたら 'playback' に戻す。それ以上は Web からは決められない。
 // navigator.audioSession が無い端末(PC・Android・古い iOS)では、何もしない。
 // DOM も three も読まない小さな部品(node の試験で、偽の audioSession を使って切りかえの順番を確かめる)。
