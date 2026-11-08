@@ -256,7 +256,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   }
 
   tryBtn.addEventListener('click', runPreview);
-  randomBtn.addEventListener('click', () => update({ ...random(), voice: s.voice }));
+  // くじびきで替えるのは性格まわりだけ。声・どこで だれと・ことば・お店のきまり(ML1)は、選んだままにする
+  randomBtn.addEventListener('click', () => update({ ...random(), voice: s.voice, role: s.role, lang: s.lang, ...(s.place ? { place: s.place } : {}), ...(s.facts ? { facts: s.facts } : {}) }));
   panel.dataset.toneLocked = String(lockTone);
   const close = () => {
     clearTimeout(timer);
@@ -269,7 +270,8 @@ export function openPersonaPanel({ initial, characterName = 'この子', random,
   });
   autoBtn.addEventListener('click', () => {
     const rec = normalize(recommended?.() ?? initial);
-    const next = fix({ ...rec, voice: { ...rec.voice, role: 'auto' } });
+    // おまかせで決めるのは、前からの 6 つの選び。ことば・お店のきまり(ML1)は、いま選んでいるままにする
+    const next = fix({ ...rec, voice: { ...rec.voice, role: 'auto' }, lang: s.lang, ...(s.facts ? { facts: s.facts } : {}) });
     if (s.voice.role !== 'auto') onVoiceRole?.('auto');
     close();
     onSave(next);

@@ -261,6 +261,7 @@ const idleClear = createIdleClear({
     dialogue.history = [];
     dialogue.carry = null;
     ui.clearTalk();
+    $('caption').textContent = ''; // 字幕の文字も空にする(隠れているだけで残さない)
     memory?.resync?.();
   },
 });
