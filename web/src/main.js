@@ -254,6 +254,10 @@ const dialogue = new Dialogue({
   motionChoices,
   onEvent: onChatEvent, // サーバーのイベントが全部届く(記憶の札・仮の頭脳の知らせ)
   onOffline: (info) => reconnector.begin(info), // 通信が切れて返事が 1 つも来なかった回: つながり直したら送り直す(LF3)
+  // 返事の前に止められた回(言い直し・割り込み): 記録だけ残す(画面の「返事が始まるまで」の表示と、ふだんの数え方には混ぜない。LF4)
+  onInterrupted: (entry) => {
+    fetch('/api/metrics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry) }).catch(() => {});
+  },
   interview: params.get('interview') === '1', // 入口のインタビューの型(返事 2 文まで)
   getContext: () => ({
     scene: sceneText(),

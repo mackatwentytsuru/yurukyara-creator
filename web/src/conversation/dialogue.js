@@ -84,10 +84,11 @@ export class Dialogue {
    * @param {(ev:object) => void} [deps.onEvent] サーバーから届いたイベントを全部渡す(記憶の札の onChatEvent など)
    *   ui.notice(文) があれば、「仮の頭脳です」などの一言をそこへ出す
    */
-  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false, onEvent = null, onOffline = null }) {
+  constructor({ character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview = false, onEvent = null, onOffline = null, onInterrupted = null }) {
     // interview: インタビューの型(返事 2 文まで・台本にしない)で答えさせる(入口の LED の ?interview=1)
     // onOffline: 通信が切れて返事が 1 つも来なかった回の言葉を渡す(main.js が、つながり直したら送り直す)
-    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview, onEvent, onOffline });
+    // onInterrupted: 返事の最初の音の前に、言い直し・割り込みで止められた回の記録を渡す(いちばん待たせた回が、数字から消えないように。11-08 LF4)
+    Object.assign(this, { character, speaker, ui, getContext, setGaze, onMetric, motionChoices, interview, onEvent, onOffline, onInterrupted });
     this.history = [];
     this.abort = null;
     this.timers = [];
@@ -95,6 +96,7 @@ export class Dialogue {
     this.busy = false;
     this.brain = 'unknown';
     this.cur = null; // 返事を待っている最中の回 { text, trigger, said }
+    this.open = null; // 送ったが、まだ記録を出していない回の数字 m(止められたら onInterrupted に出す)
     this.carry = null; // 返事が 1 文も来ないまま止められた回の言葉 { text, at }。次の言葉の頭につなげる(取りこぼさない)
     try {
       setSttHint(getContext?.()?.character?.name); // 聞き取りの手がかり(キャラの名前)。最初の声から効くように
@@ -133,6 +135,7 @@ export class Dialogue {
       this.history.push({ role: 'assistant', content: assistantLines(cur.sayEvents, cur.thought) });
       this.history = trimHistory(this.history);
     }
+    this._reportInterrupted();
     this.cur = null;
     this.turnId += 1;
     this.abort?.abort();
@@ -189,7 +192,8 @@ export class Dialogue {
     // ML1: ことば(声は文ごとの言葉で話す)と、聞く言葉(日本語以外の時は、日本語のあいづちを出さない)。日本語だけの時は、どちらも ja
     this.speaker.setLangMode?.(ctx.lang);
     this.speaker.setHearLang?.(ctx.hearLang);
-    const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null, via };
+    const m = { mode, t0, tSend: performance.now(), tFirstSay: null, tAudio: null, ttsFirstByteMs: null, brain: this.brain, tts: 'eleven', fillerMs: null, fillerEndMs: null, via, done: false };
+    this.open = trigger === 'approach' ? null : m; // 近づいた合図の声かけは、待たせた回ではないので数えない
     // あいづち: 先に出していればそれを、まだなら今出す(声で話しかけられた回だけ)。数字は本当の返事とは別に残す
     let fillerWanted = mode === 'voice' && trigger !== 'approach';
     if (fillerWanted && pre && performance.now() - pre.at < FILLER_FRESH_MS) {
@@ -322,6 +326,7 @@ export class Dialogue {
     this.cur = null;
     if (failed && !sayEvents.length) {
       this.busy = false;
+      this.open = null; // つながらなかった回は、止められた回ではない
       if (offline) this.onOffline?.(offline);
       return;
     }
@@ -351,7 +356,29 @@ export class Dialogue {
     this.ui.caption(info.crawl ? '' : ev.text); // 文字送りのときは空から始め、onCrawl が 1 字ずつ足す
   }
 
+  /** 返事の最初の音の前に止められた回(言い直し・割り込み・ボタン)を 1 行残す。止められた回が、いちばん遅かった回のことがある。valid にはしない(中央値に混ぜない) */
+  _reportInterrupted() {
+    const m = this.open;
+    this.open = null;
+    if (!m || m.done || !this.onInterrupted) return;
+    m.done = true;
+    this.onInterrupted({
+      mode: m.mode,
+      brain: m.brain,
+      tts: this.speaker.ttsError ? 'silent' : 'eleven',
+      interrupted: true,
+      valid: false,
+      waitedMs: Math.round(performance.now() - m.t0),
+      t0ToSendMs: Math.round(m.tSend - m.t0),
+      sendToFirstSayMs: m.tFirstSay ? Math.round(m.tFirstSay - m.tSend) : null,
+      totalMs: m.tAudio !== null ? Math.round(m.tAudio - m.t0) : null,
+      ...(m.via ? { via: m.via } : {}),
+    });
+  }
+
   _report(m) {
+    m.done = true;
+    if (this.open === m) this.open = null;
     const entry = {
       mode: m.mode,
       brain: m.brain,

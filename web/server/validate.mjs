@@ -196,5 +196,12 @@ export function sanitizeMetric(raw) {
   }
   // 声の回が、途中の文字を先に送った回('interim')か、先に送ったあと違う字の確定で送り直した回('replace')か(11-08 LF3)。ほかの値は書かない
   if (raw.via === 'interim' || raw.via === 'replace') entry.via = raw.via;
+  // 返事の最初の音の前に止められた回(言い直し・割り込み。11-08 LF4)。ふだんの数字(valid)には混ぜず、待たせた長さ(waitedMs)だけ足す
+  if (raw.interrupted === true) {
+    const w = raw.waitedMs;
+    entry.interrupted = true;
+    entry.valid = false;
+    entry.waitedMs = Number.isFinite(w) && w >= 0 && w < 600_000 ? Math.round(w) : null;
+  }
   return entry;
 }

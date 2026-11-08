@@ -171,6 +171,7 @@ function latencySummary() {
   const rows = readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   // 頭脳が Haiku で声が ElevenLabs の回だけを数える(仮の頭脳・字幕のみの回は、本物の数字にしない)
   const totals = rows.filter((r) => r.valid === true).map((r) => r.totalMs).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  const interrupted = rows.filter((r) => r.interrupted === true && Number.isFinite(r.waitedMs)).map((r) => r.waitedMs).sort((a, b) => a - b);
   const pick = (p) => totals[Math.min(totals.length - 1, Math.floor(totals.length * p))];
   const fillers = rows.filter((r) => r.valid === true && Number.isFinite(r.fillerMs)).map((r) => r.fillerMs).sort((a, b) => a - b);
   return {
@@ -178,6 +179,8 @@ function latencySummary() {
     filler: { count: fillers.length, medianMs: fillers.length ? fillers[Math.floor(fillers.length / 2)] : null },
     count: totals.length,
     ignored: rows.length - totals.length,
+    // 返事の前に止められた回(言い直し・割り込み)と、そのとき待たせた長さの中央(LF4)
+    interrupted: { count: interrupted.length, waitedMedianMs: interrupted.length ? interrupted[Math.floor(interrupted.length / 2)] : null },
     medianMs: totals.length ? pick(0.5) : null,
     p90Ms: totals.length ? pick(0.9) : null,
     underTargetRate: totals.length ? totals.filter((v) => v <= 1200).length / totals.length : null,
