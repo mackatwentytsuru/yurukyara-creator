@@ -307,7 +307,7 @@ npm run start:claude-code      # instead of npm start; then open http://127.0.0.
 ```
 
 - It first checks that `claude` is installed and logged in. If not, it stops and tells you why and how to fix it, in Japanese (to install Claude Code, see the [official guide](https://code.claude.com/docs/en/overview)).
-- A small relay ([`tools/claude-code-relay/`](tools/claude-code-relay/)) listens on this PC only (127.0.0.1) and hands the app's conversation and drawing calls to your own `claude -p`. `claude` gets no tools and no MCP. It allows up to 300 calls a day (change with `RELAY_DAILY_CAP`), and Ctrl+C stops it together with the app.
+- A small relay ([`tools/claude-code-relay/`](tools/claude-code-relay/)) listens on this PC only (127.0.0.1) and hands the app's conversation and drawing calls to your own `claude -p`. `claude` gets no tools and no MCP. It allows up to 300 calls a day (change with `RELAY_DAILY_CAP`; a value that is not a positive integer falls back to 300). Drawing calls work as they are, because `npm run start:claude-code` sets `YC_BROWSER_DRAW=1` (the app's own per-day and per-person drawing limits still apply). Ctrl+C stops it together with the app.
 - It does not use `ANTHROPIC_API_KEY` (even if one is set, it is passed neither to the app nor to `claude`). What you say is not logged. The usage counts against your Claude Code plan.
 - While connected, the status endpoint (`/api/status`) answers `brainVia: "claude-code"` (it answers `"mock"` when there is neither a key nor Claude Code and おためしモード talks).
 - The voice is separate. To hear it, enter your own ElevenLabs key as usual ([Voices](#voices)).
