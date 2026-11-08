@@ -389,7 +389,33 @@ def work_dir(root, ident):
     return os.path.join(root, "creator", "work", ident, "learn")
 
 
+def readable_place(root, path, ident=None):
+    """読んでよい場所か。check は characters/ と creator/work/<id>/learn/、diff・apply の案は creator/work/<その id>/learn/ だけ
+    (資料の中の命令で、リポジトリの外や鍵のファイルを読ませないため)"""
+    real = os.path.realpath(path)
+    work = os.path.realpath(os.path.join(root, "creator", "work"))
+    places = []
+    if ident is None:
+        places.append(os.path.realpath(os.path.join(root, "characters")))
+        rel = os.path.relpath(real, work) if os.path.splitdrive(real)[0].lower() == os.path.splitdrive(work)[0].lower() else ".."
+        parts = rel.replace("\\", "/").split("/")
+        if len(parts) >= 3 and parts[0] not in ("..", ".") and parts[1] == "learn":
+            return True
+    else:
+        places.append(os.path.realpath(work_dir(root, ident)))
+    for base in places:
+        try:
+            if os.path.commonpath([real, base]) == base:
+                return True
+        except ValueError:  # ドライブが違う
+            pass
+    return False
+
+
 def cmd_check(a):
+    if not readable_place(a.root, a.file):
+        print("読みません: 点検できるのは characters/ と creator/work/<id>/learn/ の中のファイルだけです。")
+        return 2
     try:
         text = read_text(a.file)
     except OSError as e:
@@ -407,6 +433,9 @@ def parse_today(s):
 
 def load_pair(a):
     pp = persona_path(a.root, a.id)
+    if not readable_place(a.root, a.proposal, a.id):
+        print(f"読みません: 案は creator/work/{a.id}/learn/ の中に置きます。")
+        return None
     try:
         persona = read_text(pp)
         proposal = read_text(a.proposal)
@@ -509,6 +538,47 @@ def cmd_apply(a):
     return 0
 
 
+def outside_facts(text):
+    """2 つの事実の節と「- 役目:」の行を除いた、残りの中身の行(空行と行の両端の空白は見ない)"""
+    out = []
+    for hline, name, lines in parse_blocks(text):
+        if name:
+            continue
+        if hline is not None:
+            out.append(hline.strip())
+        out.extend(t.strip() for t in lines if t.strip() and not ROLE_LINE.match(t))
+    return out
+
+
+def role_of(text):
+    for _, name, lines in parse_blocks(text):
+        if name:
+            continue
+        for t in lines:
+            if ROLE_LINE.match(t):
+                return ROLE_LINE.sub("", t, count=1).strip()
+    return None
+
+
+def backup_problems(backup, current, today):
+    """控えを戻してよいか。apply が作る控えは、いまの persona.md と「2 つの節と役目の行」だけが違う。
+    それ以外が違う控え・点検を通らない節・決まりに無い役目は、偽の控えか、手で直した後なので戻さない。"""
+    reasons = []
+    if outside_facts(backup) != outside_facts(current):
+        reasons.append("控えは、2 つの節と役目の行のほかも、いまの persona.md と違います(覚えさせた時の控えではありません)")
+    role = role_of(backup)
+    if role is not None and role not in ROLE_LABELS:
+        reasons.append(f"控えの役目「{role[:20]}」は、決まった言葉ではありません")
+    problems, info = check_text(backup, today=today)
+    for p in problems:
+        if p.level != "止める":
+            continue
+        if info["items"] == 0 and p.where == "全体":
+            continue  # 覚えさせる前の控え(事実がまだ無い)は、そのままでよい
+        reasons.append(str(p))
+    return reasons
+
+
 def cmd_undo(a):
     wd = work_dir(a.root, a.id)
     baks = sorted(f for f in (os.listdir(wd) if os.path.isdir(wd) else []) if f.startswith("persona.") and f.endswith(".bak.md"))
@@ -516,12 +586,30 @@ def cmd_undo(a):
         print("戻す控えがありません。")
         return 2
     latest = baks[-1]
+    pp = persona_path(a.root, a.id)
+    try:
+        backup = read_text(os.path.join(wd, latest))
+        current = read_text(pp)
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"読めません: {e}")
+        return 2
+    reasons = backup_problems(backup, current, parse_today(getattr(a, "today", None)))
+    if reasons:
+        print(f"戻しませんでした: {latest} は点検を通りません。persona.md は変えていません。")
+        print("\n".join(f"- {r}" for r in reasons[:10]))
+        return 3
+    # いまの版も残してから戻す(戻した物も、また戻せる)
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    undone = os.path.join(wd, f"persona.{stamp}.undone.md")
+    with open(undone, "wb") as f:
+        f.write(current.encode("utf-8"))
     with open(os.path.join(wd, latest), "rb") as f:
         data = f.read()
-    with open(persona_path(a.root, a.id), "wb") as f:
+    with open(pp, "wb") as f:
         f.write(data)
     os.remove(os.path.join(wd, latest))
     print(f"元に戻しました: {latest}")
+    print(f"戻す前の版: creator/work/{a.id}/learn/{os.path.basename(undone)}")
     return 0
 
 

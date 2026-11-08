@@ -10,6 +10,10 @@ allowed-tools: Read, Bash(python creator/review/yuru_make.py *), Bash(python cre
 
 約束(K3)の正: `creator/review/schema/README.md`。ここに書くのは手順だけ。
 
+## 確認は出ない(知らせだけ)
+
+このスキルの道具(`yuru_make.py`・`review_state.py`)は、確認(許可の画面)が出ない。絵を描き始める時だけ、1 行で知らせる: 「絵を描きます。3〜5 分、Claude の使える量を少し使います。」 描き直しの一言(`creator/work/<id>/review/`)は画面のサーバーが書く。Claude は review の中を書かない(書こうとすると確認が出る)。
+
 ## 守ること(先に読む)
 
 - 進めるのは `python creator/review/yuru_make.py next` の 1 本だけ。中で S1 の段の道具(ゆるキャラチェック `c01_yuru_check.py`・絵 `stage_run.py claude` で yc-0-draw)を決まった引数で呼び、時間と量を `creator/work/<id>/run.jsonl` に残す(K6)。自分で絵を描かない・SVG を書かない。

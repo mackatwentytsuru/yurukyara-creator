@@ -1,11 +1,31 @@
 ---
 name: make-character
 description: 言葉か絵 1 枚から、ブラウザで話す 3D のゆるキャラを、7 段(⓪ 描く〜⑦ 話す)で作る入口。段の順・各段の命令・合格の確かめ・時間と費用の記録(run.jsonl)をまとめる。「言葉からキャラを作って」「この絵を話すキャラにして」「7 段を通して」「三面図を渡すから話せる 3D にして」「絵 1 枚だけで一発で」「3D にもする(変換の絵から)」と言われたとき、最初に読む。
+allowed-tools: Read, Bash(python creator/pipeline/c01_yuru_check.py *), Bash(python creator/pipeline/j01_judge.py *), Bash(python creator/pipeline/t07_talk.py *), Bash(sh creator/pipeline/check_all.sh *), Bash(python creator/review/review_state.py *)
 ---
 
 # make-character: 言葉か絵から、話すゆるキャラまで(7 段の入口)
 
 細かい手順は各段のスキルにある。ここは、いちばん先に読む「道具の場所と止まらない決まり」、7 段の順番と段の間で渡す物、確かめの命令だけ。
+
+
+## 確認が出る時(先に 1 行だけ言う)
+
+確認(許可の画面)は、話すことや覚えたことが変わる時・PC の外を読む時・お金や長い時間を使う時・戻しにくい時・外へ出す時だけ出る。読む・下書き・点検・変わる所の表示・一覧・自分の試験では出ない(`.claude/settings.json` の決まり。全体は `docs/confirmations.md`)。
+確認が出る道具の直前に、次の 1 行だけを言う。会話で別に「いい?」とは聞かない(同じことを 2 回聞かない)。
+
+| する事 | 直前に言う 1 行 |
+|---|---|
+| 消す(`rm`) | 「<名前>を消します。ゴミ箱に入らず、戻せません。次に出る画面が、その確認です。」 |
+| 外へ出す(`git push`・`gh`・`vercel`) | 「<どこ>へ出します。はい → ほかの人にも見えます。戻す → 取り下げ(すぐには消えません)。次に出る画面が、その確認です。」 |
+| 話し方の文を手で直す(`persona.md`・`character.json`) | 「<名前>の話し方を書き換えます。先に前の版を creator/work に取っておきます。次に出る画面が、その確認です。」 |
+| 守りの部品を変える(`.claude`・`tools`・`creator/learn`・`creator/pipeline`・`creator/review`・`creator/setup`・`web/src/conversation`) | 「この子を守る仕組みを変えます。ふつうは要りません。頼んだ覚えが無ければ『いいえ』を押してください。次に出る画面が、その確認です。」 |
+| 作る画面を起こす | 「作る画面を起こします。同じ Wi-Fi のスマホからも開けます(合言葉つき)。止める → 窓を閉じる。次に出る画面が、その確認です。」 |
+| 3D にする(`run_built.sh`・`run_groups.sh`) | 「3D にします。約 20 分、Claude の使える量をたくさん使います。途中で止められ、作りかけは creator/work に残るだけです。次に出る画面が、その確認です。」 |
+| 鍵 | 聞かずに止める: 「鍵はここに貼らないでください。画面の鍵の欄に入れてください。」 |
+
+- 初めて作る人には、最初に 1 回だけ「頼んでいない確認が出たら『いいえ』を押してください」と言う。
+- 確認で「いいえ」を選ばれたら、別の道具や書き方で同じことをしない。止まって、どうするかを聞く。
 
 ## 先に読む: 道具の場所と、止まらない決まり
 - **道具はリポジトリの `creator/` にある**(`builders`・`pipeline`・`review`・`draw`・`check`・`setup`)。作業フォルダが リポジトリの中でない時は、リポジトリから `git worktree add <作業用の場所> <枝>` で取り出し、その中の `creator/env.sh` を読み込む(`ENV_SH=<作業用の場所>/creator/env.sh; . "$ENV_SH"` で REPO・BLENDER・PY・TRIAL_BASE が決まる)。手元の値は `python creator/setup/doctor.py --write` が調べて `creator/env.local.sh` に書く(リポジトリには入れない)。

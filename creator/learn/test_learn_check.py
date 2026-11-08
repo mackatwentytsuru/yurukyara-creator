@@ -133,7 +133,8 @@ class ApplyTest(unittest.TestCase):
         self.persona = os.path.join(self.pdir, "persona.md")
         self.before = lc.read_text(os.path.join(SAMPLES, "persona_before.md"))
         self.write(self.persona, self.before)
-        self.proposal = os.path.join(self.tmp, "proposal.md")
+        self.proposal = os.path.join(self.tmp, "creator", "work", "kono", "learn", "proposal.md")
+        os.makedirs(os.path.dirname(self.proposal), exist_ok=True)
         self.write(self.proposal, lc.read_text(os.path.join(SAMPLES, "proposal.md")))
 
     @staticmethod
@@ -378,7 +379,8 @@ class RoleTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.persona = os.path.join(self.tmp, "characters", "kono", "persona.md")
         os.makedirs(os.path.dirname(self.persona))
-        self.proposal = os.path.join(self.tmp, "proposal.md")
+        self.proposal = os.path.join(self.tmp, "creator", "work", "kono", "learn", "proposal.md")
+        os.makedirs(os.path.dirname(self.proposal), exist_ok=True)
         with open(self.proposal, "wb") as f:
             f.write(one("燃えるごみは月曜日に出す。").encode("utf-8"))
 
