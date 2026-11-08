@@ -89,7 +89,7 @@ try {
   await page.goto(`${server.base}/?character=yokoso&auto=0`);
   await stopIfSoftwareRenderer(page, browser); // CPU の描画なら止める
   await page.waitForFunction(() => window.__app?.character && window.__app.firstFrameAt !== null, null, { timeout: 60000 });
-  await page.getByText('カメラなしで試す').click();
+  await page.locator('#startSim').click();
   await page.waitForFunction(() => window.__app?.status, null, { timeout: 60000 });
 
   // マイクを入れる(作り物の聞き取り。何も言わない)

@@ -37,7 +37,7 @@ await page.addInitScript(() => {
 await page.goto(`http://127.0.0.1:${PORT}/?character=${CHAR}&place=test_room&auto=0`);
 await stopIfSoftwareRenderer(page, browser); // CPU の描画なら止める
 await page.waitForFunction(() => window.__app?.character?.vrm, null, { timeout: 90000 });
-await page.getByText('カメラなしで試す').click();
+await page.locator('#startSim').click();
 await page.waitForTimeout(2000);
 
 // 場所を見本の会場の受付にして、毎コマの記録を始める

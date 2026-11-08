@@ -47,6 +47,7 @@ let renderer = null;
 async function open(name, query, { voiceKey = false, expectBlocks = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await context.addInitScript(() => {
+    window.__YC_CAMERA_FEATURE = true; // 11-08: カメラは次のアップデートまで外してある。CSP の確かめでは入れて通す
     window.__csp = [];
     document.addEventListener('securitypolicyviolation', (e) => {
       window.__csp.push({ directive: e.effectiveDirective, blocked: String(e.blockedURI).slice(0, 100), source: String(e.sourceFile).split('/').pop() });

@@ -63,12 +63,12 @@ test('index.html の入口: 製品の名前・主役ノリー・声は鍵があ�
   assert.match(gate, /<p class="gate-what" id="gateWhat">ノリーや 見本の子と 話そう。ことばや 絵から、にた子を えらべるよ。話したことを 覚えるよ。<\/p>/, '何をする物かの 1 行。この版で本当にできることだけ(CRITux3・UIR 3)');
   assert.doesNotMatch(gate, /作れます/, '入口は、この版でできない「作れます」を約束しない(UIR 3)');
   assert.doesNotMatch(gate, /7 歩/, '使う人に見える言葉は「7 つのステップ」');
-  assert.match(gate, /id="startSim" class="primary" type="button" disabled>/, '主役は「カメラなしで試す」(UIR 22)。読み込みが終わるまで押せない(main.js が戻す)');
-  assert.match(gate, /id="startCam" class="ghost" type="button" disabled>/);
+  assert.match(gate, /id="startSim" class="primary" type="button" disabled>/, '主役の「はじめる」。読み込みが終わるまで押せない(main.js が戻す)');
+  assert.match(gate, /id="startCam" class="ghost" type="button" disabled hidden>/);
   assert.ok(gate.indexOf('id="startSim"') < gate.indexOf('id="startCam"'), 'カメラの札は 2 つ目');
   assert.match(gate, /id="camSub">読み込んでいます…</);
   const sim = gate.slice(gate.indexOf('id="startSim"'), gate.indexOf('</button>', gate.indexOf('id="startSim"')));
-  assert.match(sim, /カメラなしで試す/, 'ほかの流れの確かめの道具が、この言葉で押す(web_talk_check.mjs など)');
+  assert.match(sim, /はじめる/, '11-08 本人: カメラを外している間の入口は 1 つ(確かめの道具は #startSim で押す)');
   assert.doesNotMatch(gate, /マウス/, '入口の文はマウスと決めつけない(指かマウスかは main.js が決める。CRITux 15)');
   assert.match(gate, /マイクは「声で話す」を押した時だけ使います/);
   assert.match(gate, /id="gateFirst" hidden>はじめてなら、このあと「あたらしい子を つくる」が始まります/);

@@ -196,7 +196,7 @@ for (const size of SIZES) {
       await page.waitForFunction(() => { const b = document.getElementById('startCam'); return b && !b.disabled; }, null, { timeout: 90_000 });
       assert.equal(await shown(page, '#gateTrial'), true, '入口の 1 行が見えない');
       assert.equal((await page.textContent('#gateTrial')).trim(), TRIAL_GATE_LINE);
-      const cam = await rect(page, '#startCam');
+      const cam = await rect(page, '#startSim');
       const line = await rect(page, '#gateTrial');
       assert.ok(line.y >= cam.b - 0.5, `1 行は始めるボタンの下: ボタンの下 ${cam.b} / 1 行の上 ${line.y}`);
       assert.ok(line.x >= 0 && line.r <= size.w, '入口の 1 行が画面に収まる');

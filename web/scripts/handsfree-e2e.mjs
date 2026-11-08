@@ -122,7 +122,7 @@ export async function runHandsfree({ base, wavPath, expectTurns = 5, timeoutMs =
     } catch (err) {
       throw new Error(`舞台が出ませんでした: ${problems.join(' / ')} (${err.message})`);
     }
-    await page.getByText('カメラなしで試す').click();
+    await page.locator('#startSim').click();
     await page.waitForFunction(() => window.__app?.status?.stt?.available === true, null, { timeout: 60000 });
     // 唯一のタップ。このあとは、画面に何も触らない
     await page.click('#micBtn');
@@ -194,7 +194,7 @@ export async function runDoubleTap({ base, wavPath, character = 'yokoso' }) {
     await page.goto(`${base}/?character=${character}&auto=0&stt=server`);
     await stopIfSoftwareRenderer(page, browser);
     await page.waitForFunction(() => window.__app?.character && window.__app.firstFrameAt !== null, null, { timeout: 60000 });
-    await page.getByText('カメラなしで試す').click();
+    await page.locator('#startSim').click();
     await page.waitForFunction(() => window.__app?.status?.stt?.available === true, null, { timeout: 60000 });
     const state = () => page.evaluate(() => ({
       pressed: document.getElementById('micBtn')?.getAttribute('aria-pressed'),

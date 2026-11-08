@@ -114,7 +114,7 @@
   <footer class="bottom">
     <p class="privacy" id="privacy" role="note">
       <span class="rec"></span>
-      <span id="privacyText">カメラの映像は、この端末の中で人の位置を調べるだけに使います。保存も、送信もしません。</span>
+      <span id="privacyText">カメラは使っていません。</span>
     </p>
     <div id="choices" class="choices" role="group" aria-label="よくある質問" hidden></div>
     <form id="composer" class="composer" autocomplete="off">
@@ -193,8 +193,9 @@
       <!-- 接客モードの入口(店の人が見る): 鍵も Claude Code も無いままでは、決まった台本で話すだけ。先に PC で入れてもらう(ui/trialMode.js)。案内のボタンは付けない -->
       <p class="kiosk-trial" id="kioskTrial" role="note" hidden></p>
       <button id="kioskStart" class="primary kiosk-start" type="button" hidden disabled><span class="btn-main">接客を はじめる</span><small class="btn-sub">おすと、マイクと 音を つかえるように なります</small></button>
-      <button id="startSim" class="primary" type="button" disabled><span class="btn-main">カメラなしで試す</span><small class="btn-sub" id="simSub">読み込んでいます…</small></button>
-      <button id="startCam" class="ghost" type="button" disabled><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">読み込んでいます…</small></button>
+      <button id="startSim" class="primary" type="button" disabled><span class="btn-main">はじめる</span><small class="btn-sub" id="simSub">読み込んでいます…</small></button>
+      <!-- 11-08 本人: カメラは次のアップデートまで外す(stage/cameraFeature.js)。この札は隠したまま。位置を外から受ける入口とヘッドセットでは、カメラを開かない「はじめる」として main.js が出す -->
+      <button id="startCam" class="ghost" type="button" disabled hidden><span class="btn-main">カメラを使って始める</span><small class="btn-sub" id="camSub">読み込んでいます…</small></button>
       <!-- おためしモードの 1 行(始めるボタンの下。鍵が入っていないと手元のサーバーが言う時だけ。ui/trialMode.js) -->
       <p class="gate-trial" id="gateTrial" role="note" hidden></p>
       <!-- /B4 -->
@@ -203,7 +204,7 @@
         <input id="passInput" type="password" autocomplete="off" maxlength="200" />
       </label>
       <!-- BCV: カメラを使うと、話しかけた時の絵が答えを作るために Claude に送られる(保存しない)。使うかは使う人が決める。あとから入・切できる -->
-      <p class="fine" id="gateFine">カメラの えは、こたえを つくるために Claude に おくられます(ほぞんしません)。つかうかは あなたが きめてね。カメラは あとから いつでも きりかえられます。マイクは「声で話す」を押した時だけ使います。</p>
+      <p class="fine" id="gateFine">マイクは「声で話す」を押した時だけ使います。</p>
       <p class="status" id="gateStatus" aria-live="polite"></p>
     </div>
   </div>

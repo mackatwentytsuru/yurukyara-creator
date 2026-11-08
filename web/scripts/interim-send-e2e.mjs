@@ -193,7 +193,7 @@ async function runCondition(server, wavPath, cond) {
     await page.goto(`${server.base}/?character=yokoso&auto=0${cond.interim ? '' : '&interimsend=off'}`);
     await stopIfSoftwareRenderer(page, browser); // CPU の描画なら止める
     await page.waitForFunction(() => window.__app?.character && window.__app.firstFrameAt !== null, null, { timeout: 60000 });
-    await page.getByText('カメラなしで試す').click();
+    await page.locator('#startSim').click();
     await page.waitForFunction(() => window.__app?.status, null, { timeout: 60000 });
     await page.click('#micBtn');
     await page.waitForFunction(() => document.getElementById('micBtn')?.getAttribute('aria-pressed') === 'true', null, { timeout: 30000 });

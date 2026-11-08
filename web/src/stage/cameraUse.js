@@ -9,6 +9,7 @@
 import { cameraSwitchPlan, mountCameraSwitch, CAMERA_PRIVACY, CAMERA_PRIVACY_BACK, CAMERA_PRIVACY_BACK_MOCK, CAMERA_PRIVACY_MOCK } from './cameraSwitch.js';
 import { takeFrame } from '../conversation/cameraFrame.js';
 import { SimSource } from '../tracking/sources/simSource.js';
+import { cameraFeatureOn } from './cameraFeature.js';
 
 export const CAMERA_ENDED = 'カメラが とまりました。また つかう ときは、カメラの ボタンを おしてね';
 
@@ -28,9 +29,10 @@ export const CAMERA_ENDED = 'カメラが とまりました。また つかう 
  * @param {() => Promise<{MediapipeSource: Function}>} [o.loadFace] 顔の追従の部品を読む(重いので、入れる時に読む)
  */
 export function createCameraUse({ app, ui, dialogue, $, params, headset, touch, sourceOptions, inXr, updatePrivacy, isMock, loadFace = () => import('../tracking/sources/mediapipeSource.js') }) {
+  const featureOn = cameraFeatureOn(); // 11-08 本人: 次のアップデートまで外す(外している間は、ボタンも絵も出ない)
   const watchedTracks = new WeakSet(); // 流れ(track)ごとに 1 回(VR・AR から戻ると、同じ入力が新しい流れで始め直す)
   const use = {
-    plan: cameraSwitchPlan({ headset, led: params.get('led') === '1', autostart: params.get('autostart') === '1', source: params.get('source') ?? '', perf: params.get('perf') === '1' }),
+    plan: !featureOn ? { show: false, why: 'feature' } : cameraSwitchPlan({ headset, led: params.get('led') === '1', autostart: params.get('autostart') === '1', source: params.get('source') ?? '', perf: params.get('perf') === '1' }),
     consent: false, // 使う人がカメラを選んだか(入口の押し・知らせの「カメラを つかう」)
     ui: null,
     mockNoticeShown: false,
@@ -84,6 +86,7 @@ export function createCameraUse({ app, ui, dialogue, $, params, headset, touch, 
    * facing: 'user' = まえのカメラ(ふだん。顔の向きも見る)/ 'environment' = うしろのカメラ(スマホで前の景色や看板を見せる)
    */
   async function cameraOn(facing = 'user') {
+    if (!featureOn) throw new Error('camera-feature-off');
     if (inXr()) throw new Error('xr');
     const { MediapipeSource } = await loadFace();
     const next = new MediapipeSource(sourceOptions());
@@ -158,6 +161,7 @@ export function createCameraUse({ app, ui, dialogue, $, params, headset, touch, 
   });
   // 話しかけた回(声・文字。近づいた合図は除く)だけ、絵を 1 枚。顔の追従と同じ <video> から取る
   dialogue.getImage = ({ trigger } = {}) => (trigger !== 'approach' && use.seeing() ? takeFrame(app.source.video) : null);
+  if (!featureOn) dialogue.getImage = () => null; // カメラを外している間は、どの回も絵を付けない
   // サーバーの知らせ(cameraNotice)。仮の頭脳の知らせは、入れている間に 1 回だけ
   const before = dialogue.onEvent;
   dialogue.onEvent = (ev) => {

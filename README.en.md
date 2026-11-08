@@ -99,7 +99,6 @@ One line each: what you do → what happens. Lines marked (not checked yet) have
 
 **Where and how you see it**
 
-- **You turn the camera on and off**: press 「カメラ」 (camera), read the notice and press 「カメラを つかう」 ("use the camera") → when you talk, it uses one picture of that moment to answer about signs and things (not saved). Press again to turn it off. It is off by default.
 - **PC and phone**: open it on the PC. On a phone, open it over the same Wi-Fi or over Tailscale ([Open it on a phone](#phone)).
 - **On a TV**: on iPhone and iPad, use the browser's share button → "Add to Home Screen", and open it from that icon → it opens full screen, with no URL bar. The TV layout shows only the character, large captions and the AI notice. Then mirror the screen to the TV.
 - **VR**: in the Meta Quest 3 browser, press 「VR で見る」 ("view in VR") → the character stands in front of you; walk up to it and talk with it (we checked this on Quest 3 only; see [VR](#open-it-on-a-quest-3)).
@@ -151,7 +150,7 @@ To talk only, Node.js and Git are enough. To make characters, add Python, Chrome
 
 | What | Adds |
 |---|---|
-| `ANTHROPIC_API_KEY` (a Claude API key), or a connection to your own Claude Code | One of the two is needed to talk with the real Claude (Haiku); see step 2 under "Steps" below. With neither, you get おためしモード (trial mode): a fixed script, and the screen says so. Answering from a camera picture and answering in other languages also need the real Claude |
+| `ANTHROPIC_API_KEY` (a Claude API key), or a connection to your own Claude Code | One of the two is needed to talk with the real Claude (Haiku); see step 2 under "Steps" below. With neither, you get おためしモード (trial mode): a fixed script, and the screen says so. Answering in other languages also needs the real Claude |
 | `ELEVENLABS_API_KEY` (the voice key) | The character speaks aloud. On the PC's server, every connected device gets the voice. Without it, it talks with text and a retro sound. To be entered by an adult ([Voices](#voices)) |
 | `segno` (Python) | Prints a QR code for opening the app on a phone |
 | `faster-whisper` (Python) | Turns speech into text on this PC (when you choose a microphone other than the default one, and for headsets) |
@@ -209,7 +208,7 @@ npm run yuru     # starts the app and the maker together and prints the addresse
 
 - **`npm start`** gives you talking and choosing a sample character (with neither a key nor a Claude Code connection, it is おためしモード). Words or a picture bring out the nearest sample character; nothing new is drawn.
 - **`npm run yuru`** starts the app, `http://127.0.0.1:8787/`, and the maker, `http://127.0.0.1:8796/qr` (the maker is a small server and screen on your PC that turns words or a picture into a character). Without Python 3 or the maker's parts, only the app starts, and it says so.
-- The first screen is the entrance. Press 「カメラなしで試す」 ("try without the camera"), and Norrie guides you through 「キャラを つくる」 ("make a character"). At any question, 「おまかせ」 ("leave it to me") picks the recommended answer and goes on.
+- The first screen is the entrance. Press 「はじめる」 ("start"), and Norrie guides you through 「キャラを つくる」 ("make a character"). At any question, 「おまかせ」 ("leave it to me") picks the recommended answer and goes on.
 - Norrie appears first. The **3D / 2D** button, under 「かえる」 ("change") in the top bar, switches between them (`?look=2d` opens the 2D one directly). Other characters: `?character=<id>`, for example `?character=mikan`. They are in [`characters/`](characters/).
 - Ctrl+C stops everything it started. An app started with `npm start` or `npm run yuru` restarts itself after you update it from the screen.
 - We ran these steps (`git clone`, `npm ci`, `npm start`) from a fresh clone with Node.js 22 on Windows.
@@ -249,7 +248,7 @@ npm run yuru -- --lan
 **On a TV (iPhone and iPad)**
 
 - iPhone and iPad browsers do not let a page go full screen. Use the share button → "Add to Home Screen", and open it from that icon: it opens full screen, without the URL bar (the screen tells you this too).
-- Press 「テレビに映す」 ("show on TV"; 「テレビ」 on narrow screens) for the screen-mirroring steps. The TV layout shows only the character, large captions, the AI notice, the camera and 「もどる」 (back).
+- Press 「テレビに映す」 ("show on TV"; 「テレビ」 on narrow screens) for the screen-mirroring steps. The TV layout shows only the character, large captions, the AI notice and 「もどる」 (back).
 - The passphrase and the "first visit" mark from the browser are not carried over to the screen opened from the Home Screen.
 
 ### Common problems
@@ -350,7 +349,6 @@ Each row was checked by running it. The check is named next to it.
 | **Multilingual and 「日本語だけ」.** Chosen under 「ことば」. In multilingual mode it answers in the visitor's language, with the same safety rules. In Japanese-only mode the instructions, fixed replies, voice, listening and screen do not change by a single character. The shop device does not remember names and clears the screen after 3 minutes. | `node --test web/test/lang.test.mjs web/test/prompt_lang.test.mjs web/test/safety_lang.test.mjs web/test/voice_lang.test.mjs web/test/shop_device.test.mjs`. On Nov 8, with the real brain: the answer was in the right language 11 times out of 12, painful topics 3/3, turning down the lover role 3/3, made-up answers about things not written 0 |
 | **Learn a guide from documents (`yuru-learn`).** A fresh Claude Code learned from a made-up town's PDF and a picture of its station map, with every number, weekday, time and position right (nothing made up, with sources and dates). A fake contact number and "instructions to the AI" hidden in the documents were left out. | `python creator/learn/test_learn_check.py`, `python -I creator/learn/test_learn_guard.py`. The sample: [creator/learn/samples/kotonoha/](creator/learn/samples/kotonoha/) |
 | **Just-right confirmations.** A first-time setup (make → teach from a PDF and a map photo → one web page) asks twice. It asked at all 15 places where it should, and blocked all 7 places where it should. | Counted with a real Claude Code run on normal permission settings. `python -I tools/test_confirmations.py`. The list: [docs/confirmations.md](docs/confirmations.md) |
-| **You decide about the camera.** It is off by default and can be turned on or off at any time. While it is on, when you speak or type, one picture of that moment (512 px on the long side) is sent to Claude to make the answer (not saved). It can answer about signs and things. | `node --test web/test/camera_server.test.mjs web/test/camera_client.test.mjs web/test/camera_use.test.mjs web/test/privacy.test.mjs`. On Nov 8, 22 runs with the real Claude Haiku 5.5 (17 with a picture); we checked that no picture was left in 61 files of logs, memory and so on |
 | **Choose the microphone and speaker.** With the gear next to 「声で話す」 ("talk by voice"): a level meter, the words it heard and a test sound. If your voice is not reaching it, it says so. Text chat always works. | `node --test web/test/audio_devices.test.mjs web/test/stage_mic_notice.test.mjs` |
 | **On a TV.** Opened from "Add to Home Screen", it is full screen without the URL bar. The TV layout shows only the character, large captions and the AI notice. | `node --test web/test/tv_pwa.test.mjs`. Photos of the TV layout and its hint on an iPhone-sized landscape screen |
 | **Update from the app's screen.** When 「あたらしい はんが あります」 ("there is a new version") appears on a screen opened on this PC, press 「アップデートする」 ("update") once. 「もとに もどす」 ("go back") is in the same box. Your characters are kept. | `cd web && node scripts/update-e2e.mjs` (17/17 against a local source: update about 9 s, go back about 7 s, return from a version that does not start about 14 s) |
@@ -368,7 +366,7 @@ Each row was checked by running it. The check is named next to it.
 - On a phone, when the keyboard opens, the top bar and the character's head can be pushed off the top of the screen (the text field and 「送る」, "send", stay visible and work).
 - On a TV: that "Add to Home Screen" really removes the bar on a real iPhone (not checked yet; the layout was checked by tests and photos).
 - Operating systems: checked on Windows 11 only. Mac and Linux: (not checked yet).
-- The phone's microphone and camera through an https entry (Tailscale serve): (not checked yet).
+- The phone's microphone through an https entry (Tailscale serve): (not checked yet).
 - Talking with the real Claude Haiku with an API key (not checked yet). The real Haiku runs above called the brain in the same form as the product, through Claude Code (`claude -p`) on the development PC.
 - A voice with a voice key, and switching between the boy's and the girl's voice (not checked yet). Without a key, the character talks with text and a retro sound.
 - The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only in おためしモード and keeps no memory) (not checked yet). A real update from the public repository (not checked yet; checked against a local source).
@@ -558,6 +556,8 @@ The developer has worked in 3D and video with Unreal Engine, Blender, Cinema 4D 
 ## What's next
 
 We aim to import any kind of character, such as VRM models and Unreal Engine MetaHumans, and make them all able to hold a conversation here. (No dates yet; what works today is what this README describes.)
+
+The camera feature (answering about what you show it) comes in the next update.
 
 <a name="license"></a>
 

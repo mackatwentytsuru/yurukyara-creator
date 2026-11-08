@@ -1,6 +1,7 @@
 // 端末のカメラで顔を見つける入力。映像は端末の中だけで使う(faceTracker.js)。
 import { FaceTracker } from '../faceTracker.js';
 import { faceToWorld } from '../geometry.js';
+import { cameraFeatureOn } from '../../stage/cameraFeature.js';
 
 export class MediapipeSource {
   /**
@@ -19,6 +20,7 @@ export class MediapipeSource {
   }
 
   async start() {
+    if (!cameraFeatureOn()) throw new Error('camera-feature-off'); // 11-08 本人: 次のアップデートまで、端末のカメラを開かない
     await this.tracker.start();
   }
 

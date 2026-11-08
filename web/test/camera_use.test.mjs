@@ -51,7 +51,7 @@ function setup({ failStart = false, params = '' } = {}) {
   for (const id of ['camAskText', 'camAskMock', 'camAskYes', 'camAskNo', 'camAskStatus', 'camAskBack']) els.camAsk.kids[`#${id}`] = new FakeEl(id);
   els.camBtn.kids['.cam-label'] = new FakeEl('label');
   globalThis.document = { documentElement: new FakeEl('html'), createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {}, clearRect() {} }), toDataURL: () => 'data:image/jpeg;base64,QUJDRA==' }) };
-  globalThis.window = { isSecureContext: true, addEventListener() {}, removeEventListener() {} }; // カメラなしの入力(SimSource)が窓の pointermove を聞く
+  globalThis.window = { __YC_CAMERA_FEATURE: true, isSecureContext: true, addEventListener() {}, removeEventListener() {} }; // カメラなしの入力(SimSource)が窓の pointermove を聞く
   Object.defineProperty(globalThis.navigator, 'mediaDevices', { value: { getUserMedia() {} }, configurable: true }); // カメラの口がある端末のまね
   const log = [];
   const sim = { kind: 'sim', stop: () => log.push('sim-stop') };

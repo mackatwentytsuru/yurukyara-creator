@@ -280,7 +280,7 @@ test('画面の形: 入力の列にカメラのボタン(最初は隠す)・テ�
   assert.match(html, /<button type="button" id="tvCam" class="tv-cam" aria-pressed="false" hidden>/);
   assert.match(html, /<div id="camAsk" class="cam-ask" role="dialog" aria-modal="true"[^>]*hidden>/);
   const gate = html.slice(html.indexOf('<div id="gate"'), html.indexOf('<script'));
-  assert.match(gate, /カメラの えは、こたえを つくるために Claude に おくられます\(ほぞんしません\)。つかうかは あなたが きめてね。/, '入口でも同じ 1 行(選ぶ前に読める)');
+  assert.match(read('src', 'stage', 'cameraFeature.js'), /カメラの えは、こたえを つくるために Claude に おくられます\(ほぞんしません\)。つかうかは あなたが きめてね。/, 'カメラを戻す時は、入口でも同じ 1 行(選ぶ前に読める)');
   assert.doesNotMatch(gate, /カメラの映像は端末の外に出ません/, '古い約束(外に出ない)を残さない');
   const css = read('src', 'ui', 'style.css');
   assert.match(css, /\.cam\[hidden\], \.tv-cam\[hidden\] \{ display: none !important; \}/, 'hidden が display に負けない');

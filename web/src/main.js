@@ -67,6 +67,7 @@ const GREET_COOLDOWN_S = 90;
 const GREET_QUIET_S = 60; // 最後の会話からこれだけの間は、こちらから声をかけない(会話の途中で名乗り直さない)
 // ヘッドセットのブラウザ。カメラは使えず、聞き取りはサーバーで行い、マイクの許可は VR に入る前に取る
 const IS_HEADSET = params.get('headset') === '1' || /OculusBrowser|Quest/i.test(navigator.userAgent);
+const CAMERA_FEATURE = cameraFeatureOn(); // 11-08 本人: カメラは次のアップデートまで外す(1 か所のスイッチ。VR の道はそのまま)
 const VR_HELLO = 'こんにちは'; // コントローラーのトリガーで話しかける言葉(マイクが使えなくても、返事と声を確かめられる)
 // ヘッドセットの 2D の画面で、はじめた後に出す案内(マイクの答えを待たずに出し、マイクが使えなかった時だけ文を替える)
 const VR_GUIDE = '左上の「VR で見る」を押してください';
@@ -696,7 +697,7 @@ function updateChips() {
   const camera = app.mode === 'camera' ? (info.ok ? 'オン' : '準備中') : noCamera ? 'なし' : info.label;
   // BCV: 絵を送るカメラが入っている間は、いちばん前に赤い点の札(小さな印。高さ 500 未満でもこの札だけ残す = style.css)
   if (app.camera?.seeing?.()) chips.unshift(['', 'カメラ オン', 'cam-rec']);
-  else chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']);
+  else if (CAMERA_FEATURE || !noCamera) chips.push([app.mode === 'pose' ? '位置' : 'カメラ', camera, noCamera ? '' : info.ok ? 'ok' : 'warn']); // カメラを外している間は「カメラ なし」の札を出さない
   // UW5(UIR 23): 「見えている人 0 人」は意味が分からないので、カメラを使っている時だけ
   if (app.mode === 'camera') chips.push(['見えている人', `${app.lastAttention.tracks.length} 人`, '']);
   if (listener?.listening) chips.push(['聞き取り', listener.provider === 'server' ? 'この PC' : 'ブラウザ', 'ok']);
@@ -1846,6 +1847,7 @@ function installPanelHistory() {
 /* ---------- BCV: カメラは使う人が決める・カメラの中身にも答える(11-08 本人)。中身は stage/cameraUse.js(部品は cameraSwitch.js・絵の 1 枚は conversation/cameraFrame.js) ---------- */
 // どの端末でも、いつでも入・切。入れる前に 1 行の知らせ。入っている間は小さな印。使う人が選んだカメラで話しかけた回だけ、同じ流れから絵を 1 枚頭脳へ
 import { createCameraUse } from './stage/cameraUse.js';
+import { GATE_FINE_WITH_CAMERA, cameraFeatureOn } from './stage/cameraFeature.js';
 app.camera = createCameraUse({
   app,
   ui,
@@ -2005,6 +2007,10 @@ async function boot() {
 
   /** 入力を選んで始める。失敗したら理由を出して、ゲートに戻る */
   async function startSource(kind, pending) {
+    if (kind === 'camera' && !CAMERA_FEATURE) { // カメラを外している間は、自動で始める画面(?autostart=1)も含めてカメラなしで始める
+      kind = 'sim';
+      pending = '';
+    }
     speaker.unlock(); // 音を出す許可は、最初のタップの中で取る
     if (tvActive()) requestTvFullscreen(); // ?tv=1: 全画面も、このタップの中で頼む(待つ前に)
     buttons.forEach((b) => (b.disabled = true));
@@ -2050,7 +2056,7 @@ async function boot() {
         }, 1600);
         return;
       }
-      status.textContent = 'うまく はじめられなかったよ。「カメラなしで試す」なら うごかせます。';
+      status.textContent = CAMERA_FEATURE ? 'うまく はじめられなかったよ。「カメラなしで試す」なら うごかせます。' : 'うまく はじめられなかったよ。もう いちど おしてね。';
       buttons.forEach((b) => (b.disabled = false));
       setGateWake('ready');
     }
@@ -2061,6 +2067,12 @@ async function boot() {
     wantBridge ? startSource('bridge', '床のカメラにつないでいます…') : wantPose ? startSource('pose', '準備しています…') : startSource('camera', 'カメラとモデルを準備しています…'),
   );
   $('startSim').addEventListener('click', () => startSource('sim', ''));
+  // カメラを外している間の入口は「はじめる」1 つ。カメラを開かない入口(AR の位置・床のセンサー・VR)と、試験でカメラを入れた時は、今までの 2 つ
+  if (CAMERA_FEATURE || wantPose || wantBridge) {
+    $('startCam').hidden = false;
+    $('startSim').querySelector('.btn-main').textContent = 'カメラなしで試す';
+  }
+  if (CAMERA_FEATURE) $('gateFine').textContent = GATE_FINE_WITH_CAMERA;
   // 接客モード: 店の人が 1 回押す = 音の許可(startSource の中)と、画面を消さない・聞き取りの見張りの開始。あとは来場者が話しかけるだけ。カメラは使わない
   $('kioskStart')?.addEventListener('click', async () => {
     void wakeLock.start();
