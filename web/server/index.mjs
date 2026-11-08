@@ -24,7 +24,7 @@ import { createDrawer } from './draw.mjs'; // B4(12b): ブラウザから描く�
 import { createMadeRoutes } from './madeCharacters.mjs'; // 作った子の一覧・名前の変更・消す(characters/yb*)
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
-import { allowedHostNames, checkStaticPath, hostAllowed, resolveInside } from './staticGuard.mjs'; // 配るファイルのパスの抜けと、名前の向け直しを断る
+import { allowedHostNames, checkStaticPath, hostAllowed, originAllowed, resolveInside } from './staticGuard.mjs'; // 配るファイルのパスの抜けと、名前の向け直しを断る
 import { CAMERA_CAP_NOTICE, IMAGE_LIMITS, cameraImageCap } from './camera.mjs'; // BCV: カメラの絵(大きさの決まり・1 日の枚数)
 
 const DIST = join(WEB_ROOT, 'dist');
@@ -317,7 +317,11 @@ const kioskRoutes = createKioskRoutes({ config, logDir: LOG_DIR, readBody, json,
 
 const useTls = Boolean(config.tlsCert && config.tlsKey);
 const hostNames = allowedHostNames({ bindHost: config.host, extra: process.env.YC_ALLOWED_HOSTS ?? '' });
+const STATE_CHANGING = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 const handler = async (req, res) => {
+  // 名前の向け直し(DNS rebinding)と、よそのページからの書き込みは、どの道(/api/ も配るファイルも)でも先に断る
+  if (!hostAllowed(req.headers.host, hostNames)) return json(res, 403, { error: 'この名前では受けません' });
+  if (STATE_CHANGING.has(req.method) && !originAllowed(req.headers.origin, hostNames)) return json(res, 403, { error: 'このページからは受けません' });
   const url = new URL(req.url, 'http://localhost');
   let path;
   try {
@@ -406,8 +410,7 @@ const handler = async (req, res) => {
     if (req.method === 'GET' && path === '/api/metrics') return json(res, 200, latencySummary());
 
     if (req.method === 'GET' || req.method === 'HEAD') {
-      // 配るファイルの見張り: 名前の向け直し(DNS rebinding)・%2F などで区切りを隠したパス・.env のような点の名前を、戻す前に断る
-      if (!hostAllowed(req.headers.host, hostNames)) return json(res, 403, { error: 'この名前では受けません' });
+      // 配るファイルの見張り: %2F などで区切りを隠したパス・.env のような点の名前を、戻す前に断る(Host は頭で見張り済み)
       const checked = checkStaticPath(url.pathname);
       if (checked.error) return json(res, checked.status, { error: checked.error });
       const filePath = checked.path;

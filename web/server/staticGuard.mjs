@@ -96,3 +96,15 @@ export function hostAllowed(header, names) {
   if (!name) return false;
   return names.has(name) || TAILNET.test(name);
 }
+
+/** 状態を変える頼み(POST・PUT・DELETE)の Origin。付いていれば、その名前も同じ表で見る。付いていない頼み(curl など)はそのまま通す */
+export function originAllowed(origin, names) {
+  if (origin === undefined) return true;
+  const value = String(origin).trim();
+  if (!/^https?:\/\//i.test(value)) return false; // "null"(囲われた枠)や変な形は断る
+  try {
+    return hostAllowed(new URL(value).host, names);
+  } catch {
+    return false;
+  }
+}
