@@ -149,3 +149,55 @@ export function castNote(device = 'iPhone') {
     'やめる ときは、もう一度「画面ミラーリング」→「ミラーリングを停止」。',
   ].join('\n');
 }
+
+// ---- 完全な全画面の案内(11/8 本人「URL まで出ちゃったり、完全な全画面にもなってない」) ----
+// iPhone のブラウザ(Safari・Chrome)の頁は、頁の中から全画面にできない(Fullscreen API が無い)。
+// 「ホーム画面に追加」から開いた頁(manifest.webmanifest と apple-mobile-web-app-capable)は、URL などの帯の無い全画面で開く。
+// 頁から全画面にできず、ホーム画面の頁としても開いていない時だけ、1 回だけ短い案内を出す(画面の部品は main.js・style.css の #tvGuide)
+
+/** 案内を出したことを覚える鍵(このブラウザだけ。1 回出したら、もう出さない) */
+export const TV_GUIDE_KEY = 'yc.tvFullscreenGuide.v1';
+/** 案内を閉じるボタンの読み上げの名前 */
+export const TV_GUIDE_CLOSE_NAME = '案内を とじる';
+/** 案内が自分で消えるまでの時間(ミリ秒)。閉じるボタンでもすぐ閉じられる */
+export const TV_GUIDE_AUTO_HIDE_MS = 15000;
+
+/**
+ * 頁から全画面にできるか。全画面の口(requestFullscreen・webkitRequestFullscreen)があり、頁が「全画面にしてよい」と言っていること
+ * (iframe の中などは fullscreenEnabled が false)。iPhone のブラウザは口が無い
+ * @param {{doc?: {fullscreenEnabled?: boolean, webkitFullscreenEnabled?: boolean}, el?: {requestFullscreen?: unknown, webkitRequestFullscreen?: unknown}}} o
+ */
+export function canRequestFullscreen({ doc = {}, el = {} } = {}) {
+  const hasApi = typeof el?.requestFullscreen === 'function' || typeof el?.webkitRequestFullscreen === 'function';
+  const enabled = doc?.fullscreenEnabled ?? doc?.webkitFullscreenEnabled;
+  return hasApi && enabled !== false;
+}
+
+/**
+ * ホーム画面に追加した頁として(ブラウザの帯なしで)開いているか。iPhone・iPad は navigator.standalone、
+ * ほかは CSS の display-mode(fullscreen・standalone・minimal-ui)
+ * @param {{nav?: {standalone?: boolean}, matchMedia?: (q: string) => {matches?: boolean}}} o
+ */
+export function isInstalledApp({ nav = {}, matchMedia = null } = {}) {
+  if (nav?.standalone === true) return true;
+  if (typeof matchMedia !== 'function') return false;
+  try {
+    return ['fullscreen', 'standalone', 'minimal-ui'].some((m) => matchMedia(`(display-mode: ${m})`)?.matches === true);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 完全な全画面の案内の文。出さない時は ''。
+ * 出すのは、頁から全画面にできず(canFullscreen が偽)、ホーム画面の頁としても開いておらず(installed が偽)、まだ 1 回も出していない時だけ。
+ * iPhone・iPad は「共有 →「ホーム画面に追加」から開く」、ほか(PC など)は「F11 か、ブラウザーの全画面」
+ * @param {{device?: string, canFullscreen?: boolean, installed?: boolean, seen?: boolean}} o
+ */
+export function fullscreenGuide({ device = '', canFullscreen = false, installed = false, seen = false } = {}) {
+  if (canFullscreen || installed || seen) return '';
+  if (device === 'iPhone' || device === 'iPad') {
+    return 'ぜんがめんには、共有ボタン →「ホーム画面に追加」から ひらいてね(URL の おびが きえます)。';
+  }
+  return 'ぜんがめんには、F11 キーか、ブラウザーの「全画面表示」を つかってね。';
+}

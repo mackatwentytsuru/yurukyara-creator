@@ -5,7 +5,7 @@ import { loadFirstCharacter, loadCharacter, availableLooks, motionChoices, MAIN_
 import { writeRemembered, characterKey, lookKey, hasBothLooks } from './character/looks.js'; // 見た目(3D・2D)の切り替えの決まり・このタブで選んだ見た目を覚える
 import { topLimit, topClearance, tvTopLimit } from './stage/framing.js'; // キャラを上の段の下に収める(すき間は画面の高さの 6%。テレビ表示では画面の上の端から)
 // テレビ表示(11/7 本人「iPhone にあるものを AirPlay で、テレビにすぐパンって映せるようにしたい」): 入口の形・字幕の大きさ・画面ミラーリングの手順の決まり
-import { tvPlan, tvCaptionPx, tvCaptionRows, tvBottomReserve, castSteps, castLead, castNote, TV_CLASS, TV_LABEL, CAST_LABEL } from './stage/tvMode.js';
+import { tvPlan, tvCaptionPx, tvCaptionRows, tvBottomReserve, castSteps, castLead, castNote, TV_CLASS, TV_LABEL, CAST_LABEL, canRequestFullscreen, isInstalledApp, fullscreenGuide, TV_GUIDE_KEY, TV_GUIDE_AUTO_HIDE_MS } from './stage/tvMode.js';
 import { pickSpec, isLoopbackPage, SPEC_NOTICE } from './character/urlSpec.js'; // ?character= ?place= は公開の URL では id だけ(CRITsec F5)
 import { shouldOpenFirstRun, FIRST_RUN_DONE_KEY } from './stage/firstVisit.js'; // 初めての訪問なら、入口の後に 7 歩を出す(CRITux 2)
 // 入力の差し替え口(tracking/sources/index.js の約束)。カメラの顔の部品(mediapipeSource.js)は重いので、ここでは読まず、
@@ -855,11 +855,47 @@ function tvActive() {
   return document.documentElement.classList.contains(TV_CLASS);
 }
 
+/* 完全な全画面の案内(11/8 本人「URL まで出ちゃったり、完全な全画面にもなってない」): 頁から全画面にできず、ホーム画面の頁としても開いていない時に、
+   1 回だけ短く出す(文と決まりは stage/tvMode.js の fullscreenGuide)。閉じるボタンか、時間で消える */
+let tvGuideShown = false; // 鍵(localStorage)が使えない時も、この頁の間は 1 回だけ
+let tvGuideTimer = 0;
+function hideTvGuide() {
+  clearTimeout(tvGuideTimer);
+  const box = $('tvGuide');
+  if (box) box.hidden = true;
+}
+function showTvGuide() {
+  const box = $('tvGuide');
+  const text = $('tvGuideText');
+  if (!box || !text) return;
+  let seen = tvGuideShown;
+  try {
+    seen = seen || localStorage.getItem(TV_GUIDE_KEY) === '1';
+  } catch {
+    // 覚えられないブラウザ(この頁の間だけ 1 回)
+  }
+  const line = fullscreenGuide({ device: TV.device, canFullscreen: false, installed: isInstalledApp({ nav: navigator, matchMedia: window.matchMedia?.bind(window) }), seen });
+  if (!line) return;
+  tvGuideShown = true;
+  try {
+    localStorage.setItem(TV_GUIDE_KEY, '1');
+  } catch {
+    // 覚えられない時は、この頁の間だけ
+  }
+  text.textContent = line;
+  box.hidden = false;
+  clearTimeout(tvGuideTimer);
+  tvGuideTimer = setTimeout(hideTvGuide, TV_GUIDE_AUTO_HIDE_MS);
+}
+
 function requestTvFullscreen() {
   const el = document.documentElement;
   if (document.fullscreenElement || document.webkitFullscreenElement) return;
   const req = el.requestFullscreen ?? el.webkitRequestFullscreen;
-  if (typeof req !== 'function') return; // 全画面の口が無いブラウザ(iPhone の Safari など)
+  if (typeof req !== 'function' || !canRequestFullscreen({ doc: document, el })) {
+    showTvGuide(); // 全画面の口が無い(iPhone のブラウザなど)・頁に許されていない(別の頁の中など)
+    return;
+  }
   try {
     Promise.resolve(req.call(el, { navigationUI: 'hide' }))
       .then(() => {
@@ -901,6 +937,7 @@ function setTvMode(on, { fullscreen = false } = {}) {
   }
   if (on && fullscreen) requestTvFullscreen();
   if (!on) {
+    hideTvGuide();
     leaveTvFullscreen();
     if (btn && !btn.hidden) btn.focus({ preventScroll: true });
   }
@@ -955,6 +992,7 @@ function placeTvButton() {
 function setupTvMode() {
   const btn = $('tvBtn');
   $('tvExit')?.addEventListener('click', () => setTvMode(false));
+  $('tvGuideClose')?.addEventListener('click', hideTvGuide);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if ($('tvCast') && !$('tvCast').hidden) {
