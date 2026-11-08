@@ -22,9 +22,21 @@ export function isEditable(el) {
   return !['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'file', 'color', 'image', 'hidden'].includes((el.type || 'text').toLowerCase());
 }
 
-/** 見える範囲(visualViewport)から、キーボードの高さ・ずれ・見える高さを出す。純粋な計算(試験用に外へ出す) */
+const ZOOM_EPS = 1.02; // 見える範囲の拡大率がこれを超えたら、指で拡大している(キーボードではない)
+
+/**
+ * 指で拡大している最中か。拡大すると visualViewport の高さも縮む(高さ ÷ 拡大率)ので、キーボードと見間違えないための印。
+ * 11-08 本人の iPhone: 拡大縮小しようとしたら、キーボードが出たと数えて下の帯と字幕が持ち上がり、固まって見えた。
+ */
+export function isZoomed(vv) {
+  const scale = Number(vv?.scale);
+  return Number.isFinite(scale) && scale > ZOOM_EPS;
+}
+
+/** 見える範囲(visualViewport)から、キーボードの高さ・ずれ・見える高さを出す。純粋な計算(試験用に外へ出す)。拡大している間は、キーボードは 0 */
 export function measureInset(inner, vv) {
   if (!vv || !(vv.height > 0)) return { kb: 0, top: 0, height: inner };
+  if (isZoomed(vv)) return { kb: 0, top: 0, height: inner };
   const top = Math.max(0, Math.round(vv.offsetTop || 0));
   const kb = Math.max(0, Math.round(inner - vv.height - top));
   return { kb: kb >= MIN_KB ? kb : 0, top: kb >= MIN_KB ? top : 0, height: Math.round(vv.height) };

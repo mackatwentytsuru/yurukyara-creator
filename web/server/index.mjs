@@ -16,6 +16,7 @@ import { warmFirstVisit } from './ttsWarm.mjs';
 import { createStt, MAX_WAV_BYTES } from './stt.mjs';
 import { createUpdateRoutes, findUpdatePython, RESTART_CODE } from './update.mjs'; // BUX: 画面のアップデート
 import { createLimiter } from './limits.mjs';
+import { createClientEvents, MAX_BODY_BYTES as CLIENT_EVENT_BYTES } from './clientEvents.mjs'; // 声の聞き取りを始められなかった原因の小さな報告(logs/client_events.jsonl)
 import { createDrawer } from './draw.mjs'; // B4(12b): ブラウザから描く。既定は切ってある(YC_BROWSER_DRAW=1 の時だけ)
 import { ensureFillers, fillerPath, listFillerSets } from './fillers.mjs';
 import { ValidationError, sanitizeChatBody, sanitizeMetric } from './validate.mjs';
@@ -53,6 +54,7 @@ const memoryLimiter = createLimiter({ file: join(LOG_DIR, 'memory_usage.json'), 
 const stt = createStt();
 // B4(12b): ブラウザから描く係(切ってある時は /api/draw が 404、/api/status の draw.on が false)
 const drawer = createDrawer({ config, root: REPO_ROOT, usageFile: join(LOG_DIR, 'draw_usage.json') });
+const clientEvents = createClientEvents({ file: join(LOG_DIR, 'client_events.jsonl') });
 const sttLimiter = createLimiter({ file: join(LOG_DIR, 'stt_usage.json'), dailyCap: 3000, perMinute: 40 });
 stt.check().then((ok) => console.log(`聞き取り(サーバー): ${ok ? 'faster-whisper' : 'なし(pip install faster-whisper で使えます)'}`));
 
@@ -304,6 +306,10 @@ const handler = async (req, res) => {
         // 形の違う値は、手がかり無しで聞く
       }
       return json(res, 200, await stt.transcribe(await readRaw(req, MAX_WAV_BYTES + 1024), { hint }));
+    }
+    if (req.method === 'POST' && path === '/api/client-event') {
+      const r = clientEvents.accept(await readBody(req, CLIENT_EVENT_BYTES), req.socket.remoteAddress ?? 'unknown');
+      return json(res, r.status, r.json);
     }
     if (req.method === 'POST' && path === '/api/metrics') {
       const body = await readBody(req);

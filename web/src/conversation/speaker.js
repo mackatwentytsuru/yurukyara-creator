@@ -9,6 +9,7 @@
 // - 声の役(男の子・女の子): 性格の画面で選んだ値(setVoiceChoice)か、その子の人格の文から決まる役で話す(voiceRole.js)。
 //   声の鍵の道は役の声で直接、サーバーの道は話す役(voice)と、その子自身の声の id(あれば)を送る。あいづちの声も役の組を使う
 // - 読み方の表(speechReading.js。例: 執事 → しつじ)は、声に渡す文だけに当てる。字幕と文字送りは、もとの文のまま(11-07 第 11b 波)
+import { usePlayback } from './audioSession.js';
 import { recordedNod } from './nods.js'; // B3(第 12 波 b): 相づちは録ってある声で
 import { ROLE_DEFAULT_VOICES } from './voiceRole.js';
 import { getVoiceKey } from './voiceKey.js';
@@ -188,11 +189,8 @@ export class Speaker {
   /** ユーザーのタップの中で呼ぶ。iPhone の Safari は、これが無いと音が出ない */
   unlock() {
     // iPhone の消音スイッチ(サイレントモード)が入っていても、音を出す(iOS 17 から。Web Audio だけの音は、消音スイッチで消えるため)
-    try {
-      if (globalThis.navigator?.audioSession) globalThis.navigator.audioSession.type = 'playback';
-    } catch {
-      // 対応していない・許されない端末は、そのまま
-    }
+    // (聞いている間は、マイクの種類を壊さないよう戻さない。audioSession.js)
+    usePlayback();
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AC({ latencyHint: 'interactive' });

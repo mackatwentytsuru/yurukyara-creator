@@ -52,7 +52,19 @@ export function createCameraUse({ app, ui, dialogue, $, params, headset, touch, 
     on: cameraOn,
     off: cameraOff,
     setup,
+    hold: holdCamera,
   };
+
+  /**
+   * マイクを取り直す間だけ、カメラの映像を一瞬止める(映像の流れそのものは閉じない)。戻す関数を返す。
+   * iPhone で、カメラが動いている最中にマイクを開けなかった時の取り直し(conversation/micStream.js)が使う
+   */
+  function holdCamera() {
+    const tracks = app.source?.tracker?.stream?.getVideoTracks?.() ?? [];
+    const was = tracks.map((t) => t.enabled);
+    for (const t of tracks) t.enabled = false;
+    return () => tracks.forEach((t, i) => void (t.enabled = was[i]));
+  }
 
   /** カメラが勝手に止まったら、切った形にそろえて知らせる(絵も送らない) */
   function watchCameraEnd(source) {

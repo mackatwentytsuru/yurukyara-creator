@@ -35,6 +35,9 @@ import { createPresentation } from './stage/modes.js';
 import { mountModeButtons, XR_WAIT_TEXT } from './stage/modeButtons.js';
 import { detectTierInBrowser, applyTier } from './stage/tiers.js'; // 端末の段(軽いのにきれい)
 import { installKeyboardInset } from './ui/keyboardInset.js'; // 画面のキーボードで入力窓が隠れない(11/7 本人の iPhone)
+import { installNoPinchZoom } from './ui/noPinchZoom.js'; // 11-08 本人の iPhone: 指で拡大縮小したら固まった。画面は指では拡大縮小しない
+import { installComposerInput } from './ui/composerInput.js'; // 11-08 本人の iPhone: 文字の入力窓が小さすぎる。大きく・3 行まで伸びる
+import { reportVoice } from './conversation/clientEvents.js'; // 声を始められなかった原因だけの報告(手元のサーバーの記録へ)
 
 const params = new URLSearchParams(location.search);
 const GAIN = Number(params.get('gain') ?? 2); // 視線の振れ幅の倍率
@@ -239,6 +242,7 @@ function sceneText() {
 
 /* ---------- 声 ---------- */
 let listener = null;
+let composerInput = null; // 文字の入力窓(ui/composerInput.js)。送った後に 1 行へ戻す
 // 声の向き(ステレオのマイク)。機材に依存しない: マイクの間隔などは URL で渡せる(?micspacing=0.06 ?mic=DVR ?micswap=1 ?ild=5)
 let stereoMic = null;
 function startStereoMic() {
@@ -343,6 +347,19 @@ async function toggleMic() {
       onEmpty: () => {
         if (!speaker.speaking && !dialogue.busy) onMisheard();
       },
+      // 11-08 本人の iPhone: ブラウザの聞き取りが使えない時の自動の切りかえ・カメラを入れたままのマイクの取り直し・原因だけの報告
+      onNotice: (text) => ui.notice(text),
+      onProvider: () => updatePrivacy(),
+      onStopped: () => {
+        listener = null;
+        stereoMic?.stop();
+        btn.setAttribute('aria-pressed', 'false');
+        btn.classList.remove('hearing');
+        updatePrivacy();
+      },
+      cameraOn: () => app.mode === 'camera',
+      holdCamera: () => app.camera?.hold?.(),
+      report: (event) => void reportVoice({ ...event, cameraOn: app.mode === 'camera' }),
     }, { provider, isBusy: () => speaker.speaking && params.get('bargein') !== '1' });
     await listener.start();
     // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く(ヘッドセットの中では、頭の位置が分かるので使わない)
@@ -350,6 +367,8 @@ async function toggleMic() {
     btn.setAttribute('aria-pressed', 'true');
     updatePrivacy();
   } catch (err) {
+    // 原因だけの報告(名前・短い message・どの段か・提供元・カメラの入・https・ブラウザの分類。音も文字も入れない)
+    void reportVoice({ error: err, stage: err?.stage, provider: listener?.provider ?? 'web', cameraOn: app.mode === 'camera' });
     listener = null;
     // 英語の err.message は出さない。字幕の上の知らせに、やさしい日本語で(P1 高)。VR の板にも同じ文
     const text = micFailureText(err);
@@ -1430,6 +1449,8 @@ async function boot() {
   buttons.forEach((b) => (b.disabled = true));
   status.textContent = 'キャラを読み込んでいます…';
   installKeyboardInset();
+  installNoPinchZoom(); // 指のつまみで拡大しない・拡大されたら 1 倍へ戻す(11-08 本人の iPhone)
+  composerInput = installComposerInput({ input: $('textInput'), form: $('composer') });
   stage.resize();
   // 窓の resize が来ない箱の変化にも追いつく(毎フレームの確かめに加えて、描いていない間の変化も拾う)
   if (typeof ResizeObserver === 'function') new ResizeObserver(syncStage).observe(stage.renderer.domElement);
@@ -1597,6 +1618,7 @@ async function boot() {
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
+    composerInput?.fit(); // 1 行に戻す
     speaker.unlock();
     void talk({ text, mode: 'text' });
   });
