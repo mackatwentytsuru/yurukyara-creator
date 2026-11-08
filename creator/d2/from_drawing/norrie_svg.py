@@ -266,7 +266,8 @@ spec = {
     'parts': parts,
     'face': {k: {'box': v} for k, v in face_boxes.items()},
     'faceLayers': [{'id': 'muzzle', 'box': mz}],
-    'blink': {'noBlink': ['happy', 'relaxed']},
+    # shine: 目の光(白い丸)の色。目を閉じる間は、光を取った目の板に替える(つぶした細い線の上に白いすじが残らない)
+    'blink': {'noBlink': ['happy', 'relaxed'], 'shine': ['#FFFFFF']},
     # front: 腕を頭の前に出さない。foreBehind: 前腕をこの角度(ラジアン)より大きく曲げたら、上腕の後ろへ回す(ひじの丸が前に出る)
     'arms': {'front': False, 'foreBehind': 0.6},
     # 腕は 2 枚(arm 上腕の効き・elbow ひじで曲げる最大・swing 前腕の振り)。

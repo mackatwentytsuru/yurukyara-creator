@@ -168,6 +168,9 @@
     "noBlink": [
       "happy",
       "relaxed"
+    ],
+    "shine": [
+      "#FFFFFF"
     ]
   },
   "arms": {

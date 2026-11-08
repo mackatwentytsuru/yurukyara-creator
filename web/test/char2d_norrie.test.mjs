@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as THREE from 'three';
 import { Svg2DCharacter } from '../src/char2d/svg2dCharacter.js';
-import { extractGroup, faceVariants, listGroupIds, validateParts } from '../src/char2d/parts.js';
+import { extractGroup, faceVariants, listGroupIds, validateParts, withoutShine } from '../src/char2d/parts.js';
 import { applyIntent } from '../src/character/intent.js';
 import { STANDARD_EXPRESSIONS } from '../src/character/expressionNames.js';
 
@@ -31,7 +31,8 @@ function make() {
   return { c: new Svg2DCharacter({ spec, svg, rasterize, pxPerUnit: spec.pxPerUnit }), sizes };
 }
 
-const visibleIn = (c, slot) => c.slotGroups[slot]?.children.filter((m) => m.visible).map((m) => m.name.replace('2d:', '')) ?? [];
+// 出ている板の名前。目を閉じている間は「光を取った目の板」(名前の後ろに :closed)が出る。raw でなければ、同じ表情の目として数える
+const visibleIn = (c, slot, raw = false) => c.slotGroups[slot]?.children.filter((m) => m.visible).map((m) => m.name.replace('2d:', '').replace(raw ? /$^/ : /:closed$/, '')) ?? [];
 const visibleMouth = (c) => ['mouth_closed', 'mouth_half', 'mouth_open'].flatMap((s) => visibleIn(c, s));
 const run = (c, seconds, onFrame) => {
   for (let i = 0; i < Math.round(seconds * 30); i++) {
@@ -188,6 +189,54 @@ test('まばたき: ふつうでは目を閉じる時があり、目を閉じた
     let m = 1;
     run(c, 8, (cc) => (m = Math.min(m, cc.state2d.eyesScaleY)));
     assert.equal(m, 1, `${e} ではつぶさない`);
+  }
+});
+
+test('目を閉じる間は、目の光(白い丸)を取った目の板に替わる(閉じた細い線の上に白いすじが残らない)(NE1)', () => {
+  const { c } = make();
+  const shown = () => visibleIn(c, 'eyes', true);
+  assert.deepEqual(spec.blink.shine, ['#FFFFFF']);
+  // 光を取った板は、まばたきをする目(ふつう・おどろき・かなしい・おこり・考え中)にだけある。目を閉じた絵(happy・relaxed)には無い
+  assert.ok(c.closedPlanes.has('face.neutral.eyes'));
+  assert.ok(!c.closedPlanes.has('face.happy.eyes') && !c.closedPlanes.has('face.relaxed.eyes'));
+  // 光を取った板の SVG には、白い丸が 1 つも無く、黒い目は残る
+  const open = extractGroup(svg, 'face.neutral.eyes');
+  assert.equal((open.match(/fill="#FFFFFF"/g) ?? []).length, 4, '元の目には光が 4 つ(左右 2 つずつ)');
+  const closedSvg = withoutShine(svg, 'face.neutral.eyes', spec.blink.shine);
+  const closed = extractGroup(closedSvg, 'face.neutral.eyes');
+  assert.equal((closed.match(/fill="#FFFFFF"/gi) ?? []).length, 0);
+  assert.equal((closed.match(/fill="#000"/g) ?? []).length, 2, '黒い目は 2 つ残る');
+  // 8 秒走らせ、目をつぶしている(縮み < 0.5)コマでは必ず光を取った板、開いているコマでは元の板
+  for (const emotion of ['neutral', 'sad', 'surprised', 'think', 'angry']) {
+    c.setEmotion(emotion, 1);
+    run(c, 0.5);
+    let closedFrames = 0;
+    let openFrames = 0;
+    run(c, 10, (cc) => {
+      const names = shown();
+      assert.equal(names.length, 1, `${emotion}: 目の板は常に 1 枚(${names})`);
+      if (cc.state2d.eyesScaleY <= 0.5) {
+        closedFrames++;
+        assert.match(names[0], /:closed$/, `${emotion}: 目を閉じている間は光なしの板(${names[0]}, 縮み ${cc.state2d.eyesScaleY.toFixed(2)})`);
+      } else {
+        openFrames++;
+        assert.doesNotMatch(names[0], /:closed$/, `${emotion}: 目を開けている間は元の板`);
+      }
+    });
+    assert.ok(closedFrames > 0 && openFrames > 0, `${emotion}: 閉じたコマ ${closedFrames}・開いたコマ ${openFrames}`);
+  }
+  // 閉じている途中で表情が替わっても、板が重ならない・消えない
+  c.setEmotion('neutral', 1);
+  run(c, 0.2);
+  for (const e of ['happy', 'sad', 'relaxed', 'surprised', 'neutral']) {
+    c.setEmotion(e, 1);
+    run(c, 6, () => assert.equal(shown().length, 1, `${e}: 目の板は 1 枚`));
+  }
+  // 目を閉じた絵の表情(happy・relaxed)は、光を取った板を使わない(元から光が無い)
+  for (const e of ['happy', 'relaxed']) {
+    c.setEmotion(e, 1);
+    run(c, 0.5);
+    run(c, 6, () => assert.ok(!/:closed$/.test(shown()[0] ?? ''), `${e}: 光なしの板は使わない`));
   }
 });
 

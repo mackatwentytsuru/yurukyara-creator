@@ -74,6 +74,26 @@ export function rootXmlns(svg) {
   return decls.join(' ');
 }
 
+const hexOf = (c) => {
+  const s = String(c ?? '').trim().toLowerCase();
+  return /^#[0-9a-f]{3}$/.test(s) ? `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}` : s;
+};
+
+/**
+ * <g id> の中から、決めた色(fills。例 ['#FFFFFF'])で塗った単純な図形(circle・ellipse・rect・polygon・path の 1 つ)を取った SVG を返す。
+ * 目の光(白い丸)を取った「目を閉じた時の絵」を作るのに使う(まばたきで目を縦につぶすと、光が細い線の上に白いすじで残るため)。
+ * 取る物が 1 つも無い・<g id> が無い時は null。元の SVG は変えない。
+ */
+export function withoutShine(svg, id, fills) {
+  const group = extractGroup(svg, id);
+  if (!group) return null;
+  const want = new Set((fills ?? []).map(hexOf));
+  if (!want.size) return null;
+  const next = group.replace(/<(?:circle|ellipse|rect|polygon|path)\b[^>]*?\bfill\s*=\s*"([^"]*)"[^>]*\/>/g, (m, fill) => (want.has(hexOf(fill)) ? '' : m));
+  if (next === group) return null;
+  return String(svg).replace(group, () => next);
+}
+
 /** face.<表情>.<枠> の一覧から、表情 → 枠の集合 を作る */
 export function faceVariants(ids) {
   const out = new Map();
