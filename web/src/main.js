@@ -392,7 +392,8 @@ function listenProvider() {
 }
 async function toggleMic() {
   const btn = $('micBtn');
-  if (listener?.listening) {
+  // QA8 ③: 許可の窓が開いている間(聞き始めの最中)の 2 回目のタップも「止める」。止めないと、答えが来た時に 2 本目が開いて、1 本目が開いたまま残る
+  if (listener?.listening || listener?.starting) {
     listener.stop();
     listener = null;
     stereoMic?.stop();
@@ -406,11 +407,12 @@ async function toggleMic() {
     ui.notice(unavailable); // 押しても何も起きないように見えないよう、字幕の上に出す(P1 高)
     return;
   }
+  let mine = null; // この押しで作った聞き取り(あとで別の押しが作った物と取り違えない)
   try {
     speaker.unlock();
     const provider = listenProvider();
     if (!provider) throw new Error('聞き取りを使えません(サーバーに faster-whisper が入っていないか、このブラウザが対応していません)');
-    listener = new Listener({
+    mine = new Listener({
       onInterim: (t) => {
         lastInterimAt = performance.now();
         lastTextAt = lastInterimAt;
@@ -427,7 +429,7 @@ async function toggleMic() {
         // 話している最中に声が出たら、止まって聞く
         if (active && speaker.speaking) dialogue.cancel();
         // 声が止まった(話し終わりらしい)ら、確定した文字を待たずに、あいづちの声を先に出す
-        if (!active && performance.now() - lastInterimAt < 2500) dialogue.preFiller(listener.lastVoicedAt);
+        if (!active && performance.now() - lastInterimAt < 2500) dialogue.preFiller(mine.lastVoicedAt);
         // 声は出たのに、しばらく待っても文字が 1 つも来ない: 聞き取れなかった(自分が話している間や返事の準備中は数えない)
         if (!active && !speaker.speaking && !dialogue.busy) {
           const endedAt = performance.now();
@@ -439,8 +441,13 @@ async function toggleMic() {
       // 11-08 本人の iPhone: ブラウザの聞き取りが使えない時の自動の切りかえ・カメラを入れたままのマイクの取り直し・原因だけの報告
       onNotice: (text) => ui.notice(text),
       onProvider: () => updatePrivacy(),
+      // 前に戻った・マイクを取り直した後: 声を出す側の AudioContext も止まっていたら動かす(iPhone は戻ると止まっていることがある)
+      onRevived: () => {
+        const c = speaker.ctx;
+        if (c && c.state !== 'running' && c.state !== 'closed') c.resume?.()?.catch?.(() => {});
+      },
       onStopped: () => {
-        listener = null;
+        if (listener === mine) listener = null;
         stereoMic?.stop();
         btn.setAttribute('aria-pressed', 'false');
         btn.classList.remove('hearing');
@@ -454,7 +461,10 @@ async function toggleMic() {
         if (!speaker.speaking && !dialogue.busy) onMisheard();
       },
     }, { provider, isBusy: () => speaker.speaking && params.get('bargein') !== '1', lang: () => effectiveHearLang(currentLangMode()) });
-    await listener.start();
+    listener = mine;
+    await mine.start();
+    // 始めている最中に止められた(2 回目のタップ)・始めた後に自分で止まった: 続きはしない
+    if (listener !== mine || !mine.listening) return;
     // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く(ヘッドセットの中では、頭の位置が分かるので使わない)
     // 触る端末(スマホ)では始めない: iPhone は 2 本目のマイクの取得で 1 本目が止まることがあり、内蔵マイクは向きも出せない(11-08 見直し)
     if (!IS_HEADSET && !TOUCH) void startStereoMic();
@@ -462,8 +472,8 @@ async function toggleMic() {
     updatePrivacy();
   } catch (err) {
     // 原因だけの報告(名前・短い message・どの段か・提供元・カメラの入・https・ブラウザの分類。音も文字も入れない)
-    reportVoiceLocal({ error: err, stage: err?.stage, provider: listener?.provider ?? 'web', cameraOn: app.mode === 'camera' });
-    listener = null;
+    reportVoiceLocal({ error: err, stage: err?.stage, provider: mine?.provider ?? 'web', cameraOn: app.mode === 'camera' });
+    if (mine && listener === mine) listener = null;
     // 英語の err.message は出さない。字幕の上の知らせに、やさしい日本語で(P1 高)。VR の板にも同じ文
     const text = micFailureText(err);
     ui.notice(text);

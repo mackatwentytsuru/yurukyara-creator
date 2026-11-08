@@ -10,11 +10,25 @@ import { sttLangHeaders } from './hearLang.js';
 import { AUDIO_WORDS, NOTE_EVENT, SILENT_EVENT, createSilenceWatch, decideListening, isDefaultMic, loadChoice, micConstraints, resolveDevice, serverSttAvailable, splitDevices, tell } from './audioDevices.js';
 // 11-08 本人の iPhone: カメラを入れたまま取り直す・ブラウザの聞き取りが使えない時は PC の聞き取りへ自動で替える・止まった原因の報告
 import { openMicStream } from './micStream.js';
-import { beginRecording, endRecording, getMicWithSession } from './audioSession.js'; // iPhone: マイクを開く前に音の使い方を「録音も再生も」へ。閉じたら再生用へ戻す
+import { beginRecording, endRecording, getMicWithSession, reassertRecording } from './audioSession.js'; // iPhone: マイクを開く前に音の使い方を「録音も再生も」へ。閉じたら再生用へ戻す
 import { FALLBACK_WORDS, isFallbackError, shouldFallToServer } from './sttFallback.js';
-import { recognitionErrorText } from '../stage/micNotice.js';
+import { micFailureText, recognitionErrorText } from '../stage/micNotice.js';
 
 const MIC_BASE = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+
+// B13V: ずっと聞き続ける(ハンズフリー)ための決まり
+const RESTART_MS = 200; // ブラウザの聞き取りが終わってから、始め直すまで
+const RESTART_MAX_MS = 3000; // 始めてすぐ終わる(1 秒未満)のが続く時の、待ちの上限(同じ失敗を 0.2 秒ごとに繰り返さない)
+const QUICK_END_MS = 1000;
+const NET_RETRY_MAX = 3; // PC の聞き取りが無い時の、ネットワークの失敗の連続の許し(超えたら止めて知らせる)
+const NET_RETRY_STEP_MS = 800;
+const REOPEN_MAX = 3; // マイクの取り直しを、30 秒に何回まで許すか(超えたら止めて知らせる。無限に繰り返さない)
+const REOPEN_WINDOW_MS = 30000;
+const RESUME_WAIT_MS = 1500; // 戻った時の AudioContext.resume を待つ上限(iPhone では返事が来ないことがある)
+export const LISTEN_WORDS = Object.freeze({
+  netRetry: 'つながりにくいので、聞き取りをつなぎ直しているよ',
+  reopened: 'マイクを取り直したよ。そのまま話してね',
+});
 
 /** 覚えている選びと今の一覧から、この回の聞き取りの道とマイクを決める */
 export async function micPlan(baseProvider, { choice = loadChoice(), enumerate = () => navigator.mediaDevices.enumerateDevices(), serverOk = serverSttAvailable() } = {}) {
@@ -86,12 +100,45 @@ export class Listener {
     this._voiceSince = 0;
     this._silentSince = 0;
     this._busyUntil = 0;
+    // B13V: ハンズフリーの見張り
+    this._startPromise = null; // 聞き始めている最中の約束(許可の窓が開いている間も)
+    this._startAborted = false; // 始めている最中に stop() された(答えが来たらすぐ閉じる)
+    this._recTimer = null; // ブラウザの聞き取りの始め直しの予約(1 つだけ)
+    this._recQuick = 0; // 始めてすぐ終わった回数の連続
+    this._nextDelay = 0;
+    this._netFails = 0;
+    this._pageHook = null;
+    this._returning = false;
+    this._reopenLog = [];
   }
 
-  async start() {
-    if (this.listening) return;
+  /** 聞き始めている最中か(許可の窓が開いている間など)。2 回目のタップで取り消すために、画面側が見る */
+  get starting() {
+    return this._startPromise !== null;
+  }
+
+  /**
+   * 聞き始める。聞いている最中・始めている最中に呼んでも、2 本目は作らず、同じ約束を返す。
+   * 始めている最中に stop() されたら、マイクの答えが来た時にすぐ閉じる(エラーにはしない)。
+   */
+  start() {
+    if (this.listening) return Promise.resolve();
+    if (this._startPromise) return this._startPromise;
+    this._startAborted = false;
+    const p = this._doStart().finally(() => {
+      if (this._startPromise === p) this._startPromise = null;
+    });
+    this._startPromise = p;
+    return p;
+  }
+
+  async _doStart() {
+    this._recognitionDead = false;
+    this._netFails = 0;
+    this._recQuick = 0;
     // BUX: 選んだマイク。既定でないマイクは、その音を PC の聞き取りへ(ブラウザの聞き取りは既定のマイクしか使えない)
     const plan = await micPlan(this.baseProvider);
+    if (this._startAborted) return;
     this.provider = plan.provider;
     if (plan.note) tell(NOTE_EVENT, { text: plan.note });
     this._checkWebSupport();
@@ -103,24 +150,37 @@ export class Listener {
     try {
       // 声の有無を見るためのマイク(エコーは打ち消す)。カメラが入っていて失敗したら、1 回だけ取り直す(micStream.js)
       const open = (audio) => openMicStream((c) => getMicWithSession((x) => navigator.mediaDevices.getUserMedia(x), c),{ audio }, { cameraOn: this.cb.cameraOn?.() === true, holdCamera: this.cb.holdCamera });
+      let stream;
       try {
-        this.stream = await open(micConstraints(MIC_BASE, plan.chosen, !plan.useChosen));
+        stream = await open(micConstraints(MIC_BASE, plan.chosen, !plan.useChosen));
         this.micLabel = plan.useChosen ? plan.chosen.label : '';
       } catch (err) {
-        if (!plan.useChosen || !['OverconstrainedError', 'NotFoundError'].includes(err?.name)) throw err;
+        if (this._startAborted || !plan.useChosen || !['OverconstrainedError', 'NotFoundError'].includes(err?.name)) throw err;
         // 選んだマイクが抜かれた: 頼まれた道と既定のマイクに戻す
         tell(NOTE_EVENT, { text: AUDIO_WORDS.gone });
         this.provider = this.baseProvider;
         this._checkWebSupport();
-        this.stream = await open({ ...MIC_BASE });
+        stream = await open({ ...MIC_BASE });
         this.micLabel = '';
       }
+      // QA8 ③: 許可の窓が開いている間に「はなす」をもう 1 回押された(= stop())。答えが来ても、マイクを開けたままにしない
+      if (this._startAborted) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      this.stream = stream;
+      this._watchStream(stream);
       stage = 'audio-setup';
       this._silence = createSilenceWatch({ startedAt: performance.now() });
       const AC = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AC();
       // iPhone では、押した後に作った AudioContext が止まったまま(suspended)で、音が 0 のままになることがある
       if (this.ctx.state === 'suspended') this.ctx.resume?.().catch(() => {});
+      // 電話・Siri などで止められた時は、前に戻っていれば自分で動かし直す
+      this.ctx.onstatechange = () => {
+        const st = this.ctx?.state;
+        if (this.listening && !this._isHidden() && (st === 'suspended' || st === 'interrupted')) this.ctx.resume?.().catch(() => {});
+      };
       const src = this.ctx.createMediaStreamSource(this.stream);
       this.src = src;
       this.analyser = this.ctx.createAnalyser();
@@ -129,15 +189,25 @@ export class Listener {
       src.connect(this.analyser);
       this.listening = true;
       this.vadTimer = setInterval(() => this._vad(), 40);
+      this._hookPage();
       if (this.provider === 'server') {
         stage = 'capture';
         await this._startCapture(src);
+        if (this._startAborted) {
+          this.stop();
+          return;
+        }
         fetch('/api/stt/warm', { method: 'POST' }).catch(() => {}); // 最初の 1 回が遅くならないよう、先に用意してもらう
       } else {
         stage = 'recognition';
         this._startRecognition();
       }
     } catch (err) {
+      // 始めている最中に止められた後の失敗(断った・取れなかった)は、もう誰も待っていない。静かに終える
+      if (this._startAborted) {
+        this.stop();
+        return;
+      }
       // 途中まで開いた物(マイク・音の場)を残さない(マイクの印が付いたままにならない)
       this.stop();
       try {
@@ -157,21 +227,113 @@ export class Listener {
     this.cb.onNotice?.(FALLBACK_WORDS.missing);
   }
 
+  /** 聞くのをやめる。何度呼んでも安全(閉じた物は閉じ直さない)。始めている最中に呼ぶと、マイクの答えが来た時に閉じる */
   stop() {
+    if (this._startPromise) this._startAborted = true;
     this.listening = false;
     clearInterval(this.vadTimer);
-    try {
-      this.recognition?.stop();
-    } catch {
-      // すでに止まっている
+    clearTimeout(this._recTimer);
+    this._recTimer = null;
+    this._unhookPage();
+    const rec = this.recognition;
+    this.recognition = null; // 古い物の知らせ(onend など)は、もう受けない
+    if (rec) {
+      try {
+        rec.stop();
+      } catch {
+        // すでに止まっている
+      }
     }
     this.capture?.disconnect();
     this.stream?.getTracks().forEach((t) => t.stop());
-    this.ctx?.close();
+    if (this.ctx && this.ctx.state !== 'closed') this.ctx.close()?.catch?.(() => {});
     this.voiceActive = false;
     if (this._recSession) {
       this._recSession = false;
       endRecording(); // マイクを閉じた: 声を出す側の「再生用」へ戻す
+    }
+  }
+
+  /* ---------- B13V: ハンズフリー(ずっと聞き続ける)の見張り ---------- */
+
+  _isHidden() {
+    return globalThis.document?.visibilityState === 'hidden';
+  }
+
+  /** ページが前に戻った・タブが戻った時に、聞き取りを生き返らせる(止まっていたら動かし直す) */
+  _hookPage() {
+    if (this._pageHook) return;
+    const doc = globalThis.document;
+    const win = globalThis.window;
+    const onVis = () => void this._onReturn();
+    doc?.addEventListener?.('visibilitychange', onVis);
+    win?.addEventListener?.('pageshow', onVis);
+    this._pageHook = () => {
+      doc?.removeEventListener?.('visibilitychange', onVis);
+      win?.removeEventListener?.('pageshow', onVis);
+    };
+  }
+
+  _unhookPage() {
+    const off = this._pageHook;
+    this._pageHook = null;
+    off?.();
+  }
+
+  /** マイクの流れが外から閉じられた(別の物がマイクを取った・iPhone が閉じた)時の見張り */
+  _watchStream(stream) {
+    for (const t of stream.getTracks()) {
+      t.addEventListener?.('ended', () => {
+        if (this.stream !== stream || !this.listening || this._isHidden()) return; // 隠れている間は、戻った時(_onReturn)にまとめて見る
+        void this._reopen();
+      });
+    }
+  }
+
+  /**
+   * 前に戻った時: ①音の使い方をそろえ直す ②止まった AudioContext を動かす ③マイクの流れが閉じていたら取り直す
+   * ④ブラウザの聞き取りが止まっていたら始め直す。何も起きていなければ、何もしない
+   */
+  async _onReturn() {
+    if (!this.listening || this._returning || this._isHidden()) return;
+    this._returning = true;
+    try {
+      reassertRecording();
+      const ctx = this.ctx;
+      if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') {
+        // iPhone では resume の返事が来ないことがあるので、待つのは少しだけ
+        await Promise.race([Promise.resolve(ctx.resume?.()).catch(() => {}), new Promise((r) => setTimeout(r, RESUME_WAIT_MS))]);
+      }
+      if (!this.listening) return;
+      const tracks = this.stream?.getTracks?.() ?? [];
+      if (tracks.length > 0 && tracks.every((t) => t.readyState === 'ended')) {
+        await this._reopen();
+        return;
+      }
+      if (this.provider === 'web' && !this.recognition && !this._recTimer && !this._recognitionDead) this._startRecognition();
+      this.cb.onRevived?.();
+    } finally {
+      this._returning = false;
+    }
+  }
+
+  /** マイクを一度閉じて取り直す。30 秒に REOPEN_MAX 回を超えたら、繰り返さず止めて知らせる。取れなければ止めて知らせる */
+  async _reopen() {
+    const now = performance.now();
+    this._reopenLog = this._reopenLog.filter((t) => now - t < REOPEN_WINDOW_MS);
+    const tooMany = this._reopenLog.length >= REOPEN_MAX;
+    this._reopenLog.push(now);
+    this.stop();
+    try {
+      if (tooMany) throw Object.assign(new Error('reopen-loop'), { name: 'ReopenLoop', stage: 'reopen' });
+      await this.start();
+      this.cb.onNotice?.(LISTEN_WORDS.reopened);
+      this.cb.onRevived?.();
+    } catch (err) {
+      const text = micFailureText(err);
+      this.cb.onError(text);
+      this.cb.onNotice?.(text);
+      this.cb.onStopped?.();
     }
   }
 
@@ -313,13 +475,48 @@ export class Listener {
     }
   }
 
+  /**
+   * ブラウザの聞き取りの始め直しを予約する(予約は 1 つだけ。2 回呼んでも 2 本にならない)。
+   * 隠れているタブでは始めない(始めても許されない)。前に戻った時(_onReturn)に始める
+   */
+  _scheduleRecognition(delay = RESTART_MS) {
+    if (!this.listening || this._recognitionDead || this.provider !== 'web' || this._recTimer) return;
+    this._recTimer = setTimeout(() => {
+      this._recTimer = null;
+      if (this.listening && !this._recognitionDead && this.provider === 'web') this._startRecognition();
+    }, delay);
+  }
+
+  /** いまのブラウザの聞き取りを、知らせを受けないようにして閉じる(作り直す前に必ず。2 本が同時に動かないように) */
+  _dropRecognition() {
+    const old = this.recognition;
+    this.recognition = null;
+    if (!old) return;
+    old.onresult = old.onerror = old.onend = null;
+    try {
+      old.abort?.();
+    } catch {
+      // すでに止まっている
+    }
+  }
+
   _startRecognition() {
+    // 呼ぶ側(予約・戻った時・聞き始め)が聞いているかを見てから呼ぶ。ここでは、道が違う・もう使えない時だけ止める
+    if (this._recognitionDead || this.provider !== 'web') return;
+    clearTimeout(this._recTimer);
+    this._recTimer = null;
+    if (this._isHidden()) return; // 隠れている間は始めない。前に戻った時に _onReturn が始める
+    this._dropRecognition();
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
+    const startedAt = performance.now();
+    const mine = () => this.recognition === rec; // 古い物(作り直し前・止めた後)の知らせは捨てる
     rec.lang = SR_LANG[this._langNow()] ?? 'ja-JP'; // ML1: 日本語は今までの 'ja-JP' のまま
     rec.continuous = true;
     rec.interimResults = true;
     rec.onresult = (e) => {
+      if (!mine()) return;
+      this._netFails = 0; // 何か届いた = つながっている
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
@@ -333,7 +530,18 @@ export class Listener {
       if (interim) this.cb.onInterim(interim);
     };
     rec.onerror = (e) => {
+      if (!mine()) return;
+      // 話さなかった・こちらで止めた: 何もしない(このあと onend が来て、自分で始め直す)
       if (e.error === 'no-speech' || e.error === 'aborted') return;
+      // つながらない(network)で PC の聞き取りが無い時は、少し待ってつなぎ直す(ハンズフリーを一時の通信の乱れで止めない)。続いたら止めて知らせる
+      if (e.error === 'network' && !serverSttAvailable()) {
+        this._netFails += 1;
+        if (this._netFails <= NET_RETRY_MAX) {
+          this._nextDelay = NET_RETRY_STEP_MS * this._netFails;
+          if (this._netFails === 1) this.cb.onNotice?.(LISTEN_WORDS.netRetry);
+          return;
+        }
+      }
       // 許可されない・音を取れない・つながらない: 作り直しても同じなので、PC の聞き取りへ替える(無ければ、止めて知らせる)
       if (isFallbackError(e.error)) {
         void this._recognitionFailed(e.error, e);
@@ -342,7 +550,14 @@ export class Listener {
       this.cb.onError(`聞き取りでエラー: ${e.error}`);
     };
     rec.onend = () => {
-      if (this.listening && !this._recognitionDead) setTimeout(() => this._startRecognition(), 200);
+      if (!mine()) return;
+      this.recognition = null;
+      // 始めてすぐ終わるのが続く時は、待ちを倍にしていく(0.2 → 0.4 → 0.8 … 上限 3 秒)。ふつうに続いたあとの終わりは 0.2 秒で始め直す
+      this._recQuick = performance.now() - startedAt < QUICK_END_MS ? this._recQuick + 1 : 0;
+      const wait = Math.min(RESTART_MS * 2 ** Math.min(this._recQuick, 5), RESTART_MAX_MS);
+      const delay = Math.max(this._recQuick > 1 ? wait : RESTART_MS, this._nextDelay);
+      this._nextDelay = 0;
+      this._scheduleRecognition(delay);
     };
     this.recognition = rec;
     try {
@@ -359,17 +574,9 @@ export class Listener {
   async _recognitionFailed(code, err) {
     if (this._recognitionDead || !this.listening) return;
     this._recognitionDead = true;
-    const rec = this.recognition;
-    this.recognition = null;
-    if (rec) {
-      rec.onend = null;
-      rec.onerror = null;
-      try {
-        rec.abort?.();
-      } catch {
-        // すでに止まっている
-      }
-    }
+    clearTimeout(this._recTimer);
+    this._recTimer = null;
+    this._dropRecognition();
     const fell = shouldFallToServer({ provider: this.provider, errorCode: code, serverOk: serverSttAvailable() });
     this.cb.report?.({ kind: fell ? 'voice-fallback' : 'voice-start-failed', error: { name: code, message: err?.message ?? '' }, provider: 'web', stage: 'recognition', fellBack: fell });
     if (fell) {
