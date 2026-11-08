@@ -50,7 +50,7 @@ export const WORK_CSS = `
 .wk-pill .wk-body { padding-bottom: 6px; }
 
 /* 作る札の中の 1 行 */
-.fr-working { display: flex; align-items: center; gap: 12px; margin: 8px 4px; padding: 10px 16px 10px 12px; min-height: 56px; border-radius: 18px; box-sizing: border-box;
+.fr-working { flex: none; display: flex; align-items: center; gap: 12px; margin: 8px 4px; padding: 10px 16px 10px 12px; min-height: 56px; border-radius: 18px; box-sizing: border-box;
   background: rgb(var(--accent-rgb, 183 168 255) / 0.1); border: 1px solid rgb(var(--accent-rgb, 183 168 255) / 0.34); }
 .fr-working .wk-body { flex: 1 1 auto; }
 

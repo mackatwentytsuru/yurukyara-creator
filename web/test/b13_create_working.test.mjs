@@ -586,3 +586,7 @@ test('待つ吹き出しは、選んだことばで出る。きらきらの動�
   assert.equal(tracked.filter((x) => x[0] === 'begin').length, 2);
   assert.equal(tracked.filter((x) => x[0] === 'end').length, 2, '終われば必ず外す');
 });
+
+test('作る札の「はたらいている」1 行は、会話が長くなっても縮まない(flex: none)', () => {
+  assert.match(WORK_CSS, /\.fr-working\s*\{\s*flex:\s*none;/);
+});
