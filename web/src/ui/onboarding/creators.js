@@ -197,15 +197,19 @@ export function createDrawCreator({ sample, enabled }) {
     },
     async make(input, o = {}) {
       if (!on()) return sample.make(input, o);
+      // 絵(と、絵の色と形のオリジナル)の道は、描けなかった時に見本の子を黙って出さない(failed を返す。台本が正直に言って選んでもらう)
+      const fromPicture = input?.from === 'picture';
       try {
-        const body = input?.from === 'picture' && input.file ? { picture: await pictureBody(input.file) } : { words: String(input?.words ?? '') };
+        const body = fromPicture && input.file ? { picture: await pictureBody(input.file) } : { words: fromPicture ? originalWords(input) : String(input?.words ?? '') };
         o.onProgress?.('Claude が 描いているよ。少し まってね(1 分くらい)');
         const r = await fetch('/api/draw', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
         const j = await r.json().catch(() => ({}));
         if (r.ok && /^[a-z0-9_]{1,32}$/.test(String(j.id ?? ''))) return { id: j.id, name: String(j.name ?? 'あたらしい子').slice(0, 20), sample: false, drawn: true, twod: true, note: 'Claude が描いた子' };
-        const fallback = await sample.make(input?.from === 'picture' ? { ...input, colors: input.colors ?? [], shape: input.shape ?? 'any' } : input, o);
+        if (fromPicture) return pictureFailure(r.status, j.reason);
+        const fallback = await sample.make(input, o);
         return fallback ? { ...fallback, drawFailed: String(j.error ?? '描けなかったよ').slice(0, 60) } : null;
       } catch {
+        if (fromPicture) return pictureFailure(0, null);
         const fallback = await sample.make(input, o);
         return fallback ? { ...fallback, drawFailed: '描けなかったよ' } : null;
       }
@@ -213,12 +217,28 @@ export function createDrawCreator({ sample, enabled }) {
   };
 }
 
-/** 選んだ絵を、サーバーへ送る形(base64)にする。絵はこの時だけ、この PC のサーバーを通って Claude に送られる */
-async function pictureBody(file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+/** 描けなかった(絵の道)。見本の子は入れない。status と reason から、台本が理由を言う */
+export function pictureFailure(status, reason) {
+  const why = ['daily', 'visitor', 'busy'].includes(reason) ? reason : status === 400 ? 'unusable' : 'failed';
+  return { failed: true, picture: true, reason: why, status: status || 0, drawFailed: '描けなかったよ' };
+}
+
+/** 絵を使わないで、色と形の答えから作る「オリジナルの子」のことば(サーバーの上限 60 字の中) */
+export function originalWords(input) {
+  const color = COLOR_CHIPS.find((c) => c.id === (input?.colors ?? [])[0])?.label;
+  const shape = SHAPE_CHIPS.find((s) => s.id === input?.shape && s.id !== 'any')?.label;
+  const parts = [color && `${color}の 色`, shape && `${shape} かたち`].filter(Boolean);
+  return `${parts.length ? `${parts.join('で ')}の ` : ''}あたらしい オリジナルの ゆるキャラ`.slice(0, 60);
+}
+
+const toBase64 = (bytes) => {
   let bin = '';
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return { type: file.type, data: btoa(bin) };
+  return btoa(bin);
+};
+/** 選んだ絵を、サーバーへ送る形(base64)にする。絵はこの時だけ、この PC のサーバーを通って Claude に送られる */
+async function pictureBody(file) {
+  return { type: file.type, data: toBase64(new Uint8Array(await file.arrayBuffer())) };
 }
 
 /* ---------- 手元の PC の作る道('local') ---------- */
