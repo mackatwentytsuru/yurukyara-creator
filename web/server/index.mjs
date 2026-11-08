@@ -5,6 +5,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, createReadStream } from 'node:fs';
 import { extname, join, normalize, sep } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { config, REPO_ROOT, WEB_ROOT } from './env.mjs';
 import { runTurn } from './brain.mjs';
 import { isAbortError } from './abort.mjs';
@@ -91,12 +92,63 @@ async function readRaw(req, limit) {
   return Buffer.concat(chunks);
 }
 
-/** root の外に出られないようにしてファイルを返す */
-function sendFile(res, root, rel) {
+// 配るファイルの圧縮とキャッシュ(スマホの遅い回線で、入口のボタンが押せるまでの時間を縮める。CU)。
+// 圧縮するのは文字・形のファイルだけ(画像・声・wasm は、もう小さいか大きすぎる)。圧縮した物は、ファイルが変わるまで覚える。
+// 画面の部品(/assets/ の、名前に中身の印が入った物)は 1 年覚えさせる。ほかは、毎回「変わったか」だけ聞かせる(変わっていなければ 304)
+const GZIP_TYPES = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.glb', '.vrm', '.md']);
+const GZIP_MAX_BYTES = 6 * 1024 * 1024;
+const HASHED_ASSET = /^\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.(js|css)$/; // vite の名前: index-Deiv-YqO.js
+const gzipCache = new Map();
+
+/** ファイル 1 つの、配る形(圧縮するか・印・更新時刻)を決める。圧縮した中身は覚えておく */
+function servable(full, st, wantsGzip) {
+  const gz = wantsGzip && GZIP_TYPES.has(extname(full).toLowerCase()) && st.size > 256 && st.size <= GZIP_MAX_BYTES;
+  const tag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}${gz ? '-gz' : ''}"`;
+  let body = null;
+  if (gz) {
+    const hit = gzipCache.get(full);
+    if (hit?.tag === tag) body = hit.body;
+    else {
+      body = gzipSync(readFileSync(full), { level: 6 });
+      gzipCache.set(full, { tag, body });
+    }
+  }
+  return { gz, tag, body, mtime: new Date(st.mtimeMs).toUTCString() };
+}
+
+/** root の外に出られないようにしてファイルを返す。req を渡すと、圧縮(gzip)・覚えさせる指示・304 に対応する */
+function sendFile(res, root, rel, req = null) {
   const full = normalize(join(root, rel));
   if (full !== root && !full.startsWith(root + sep)) return false;
-  if (!existsSync(full) || !statSync(full).isFile()) return false;
-  res.writeHead(200, { 'content-type': MIME[extname(full).toLowerCase()] ?? 'application/octet-stream' });
+  if (!existsSync(full)) return false;
+  const st = statSync(full);
+  if (!st.isFile()) return false;
+  const type = MIME[extname(full).toLowerCase()] ?? 'application/octet-stream';
+  if (!req) {
+    res.writeHead(200, { 'content-type': type });
+    createReadStream(full).pipe(res);
+    return true;
+  }
+  const v = servable(full, st, /\bgzip\b/i.test(String(req.headers['accept-encoding'] ?? '')));
+  const headers = {
+    'content-type': type,
+    etag: v.tag,
+    'last-modified': v.mtime,
+    'cache-control': HASHED_ASSET.test(rel.startsWith('/') ? rel : `/${rel}`) ? 'public, max-age=31536000, immutable' : 'no-cache',
+    vary: 'Accept-Encoding',
+  };
+  const inm = String(req.headers['if-none-match'] ?? '');
+  const ims = Date.parse(String(req.headers['if-modified-since'] ?? ''));
+  const fresh = inm ? inm.split(',').some((t) => t.trim().replace(/^W\//, '') === v.tag) : Number.isFinite(ims) && Math.floor(st.mtimeMs / 1000) <= Math.floor(ims / 1000);
+  if (fresh) {
+    res.writeHead(304, headers).end();
+    return true;
+  }
+  if (v.gz) {
+    res.writeHead(200, { ...headers, 'content-encoding': 'gzip', 'content-length': v.body.length }).end(v.body);
+    return true;
+  }
+  res.writeHead(200, { ...headers, 'content-length': st.size });
   createReadStream(full).pipe(res);
   return true;
 }
@@ -330,11 +382,11 @@ const handler = async (req, res) => {
     if (req.method === 'GET' || req.method === 'HEAD') {
       if (path.startsWith('/characters/') || path.startsWith('/places/')) {
         if (path === '/characters/_test/model.vrm' && !existsSync(join(REPO_ROOT, path)) && sendDevVrm(res)) return;
-        if (sendFile(res, REPO_ROOT, path)) return;
+        if (sendFile(res, REPO_ROOT, path, req)) return;
         return json(res, 404, { error: '見つかりません' });
       }
-      if (sendFile(res, DIST, path === '/' ? 'index.html' : path)) return;
-      if (sendFile(res, DIST, 'index.html')) return;
+      if (sendFile(res, DIST, path === '/' ? 'index.html' : path, req)) return;
+      if (sendFile(res, DIST, 'index.html', req)) return;
       return json(res, 404, { error: '先に npm run build をしてください' });
     }
     json(res, 405, { error: 'この方法は使えません' });

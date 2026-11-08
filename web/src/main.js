@@ -89,6 +89,28 @@ let firstRunReady = Promise.resolve(null);
 let firstRunDoneKey = FIRST_RUN_DONE_KEY;
 const firstRunWanted = () => shouldOpenFirstRun({ params, storage: siteMemory, doneKey: firstRunDoneKey, headset: IS_HEADSET });
 const ui = createUi();
+// CU: 起動中・返事待ちの表示(出し入れの決まりは ui/waitBubble.js。画面の文字と「…」は index.html の #waitBubble と入口の #gateWake)
+import { WAKE_BUSY, WAKE_FAILED, WAKE_READY, WAKE_HINT, createWaitBubble, wakeLoading } from './ui/waitBubble.js';
+const waitBubble = createWaitBubble({
+  // 舞台に立っている子の名前(作った子や入れ替えた子でも、その子の名前で「かんがえているよ」と出す。CU3 must 2)
+  nameOf: () => app.character?.name || document.documentElement.dataset.guideName || 'ノリー',
+  render: (visible, text) => {
+    const box = $('waitBubble');
+    if (!box) return;
+    $('waitBubbleText').textContent = text;
+    box.hidden = !visible;
+  },
+});
+let waitSeq = 0; // 話しかけた回の通し番号(止められた前の回が、次の回の「…」を消さないため)
+// 返事の最初の文字(字幕・先に見える文・失敗の知らせ)が出たら、「…」を消す。使う人の言葉(kind: user)の字幕では消さない
+for (const [name, isText] of [['caption', (text, _ms, kind) => Boolean(text) && kind !== 'user'], ['sayAhead', () => true], ['say', () => true], ['error', () => true]]) {
+  const base = ui[name];
+  if (typeof base !== 'function') continue;
+  ui[name] = (...args) => {
+    if (isText(...args)) waitBubble.end();
+    return base.apply(ui, args);
+  };
+}
 const stage = createStage($('stage'));
 const speaker = new Speaker();
 const picker = new AttentionPicker();
@@ -203,7 +225,12 @@ function talk(turn) {
   presence.lastTalkAt = t;
   // 声かけの回(trigger: 'approach')は、人が話した回ではないので、前の返事・「あなた:」の行が残って後ろにつながる(Q3 ②)。話し始めの前に空にする
   if (turn?.trigger === 'approach') ui.userSaid('');
-  return dialogue.send(turn).then(updateBrainNotice);
+  // CU: 返事の最初の文字が出るまで(0.4 秒たっても出ない時)「…」を出す。無視されているように見せない
+  const waitId = ++waitSeq;
+  waitBubble.begin({ immediate: turn?.trigger === 'approach' });
+  return dialogue.send(turn).then(updateBrainNotice).finally(() => {
+    if (waitId === waitSeq) waitBubble.end(); // 止められた前の回の終わりで、次の回の「…」を消さない
+  });
 }
 
 /** 場所の情報を会話に渡すか。?place= が無い(試しの場所)・VR の中では渡さない(試しの目印が「スタッフの部屋」などを案内してしまうため) */
@@ -1338,7 +1365,30 @@ function fillGuide() {
   const c = app.character;
   const guide = $('gateGuide');
   if (guide && c && (app.characterId ?? c.id) !== MAIN_CHARACTER.id) guide.textContent = `案内するのは「${c.name ?? app.characterId ?? 'この子'}」です。`;
+  document.documentElement.dataset.guideName = c?.name || MAIN_CHARACTER.name; // CU: 入口の「〜が おきているよ」と「〜が かんがえているよ」の名前
   document.documentElement.classList.add('guide-ready');
+  if (document.documentElement.classList.contains('gate-up')) setGateWake(wakeState);
+}
+
+/**
+ * CU: 入口の「起動中」の表示。loading = 読み込んでいる間、ready = 押せる(ボタンが光る)、busy = 押した後(カメラやモデルを用意している間)。
+ * 文の決まりは ui/waitBubble.js。小さな字の知らせ(gateStatus)とは別に、顔と動く点で「起きている途中」だと見せる(押せない間に、無視されているように見せない)
+ */
+let wakeState = 'loading';
+function setGateWake(state) {
+  wakeState = state;
+  document.documentElement.classList.toggle('gate-ready', state === 'ready');
+  document.documentElement.classList.toggle('gate-failed', state === 'failed');
+  const text = $('gateWakeText');
+  if (!text) return;
+  const name = document.documentElement.dataset.guideName || 'ノリー';
+  const line = state === 'ready' ? WAKE_READY : state === 'busy' ? WAKE_BUSY : state === 'failed' ? WAKE_FAILED : wakeLoading(name);
+  if (text.textContent !== line) text.textContent = line;
+  const hint = $('gateWakeHint');
+  if (hint) {
+    hint.textContent = WAKE_HINT;
+    hint.hidden = state !== 'loading';
+  }
 }
 
 function fillGate() {
@@ -1355,6 +1405,9 @@ function fillGate() {
 function gateClosed() {
   $('gate').classList.add('hidden');
   document.documentElement.classList.remove('gate-up');
+  // CU: 押してから最初の一言が出るまで「ノリーが かんがえているよ …」を出す(スマホの遅い回線でも、無視されているように見せない)。
+  // 初めての訪問は、はじめての会話の札が開いたら札の「…」に替わる(下の MutationObserver が消す)。声かけをしない設定(?auto=0)・ヘッドセットなどでは出さない
+  if (app.autoGreet && UW5_SIMPLE) waitBubble.begin({ immediate: true });
   if (!firstRunWanted()) return;
   void firstRunReady.then((api) => {
     if (api && !(api.sheet && !api.sheet.closed)) api.start();
@@ -1546,7 +1599,7 @@ async function boot() {
   const status = $('gateStatus');
   const buttons = [$('startCam'), $('startSim')];
   buttons.forEach((b) => (b.disabled = true));
-  status.textContent = 'キャラを読み込んでいます…';
+  setGateWake('loading'); // CU: 入口の「ノリーが おきているよ…」(読み込みの間。小さな字の「読み込んでいます」は、これに替えた)
   installKeyboardInset();
   installNoPinchZoom(); // 指のつまみで拡大しない・拡大されたら 1 倍へ戻す(11-08 本人の iPhone)
   composerInput = installComposerInput({ input: $('textInput'), form: $('composer') });
@@ -1623,6 +1676,7 @@ async function boot() {
   } catch (err) {
     console.error(err);
     status.textContent = `キャラを読み込めませんでした: ${err.message}`;
+    setGateWake('failed'); // CU: 「おきているよ…」のまま止まらない(動く点を止めて、やさしく知らせる)
     return;
   }
   await setupPresentation().catch((e) => console.warn('見せ方の切りかえを用意できませんでした:', e.message));
@@ -1640,6 +1694,7 @@ async function boot() {
   fillGate(); // 入口の文(声があるか・初めての訪問か・指かマウスか)は、状態を読んだ後に決める
   $('camSub').textContent = 'キャラがあなたの方を見ます。顔は保存しません'; // B4(12b): カメラの札に「顔は保存しません」(UIR 22) // index.html では「読み込んでいます…」で押せない(遅い回線で、押せそうで押せない時間を作らない。P1 中)
   buttons.forEach((b) => (b.disabled = false));
+  setGateWake('ready'); // CU: 「じゅんび できたよ! おしてね」(ボタンが光る)
   // ?perf=1: いまの重さを測る(L0。数字は window.__perf。測りの部品は、このときだけ読む)
   if (params.get('perf') === '1') import('./stage/perf.js').then(({ startPerf }) => startPerf({ stage, character: app.character, params, readyAt, tier: app.tier, firstFrameAt: () => app.firstFrameAt, loopStartAt }));
 
@@ -1649,6 +1704,7 @@ async function boot() {
     if (tvActive()) requestTvFullscreen(); // ?tv=1: 全画面も、このタップの中で頼む(待つ前に)
     buttons.forEach((b) => (b.disabled = true));
     status.textContent = pending;
+    setGateWake('busy'); // CU: 押した後、カメラやモデルを用意している間も「じゅんびしているよ…」(固まって見えない)
     try {
       // カメラの顔の部品は、押した時に読む(最初の読み込みに入れない)
       const MediapipeSource = kind === 'camera' ? (await import('./tracking/sources/mediapipeSource.js')).MediapipeSource : null;
@@ -1691,6 +1747,7 @@ async function boot() {
       }
       status.textContent = 'うまく はじめられなかったよ。「カメラなしで試す」なら うごかせます。';
       buttons.forEach((b) => (b.disabled = false));
+      setGateWake('ready');
     }
   }
   const wantPose = params.get('source') === 'pose' || IS_HEADSET; // AR(iPhone の殻アプリ)・VR(Quest)では、位置を外から受け取る
@@ -1825,8 +1882,10 @@ function uw5GreetOnOpen() {
   clearTimeout(uw5GreetWait);
   uw5Greeted = true;
   uw5ShowExamples();
-  if (!app.autoGreet || dialogue.busy || speaker.speaking) return;
-  if (performance.now() / 1000 - presence.lastTalkAt < GREET_QUIET_S) return; // もう話している(はじめての会話の後など)
+  if (!app.autoGreet || dialogue.busy || speaker.speaking || performance.now() / 1000 - presence.lastTalkAt < GREET_QUIET_S) {
+    waitBubble.end(); // 声かけをしない回(もう話している・はじめての会話の後など)に、「…」だけ残さない
+    return;
+  }
   void talk({ trigger: 'approach', mode: 'text' });
 }
 
@@ -1892,7 +1951,10 @@ function uw5VoiceRest(ttsOk, s) {
   const mic = $('micBtn');
   if (mic) new MutationObserver(uw5SyncTalkLabels).observe(mic, { attributes: true, attributeFilter: ['aria-pressed'] });
   uw5SyncTalkLabels();
-  new MutationObserver(() => uw5GreetOnOpen()).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  new MutationObserver(() => {
+    if (document.documentElement.classList.contains('fr-open')) waitBubble.end(); // CU: はじめての会話の札が開いたら、字幕の場所の「…」は札の中の「…」に替わる
+    uw5GreetOnOpen();
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
   // キャラの名前が分かったら見出しを入れる(起動の後に 1 回。替わるたびは swapCharacter)
   const nameWait = setInterval(() => {
     if (!app.character) return;

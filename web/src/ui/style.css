@@ -970,3 +970,80 @@ html.kb-short .composer .mic, html.kb-short .composer .cam, html.kb-short .compo
 @media (max-width: 340px) {
   .composer textarea { padding: 12px 10px; }
 }
+
+/* ---------- CU: 起動中の表示と、作る画面(本人 11/8「最初の一言が出るまで、起動中だと分かるように」「作るのは作る画面にまとめて」) ----------
+   「…」(.wd)は、入口・字幕の場所・初めての会話の吹き出しの 3 か所で同じ物。動きを止める設定では、点は動かさず文字だけ */
+.wd { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; vertical-align: middle; }
+.wd i { display: block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: 0.3; animation: wd-blink 1.3s ease-in-out infinite; }
+.wd i:nth-child(2) { animation-delay: 0.22s; }
+.wd i:nth-child(3) { animation-delay: 0.44s; }
+@keyframes wd-blink { 0%, 70%, 100% { opacity: 0.3; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
+
+/* 入口: ノリーの顔の丸(CSS の絵。初めての会話の吹き出しの顔と同じ形)が、息をするように上下して、動く点が続く。押せるようになったら顔は止まり、ボタンが光る */
+.gate-wake { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 18px; background: rgba(183, 168, 255, 0.1); border: 1px solid rgba(183, 168, 255, 0.34); }
+.gw-face { position: relative; flex: none; display: block; width: 36px; height: 36px; margin: 9px; border-radius: 50%; overflow: hidden; background: #3a3156; --gw-s: 1.5; transform: scale(var(--gw-s)); animation: gw-breathe 2.4s ease-in-out infinite; }
+.gw-face i { position: absolute; display: block; }
+.gw-face .ff-ear { top: 3px; width: 11px; height: 14px; border-radius: 50% 50% 40% 40%; background: #5b463c; }
+.gw-face .ff-ear.ff-l { left: 6px; transform: rotate(-16deg); }
+.gw-face .ff-ear.ff-r { right: 6px; transform: rotate(16deg); }
+.gw-face .ff-head { left: 5px; top: 7px; width: 26px; height: 25px; border-radius: 50% 50% 46% 46%; background: #5b463c; }
+.gw-face .ff-muzzle { left: 10px; top: 15px; width: 16px; height: 15px; border-radius: 50% 50% 46% 46%; background: #efe3d3; }
+.gw-face .ff-eye { top: 13px; width: 4px; height: 4px; border-radius: 50%; background: #121018; }
+.gw-face .ff-eye.ff-l { left: 12px; }
+.gw-face .ff-eye.ff-r { right: 12px; }
+.gw-face .ff-nose { left: 15px; top: 18px; width: 6px; height: 5px; border-radius: 50%; background: #f2a3b3; }
+.gw-face .ff-bow { left: 12px; bottom: 2px; width: 12px; height: 5px; border-radius: 2px; background: #2fa36b; }
+@keyframes gw-breathe { 0%, 100% { transform: scale(var(--gw-s)) translateY(0); } 50% { transform: scale(calc(var(--gw-s) * 1.04)) translateY(-1.5px); } }
+.gw-body { margin: 0; display: grid; gap: 2px; min-width: 0; }
+.gw-line { display: flex; align-items: center; flex-wrap: wrap; }
+.gw-text { font-size: 17px; line-height: 1.4; color: var(--text); }
+.gw-hint { font-size: 14px; line-height: 1.4; color: var(--muted); }
+html.gate-ready .gate-wake { background: rgba(123, 224, 195, 0.12); border-color: rgba(123, 224, 195, 0.55); }
+html.gate-ready .gw-face { animation: gw-hop 0.7s ease-out 1; }
+html.gate-ready .gw-text { color: var(--mint); }
+html.gate-ready .gate-wake .wd, html.gate-ready .gw-hint { display: none; }
+html.gate-failed .gate-wake { background: rgba(255, 211, 122, 0.1); border-color: rgba(255, 211, 122, 0.5); }
+html.gate-failed .gw-face { animation: none; }
+html.gate-failed .gate-wake .wd, html.gate-failed .gw-hint { display: none; }
+html.gate-failed .gw-text { color: var(--warn); }
+@keyframes gw-hop { 0% { transform: scale(var(--gw-s)) translateY(0); } 40% { transform: scale(var(--gw-s)) translateY(-7px); } 100% { transform: scale(var(--gw-s)) translateY(0); } }
+/* 押せる印: 光の輪がゆっくり出る(押せる間だけ。押せない間は薄いまま) */
+.gate .primary { position: relative; }
+.gate .primary::after { content: ""; position: absolute; inset: -5px; border-radius: 21px; border: 2px solid #c9a8ff; opacity: 0; pointer-events: none; }
+html.gate-ready .gate .primary:not(:disabled)::after { animation: gw-ring 1.8s ease-in-out infinite; }
+@keyframes gw-ring { 0%, 100% { opacity: 0; transform: scale(0.97); } 50% { opacity: 0.9; transform: scale(1.02); } }
+
+/* 押した後〜最初の一言・話しかけた後〜返事の最初の文字: 字幕の場所の「…」。字幕の箱(.subs)の中、字幕の所に置く(仮の頭脳の知らせ・注意書きと重ならない)。
+   箱は下に寄せてあるので、キャラの置き方は変わらない(下の余白は字幕の文字が出た時の高さで測る)。最初の文字が出たら消える(main.js)。はじめての会話の札・入口・テレビ表示の間は出さない */
+.wait-bubble { display: flex; align-items: center; justify-content: center;
+  width: max-content; max-width: 100%; margin: 0; padding: 10px 20px; border-radius: 22px 22px 22px 6px; background: rgba(12, 10, 22, 0.78); border: 1px solid rgba(183, 168, 255, 0.4);
+  color: var(--text); font-size: clamp(16px, 4.4vw, 22px); font-weight: 700; line-height: 1.4; pointer-events: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.wait-bubble[hidden] { display: none; }
+html.fr-open .wait-bubble, html.gate-up .wait-bubble, html.tv-mode .wait-bubble, html.is-led .wait-bubble, html.is-headset .wait-bubble { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .wd i { animation: none; opacity: 0.8; }
+  .wd i:nth-child(2) { opacity: 0.55; }
+  .wd i:nth-child(3) { opacity: 0.3; }
+  .gw-face, html.gate-ready .gw-face { animation: none; }
+  html.gate-ready .gate .primary:not(:disabled)::after { animation: none; opacity: 0.7; }
+}
+
+/* 作る画面(初めての会話の札を、作るための 1 枚として見せる)。開いている間は、話す画面の上の段(はなす・かえる・もっと)と下の帯(はなす・文字で話す)を隠す
+   (話す画面と作る画面がまざらない)。隠すのは見た目だけ(visibility)で、高さの測りは変えない = キャラの置き方は変わらない。舞台の子は見せたまま(できた子を見るため) */
+html.cc-open .top, html.cc-open .bottom { visibility: hidden; pointer-events: none; }
+html.cc-open .top *, html.cc-open .bottom * { pointer-events: none; }
+/* 低い画面(スマホで上の枠が出ている時など、高さ 700px 以下)の入口: 起動中の箱と余白を詰めて、「カメラを使って始める」まで最初の画面に収める
+   (CU2 の必須。390x670 で 622〜693px に切れていた)。ひとこと「ボタンが ひかったら、おしてね」は、点が動いていれば足りるので、この高さでは隠す */
+@media (max-height: 700px) {
+  .gate { padding: 12px 16px; }
+  .gate-card { padding: 20px 20px; gap: 10px; }
+  .gate-wake { padding: 6px 12px; gap: 10px; }
+  .gw-face { --gw-s: 1.15; margin: 3px; }
+  .gw-hint { display: none; }
+}
+/* もっと低い画面(高さ 660px 以下。360x640 の小さなスマホなど): 顔の丸を外し(動く点と文字は残る)、押す物の余白を少し詰める。入口の 2 つのボタンが最初の画面に収まるように */
+@media (max-height: 660px) {
+  .gate-card { gap: 8px; }
+  .gw-face { display: none; }
+  .gate button { padding: 10px 16px; }
+}

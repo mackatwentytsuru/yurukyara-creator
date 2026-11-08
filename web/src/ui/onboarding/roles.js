@@ -19,6 +19,27 @@ export const ROLE_SCENES = {
   facility: '学校や施設で、来た人と 話して 案内する',
 };
 
+/**
+ * 「どんな子を生み出そうか?」で「おまかせ」を押した時に使う、役目ごとの短い説明(子どもに読める言葉)。
+ * 場所の名前が分かっていれば、名前を頭に付ける(例: みどり駅で みちを あんないする 子)。ことば(WORDS_MAX 60 字)に収める
+ */
+export const ROLE_AUTO_WORDS = {
+  home: 'おうちで いっしょに あそぶ 子',
+  shop: 'おみせで あんないする 子',
+  station: 'えきで みちを あんないする 子',
+  facility: 'がっこうで みんなを まもる 子',
+};
+
+/** 役目(と場所の名前)から、おまかせの説明を 1 つ作る。名前は、お店と駅の時だけ使う */
+export function autoWords(role, place = null) {
+  const r = normalizeRole(role);
+  const base = ROLE_AUTO_WORDS[r];
+  const name = ASKS_PLACE.has(r) ? [...String(place?.name ?? '').trim()].slice(0, PLACE_MAX).join('') : '';
+  if (!name) return base;
+  // 「えきで」「おみせで」の頭の言葉を、名前に置き換える(みどり駅 + えきで みちを… → みどり駅で みちを…)
+  return `${name}${base.replace(/^[^で]+/, '')}`.slice(0, 60);
+}
+
 /** 場所の名前を聞く役目(お店と駅だけ。1〜2 問で終える) */
 export const ASKS_PLACE = new Set(['shop', 'station']);
 export const PLACE_MAX = 30;

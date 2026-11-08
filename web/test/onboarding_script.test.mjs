@@ -72,7 +72,7 @@ test('言葉の入口: 7 歩を最後まで通す(仮の頭脳・鍵を入れて
   assert.deepEqual(h.offered, ROLE_IDS);
   assert.equal(h.offeredAll[0].primary, true, '既定は おうち');
   await h.fr.act('role_home');
-  assert.deepEqual(h.offered, ['pick', 'photo', 'words'], 'カメラの「写真を撮る」は主役にしない(UIR 22)');
+  assert.deepEqual(h.offered, ['pick', 'photo', 'what_auto', 'words'], 'カメラの「写真を撮る」は主役にしない(UIR 22)。「おまかせ」は、どんな子かだけを おまかせにする(CU)');
   assert.ok(h.texts('guide').includes('どんな子を生み出そうか?'));
   assert.ok(h.texts('note').some((t) => t.includes('見本の子')), '見本の道だと正直に出す');
 
@@ -156,7 +156,7 @@ test('写真 → 色と形 → 近い子 → やりなおす → 1 つ目のス�
   assert.equal(h.fr.character.id, 'd_lantern', 'あかくて たてに ながい → ちょうちんくん');
   await h.fr.act('again');
   assert.equal(h.fr.step, 1);
-  assert.deepEqual(h.offered, ['pick', 'photo', 'words']);
+  assert.deepEqual(h.offered, ['pick', 'photo', 'what_auto', 'words']);
   const [a, b] = await Promise.all([h.fr.act('words', { text: 'みかん' }), h.fr.act('words', { text: 'ロボ' })]);
   assert.deepEqual([a, b], [true, false], '動いている最中の 2 回目は捨てる');
   assert.equal(h.fr.character.id, 'mikan');
@@ -274,7 +274,7 @@ test('読み込み直しをまたぐ: 3 歩目で状態を残し、続きから�
   await r.fr.resume(snap);
   assert.equal(r.fr.step, 3);
   assert.ok(r.texts('guide').includes('ロボくんだよ。この子は どうかな?'));
-  assert.deepEqual(r.offered, ['keep', 'choose_sample', 'again']);
+  assert.deepEqual(r.offered, ['keep', 'choose_sample', 'again']); // reload でない続きには「はじめから」を付けない(読み込み直し=作りかけの続きの時だけ)
   const bad = harness();
   await bad.fr.resume({ v: 99 });
   assert.equal(bad.fr.step, 1, '形の違う控えは捨てて、はじめから');
@@ -305,7 +305,7 @@ test('D1(UIR 1): ぴったりの子がいない言葉も、近い子を出して
   const h = harness({ guideUrl: 'https://example.org/readme#make' });
   await h.fr.start();
   await h.fr.act('role_home');
-  assert.deepEqual(h.offered, ['pick', 'photo', 'words']);
+  assert.deepEqual(h.offered, ['pick', 'photo', 'what_auto', 'words']);
   await h.fr.act('words', { text: '空を飛ぶペンギンの郵便屋さん' });
   assert.equal(h.fr.step, 3);
   assert.ok(h.fr.character?.id, '行き止まりにしない');
@@ -441,7 +441,7 @@ test('QF4 高 1: 歩みごとに途中経過を残し、読み込み直した後
   assert.equal(g.fr.character.id, 'robo');
   assert.ok(g.texts('guide').some((t) => t.includes('さっきの つづきからだよ')));
   assert.ok(!g.texts('guide').includes('どんな子を生み出そうか?'), '1 歩目に戻さない');
-  assert.deepEqual(g.offered, ['to_retro']);
+  assert.deepEqual(g.offered, ['to_retro', 'fresh'], '続きの最初の選びには「はじめから」が付く(CU3)');
 });
 
 test('OL1f: 子を選ぶ前の 3 歩目(見本が出ただけ)で読み込み直しても、同じ言葉で 3 歩目から続く', async () => {
