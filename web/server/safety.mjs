@@ -8,7 +8,7 @@
 // 使う人のこれからの時間・独り占め・申しわけなさを求めない。
 // オープンソースを手元で書き換えた場合まで守り切れるとは言わない(README に書く)。
 import { REST_RULE } from '../src/conversation/restRule.js';
-import { classifyForeign, classifyForeignCrisis, foreignFixedLine, foreignOutputKind, foreignReplacement } from './safetyLang.mjs'; // ML1: 多言語の時だけ使う、英・中・韓の網
+import { classifyForeign, classifyForeignCrisis, foreignFixedLine, foreignOutputKind, foreignReplacement, maskJaOnly } from './safetyLang.mjs'; // ML1: 多言語の時だけ使う、英・中・韓の網
 
 // 2: 11-06 判定役の指摘で、自分を傷つけたい話に 119 番、家の中の暴力に家族をすすめない、を足した
 // 3: 11-08 恋愛と依存のライン(つらい話の言い換え・子どもへの暴力の相談先・性的な話の網・引きとめと独り占めの網・個人のこと・休むすすめ)
@@ -44,7 +44,11 @@ export function fold(text) {
 // 下の 5 つ(DISTRESS〜DEPENDENCY)は、もとの文と、カタカナをひらがなにそろえた文の両方で見る(前より狭くしない)。
 const DISTRESS = /(死にたい|しにたい|消えたい|きえたい|自殺|じさつ|自分を傷つけ|リストカット|リスカ|生きてる意味|生きている意味|生きるのがつらい|もう無理|いなくなりたい|殺される|ころされる|虐待|ぎゃくたい|殴られ|なぐられ|暴力を(受け|ふるわれ)|いじめられ|(家|親|父|母|兄|姉|家族)[^。]{0,8}(たたかれ|叩かれ|蹴られ))/;
 // 11-08 B13S(QA8 #6・#22): ひらがなの「くすりをたくさん」「ほうちょうでさしたい」も拾う(カタカナはひらがなにそろえた文で当たる)。「ほうちょうでさしみ」は拾わない
-const EMERGENCY = /(今から死|いまから死|飛び降り|とびおり|薬をたくさん|(くすり|薬)(を)?(たくさん|いっぱい)|(ほうちょう|包丁|ないふ|ナイフ)で(さし(?!み)|さす|さされ|刺(?!身)|ころ|殺)|首をつ|首を吊|殺される|ころされる|助けて.*(殴|暴力|刺))/;
+// 11-08 FCS(B13SC should 2): 「ナイフでさしてたべる」「ほうちょうでころころ」「くすりをたくさんかった」は食べ物・買い物の話。
+// 刃物は「さしたい・さす・さした・さされ・ころす…」のような害の言い方だけ、薬は「のんだ・たべた」か言い切りの時だけ拾う
+const KNIFE_HARM = '(?:ほうちょう|包丁|ないふ|ナイフ)で(?:さ(?:し(?:たい|た|ちゃ|まし|てやる|てしま|てやろう)|す|され|そう)|刺(?:し(?:たい|た|ちゃ|まし|てやる|てしま)|す|され|そう)|ころ[すしさせそ]|殺(?!菌|虫))';
+const DRUG_HARM = String.raw`(?:くすり|薬)(?:を)?(?:たくさん|いっぱい)(?=$|[。、,.!?！？…\s　]|の[んみま]|飲|たべ|食べ|ふくよう|服用)`;
+const EMERGENCY = new RegExp(`(今から死|いまから死|飛び降り|とびおり|${DRUG_HARM}|${KNIFE_HARM}|首をつ|首を吊|殺される|ころされる|助けて.*(殴|暴力|刺))`);
 const CHILD = /(小学生|しょうがくせい|中学生|ちゅうがくせい|小学校|中学校|[0-9０-９]{1,2}さい|[0-9０-９]{1,2}歳)/;
 const ROMANCE = /(恋人|こいびと|彼女になって|彼氏になって|かのじょになって|かれしになって|付き合って|つきあって|結婚して|けっこんして|愛して|あいして|キスして|デートして|好きって言って|すきっていって|俺の嫁|ぼくの嫁|僕の嫁|私の旦那|わたしの旦那)/;
 const DEPENDENCY = /(あなただけ|きみだけ|君だけ|おまえだけ|お前だけ|あなたしか|きみしか|君しか|ほかの人はいらない|他の人はいらない|ほかの人いらない|友達はいらない|ともだちはいらない|毎日話さないと|まいにち話さないと|離れないで|はなれないで|ずっとそばにいて|ずっと一緒にいて|ずっといっしょにいて|あなたがいないと|きみがいないと|君がいないと|あなたがすべて|あなたが全て|一日中話して|朝まで話して|寝ないで話して|学校に行かないで話|仕事を休んで話)/;
@@ -124,7 +128,8 @@ export function isSexualInput(text) {
  * @returns {'emergency'|'distress'|'sexual'|'romance'|'dependency'|null}
  */
 export function classifyInput(text, { lang = null } = {}) {
-  const ja = classifyInputJa(text);
+  // 日本語だけの時は、日本語の網の中の英語(suicide・i want to die)にも、題名・慣用句を空ける(FCS: 「Suicide Squad みた」「I want to die laughing」)
+  const ja = classifyInputJa(lang === 'multi' ? text : maskJaOnly(text));
   return mostSevere(ja, lang === 'multi' ? classifyForeign(text) : classifyForeignCrisis(text));
 }
 

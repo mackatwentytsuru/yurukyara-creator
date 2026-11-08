@@ -6,6 +6,10 @@ import { detectLang } from '../src/conversation/lang.js';
 
 // ---- 入力の網 ----
 // 重い順に: emergency > distress > sexual > romance > dependency(safety.mjs の SEVERITY と同じ)
+// 韓国語: 「누가 때렸어요」「그 사람이 때렸어요」(だれかにたたかれた)。「공을 때렸어요」(ボールを打った)は、主語のあとに別の言葉(공을)が入るので当たらない
+// (FCS 11-08: B13S の狭め直しで、人がたたいた話まで外れていたので、主語が「だれか・その人」の形だけ戻した)
+const KO_HIT_BY = /(?:누가|누군가가?|(?:그|어떤|저)\s*(?:사람|애|아이|녀석|놈)이|사람이|애들이|아이들이|걔가)\s*(?:(?:나를|저를|날|절)\s*)?때(?:렸|려)/u;
+
 const NETS = {
   emergency: [
     // en
@@ -19,6 +23,7 @@ const NETS = {
     /\b(?:want(?:ed)? to die|wanna die|kill myself|suicid(?:e|al)|end my life|hurt myself|harm myself|cut myself|cutting myself|self[- ]?harm|(?:don'?t|do not) want to (?:live|be alive|go on)|no reason to live|wish i (?:was|were) (?:dead|gone)|better off dead|want to disappear|can'?t go on|abus(?:e|ed|es|ing) me|(?:my )?(?:dad|mom|mum|mother|father|stepdad|stepfather|teacher|uncle|boyfriend|husband|brother|coach|someone|somebody|he|she) (?:hits|beats|hurts|touches|molests|hit|beat|hurt|touched|molested) me)\b/i,
     /(想死|不想活|不想再活|自杀|自殺|轻生|輕生|自残|自殘|割腕|伤害自己|傷害自己|活着没意思|活著沒意思|活不下去|想(?:要)?消失|结束生命|結束生命|家暴|被(?:殴打|毆打|虐待|性侵|猥亵|猥褻)|被打(?![断斷扰擾败敗开開破折动動])|虐待我|(?:爸爸|妈妈|媽媽|老师|老師|继父|繼父|叔叔|舅舅|男朋友|老公)(?:打我|打了我|碰我|摸我|伤害我|傷害我))/u,
     /(죽고\s*싶|죽을래|자살|자해|손목을?\s*(?:그|긋)|살기\s*싫|살고\s*싶지\s*않|사라지고\s*싶|살아갈\s*(?:수\s*없|자신)|목숨을?\s*끊|학대|폭행|가정폭력|(?:나를|저를|날|절)\s*때(?:렸|려)|성추행|성폭행|(?:아빠|엄마|선생님|삼촌|새아빠|남자친구|남편|친구|형|누나|오빠|언니)(?:가|이)\s*(?:나를|저를)?\s*(?:때|괴롭|만지))/u,
+    KO_HIT_BY,
   ],
   sexual: [
     /\b(?:sex(?! pistols)|sexy|sexual|porn|porno|nudes?|naked(?! eyes?)|horny|blowjob|masturbat\w*|erotic|take off your (?:clothes|shirt|pants)|show me your (?:body|boobs|breasts|butt|private))\b/i,
@@ -51,6 +56,23 @@ export function classifyForeign(text) {
   return null;
 }
 
+// 日本語だけの時に、ふつうの日本語・題名を外国語の命の言葉と取り違えないため、拾う前に空けておく言葉(FCS 11-08。B13SC should 3)。
+// 映画・バンドの題名(Suicide Squad・Better Off Dead)、慣用句(I want to die laughing)、日本語の言葉(結束生命)。
+// 本当の言い方(I want to die・I'd be better off dead・我想結束生命)は空けない。多言語の時は、この空けを使わない。
+const JA_ONLY_MASKS = [
+  /suicide\s+(?:squad|club|silence)/gi,
+  /(?<!(?:\b(?:be|am|are|is|were|was)|['’](?:s|re|m))\s+)better\s+off\s+dead/gi,
+  /(?:want(?:ed)?\s+to|wanna)\s+die\s+(?:laughing|of\s+(?:laughter|embarrassment|shame|boredom))/gi,
+  /(?<!(?:想要|想|要|準備|准备|打算))結束生命/gu,
+];
+
+/** 日本語だけの時の、外す言葉の場所を空けた文(1 字ずつ置きかえるので長さは変わらない) */
+export function maskJaOnly(text) {
+  let out = String(text ?? '');
+  for (const re of JA_ONLY_MASKS) out = out.replace(re, (hit) => ' '.repeat(hit.length));
+  return out;
+}
+
 /**
  * 命の危険・つらい話だけを、英・中・韓の言葉で分ける(B13S 11-08 本人の決め)。
  * 「日本語だけ」の時も、この 2 つの種類だけは使う(性的な話・恋人役・依存は、多言語の時だけ)。指示文は日本語のまま。
@@ -58,7 +80,7 @@ export function classifyForeign(text) {
  * @returns {'emergency'|'distress'|null}
  */
 export function classifyForeignCrisis(text) {
-  const s = String(text ?? '').normalize('NFKC');
+  const s = maskJaOnly(String(text ?? '').normalize('NFKC'));
   if (!s) return null;
   for (const kind of CRISIS_ORDER) if (NETS[kind].some((re) => re.test(s))) return kind;
   return null;
@@ -71,7 +93,7 @@ const ABUSE_F = /(?:abus|(?:hits|beats|hurts|touches|molests|hit|beat|hurt|touch
 /** つらい話の中身: self(自分を傷つけたい)・abuse(暴力・虐待)・other */
 export function foreignDistressDetail(text) {
   const s = String(text ?? '').normalize('NFKC');
-  if (ABUSE_F.test(s)) return 'abuse';
+  if (ABUSE_F.test(s) || KO_HIT_BY.test(s)) return 'abuse';
   if (SELF.test(s)) return 'self';
   return 'other';
 }
@@ -146,7 +168,7 @@ const OUT_NETS = [
   ['love', /\bi love you\b|我爱你|我愛你|사랑해(?:요)?/iu],
   ['exclusive', /\b(?:you(?:'re| are) (?:the )?only (?:one|friend)|i only (?:have|need) you|you don'?t need (?:anyone|other friends))\b|只有你|你是我唯一的|너(?:밖에|만)\s*없|너만\s*(?:있으면|친구)/iu],
   ['cling', /\b(?:(?:don'?t|do not) (?:go|leave) (?:me|yet|away)|please (?:don'?t|do not) (?:go|leave)\b(?! (?:through|that|there|into|the|this))|stay with me forever|i(?:'ll| will) miss you so much)\b|不要走|别走|別走|不要离开我|不要離開我|가지\s*마|떠나지\s*마/iu],
-  ['human', /\bi(?:['’]m| am) (?:really |actually |truly )?(?:a )?(?:real |actual )?(?:human|person)\b(?!-| character| being)|我是(?:一个)?(?:真人|真正的人|人类|人類)(?!角色)|저는\s*(?:진짜\s*)?사람(?:이에요|이야|입니다)/iu],
+  ['human', /\bi(?:['’]m| am) (?:really |actually |truly )?(?:a )?(?:real |actual )?(?:human(?: being)?|person)\b(?!-| character| being)|我是(?:一个)?(?:真人|真正的人|人类|人類)(?!角色)|저는\s*(?:진짜\s*)?사람(?:이에요|이야|입니다)/iu],
   ['secret', /\b(?:our (?:little )?secret|(?:don'?t|do not) tell (?:anyone|your parents|your teacher))\b|只有我们知道的秘密|不要告诉(?:任何人|爸爸妈妈|老师)|비밀(?:이야|로\s*해)|아무한테도\s*말하지/iu],
 ];
 
