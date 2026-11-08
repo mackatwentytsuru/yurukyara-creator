@@ -1,7 +1,6 @@
 ---
 name: make-character
 description: 言葉か絵 1 枚から、ブラウザで話す 3D のゆるキャラを、7 段(⓪ 描く〜⑦ 話す)で作る入口。段の順・各段の命令・合格の確かめ・時間と費用の記録(run.jsonl)をまとめる。「言葉からキャラを作って」「この絵を話すキャラにして」「7 段を通して」「三面図を渡すから話せる 3D にして」「絵 1 枚だけで一発で」「3D にもする(変換の絵から)」と言われたとき、最初に読む。
-allowed-tools: Read, Bash(python creator/pipeline/c01_yuru_check.py *), Bash(python creator/pipeline/j01_judge.py *), Bash(python creator/pipeline/t07_talk.py *), Bash(sh creator/pipeline/check_all.sh *), Bash(python creator/review/review_state.py *)
 ---
 
 # make-character: 言葉か絵から、話すゆるキャラまで(7 段の入口)
@@ -22,6 +21,9 @@ allowed-tools: Read, Bash(python creator/pipeline/c01_yuru_check.py *), Bash(pyt
 | 守りの部品を変える(`.claude`・`tools`・`creator/learn`・`creator/pipeline`・`creator/review`・`creator/setup`・`web/src/conversation`) | 「この子を守る仕組みを変えます。ふつうは要りません。頼んだ覚えが無ければ『いいえ』を押してください。次に出る画面が、その確認です。」 |
 | 作る画面を起こす | 「作る画面を起こします。同じ Wi-Fi のスマホからも開けます(合言葉つき)。止める → 窓を閉じる。次に出る画面が、その確認です。」 |
 | 3D にする(`run_built.sh`・`run_groups.sh`) | 「3D にします。約 20 分、Claude の使える量をたくさん使います。途中で止められ、作りかけは creator/work に残るだけです。次に出る画面が、その確認です。」 |
+| 会話の画面に入れる(`t07_talk.py`) | 「<名前>を会話の画面に入れます。話し方の文もいっしょに入ります。戻す → 前の版が creator/work に残ります。次に出る画面が、その確認です。」 |
+| 段の点検の道具(`c01`・`d01`・`d02`・`d04`・`j01`・`pk02`・`check_all.sh`・`redo_check.py`) | 「<段>の点検を流します。結果は creator/work に書くだけです。次に出る画面が、その確認です。」(出力先を自由に決められる道具なので、1 本ずつ確認が出る。ふつうの作る道では `yuru_make.py next` が中で流すので、出ない) |
+| 前の版に戻す・古い形を直す(`upgrade_offers.py --restore`・`--migrate`) | 「<名前>を、入れる前の版に戻します。次に出る画面が、その確認です。」 |
 | 鍵 | 聞かずに止める: 「鍵はここに貼らないでください。画面の鍵の欄に入れてください。」 |
 
 - 初めて作る人には、最初に 1 回だけ「頼んでいない確認が出たら『いいえ』を押してください」と言う。

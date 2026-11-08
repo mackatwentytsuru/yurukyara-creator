@@ -101,7 +101,7 @@ DEADLINE = re.compile(r"[(（]〜(\d{4}-\d{2}-\d{2})[)）]")
 DATE_WORD = re.compile(r"\d{1,2}月\d{1,2}日")
 URL = re.compile(r"(https?://|www\.)", re.IGNORECASE)
 TAG = re.compile(r"</?[A-Za-z][^>]{0,40}>")
-HIDDEN = re.compile("[​-‏⁠﻿‪-‮]")
+HIDDEN = re.compile("[​-‏⁠﻿‪-‮  ⁦-⁩]")
 
 
 class Problem:
@@ -172,6 +172,9 @@ def is_labelled(line, labels):
 
 def check_line(where, line, today, problems, strict=True):
     if MARKER.match(line):
+        # 見出しの行(【…】)も、命令・URL・タグ・見えない文字は止める(出典は要らない)
+        if HIDDEN.search(line) or TAG.search(line) or URL.search(line) or INJECT.search(line) or INJECT_OTHER.search(line) or BEHAVIOR.search(line):
+            problems.append(Problem("止める", where, "見出しの行に、命令・URL・タグ・見えない文字は書きません: " + line[:30]))
         return
     body, source, date = strip_source(line)
     if source is None:
@@ -550,14 +553,19 @@ def outside_facts(text):
     return out
 
 
-def role_of(text):
+def roles_of(text):
+    """節の外の「- 役目:」の行の言葉を、全部"""
+    out = []
     for _, name, lines in parse_blocks(text):
         if name:
             continue
-        for t in lines:
-            if ROLE_LINE.match(t):
-                return ROLE_LINE.sub("", t, count=1).strip()
-    return None
+        out.extend(ROLE_LINE.sub("", t, count=1).strip() for t in lines if ROLE_LINE.match(t))
+    return out
+
+
+def odd_fact_headings(text):
+    """事実の節と読まれるのに、決まった形(「## お店のきまり」「## 町のお知らせ」)ちょうどではない見出し"""
+    return [h.strip() for h, name, _ in parse_blocks(text) if name and h.strip() not in ("## " + n for n in FACT_HEADINGS)]
 
 
 def backup_problems(backup, current, today):
@@ -566,9 +574,16 @@ def backup_problems(backup, current, today):
     reasons = []
     if outside_facts(backup) != outside_facts(current):
         reasons.append("控えは、2 つの節と役目の行のほかも、いまの persona.md と違います(覚えさせた時の控えではありません)")
-    role = role_of(backup)
-    if role is not None and role not in ROLE_LABELS:
-        reasons.append(f"控えの役目「{role[:20]}」は、決まった言葉ではありません")
+    roles = roles_of(backup)
+    if len(roles) > 1:
+        reasons.append("控えに「役目」の行が 2 つ以上あります")
+    for role in roles:
+        if role not in ROLE_LABELS:
+            reasons.append(f"控えの役目「{role[:20]}」は、決まった言葉ではありません")
+    for h in odd_fact_headings(backup):
+        reasons.append(f"控えの見出し「{h[:30]}」は、決まった形ではありません")
+    if HIDDEN.search(backup):
+        reasons.append("控えに見えない文字(向きを変える文字・幅ゼロの文字など)が入っています")
     problems, info = check_text(backup, today=today)
     for p in problems:
         if p.level != "止める":

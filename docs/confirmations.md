@@ -10,7 +10,7 @@
 | キャラの話すことや、知っていることが変わる時 | 資料から案内を覚えさせる・話し方の文を手で直す | 1 回ごと |
 | PC の外を読む時 | ホームページを読む | サイトごとに 1 回(「今後聞かない」を選べば 2 回目から出ない) |
 | PC の中の、作業場所の外のファイルを読む時 | デスクトップの PDF を読む | 1 回ごと(資料を `creator/work/<id>/learn/` に入れれば出ない) |
-| お金や、長い時間を使う時 | 3D にする(約 20 分。Claude の使える量をたくさん使う) | 1 回ごと |
+| お金や、長い時間を使う時 | 3D にする(約 20 分。Claude の使える量をたくさん使う)・会話の画面に入れる | 1 回ごと |
 | 戻しにくい時・PC の外へ出す時 | 消す・公開する・新しい版にする・前の版に戻す・作る画面を同じ Wi-Fi に開く | 1 回ごと |
 | 鍵 | 鍵をチャットに貼った | 聞かずに止めます。「画面の鍵の欄に入れてください」と案内します |
 
@@ -22,7 +22,7 @@
 
 ## 初めての準備で、何回聞かれるか
 
-キャラを作る → PDF と地図の写真で覚えさせる → ホームページ 1 つ、の道で、確認はおよそ 2〜3 回です(ホームページ 1 回・覚えさせる 1 回。3D まで作ると、もう 1 回)。
+キャラを作る → PDF と地図の写真で覚えさせる → ホームページ 1 つ、の道で、確認は 2 回です(ホームページ 1 回・覚えさせる 1 回。本物の Claude Code で数えた)。3D まで作ると、3D にする・確かめる・会話の画面に入れる、で 3 回ほど増えます。
 
 ## 最初から止めてある物
 
@@ -39,6 +39,9 @@
 - 確認の前の 1 行: 各スキル(`.claude/skills/*/SKILL.md`)の「確認が出る時」の表。
 - 試験: `python -I tools/test_confirmations.py`(決まりとスキルの文)・`python -I creator/learn/test_learn_guard.py`(偽の前の版 + 戻す、読める場所)。
 - 試験の命令は、引数の無い決まった形だけを許しています(`npm --prefix web test` など)。`node --test <ファイル>` のように、書いたファイルをそのまま動かせる形は、確認が出ます。
+- 出力先を自由に決められる道具(段の点検の道具・`t07_talk.py`・`upgrade_offers.py --restore` など)は、許可の一覧に入れていません(好きな所へ書けてしまうため)。ふつうの作る道では `yuru_make.py next` が中で流すので、確認は出ません。
+- `cd` は確認が出ます。許可した命令はリポジトリの頭からの相対の形なので、別のフォルダへ移ると、そこに置いた偽の道具を動かせてしまうためです。命令はリポジトリの頭のまま流します(`npm --prefix web test` など)。
+- `creator/work/` の中は確認なしで書けますが、覚えさせた前の版(`learn/persona.*`)・確認画面の一言(`review/`)・リポジトリの形をまねた場所(`creator/`・`tools/`・`web/`・`package.json`)は、確認が出ます。
 
 ---
 
@@ -65,7 +68,7 @@ It does not also ask "OK?" in the chat, so you are never asked the same thing tw
 
 ## How many asks in a first setup
 
-Make a character, teach it from a PDF and a map photo, and read one web page: about 2-3 asks (one for the web page, one for teaching, one more if you make the 3D model).
+Make a character, teach it from a PDF and a map photo, and read one web page: 2 asks (one for the web page, one for teaching; counted with a real Claude Code run). Making the 3D model adds about 3 more (build, check, install into the talk page).
 
 ## Blocked from the start
 
@@ -82,3 +85,6 @@ Make a character, teach it from a PDF and a map photo, and read one web page: ab
 - The one-line notice before each ask: the "確認が出る時" table in each skill.
 - Tests: `python -I tools/test_confirmations.py` and `python -I creator/learn/test_learn_guard.py`.
 - Test commands are allowed only in fixed forms without arguments (such as `npm --prefix web test`). Forms that run a file Claude just wrote, such as `node --test <file>`, ask first.
+- Tools that can write to any path they are given (stage checks, `t07_talk.py`, `upgrade_offers.py --restore`) are not on the allow list. In the normal maker flow, `yuru_make.py next` runs them internally, so no ask appears.
+- `cd` asks, because the allowed commands are relative to the repository root and a planted copy in another folder could run instead.
+- Writing under `creator/work/` does not ask, except the saved versions of taught knowledge (`learn/persona.*`), the review notes (`review/`) and paths that mimic the repository (`creator/`, `tools/`, `web/`, `package.json`).

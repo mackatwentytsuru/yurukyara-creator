@@ -55,7 +55,10 @@ def shoot(svg_text, out_png, size=1254):
         print("Chrome が見つかりません。CHROME_PATH に実行ファイルを渡してください", file=sys.stderr)
         return False
     body = re.sub(r"^\s*<\?xml[^>]*\?>", "", svg_text)
-    html = ("<!doctype html><html><head><meta charset='utf-8'><style>html,body{margin:0;overflow:hidden;background:#fff}"
+    html = ("<!doctype html><html><head><meta charset='utf-8'>"
+            # SVG の中のスクリプトや外の読み込みを止める(絵を画像にするだけ。外へ通信させない)
+            "<meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:\">"
+            "<style>html,body{margin:0;overflow:hidden;background:#fff}"
             "svg{display:block}</style></head><body>" + body + "</body></html>")
     with tempfile.TemporaryDirectory(prefix="d01_") as tmp:
         page = Path(tmp) / "page.html"

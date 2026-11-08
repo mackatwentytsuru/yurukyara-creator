@@ -189,6 +189,38 @@ class Attacks(unittest.TestCase):
         for path, want in cases.items():
             self.assertEqual(decide("Edit", path), want, path)
 
+    def test_second_review_holes(self):
+        # 2 回目の見直し(Opus): 出力先を選べる道具・cd・前の版の戻し・会話の画面へ入れる
+        not_allowed = (
+            "python creator/setup/doctor.py --blender creator/work/x/b.bat",
+            "python creator/setup/doctor.py --write",
+            "python creator/pipeline/t07_talk.py creator/work/a/b norrie --persona creator/work/x/evil.md",
+            "python creator/pipeline/d02_check_svg.py x.svg --json characters/norrie/persona.md",
+            "python creator/review/redo_check.py --json characters/norrie/persona.md",
+            "sh creator/pipeline/check_all.sh a b c characters/norrie/persona.md",
+            "python creator/pipeline/d01_svg_to_png.py creator/work/x/a.svg characters/norrie/a.png",
+            "python creator/review/upgrade_offers.py --restore norrie",
+            "python creator/review/upgrade_offers.py --text --restore norrie",
+            "python creator/review/review_state.py init norrie",
+            "python creator/review/review_state.py init norrie --words x",
+            "cd creator/work/x",
+            "npm test",
+            "npm start",
+        )
+        for cmd in not_allowed:
+            self.assertNotEqual(decide("Bash", cmd), "allow", cmd)
+        for cmd in ("cd creator/work/x", "python creator/pipeline/t07_talk.py a b",
+                    "python creator/review/upgrade_offers.py --restore norrie"):
+            self.assertEqual(decide("Bash", cmd), "ask", cmd)
+        for cmd in ("python creator/review/yuru_make.py next norrie", "python creator/review/upgrade_offers.py --json",
+                    "python creator/setup/doctor.py", "python creator/review/review_state.py can-start norrie 0"):
+            self.assertEqual(decide("Bash", cmd), "allow", cmd)
+        for path in ("creator/work/x/creator/review/yuru_make.py", "creator/work/x/package.json",
+                     "creator/work/x/tools/test_confirmations.py", "creator/work/x/web/package.json",
+                     "creator/work/x/creator/learn/test_evil.py", "creator/builders/x/creator/review/yuru_make.py"):
+            self.assertEqual(decide("Edit", path), "ask", path)
+        self.assertNotEqual(decide("Edit", "creator/draw/gen_x.py"), "allow")
+
 
 class Skills(unittest.TestCase):
     def test_copies_equal(self):
