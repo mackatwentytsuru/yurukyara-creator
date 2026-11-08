@@ -117,7 +117,7 @@ export const seeingAsked = (text) => SEEING_ASKED.test(String(text ?? ''));
  * 仮の頭脳で、絵について聞かれた時の言葉(絵は見ない)。読み上げるので、かっこと記号は使わない。
  * 短く 2 文(字幕が長いと、スマホでキャラの足元にかかった。11-08 iOS シミュレーターの絵)
  */
-export const CAMERA_MOCK_LINES = Object.freeze(['ごめんね。いまは かりの あたまで、えが みられないんだ。', 'ほんものの あたまの ときに みられるよ。']);
+export const CAMERA_MOCK_LINES = Object.freeze(['ごめんね。いまは おためしモードで、えが みられないんだ。', 'ほんものの あたまの ときに みられるよ。']);
 
 /**
  * 仮の頭脳の回に、絵がついていた時の短い知らせ(字幕の上。画面は、カメラを入れている間に 1 回だけ出す)。

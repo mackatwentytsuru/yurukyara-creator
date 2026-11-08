@@ -283,7 +283,7 @@ async function walkWords(page, label, { full }) {
   assert.match(await page.$eval('.yp-role-note', (e) => e.textContent), /男の子の声で話します/);
   await page.click('.yp-roles [data-key="auto"]');
   assert.match(await page.$eval('.yp-role-note', (e) => e.textContent), /^おまかせ: /);
-  assert.match(await page.$eval('.yp-brain-note', (e) => e.textContent), /仮の頭脳です/);
+  assert.match(await page.$eval('.yp-brain-note', (e) => e.textContent), /おためしモードです/);
   assert.match(await page.$eval('.yp-block', (e) => e.textContent), /恥ずかしがり屋/);
   await shot(page, `${label}_4_persona_shy`);
   assert.ok(first.length > 0);
@@ -297,7 +297,7 @@ async function walkWords(page, label, { full }) {
   await waitAct(page, 'to_retro');
   const hello = await lastChar(page);
   assert.match(hello, /^(あ、あの…|えっと…)こんにちはにゃ。$/, `あいさつ: ${hello}`);
-  assert.match(await logText(page), /おためしの あたま/);
+  assert.match(await logText(page), /おためしモード/);
   await shot(page, `${label}_5_hello`);
 
   // 6 歩目: 文字とレトロな音で話す

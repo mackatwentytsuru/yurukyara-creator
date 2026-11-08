@@ -14,6 +14,8 @@ export const START_COMMANDS = Object.freeze({
   easy: 'npm run start:keys',
   unix: 'ANTHROPIC_API_KEY="ここに鍵" npm start',
   windows: '$env:ANTHROPIC_API_KEY="ここに鍵"; npm start',
+  /** 鍵を使わず、自分の PC の Claude Code(ログイン済み)につないで起こす */
+  claudeCode: 'npm run start:claude-code',
 });
 
 /** 声の鍵の欄の下に出す、1 行の注意(お試しのプランがあるかもしれない・公式で確かめる) */

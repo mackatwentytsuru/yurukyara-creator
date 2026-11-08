@@ -25,21 +25,29 @@ html.is-kiosk .yc-sheet,
 html.is-kiosk #camAsk,
 html.is-kiosk #brainNotice,
 html.is-kiosk #brainGuide,
+html.is-kiosk #trialBanner,
 html.is-kiosk #shopBadge,
 html.is-kiosk .privacy { display: none !important; }
 
 /* 入口(店の人が 1 回押す所): 大きな「接客を はじめる」だけ。ふつうの入口の文と 2 つのボタンは出さない */
-.kiosk-lead, .kiosk-start { display: none; }
+.kiosk-lead, .kiosk-start, .kiosk-trial { display: none; }
 html.is-kiosk .gate-what,
 html.is-kiosk .gate-guide,
 html.is-kiosk .gate .lead,
 html.is-kiosk .gate-first,
 html.is-kiosk .gate .fine,
 html.is-kiosk .gate .pass,
+html.is-kiosk .gate-trial,
 html.is-kiosk #startSim,
 html.is-kiosk #startCam { display: none !important; }
 html.is-kiosk .kiosk-lead { display: block; margin: 0; font-size: 17px; line-height: 1.7; color: var(--text); }
 html.is-kiosk .kiosk-lead[hidden], html.is-kiosk .kiosk-start[hidden] { display: none; }
+/* おためしモード(鍵も Claude Code も無い)の接客: 入口は店の人への知らせ(案内のボタンは付けない)、動いている間は来場者に見える札を出しっぱなしにする */
+html.is-kiosk .kiosk-trial:not([hidden]) { display: block; font-size: 16px; line-height: 1.6; text-align: left; }
+html.is-kiosk .trial-label:not([hidden]) {
+  display: block; width: auto; max-width: 100%; margin: 0; text-align: center; font-size: clamp(14px, 1.6vw, 16px); line-height: 1.4; font-weight: 700;
+  padding: 5px 12px; border-radius: 999px; background: rgb(var(--scrim-rgb) / 0.8); border: 1px solid var(--warn); color: var(--warn); pointer-events: none;
+}
 html.is-kiosk .gate .kiosk-start { display: grid; min-height: 112px; font-size: 26px; border-radius: 22px; }
 html.is-kiosk .gate .kiosk-start[hidden] { display: none; }
 html.is-kiosk .gate .kiosk-start .btn-sub { font-size: 15px; }

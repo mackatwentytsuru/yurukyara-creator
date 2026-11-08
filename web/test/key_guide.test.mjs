@@ -1,5 +1,5 @@
 // 鍵を入れやすくする案内の試験。
-// - 「本物の Claude で話すには」: 仮の頭脳(鍵が入っていない時)だけ出る・公式のリンク・命令・「鍵はファイルに保存されません」
+// - 「本物の Claude で話すには」の案内の窓: おためしモードの帯のボタンで開く・2 つの道(鍵 / Claude Code)・公式のリンク・命令・「鍵はファイルに保存されません」
 // - 声の歩み: 声の鍵の欄の下に、声の会社の公式の「鍵のページ」「料金のページ」と 1 行の注意。値段は書かない
 // - 画面なしの Chrome(YC_BROWSER_TESTS=1)で、幅 390x844 に収まり、AI の表示に重ならないこと
 import { test } from 'node:test';
@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
-import { GUIDE_BUTTON_LABEL, GUIDE_SAFE_LINE, shouldShowGuide } from '../src/ui/brainGuide.js';
+import { GUIDE_SAFE_LINE, GUIDE_TITLE, shouldShowGuide } from '../src/ui/brainGuide.js';
 import { KEY_LINKS, START_COMMANDS, VOICE_TRIAL_NOTE } from '../src/ui/keyLinks.js';
 import { HIDDEN } from '../src/stage/kioskMode.js';
 
@@ -32,37 +32,42 @@ test('案内を出すのは、仮の頭脳で、理由つきの知らせが無�
   assert.equal(shouldShowGuide('mock', null), true);
   assert.equal(shouldShowGuide('haiku', null), false, '本物の頭脳なら出さない');
   assert.equal(shouldShowGuide(null, null), false, 'まだ分からない間は出さない');
-  assert.equal(shouldShowGuide('mock', '仮の頭脳です(今日の上限に届きました)'), false, '上限・合言葉などの理由の時は出さない');
+  assert.equal(shouldShowGuide('mock', 'おためしモードです(今日の上限に届きました)'), false, '上限・合言葉などの理由の時は出さない');
 });
 
-test('main.js: 仮の頭脳の知らせを更新する所で、案内を出し入れする。案内は最初は隠れている', () => {
+test('main.js: 仮の頭脳の知らせを更新する所で、おためしモードの帯と案内を出し入れする。案内の窓は最初は隠れている', () => {
   const main = read('src/main.js');
-  assert.match(main, /import \{ mountBrainGuide, shouldShowGuide \} from '\.\/ui\/brainGuide\.js';/);
-  assert.match(main, /brainGuide\?\.show\(shouldShowGuide\(currentBrain\(\), brainNoticeText\)\);/);
+  assert.match(main, /import \{ mountBrainGuide \} from '\.\/ui\/brainGuide\.js';/);
+  assert.match(main, /import \{ mountTrialMode, trialView \} from '\.\/ui\/trialMode\.js';/);
+  assert.match(main, /trialMode\.update\(trialView\(\{ brain: currentBrain\(\), noticeText: brainNoticeText, statusBrain: app\.status\?\.brain \?\? null, kiosk: KIOSK\.on \}\)\);/);
   assert.match(read('index.html'), /<div id="brainGuide" class="brain-guide" hidden><\/div>/);
 });
 
-test('案内は AI の表示(#aiNotice)と同じ字幕の列の中、その上に置く。接客モードでは隠す', () => {
+test('案内の窓は、上の段(.top)にも字幕の列(.subs)にも入れず、画面いっぱいの板として別に置く。接客モードでは隠す', () => {
   const html = read('index.html');
+  const top = html.slice(html.indexOf('<header class="top">'), html.indexOf('</header>'));
   const subs = html.slice(html.indexOf('<div class="subs">'), html.indexOf('id="aiNoticeTop"'));
-  assert.ok(subs.indexOf('id="brainGuide"') > 0 && subs.indexOf('id="brainGuide"') < subs.indexOf('id="aiNotice"'), '案内は AI の表示より上');
+  assert.ok(!top.includes('id="brainGuide"') && !subs.includes('id="brainGuide"'));
+  assert.ok(html.indexOf('id="brainGuide"') > html.indexOf('id="aiNoticeTop"'));
   assert.ok(HIDDEN.some((h) => h.selector === '#brainGuide'));
   assert.match(read('src/ui/kiosk.css'), /html\.is-kiosk #brainGuide,/);
 });
 
-test('案内の文: 鍵を作る公式のリンク・起こす命令(Mac/Linux と PowerShell)・かんたんな道・鍵はファイルに保存しない', () => {
+test('案内の文: 2 つの道(鍵 / Claude Code)・鍵を作る公式のリンク・起こす命令・かんたんな道・鍵はファイルに保存しない', () => {
   const src = read('src/ui/brainGuide.js');
   assert.match(src, /KEY_LINKS\.claudeKeys/);
   assert.match(src, /target: '_blank', rel: 'noopener noreferrer'/);
+  assert.match(src, /'data-way': 'key'/);
+  assert.match(src, /'data-way': 'claude-code'/);
   for (const c of Object.values(START_COMMANDS)) assert.ok(c.length > 5);
   assert.equal(START_COMMANDS.easy, 'npm run start:keys');
+  assert.equal(START_COMMANDS.claudeCode, 'npm run start:claude-code');
   assert.match(START_COMMANDS.unix, /^ANTHROPIC_API_KEY="ここに鍵" npm start$/);
   assert.match(START_COMMANDS.windows, /^\$env:ANTHROPIC_API_KEY="ここに鍵"; npm start$/);
-  assert.equal(GUIDE_BUTTON_LABEL, '本物の Claude で話すには');
+  assert.equal(GUIDE_TITLE, '本物の Claude で話すには');
   assert.equal(GUIDE_SAFE_LINE.startsWith('鍵はファイルに保存されません'), true);
   assert.equal(/innerHTML/.test(src.replace(/\/\/.*$/gm, '')), false, 'innerHTML は使わない');
 });
-
 test('声の歩み: 鍵の欄の下に公式の 2 つのリンクと 1 行の注意。値段・お試しの中身は書かない', () => {
   const view = read('src/ui/onboarding/view.js');
   assert.match(view, /KEY_LINKS\.voiceKeys/);
@@ -72,12 +77,13 @@ test('声の歩み: 鍵の欄の下に公式の 2 つのリンクと 1 行の注
   assert.match(VOICE_TRIAL_NOTE, /公式ページで たしかめてね/);
 });
 
-/** 実物の index.html の字幕の列(.subs)だけを取り出す */
-function realSubs() {
+/** 実物の index.html の本文(main.js と kioskEarly.js を外した物)。入口は閉じた後の画面を見る */
+function realBody() {
   const html = read('index.html');
-  const start = html.indexOf('<div class="subs">');
-  const end = html.indexOf('<p class="ai-notice ai-notice-top"');
-  return html.slice(start, end);
+  return html
+    .slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>'))
+    .replace(/<script type="module" src="\/src\/main\.js"><\/script>/, '')
+    .replace(/<script type="module" src="\/src\/stage\/kioskEarly\.js"><\/script>/, '');
 }
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
@@ -120,15 +126,19 @@ async function openChrome(t) {
 }
 
 const GUIDE_PAGE = () => `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/src/ui/style.css"></head><body>${realSubs()}
+<link rel="stylesheet" href="/src/ui/themes.css"><link rel="stylesheet" href="/src/ui/style.css"><link rel="stylesheet" href="/src/ui/kiosk.css"></head><body>${realBody()}
 <script type="module">
-import { mountBrainGuide, shouldShowGuide } from '/src/ui/brainGuide.js';
+import { mountBrainGuide } from '/src/ui/brainGuide.js';
+import { mountTrialMode, trialView } from '/src/ui/trialMode.js';
+document.getElementById('gate').classList.add('hidden');
+document.getElementById('topMain').hidden = false;
 const guide = mountBrainGuide({ root: document.getElementById('brainGuide') });
-window.__set = (brain, notice) => { const n = document.getElementById('brainNotice'); n.hidden = brain !== 'mock'; n.textContent = notice ?? '仮の頭脳です(本物の頭脳につながっていません)'; guide.show(shouldShowGuide(brain, notice ?? null)); };
+const trial = mountTrialMode({ banner: document.getElementById('trialBanner'), gateLine: document.getElementById('gateTrial'), kioskStaff: document.getElementById('kioskTrial'), label: document.getElementById('trialLabel'), guide });
+window.__set = (brain, notice) => { const n = document.getElementById('brainNotice'); n.hidden = brain !== 'mock'; n.textContent = notice ?? 'おためしモードです(本物の頭脳につながっていません)'; trial.update(trialView({ brain, noticeText: notice ?? null, statusBrain: brain, kiosk: false })); };
 window.__ready = true;
 </script></body></html>`;
 
-test('画面なしの Chrome(幅 390x844): 仮の頭脳の時だけ案内が出て、開いても AI の表示に重ならず、公式リンクを新しいタブで開く', { skip: SLOW, timeout: 120_000 }, async (t) => {
+test('画面なしの Chrome(幅 390x844): 鍵が無い時だけ帯が出て、ボタンで案内の窓が開き(2 つの道)、AI の表示と文字の欄に重ならず、公式リンクを新しいタブで開く', { skip: SLOW, timeout: 120_000 }, async (t) => {
   const browser = await openChrome(t);
   if (!browser) return;
   const { server, base } = await serve(GUIDE_PAGE());
@@ -139,38 +149,33 @@ test('画面なしの Chrome(幅 390x844): 仮の頭脳の時だけ案内が出�
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`${base}/`);
     await page.waitForFunction(() => window.__ready, null, { timeout: 30_000 });
-    const visible = (sel) => page.$eval(sel, (e) => !e.hidden && getComputedStyle(e).display !== 'none');
+    const visible = (sel) => page.$eval(sel, (e) => !e.closest('[hidden]') && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0);
 
     await page.evaluate(() => window.__set('haiku'));
-    assert.equal(await visible('#brainGuide'), false, '本物の頭脳: 案内は出ない');
-    await page.evaluate(() => window.__set('mock', '仮の頭脳です(今日の上限に届きました)'));
-    assert.equal(await visible('#brainGuide'), false, '理由つきの仮の頭脳: 案内は出ない');
+    assert.equal(await visible('#trialBanner'), false, '本物の頭脳: 帯は出ない');
+    await page.evaluate(() => window.__set('mock', 'おためしモードです(今日の上限に届きました)'));
+    assert.equal(await visible('#trialBanner'), false, '理由つきの仮の頭脳: 帯は出ない');
     await page.evaluate(() => window.__set('mock'));
-    assert.equal(await visible('#brainGuide'), true, '鍵が無い仮の頭脳: 案内が出る');
-    assert.equal((await page.textContent('.brain-guide-btn')).trim(), '本物の Claude で話すには');
-    assert.equal(await visible('#brainGuidePanel'), false, '最初はたたんである');
+    assert.equal(await visible('#trialBanner'), true, '鍵が無い仮の頭脳: 帯が出る');
+    assert.equal((await page.textContent('#trialBanner .tb-btn')).trim(), '本物の Claude にする');
+    assert.equal(await visible('#brainGuide'), false, '案内の窓は最初は閉じている');
 
-    await page.click('.brain-guide-btn');
-    assert.equal(await visible('#brainGuidePanel'), true);
-    assert.equal(await page.getAttribute('.brain-guide-btn', 'aria-expanded'), 'true');
+    await page.click('#trialBanner .tb-btn');
+    assert.equal(await visible('#brainGuide'), true);
+    assert.equal(await page.getAttribute('#trialBanner .tb-btn', 'aria-expanded'), 'true');
+    assert.equal((await page.textContent('#brainGuideTitle')).trim(), GUIDE_TITLE);
+    const ways = await page.$$eval('#brainGuidePanel .bg-way', (s) => s.map((e) => ({ way: e.dataset.way, text: e.innerText })));
+    assert.deepEqual(ways.map((w) => w.way), ['key', 'claude-code'], '道は 2 つ');
+    for (const c of [START_COMMANDS.easy, START_COMMANDS.unix, START_COMMANDS.windows]) assert.ok(ways[0].text.includes(c), c);
+    assert.ok(ways[1].text.includes(START_COMMANDS.claudeCode));
+    assert.ok(ways[0].text.includes('鍵はファイルに保存されません'));
     const link = await page.$eval('#brainGuidePanel a', (a) => ({ href: a.href, target: a.target, rel: a.rel }));
     assert.deepEqual(link, { href: KEY_LINKS.claudeKeys, target: '_blank', rel: 'noopener noreferrer' });
-    const text = await page.$eval('#brainGuidePanel', (e) => e.innerText);
-    for (const c of Object.values(START_COMMANDS)) assert.ok(text.includes(c), c);
-    assert.ok(text.includes('鍵はファイルに保存されません'));
-
-    // 390x844 に収まる・横に巻かない・AI の表示に重ならない・押せる
     const box = async (sel) => page.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, b: r.bottom, r: r.right }; });
     const panel = await box('#brainGuidePanel');
-    const ai = await box('#aiNotice');
-    const btn = await box('.brain-guide-btn');
-    assert.ok(panel.x >= 0 && panel.r <= 390 && panel.y >= 0, `案内が画面に収まる: ${JSON.stringify(panel)}`);
-    assert.ok(panel.b <= ai.y + 0.5, `案内は AI の表示の上: 案内の下 ${panel.b} / AI の表示の上 ${ai.y}`);
-    assert.ok(btn.h >= 44, `押す所は 44px 以上: ${btn.h}`);
-    assert.ok(ai.w > 0 && ai.h > 0);
+    assert.ok(panel.x >= 0 && panel.r <= 390 && panel.y >= 0 && panel.b <= 844, `案内が画面に収まる: ${JSON.stringify(panel)}`);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, '横に巻かない');
-    const clear = (a, b) => a.b <= b.y + 0.5 || b.b <= a.y + 0.5 || a.r <= b.x || b.r <= a.x;
-    assert.ok(clear(btn, ai) && clear(panel, ai), `ボタンも案内も、AI の表示と四角が重ならない: ${JSON.stringify({ btn, panel, ai })}`);
+    assert.ok((await box('.bg-close')).h >= 44, '押す所は 44px 以上');
     // 新しいタブで開く(外へは出さない: 横取りして中身は返さない)
     await ctx.route(/^https:\/\/platform\.claude\.com\//, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>x</title>' }));
     const [popup] = await Promise.all([ctx.waitForEvent('page'), page.click('#brainGuidePanel a')]);
@@ -178,9 +183,16 @@ test('画面なしの Chrome(幅 390x844): 仮の頭脳の時だけ案内が出�
     await popup.close();
 
     await page.keyboard.press('Escape');
-    assert.equal(await visible('#brainGuidePanel'), false, 'Escape で閉じる');
+    assert.equal(await visible('#brainGuide'), false, 'Escape で閉じる');
+    assert.equal(await page.evaluate(() => document.activeElement?.className), 'tb-btn', '閉じたら、押したボタンへ戻る');
+    await page.click('#trialBanner .tb-btn');
+    await page.click('.bg-close');
+    assert.equal(await visible('#brainGuide'), false, '「とじる」で閉じる');
+    // 開いたまま本物の頭脳に替わったら、帯も案内も消える
+    await page.click('#trialBanner .tb-btn');
     await page.evaluate(() => window.__set('haiku'));
-    assert.equal(await visible('#brainGuide'), false, '本物の頭脳に替わると案内は消える');
+    assert.equal(await visible('#brainGuide'), false);
+    assert.equal(await visible('#trialBanner'), false);
     assert.deepEqual(errors, []);
     await ctx.close();
   } finally {

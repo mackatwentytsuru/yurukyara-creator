@@ -185,7 +185,7 @@ test('音がまだ使えない(タップの前)ときも、文字送りは順番
   }
 });
 
-test('公開のリンクの通し: まとめた返事(仮の頭脳)→「仮の頭脳です」を出す → 声が無いので字幕が 1 字ずつ出る。会話の欄の鍵らしい文字は送らない', async () => {
+test('公開のリンクの通し: まとめた返事(仮の頭脳)→「おためしモードです」を出す → 声が無いので字幕が 1 字ずつ出る。会話の欄の鍵らしい文字は送らない', async () => {
   const realFetch = globalThis.fetch;
   const sent = [];
   globalThis.fetch = async (url, init = {}) => {
@@ -195,7 +195,7 @@ test('公開のリンクの通し: まとめた返事(仮の頭脳)→「仮の�
         brain: 'fallback',
         fallback: true,
         reason: 'no-key',
-        notice: '仮の頭脳です(本物の頭脳の鍵が入っていません)',
+        notice: 'おためしモードです(本物の頭脳の鍵が入っていません)',
         events: [
           { type: 'meta', brain: 'mock' },
           { type: 'thought', seen: '', intent: '雑談', stage: 'chat', handoff: false },
@@ -218,7 +218,7 @@ test('公開のリンクの通し: まとめた返事(仮の頭脳)→「仮の�
     const fakeKey = ['sk', 'ab12'.repeat(12)].join('_');
     await d.send({ text: `これ ${fakeKey} です` });
     await new Promise((r) => setTimeout(r, 900));
-    assert.ok(notices.includes('仮の頭脳です(本物の頭脳の鍵が入っていません)'));
+    assert.ok(notices.includes('おためしモードです(本物の頭脳の鍵が入っていません)'));
     assert.ok(notices.some((n) => n.includes('鍵らしい文字')), '鍵らしい文字を消したと知らせる');
     assert.ok(captions.includes('そ') && captions.includes('そうなんだ。'), '字幕が 1 字ずつ出る');
     assert.ok(events.includes('memory') === false && events.includes('say'), 'イベントを onEvent に渡す');

@@ -84,7 +84,7 @@ export const drawFailedWhy = (reason) => ({
 export const ASK_3D = '3D にもする?(やく 20 ぷん)';
 export const CONVERT_NOTE = '3D は、ゆるキャラの かたちに ととのえて つくるよ(もとの えと まったく おなじには ならないよ)';
 /** 仮の頭脳で話している時の、子ども向けの知らせ(くわしい言い方は性格の画面) */
-export const MOCK_NOTE = 'いまは おためしの あたまで 話しているよ。話し方だけ 性格に あわせているよ。';
+export const MOCK_NOTE = 'いまは おためしモードで 話しているよ。話し方だけ 性格に あわせているよ。';
 
 const chars = (s) => [...String(s ?? '')].length;
 /** 1 つ目のステップの入れ方の id(役目をとばして来ても受ける) */

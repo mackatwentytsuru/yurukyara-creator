@@ -71,7 +71,7 @@ test('合言葉なし・違う合言葉は、断らずに仮の頭脳で答え�
     assert.equal(r.status, 200);
     assert.equal(r.data.brain, 'fallback');
     assert.equal(r.data.reason, 'passphrase');
-    assert.match(r.data.notice, /仮の頭脳です/);
+    assert.match(r.data.notice, /おためしモードです/);
     assert.ok(r.data.events.some((e) => e.type === 'meta' && e.brain === 'mock'), '仮の頭脳の印は runTurn が出す');
     assert.ok(said(r.data).length > 0, '仮の頭脳でも話す');
     assert.equal(calls.length, 0, '本物の頭脳を呼ばない');
@@ -88,7 +88,7 @@ test('鍵が無い・合言葉が決まっていない・合言葉が短いと�
     const { calls, d } = deps({ env: over });
     const r = await read(await handleChat(req({ text: 'こんにちは' }, { pass }), d));
     assert.equal(r.data.reason, reason);
-    assert.match(r.data.notice, /仮の頭脳です/);
+    assert.match(r.data.notice, /おためしモードです/);
     assert.equal(calls.length, 0);
   }
 });
@@ -227,7 +227,7 @@ test('B13S: 本物の頭脳が 429 などで答えられず runTurn が自分で
   const r = await read(await handleChat(req({ text: 'こんにちは' }, { pass: PASS }), d));
   assert.equal(r.data.brain, 'fallback');
   assert.equal(r.data.reason, 'brain-error');
-  assert.match(r.data.notice, /仮の頭脳/);
+  assert.match(r.data.notice, /おためしモード/);
   assert.deepEqual(said(r.data), ['替えた後の返事']);
   assert.equal(mockRuns, 0, '仮の頭脳をもう一度回さない');
 });

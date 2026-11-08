@@ -5,7 +5,7 @@ import { SCAN_HOW, NO_QR_NOTE, SEND_LABEL, SEND_NAME } from '../stage/questLink.
 const $ = (id) => document.getElementById(id);
 
 /** 仮の頭脳の知らせの決まりの文(理由が分からない時) */
-export const FALLBACK_BRAIN_NOTICE = '仮の頭脳です(本物の頭脳につながっていません)';
+export const FALLBACK_BRAIN_NOTICE = 'おためしモードです(本物の頭脳につながっていません)';
 /** 短い知らせを出しておく時間 */
 const NOTICE_MS = 6000;
 
@@ -86,7 +86,7 @@ export function actWords(ev = {}) {
 
 /* ---------- 考えの窓の下の「返事が始まるまで」(点検 CRITux 18) ---------- */
 /** 仮の頭脳で話した回に、秒の後ろへ付ける一言 */
-export const FAKE_BRAIN_LATENCY_NOTE = '(仮の頭脳なので、参考の値)';
+export const FAKE_BRAIN_LATENCY_NOTE = '(おためしモードなので、参考の値)';
 
 /**
  * 「返事が始まるまで ○ 秒」の後ろに付ける一言。付けるのは、仮の頭脳で話した回だけ。

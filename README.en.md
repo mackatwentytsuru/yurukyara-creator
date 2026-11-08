@@ -41,7 +41,7 @@ npm start        # then open http://127.0.0.1:8787/
 
 - **Children in elementary school or younger: please use it together with a family member.** You are talking with an AI character (the screen always says who you are talking with, such as “You're talking with 〈name〉, an AI character”). There is no age check, monitoring or reporting yet.<!-- BSF (11-08 safety) -->
 - Norrie appears first. The **3D / 2D** button switches Norrie between the 3D model and the 2D drawing (`?look=2d` opens the 2D one directly).
-- No API key is needed. Without one, the character talks with a stand-in brain, and the screen says so (「仮の頭脳です」).
+- No API key is needed. Until a key (or your own Claude Code) is connected, the app runs in 「おためしモード」 (trial mode) and the character speaks from a fixed script. It is not a real conversation, so a banner stays at the top of the screen (its 「本物の Claude にする」 button opens the guide) and the entrance says so too. In kiosk mode the entrance tells the staff to set a key or Claude Code first, and a label stays visible to visitors while it runs.
 - To talk with Claude Haiku, set `ANTHROPIC_API_KEY` in your environment before `npm start`. Never write keys into files. (not checked yet)
 - Other characters: add `?character=<id>`, for example `?character=mikan`. They are in [`characters/`](characters/).
 - We ran these 3 lines from a fresh clone with Node.js 22 on Windows. Mac and Linux: (not checked yet)
@@ -55,7 +55,7 @@ Run `npm run start:keys` in the `web` folder. It asks for your Claude key and yo
 - Make a voice key (ElevenLabs, official): <https://elevenlabs.io/app/api/api-keys>
 - Voice pricing and any trial plan (ElevenLabs, official): <https://elevenlabs.io/pricing/api>. Whether a trial plan exists, and what it includes, changes over time, so check the official page.
 
-In the app, while the stand-in brain is answering, the “本物の Claude で話すには” link opens the same steps. A voice key can also be typed on this device only, at the “voice” step of the creation flow.
+In the app, while it is in trial mode, the 「本物の Claude にする」 button on the banner opens a guide with two ways: the key steps above, or connecting your own Claude Code on this computer (`npm run start:claude-code`, no key needed). A voice key can also be typed on this device only, at the “voice” step of the creation flow.
 
 ## What works today
 

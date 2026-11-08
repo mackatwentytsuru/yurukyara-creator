@@ -98,7 +98,7 @@ test('言葉の入口: 7 歩を最後まで通す(仮の頭脳・鍵を入れて
   const hello = h.said.filter((l) => l.who === 'char').at(-1);
   assert.notEqual(hello.text, 'こんにちは。今日は、どんなお話をしようか。', '仮の頭脳の返事を、性格の話し方にそろえた');
   assert.equal(hello.voice, true);
-  assert.ok(h.texts('note').some((t) => t.includes('おためしの あたま')), '仮の頭脳だと、子どもの言葉で出す');
+  assert.ok(h.texts('note').some((t) => t.includes('おためしモード')), '仮の頭脳だと、子どもの言葉で出す');
 
   await h.fr.act('to_retro');
   assert.equal(h.fr.step, 6);

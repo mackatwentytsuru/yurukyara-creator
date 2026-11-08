@@ -23,7 +23,8 @@ import { Reconnector, probeServer } from './conversation/reconnect.js'; // 11-08
 import { StereoMic } from './tracking/audio/stereoMic.js';
 import { MisheardTracker, SHOP_CHOICES, RETRY_LINE, CHOICES_LINE } from './conversation/misheard.js';
 import { createUi, FALLBACK_BRAIN_NOTICE, mountQuestLink, latencyNote } from './ui/panel.js';
-import { mountBrainGuide, shouldShowGuide } from './ui/brainGuide.js';
+import { mountBrainGuide } from './ui/brainGuide.js';
+import { mountTrialMode, trialView } from './ui/trialMode.js';
 import { questLinkPlan } from './stage/questLink.js'; // 「VR(Quest)で開く」: この画面の QR に入れてよい物の決まり
 import { getDemoPass, setDemoPass } from './conversation/demoPass.js'; // 合言葉(S3。会話と記憶の通信に見出し x-demo-pass で付く)
 import { mountMemoryPanel } from './ui/memoryPanel.js'; // 記憶の札(S3。覚えていることの一覧・番号・わすれる)
@@ -113,7 +114,9 @@ let firstRunReady = Promise.resolve(null);
 let firstRunDoneKey = FIRST_RUN_DONE_KEY;
 const firstRunWanted = () => !KIOSK.on && shouldOpenFirstRun({ params, storage: siteMemory, doneKey: firstRunDoneKey, headset: IS_HEADSET }); // 接客モードでは、作る・はじめての会話は出さない
 const ui = createUi();
-const brainGuide = $('brainGuide') ? mountBrainGuide({ root: $('brainGuide') }) : null; // 「本物の Claude で話すには」(仮の頭脳の間だけ出る。updateBrainNotice が出し入れする)
+const brainGuide = $('brainGuide') ? mountBrainGuide({ root: $('brainGuide') }) : null; // 「本物の Claude で話すには」の案内の窓(おためしモードの帯のボタンで開く)
+// おためしモード(鍵も Claude Code も無く、決まった台本で話す間): 帯・入口の 1 行・接客の入口と札。updateBrainNotice が出し入れする(ui/trialMode.js)
+const trialMode = mountTrialMode({ banner: $('trialBanner'), gateLine: $('gateTrial'), kioskStaff: $('kioskTrial'), label: $('trialLabel'), guide: brainGuide });
 // CU: 起動中・返事待ちの表示(出し入れの決まりは ui/waitBubble.js。画面の文字と「…」は index.html の #waitBubble と入口の #gateWake)
 import { createWaitBubble, wakeHint, wakeLine } from './ui/waitBubble.js';
 import { beginWork, configureWork } from './ui/work.js'; // はたらいている間のきらきらと小さな印(描く・舞台に出す・3D を待つ・1.5 秒より長い待ち)
@@ -230,7 +233,7 @@ function setGaze(spec, ms = 2000) {
 
 /* ---------- 会話のイベント(記憶の札・仮の頭脳の知らせ) ---------- */
 let memory = null; // 記憶の札(S3 の mountMemoryPanel の返り値)
-let brainNoticeText = null; // イベントで届いた「仮の頭脳です(理由)」
+let brainNoticeText = null; // イベントで届いた「おためしモードです(理由)」
 let eventBrain = null; // 会話のイベントで分かった頭脳('haiku' | 'mock')。公開の関数の fallback も mock
 
 /** サーバーの会話のイベントを 1 つ受ける。Dialogue の onEvent で、手元のサーバー(流れる形)も公開の関数(まとめた JSON)も全部届く */
@@ -256,8 +259,9 @@ function currentBrain() {
 function updateBrainNotice() {
   const mock = currentBrain() === 'mock';
   ui.brainNotice(mock ? (brainNoticeText ?? FALLBACK_BRAIN_NOTICE) : null);
-  // 「本物の Claude で話すには」は、鍵が入っていないだけの仮の頭脳の時(理由つきの知らせが無い時)だけ。上限・合言葉などの理由の時は出さない
-  brainGuide?.show(shouldShowGuide(currentBrain(), brainNoticeText));
+  // おためしモードの帯と「本物の Claude にする」は、鍵が入っていないだけの時(理由つきの知らせが無い時)だけ。上限・合言葉などの理由の時は出さない。
+  // 入口の 1 行と接客の入口は、手元のサーバーが鍵なしと言う時(/api/status)。接客の札は、決まった台本で話している間
+  trialMode.update(trialView({ brain: currentBrain(), noticeText: brainNoticeText, statusBrain: app.status?.brain ?? null, kiosk: KIOSK.on }));
 }
 
 // 記憶の引き出しを開いた時は、合鍵を確かめて一覧を読み直す(別の端末で消した・番号で受け取った後でも合うように)。
@@ -1598,6 +1602,7 @@ function fillGate() {
   if (first) first.hidden = !firstRunWanted();
   const simSub = $('simSub');
   if (simSub) simSub.textContent = TOUCH ? '画面を指でなぞると、その向きを見ます' : 'マウスを動かすと、その向きを見ます';
+  updateBrainNotice(); // 入口の「おためしモード」の 1 行(接客の入口は店の人への知らせ)は、状態を読んだ後すぐに出す
 }
 
 /** 入口を閉じた(どの入力でも)。上の段を出し、初めての訪問なら「はじめての会話」(7 歩)を出す */

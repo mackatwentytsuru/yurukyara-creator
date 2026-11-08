@@ -195,7 +195,7 @@ html .fr-sheet.fr-sheet.fr-kb .fr-log { flex: 1 1 auto; min-height: 0; }
 html .fr-sheet.fr-kb[data-layout="overlay"] { background: var(--fr-bg); }
 html .fr-sheet.fr-kb[data-layout="overlay"]::before { display: none; }
 
-/* 札が開いている間は、後ろの知らせ(仮の頭脳です・カメラの説明)を隠す。札と重なって見えていた(WebKit) */
+/* 札が開いている間は、後ろの知らせ(おためしモードです・カメラの説明)を隠す。札と重なって見えていた(WebKit) */
 @media (max-width: 719px) { html.fr-open #brainNotice, html.fr-open #brainGuide, html.fr-open #privacy { visibility: hidden; } }
 /* 最後まで行った後に、選んだ子が舞台に立っている間だけ出る、小さな「〜にもどす」(Q-0111) */
 .fr-return { position: fixed; left: 12px; bottom: calc(var(--bottom-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); z-index: 6; font: inherit; font-size: 15px;

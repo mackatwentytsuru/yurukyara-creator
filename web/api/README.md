@@ -30,7 +30,7 @@
 ```
 
 - `events` は手元のサーバーが流す物と同じ形(`memory`・`meta`・`thought`・`say`・`handoff`)を、順に並べた物。
-- 仮の頭脳になる理由(`reason`)と、画面に出す一言(`notice`、「仮の頭脳です(…)」): `no-key`(鍵なし)・`no-passphrase-set`(合言葉が決まっていない)・`weak-passphrase`(合言葉の設定が 16 字未満)・`passphrase`(無い・違う)・`passphrase-wait`(間違いが続いたので、しばらく比べない)・`per-minute`・`daily-cap`・`counter-unavailable`(数えられない時は止める方へ)・`brain-error`。**どれでも断らずに、仮の頭脳で話し続ける。**
+- 仮の頭脳になる理由(`reason`)と、画面に出す一言(`notice`、「おためしモードです(…)」): `no-key`(鍵なし)・`no-passphrase-set`(合言葉が決まっていない)・`weak-passphrase`(合言葉の設定が 16 字未満)・`passphrase`(無い・違う)・`passphrase-wait`(間違いが続いたので、しばらく比べない)・`per-minute`・`daily-cap`・`counter-unavailable`(数えられない時は止める方へ)・`brain-error`。**どれでも断らずに、仮の頭脳で話し続ける。**
 
 ### /api/memory
 
