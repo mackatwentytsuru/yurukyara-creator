@@ -12,6 +12,8 @@
 <img src="https://img.shields.io/badge/license-MIT_%28code_only%29-D97757?style=flat" alt="License">
 </p>
 
+<p align="center"><b>▶ Demo video (3 min): <a href="https://youtu.be/qLiIErXkC-A">https://youtu.be/qLiIErXkC-A</a></b></p>
+
 [日本語](README.md) · **English**
 
 # Yuru-chara Creator
