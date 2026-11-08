@@ -192,16 +192,19 @@ export function createDrawCreator({ sample, enabled }) {
   /** サーバーの /api/draw を 1 回呼ぶ。描けた子か、描けなかった理由(reason は daily・visitor・busy・fails など。サーバーの印) */
   const callDraw = async (input, note, o) => {
     try {
+      // 絵の中身を持たないオリジナルの道(色と形だけ)は、その答えから作ったことば(originalWords)で描く
+      const fromPicture = input?.from === 'picture';
+      const baseWords = fromPicture ? (input.file ? '' : originalWords(input)) : String(input?.words ?? '');
       // 「なおしたい ところ」の一言は、ことばの前に足す(長い時は後ろの元のことばが切れる。一言は捨てない。QA8 #4)
-      const words = note ? clipWords(`なおす: ${note}。${input?.words ?? ''}`) : String(input?.words ?? '');
-      const body = input?.from === 'picture' && input.file ? { ...(note ? { words } : {}), picture: await pictureBody(input.file) } : { words };
+      const words = note ? clipWords(`なおす: ${note}。${baseWords}`) : baseWords;
+      const body = fromPicture && input.file ? { ...(note ? { words } : {}), picture: await pictureBody(input.file) } : { words };
       o.onProgress?.('Claude が 描いているよ。少し まってね(1 分くらい)');
       const r = await fetch('/api/draw', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json().catch(() => ({}));
       if (r.ok && /^[a-z0-9_]{1,32}$/.test(String(j.id ?? ''))) return { ok: true, character: { id: j.id, name: String(j.name ?? 'あたらしい子').slice(0, 20), sample: false, drawn: true, twod: true, note: 'Claude が描いた子' } };
-      return { ok: false, reason: String(j.reason ?? 'fail'), message: String(j.error ?? '描けなかったよ').slice(0, 60) };
+      return { ok: false, reason: String(j.reason ?? 'fail'), message: String(j.error ?? '描けなかったよ').slice(0, 60), status: r.status };
     } catch {
-      return { ok: false, reason: 'fail', message: '描けなかったよ' };
+      return { ok: false, reason: 'fail', message: '描けなかったよ', status: 0 };
     }
   };
   return {
@@ -214,15 +217,17 @@ export function createDrawCreator({ sample, enabled }) {
       if (!on()) return sample.make(input, o);
       const r = await callDraw(input, '', o);
       if (r.ok) return r.character;
-      const fallback = await sample.make(input?.from === 'picture' ? { ...input, colors: input.colors ?? [], shape: input.shape ?? 'any' } : input, o);
+      // 絵(と、絵の色と形のオリジナル)の道は、描けなかった時に見本の子を黙って出さない(failed を返す。台本が正直に言って選んでもらう)
+      if (input?.from === 'picture') return pictureFailure(r.status, r.reason);
+      const fallback = await sample.make(input, o);
       return fallback ? { ...fallback, drawFailed: r.message } : null;
     },
     /**
      * 描いた子の「なおしたい ところ」: 一言を足して、もう 1 回描く。見本の子に替えない(替えると、一言が捨てられる)。
-     * @returns {Promise<{ok:boolean, character?:object, reason?:string, message?:string}>}
+     * @returns {Promise<{ok:boolean, character?:object, reason?:string, message?:string, status?:number}>}
      */
     async redraw(input, note, o = {}) {
-      if (!on()) return { ok: false, reason: 'off', message: 'ここでは 描けないよ' };
+      if (!on()) return { ok: false, reason: 'off', message: 'ここでは 描けないよ', status: 0 };
       return callDraw(input, String(note ?? '').trim(), o);
     },
   };
@@ -231,12 +236,28 @@ export function createDrawCreator({ sample, enabled }) {
 /** ことばの長さ(サーバーの上限 60 字と同じ。長い時は後ろを切る) */
 const clipWords = (s) => [...String(s ?? '').trim()].slice(0, 60).join('');
 
-/** 選んだ絵を、サーバーへ送る形(base64)にする。絵はこの時だけ、この PC のサーバーを通って Claude に送られる */
-async function pictureBody(file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+/** 描けなかった(絵の道)。見本の子は入れない。status と reason から、台本が理由を言う */
+export function pictureFailure(status, reason) {
+  const why = ['daily', 'visitor', 'busy'].includes(reason) ? reason : status === 400 ? 'unusable' : 'failed';
+  return { failed: true, picture: true, reason: why, status: status || 0, drawFailed: '描けなかったよ' };
+}
+
+/** 絵を使わないで、色と形の答えから作る「オリジナルの子」のことば(サーバーの上限 60 字の中) */
+export function originalWords(input) {
+  const color = COLOR_CHIPS.find((c) => c.id === (input?.colors ?? [])[0])?.label;
+  const shape = SHAPE_CHIPS.find((s) => s.id === input?.shape && s.id !== 'any')?.label;
+  const parts = [color && `${color}の 色`, shape && `${shape} かたち`].filter(Boolean);
+  return `${parts.length ? `${parts.join('で ')}の ` : ''}あたらしい オリジナルの ゆるキャラ`.slice(0, 60);
+}
+
+const toBase64 = (bytes) => {
   let bin = '';
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return { type: file.type, data: btoa(bin) };
+  return btoa(bin);
+};
+/** 選んだ絵を、サーバーへ送る形(base64)にする。絵はこの時だけ、この PC のサーバーを通って Claude に送られる */
+async function pictureBody(file) {
+  return { type: file.type, data: toBase64(new Uint8Array(await file.arrayBuffer())) };
 }
 
 /* ---------- 手元の PC の作る道('local') ---------- */

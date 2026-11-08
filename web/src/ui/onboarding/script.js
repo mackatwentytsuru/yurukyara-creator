@@ -63,6 +63,23 @@ export const PICTURE_TRY = 'ここでは、見本の子で ためしてみよう
 export const NEAR_ENOUGH = 'ぴったりではないけど、この子はどう?';
 /** 絵の道(見本の道)。この画面は絵を見られないので、色と形を聞いて近い子を選ぶ(UIR 2。正直に言う) */
 export const PICTURE_ASK = 'この画面は 絵を 見られないんだ。いちばん 多い 色と、かたちを おしえてね。にた子を さがすよ。';
+/**
+ * 絵から描く前に、1 回だけ聞く確かめ(よその会社のキャラを、そのまま写さないため。本人 11/8)。
+ * はい → その絵から描く。わからない・いいえ → 絵は使わず、色と形だけ聞いて、新しいオリジナルの子を描く。人の写真 → 同じ道
+ */
+export const RIGHTS_ASK = 'この絵のキャラを使っていい人ですか?(自分のキャラ・使ってよいと言われたキャラ)';
+export const RIGHTS_LABELS = { yes: 'はい', unsure: 'わからない', no: 'いいえ', person: '人の写真です' };
+/** 描けなかった時に、見本の子を黙って出さずに、どうするかを聞く(本人 11/8: 絵を送ったのに みかんが出た) */
+export const drawFailedAsk = (noun = '絵', nori = false) => (nori
+  ? `ごめんなさい、この${noun}から うまく 描けマセンでした。かわりの子を 勝手に 出すことは しマセン。どうしマスカ?`
+  : `ごめんね、この${noun}から うまく 描けなかったよ。かわりの子を 勝手には 出さないよ。どうする?`);
+/** 描けなかった理由(短く、正直に) */
+export const drawFailedWhy = (reason) => ({
+  daily: 'きょうは もう たくさん 描いたから、これ以上は 描けないんだ。',
+  visitor: 'きょう 描ける 枚数を つかいきったんだ。',
+  busy: 'いま ほかの子を 描いているよ。',
+  unusable: 'この絵は 大きすぎるか、使えない かたちだったよ。',
+}[reason] ?? 'つながりが うまく いかなかったみたい。');
 /** 3D にするかを聞く(2D は すぐ。B4 12b) */
 export const ASK_3D = '3D にもする?(やく 20 ぷん)';
 export const CONVERT_NOTE = '3D は、ゆるキャラの かたちに ととのえて つくるよ(もとの えと まったく おなじには ならないよ)';
@@ -682,6 +699,23 @@ export class FirstRun {
       case 'photo':
       case 'pick':
         return this._fromPicture(id, p);
+      case 'rights_yes': // 使っていい絵(自分のキャラ・使ってよいと言われたキャラ): その絵から描く
+        await this._echo(id);
+        return this._drawFromPicture();
+      case 'rights_unsure':
+      case 'rights_no':
+      case 'rights_person':
+        await this._echo(id);
+        return this._originalOffer(id === 'rights_person');
+      case 'orig_yes':
+        await this._echo(id);
+        return this._originalColors();
+      case 'draw_retry':
+        await this._echo(id);
+        return this._meet();
+      case 'draw_words':
+        await this._echo(id);
+        return this._askWords();
       case 'words':
         return this._fromWords(p);
       case 'what_auto': // 「どんな子?」だけを おまかせに(役目と場所から説明を作る。ほかの選びは自分で決める)
@@ -834,12 +868,14 @@ export class FirstRun {
     await this._say({ who: 'user', text: kind === 'photo' ? '(写真を撮った)' : '(絵を選んだ)', img: p.url });
     this._go(2);
     if (this.d.creator.mode === 'sample' && this.d.creator.canDraw && this.input.file) {
-      // ブラウザから描ける設定(サーバーの YC_BROWSER_DRAW=1): 絵を Claude に見せて描いてもらう。どこへ送るかを先に言う
-      await this._say(
-        { who: 'guide', text: `${noun}を ありがとう!` },
-        { who: 'note', text: `${noun}は、この サーバーから Claude(Anthropic)に 送って、ゆるキャラの 絵に するよ。` },
-      );
-      return this._meet();
+      // ブラウザから描ける設定(サーバーの YC_BROWSER_DRAW=1): 送る前に、使っていい絵かを 1 回だけ聞く
+      await this._say({ who: 'guide', text: `${noun}を ありがとう!` }, { who: 'guide', text: RIGHTS_ASK });
+      return this._offer([
+        { id: 'rights_yes', label: RIGHTS_LABELS.yes, primary: true },
+        { id: 'rights_unsure', label: RIGHTS_LABELS.unsure },
+        { id: 'rights_no', label: RIGHTS_LABELS.no },
+        { id: 'rights_person', label: RIGHTS_LABELS.person, aria: '人の写真です(その人を ゆるキャラに かえる)' },
+      ]);
     }
     if (this.d.creator.mode === 'sample') {
       // 見本の道: この画面は絵を見られない(どこにも送らない)。正直に言い、色と形を聞いて、いちばん近い見本を出す(UIR 2)
@@ -854,6 +890,71 @@ export class FirstRun {
     await this._say({ who: 'guide', text: `${noun}を 見てみるね。ちょっと まってて。` });
     const result = await this._long(this.d.creator.check(this.input), 'check');
     return this._afterCheck(result);
+  }
+
+  /** 「使っていい絵」と答えてもらった後: どこへ送るかを言って、その絵から描く */
+  async _drawFromPicture() {
+    const noun = this.input?.kind === 'photo' ? '写真' : '絵';
+    await this._say({ who: 'note', text: `${noun}は、この サーバーから Claude(Anthropic)に 送って、ゆるキャラの 絵に するよ。` });
+    return this._meet();
+  }
+
+  /**
+   * 「わからない・いいえ・人の写真」の時: その絵は使わない(送らない・写さない)。
+   * 色と ふんいきだけ教えてもらって、新しい オリジナルの子なら 描けると言う
+   */
+  async _originalOffer(person) {
+    const noun = this.input?.kind === 'photo' ? '写真' : '絵';
+    if (this.input) {
+      const { file: _drop, ...rest } = this.input; // 絵の中身は、もう持たない(使わないと決めた)
+      this.input = rest;
+    }
+    await this._say(
+      person
+        ? { who: 'guide', text: `人の${noun}なんだね。ゆるキャラに してみる?` }
+        : { who: 'guide', text: `そっか。その${noun}の子は、そのままは 使わないでおくね。` },
+      { who: 'note', text: `${noun}は どこにも 送らないよ。そっくりには 描かないよ。` },
+      { who: 'note', text: '色と ふんいきが にた、あたらしい オリジナルの子なら 描けるよ。' },
+    );
+    return this._offer([
+      { id: 'orig_yes', label: person ? 'ゆるキャラに してみる' : 'オリジナルを 描く', primary: true },
+      { id: 'other', label: `べつの${noun}にする` },
+    ]);
+  }
+
+  /** オリジナルの子: いちばん多い色と形だけ聞いて、そのことばで描く(絵の中身は使わない) */
+  async _originalColors() {
+    this.input = { ...(this.input ?? { from: 'picture' }), from: 'picture', original: true };
+    await this._say({ who: 'guide', text: 'いちばん 多い 色は?' });
+    return this._offer(COLOR_CHIPS.map((c, i) => ({ id: `col_${c.id}`, label: c.label, primary: i === 0 })));
+  }
+
+  /** 描けなかった: 見本の子を黙って出さない。正直に言って、もう一度・ことばで・見本から、を選んでもらう */
+  async _drawFailed(made) {
+    this._go(3);
+    this.character = null;
+    const picture = this.input?.from === 'picture';
+    const noun = this.input?.kind === 'photo' ? '写真' : '絵';
+    const spent = made.reason === 'daily' || made.reason === 'visitor';
+    await this._say(
+      { who: 'guide', text: drawFailedAsk(picture ? noun : 'ことば', this.nori) },
+      { who: 'note', text: drawFailedWhy(made.reason) },
+    );
+    return this._offer([
+      ...(spent ? [] : [{ id: 'draw_retry', label: 'もういちど 描く', primary: true }]),
+      { id: 'draw_words', label: 'ことばで 書く', primary: spent },
+      { id: 'choose_sample', label: '見本から えらぶ' },
+    ]);
+  }
+
+  /** ことばで書き直す(描けなかった時の道)。入れ方は 1 つ目のステップの「ことばで 書く」と同じ */
+  async _askWords() {
+    this.d.pin?.(null);
+    await this._say({ who: 'guide', text: 'どんな子か、ことばで 教えてね。' });
+    return this._offer([
+      { id: 'words', label: 'ことばで 書く', kind: 'text', placeholder: '例: 赤い ちょうちんの子', max: WORDS_MAX, submit: '送る', primary: true },
+      { id: 'again', label: 'やりなおす' },
+    ]);
   }
 
   async _afterCheck(result) {
@@ -926,6 +1027,7 @@ export class FirstRun {
     this._go(3);
     const made = await this._long(this.d.creator.make(this.input ?? { from: 'words', words: '' }, { onProgress: (text) => this._say({ who: 'note', text }) }), 'draw');
     if (!made) return this._noMatch(); // 見本の一覧が空の時だけ
+    if (made.failed) return this._drawFailed(made); // 絵からの描き直しが失敗: 見本を黙って出さない
     this.character = made;
     if (made.drawn) {
       // ブラウザから描けた子: もう動く 2D になっている。その場で舞台に出す(B4 12b)
