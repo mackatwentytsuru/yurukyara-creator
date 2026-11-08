@@ -25,7 +25,7 @@ test('FCS 1: 広げない。ボールや物をたたく話・言い切りでな�
 });
 
 test('FCS 2: 食べ物・買い物の話では命の案内を出さない(ナイフでさしてたべる・ほうちょうでころころ・くすりをたくさんかった)', () => {
-  for (const t of ['ナイフでさしてたべる', 'ナイフでさしてね', 'ほうちょうでころころ', 'くすりをたくさんかった', '薬をたくさんもらった', 'くすりをいっぱいぬった', 'ほうちょうでさしみをきった', '包丁で刺身を切った', 'ほうちょうでやさいをきったよ', 'ナイフとフォークでたべた', 'くすりやさんにいった', 'ナイフで殺菌した']) {
+  for (const t of ['ナイフでさしてたべる', 'ほうちょうでころころ', 'くすりをたくさんかった', '薬をたくさんもらった', 'くすりをいっぱいぬった', 'ほうちょうでさしみをきった', '包丁で刺身を切った', 'ほうちょうでやさいをきったよ', 'ナイフとフォークでたべた', 'くすりやさんにいった', 'ナイフで殺菌した']) {
     assert.equal(classifyInput(t), null, t);
     assert.equal(classifyInput(t, MULTI), null, `多言語 ${t}`);
   }
@@ -91,7 +91,7 @@ test('FCS_2 must 1: 人から刺される話・刃物の「さして/刺して/�
     assert.equal(classifyInput(t), 'emergency', t);
     assert.equal(classifyInput(t, MULTI), 'emergency', `多言語 ${t}`);
   }
-  for (const t of ['ナイフでさしてたべる', 'ほうちょうでさしてたべたい', '包丁で刺して食べる', 'ナイフでさしてね', 'ほうちょうでころころ', '包丁でころっと切れた', '包丁で刺身を切った']) {
+  for (const t of ['ナイフでさしてたべる', 'ほうちょうでさしてたべたい', '包丁で刺して食べる', 'ほうちょうでころころ', '包丁でころっと切れた', '包丁で刺身を切った']) {
     assert.equal(classifyInput(t), null, t);
   }
 });
@@ -104,4 +104,47 @@ test('FCS_2 must 2: ひらがなの「くすりをたくさんのむ」の形も
   for (const t of ['くすりをたくさんかった', '薬をたくさん買った', 'くすりをたくさんもらった', 'くすりをたくさんぬった', 'くすりやさんでたくさん']) {
     assert.equal(classifyInput(t), null, t);
   }
+});
+test('FCS_3 must: 薬を「買う・もらう」から「のむ・死ぬ」に続く文は、命の案内に戻す(日本語だけ・多言語の両方)', () => {
+  for (const t of ['くすりをたくさんかって、ぜんぶのむ', '薬をたくさん買って全部飲む', 'くすりをいっぱいもらって、いっきにのむ', '薬をたくさんもらって死ぬ',
+    'くすりをたくさんかってきた。ぜんぶのんじゃおうかな', 'くすりをたくさんかってしぬ', 'くすりをたくさんもらって、まとめてのもう', 'くすりをいっぱいかって、のんでしまいたい']) {
+    assert.equal(classifyInput(t), 'emergency', t);
+    assert.equal(classifyInput(t, MULTI), 'emergency', `多言語 ${t}`);
+  }
+  // 買う・もらうだけの文、別の文に「のむ」がある時(。で切れる時)は、今までどおり拾わない
+  for (const t of ['くすりをたくさんかった', '薬をたくさん買った', 'くすりをたくさんもらった。ジュースをのむ', '薬をたくさん買ってきた。おなかがすいた', 'くすりをたくさんかってきた。おかあさんにわたした']) {
+    assert.equal(classifyInput(t), null, t);
+    assert.equal(classifyInput(t, MULTI), null, `多言語 ${t}`);
+  }
+});
+
+test('FCS_3 should 1: 「包丁で刺してね」は拾う。食べ物の「さしてたべる」は外すが、同じ文におどし(やる)があれば拾う', () => {
+  for (const t of ['包丁で刺してね', 'ナイフでさしてね', 'ナイフで刺してねって言われた', 'ナイフで刺してたべさせてやる', '包丁でさしてたべてやる', '包丁で刺して食べてやろう']) {
+    assert.equal(classifyInput(t), 'emergency', t);
+    assert.equal(classifyInput(t, MULTI), 'emergency', `多言語 ${t}`);
+  }
+  for (const t of ['ナイフでさしてたべる', '包丁で刺して食べる', 'ほうちょうでさしてたべたい', 'ほうちょうでさしみ', 'ナイフでころがす']) assert.equal(classifyInput(t), null, t);
+});
+
+test('FCS_3 should 2: 「くすりをたくさんうった」は文全体で決める(店・お金など売る話は外す。決められなければ拾う)', () => {
+  for (const t of ['くすりをたくさんうった', 'くすりをいっぱいうった', 'くすりをたくさんうって、しぬ', '薬をたくさん打った', 'お店でくすりをたくさんうって、しにたい']) {
+    assert.ok(classifyInput(t), t);
+    assert.equal(classifyInput(t, MULTI) != null, true, `多言語 ${t}`);
+  }
+  for (const t of ['薬をたくさん売った', 'お店でくすりをたくさんうった', 'くすりをたくさんうって、おかねをもらった', 'くすりやさんがくすりをたくさんうった']) {
+    assert.equal(classifyInput(t), null, t);
+  }
+  assert.equal(classifyInput('くすりをたくさんうった'), 'emergency');
+});
+
+test('FCS_3 should 3: 大文字の「I\'d Be Better Off Dead」「Im Better Off Dead」は小文字と同じに拾う。題名の「Better Off Dead」は空ける', () => {
+  for (const t of ["I'd Be Better Off Dead", 'Im Better Off Dead', "I'M Better Off Dead", 'I Am Better Off Dead', "I'm Better Off Dead", "I'D BE BETTER OFF DEAD", 'I AM BETTER OFF DEAD', "i'd be better off dead", "I'd be better off dead"]) {
+    assert.equal(classifyInput(t), 'distress', t);
+    assert.equal(classifyInput(t, MULTI), 'distress', `多言語 ${t}`);
+  }
+  for (const t of ['Better Off Dead', 'Better Off Dead って曲']) assert.equal(classifyInput(t), null, t);
+  // 「laughing」の慣用句でも、同じ文に自分を責める言葉があれば拾う
+  assert.equal(classifyInput('I want to die laughing at myself, i hate me'), 'distress');
+  assert.equal(classifyInput('I want to die laughing'), null);
+  assert.equal(classifyInput('I want to die laughing. i hate me'), null);
 });

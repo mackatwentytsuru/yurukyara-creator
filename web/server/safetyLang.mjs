@@ -62,9 +62,9 @@ export function classifyForeign(text) {
 const JA_ONLY_MASKS = [
   /suicide\s+(?:squad|club|silence)/gi,
   // 題名の「Better Off Dead」は、大文字の時と「って曲」などが続く時だけ空ける。「be 動詞 + better off dead」「better off dead」の 1 行は本当の言い方なので空けない
-  /(?<!(?:\b(?:be|am|are|is|were|was)|['’](?:s|re|m|d))\s+(?:probably\s+|really\s+|just\s+)?)Better\s+Off\s+Dead/g,
+  /(?<!(?:\b(?:[Bb]e|[Aa]m|[Aa]re|[Ii]s|[Ww]ere|[Ww]as|[Ii]m|[Yy]oure|[Hh]es|[Ss]hes)|['’](?:[sS]|[rR][eE]|[mM]|[dD]))\s+(?:(?:[Pp]robably|[Rr]eally|[Jj]ust|[Ss]o|[Aa]lways)\s+)?)Better\s+Off\s+Dead/g,
   /better\s+off\s+dead(?=\s*(?:って|という|の(?:曲|歌|映画|バンド)))/gi,
-  /(?:want(?:ed)?\s+to|wanna)\s+die\s+(?:laughing|of\s+laughter)/gi,
+  /(?:want(?:ed)?\s+to|wanna)\s+die\s+(?:laughing|of\s+laughter)(?![^.!?。！？\n]*(?:hate\s+(?:me|myself)|worthless|useless|hopeless|depress|\bcry|\bsad\b|tired\s+of\s+(?:life|living)|can'?t\s+(?:go\s+on|take)|nobody|no\s+one|disappear))/gi,
   // 日本語の言葉の「結束生命」だけを空ける。「我想結束生命」「我決定結束生命」のような中国語の言い方は空けない
   /(?<!(?:想要|想|要|準備|准备|打算|決定|决定|決心|决心|只想|已經|已经|會|会|將|将))結束生命/gu,
 ];
