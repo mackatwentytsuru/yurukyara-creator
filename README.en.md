@@ -7,7 +7,7 @@
 ## Just choose and answer (3 steps)
 
 1. **Choose how to start**: 「ことばで 書く」 ("write it in words"), 「絵を選ぶ」 or 「写真を撮る」 ("choose a picture" or "take a photo": from one drawing), or 「おまかせ」 ("leave it all to me").
-2. **Answer a few questions by charang chips**: for example 「この子は、どこで だれと?」 ("where, and with whom?": home, guiding a shop, guiding a station or town, a school or facility). **Every question has 「おまかせ」**, and 「のこりを ぜんぶ おまかせ」 ("leave all the rest to me") hands over everything that is left.
+2. **Answer a few questions with chips**: for example 「この子は、どこで だれと?」 ("where, and with whom?": home, guiding a shop, guiding a station or town, a school or facility). **Every question has 「おまかせ」**, and 「のこりを ぜんぶ おまかせ」 ("leave all the rest to me") hands over everything that is left.
 3. **A talking yuru-chara in about two minutes**: Claude draws and checks the picture, and the character goes on stage as a moving 2D. You can talk with it right away, by voice or text.
 
 - One measured run (Nov 8, the real Claude Sonnet 5.5): 1 min 16 s from handing over the picture to the 2D on stage (the buttons were pressed automatically, so no time for a person to choose is included).

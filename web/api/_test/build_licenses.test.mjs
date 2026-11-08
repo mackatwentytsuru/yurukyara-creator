@@ -46,5 +46,6 @@ test('組み立てた dist があれば: licenses.txt に部品が並び、部�
   for (const name of ['three ', '@pixiv/three-vrm ', '@mediapipe/tasks-vision ', 'vite ']) assert.ok(text.includes(name), name);
   const entry = readdirSync(join(DIST, 'assets')).filter((f) => /^index-.*\.js$/.test(f));
   assert.ok(entry.length >= 1);
-  for (const f of entry) assert.ok(readFileSync(join(DIST, 'assets', f), 'utf8').startsWith(LICENSE_BANNER), f);
+  // 「JS の頭」= 先頭の 2 行まで。あとから読む部品がある時は、Vite が先頭に preload の 1 行(const __vite__mapDeps=…)を足すので、注は 2 行目になる
+  for (const f of entry) assert.ok(readFileSync(join(DIST, 'assets', f), 'utf8').split('\n').slice(0, 2).includes(LICENSE_BANNER), f);
 });

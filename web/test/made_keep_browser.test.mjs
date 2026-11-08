@@ -166,7 +166,8 @@ async function say(page, text) {
   await page.fill('#textInput', text);
   const reply = page.waitForResponse((r) => r.url().endsWith('/api/chat') && r.request().method() === 'POST' && (r.request().postData() ?? '').includes(text), { timeout: 30_000 });
   await page.press('#textInput', 'Enter');
-  await (await reply).text();
+  // 返事の本文は、画面の切り替えと重なると取れないことがある(取れなくても、返事が届いた事は waitForResponse で分かる)
+  await (await reply).text().catch(() => '');
   await sleep(500);
 }
 
