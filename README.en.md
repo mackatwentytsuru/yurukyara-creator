@@ -104,7 +104,7 @@ One line each: what you do → what happens. Lines marked (not checked yet) have
 
 **For shops and towns, with visitors from abroad**
 
-- **The 「ことば」 (language) setting**: on the personality screen, choose 「日本語だけ」 (Japanese only; the default) or 「多言語」 (multilingual: Japanese, English, Chinese and Korean) → in multilingual mode, it answers in the language the visitor used (with the real brain, that is, when `ANTHROPIC_API_KEY` is set; the stand-in brain used without a key stays in Japanese). Japanese-only gives the most accurate Japanese listening and speech.
+- **The 「ことば」 (language) setting**: on the personality screen, choose 「日本語だけ」 (Japanese only; the default) or 「多言語」 (multilingual: Japanese, English, Chinese and Korean) → in multilingual mode, it answers in the language the visitor used (with the real Claude, that is, when `ANTHROPIC_API_KEY` is set or your own Claude Code is connected; おためしモード, used with neither, stays in Japanese). Japanese-only gives the most accurate Japanese listening and speech.
 - **The same safety in every language**: in multilingual mode the safety rules are the same; fixed replies start with one line in the visitor's language. **Even in Japanese-only mode, painful words in English, Chinese and Korean are caught, and the fixed reply points to help.**
 - **Shop rules and town news**: write them in Japanese, under the headings 「お店のきまり」 (shop rules) and 「町のお知らせ」 (town news) in the personality text (`characters/<id>/persona.md`) or in a field on the personality screen → it tells visitors what is written, in their language, adding nothing and leaving nothing out. For anything not written there, it says it does not know and asks them to ask the staff.
 - **Learn from a web page, a PDF or a map photo (`yuru-learn`)**: ask Claude Code 「この PDF と この地図の写真で、案内を覚えさせて」 ("learn our guide from this PDF and this map photo") → it reads what you hand it (web pages, PDFs, photos of maps or signs, plain text), keeps only facts that help visitors, each with its source and the date read, and puts them under 「お店のきまり」 and 「町のお知らせ」. It never obeys instructions found inside the material. It shows a diff and waits for your OK before writing ([creator/learn/README.md](creator/learn/README.md), Japanese).
@@ -134,7 +134,7 @@ To talk only, Node.js and Git are enough. To make characters, add Python, Chrome
 
 | What | Adds |
 |---|---|
-| `ANTHROPIC_API_KEY` (a Claude API key) | The character talks with Claude Haiku. Without it, a stand-in brain answers in the same format, and the screen says so. Answering from a camera picture and answering in other languages also need the key |
+| `ANTHROPIC_API_KEY` (a Claude API key), or a connection to your own Claude Code | One of the two is needed to talk with the real Claude (Haiku); see step 2 under "Steps" below. With neither, you get おためしモード (trial mode): a fixed script, and the screen says so. Answering from a camera picture and answering in other languages also need the real Claude |
 | `ELEVENLABS_API_KEY` (the voice key) | The character speaks aloud. On the PC's server, every connected device gets the voice. Without it, it talks with text and a retro sound. To be entered by an adult ([Voices](#voices)) |
 | `segno` (Python) | Prints a QR code for opening the app on a phone |
 | `faster-whisper` (Python) | Turns speech into text on this PC (when you choose a microphone other than the default one, and for headsets) |
@@ -143,9 +143,9 @@ Never write keys into files; pass them as environment variables when you start (
 
 ### Steps
 
-Type the commands in bash or PowerShell 7 (Windows PowerShell 5.1 cannot run `&&`).
+Type the commands in bash or PowerShell 7 (Windows PowerShell 5.1 cannot run `&&`). There are three steps.
 
-1. Get the code and its parts:
+1. **Install**: get the code and its parts.
 
    ```bash
    git clone https://github.com/<owner>/yurukyara-creator.git && cd yurukyara-creator/web
@@ -154,19 +154,32 @@ Type the commands in bash or PowerShell 7 (Windows PowerShell 5.1 cannot run `&&
 
    `npm ci` also downloads the face-tracking model into `web/public/mediapipe/` (it is not stored in this repository; you need the internet).
 
-2. To use the maker, install the Python parts (on Mac and Linux the command may be `python3`):
+   To use the maker (optional), install the Python parts too (on Mac and Linux the command may be `python3`):
 
    ```bash
    python -m pip install pillow numpy scipy segno
    ```
 
-3. To make 3D, once, in the repository root (`yurukyara-creator`), record where Blender is:
+   To make 3D (optional), once, in the repository root (`yurukyara-creator`), record where Blender is:
 
    ```bash
    python creator/setup/doctor.py --write --blender "<path to Blender>"
    ```
 
    If Blender is found automatically, `--blender` is not needed. The path goes into `creator/env.local.sh` (not stored in the repository).
+
+2. **Connect Claude (pick one)**: normally, you use it connected to the real Claude.
+   - **Put in a Claude API key**: have your Claude key ready and use `npm run start:keys` in step 3 (it asks for the key with hidden input; see [Adding keys the easy way](#adding-keys-the-easy-way)).
+   - **Or connect your own Claude Code**: no key needed. If the `claude` command is installed and logged in, use `npm run start:claude-code` in step 3 (see [Connect it to Claude Code](#connect-it-to-claude-code)).
+
+3. **Start**: in the `web` folder, type the one you chose in step 2. The app starts as it is, and you can talk at `http://127.0.0.1:8787/`.
+
+   ```bash
+   npm run start:keys          # enter your keys, then start
+   npm run start:claude-code   # connect your own Claude Code, then start
+   ```
+
+**In a hurry and only want the feel of it? It also opens without a key.** `npm start` gives you おためしモード (trial mode): the character talks from a fixed script, and the screen says so at the top because it is not a real conversation. If you want the real Claude later, the 「本物の Claude にする」 button on the screen opens the guide.
 
 ### Open it on the PC
 
@@ -177,7 +190,7 @@ npm start        # talking only; then open http://127.0.0.1:8787/
 npm run yuru     # starts the app and the maker together and prints the addresses
 ```
 
-- **`npm start`** gives you talking and choosing a sample character. Words or a picture bring out the nearest sample character; nothing new is drawn.
+- **`npm start`** gives you talking and choosing a sample character (with neither a key nor a Claude Code connection, it is おためしモード). Words or a picture bring out the nearest sample character; nothing new is drawn.
 - **`npm run yuru`** starts the app, `http://127.0.0.1:8787/`, and the maker, `http://127.0.0.1:8796/qr` (the maker is a small server and screen on your PC that turns words or a picture into a character). Without Python 3 or the maker's parts, only the app starts, and it says so.
 - The first screen is the entrance. Press 「カメラなしで試す」 ("try without the camera"), and Norrie guides you through 「キャラを つくる」 ("make a character"). At any question, 「おまかせ」 ("leave it to me") picks the recommended answer and goes on.
 - Norrie appears first. The **3D / 2D** button, under 「かえる」 ("change") in the top bar, switches between them (`?look=2d` opens the 2D one directly). Other characters: `?character=<id>`, for example `?character=mikan`. They are in [`characters/`](characters/).
@@ -231,7 +244,7 @@ npm run yuru -- --lan
 | Port 8787 is in use | `PORT=8788 npm start` (PowerShell: `$env:PORT=8788; npm start`); for `npm run yuru`, add `-- --port 8788` |
 | It says the maker is not running (「作る道: うごいていません」) | Install Python 3.10 or later and `pillow numpy scipy`. To use another Python, put its path in the environment variable `YURU_PYTHON` |
 | The drawing step cannot find Chrome | Put Chrome's path in the environment variable `CHROME_PATH` |
-| The screen says 「仮の頭脳です」 ("stand-in brain") | `ANTHROPIC_API_KEY` is not set. Set it and start again (text chat works without it) |
+| The screen says 「おためしモード」 | There is neither a key nor a Claude Code connection. Enter a key with `npm run start:keys`, or connect your own Claude Code with `npm run start:claude-code`, and start again (the fixed script still works without them) |
 | No voice | You need the voice key (`ELEVENLABS_API_KEY`). The voice service says that the default voices (Voice Library voices) are not available through the API with a free-tier key |
 | The phone cannot open it | Check that the PC and the phone are on the same Wi-Fi and that you added `--lan`. Guest Wi-Fi networks often keep devices apart. Check that Windows Firewall is not blocking Node.js |
 | The microphone or camera does not work on the phone | The page is http. Open it through the https entry above, or use text |
@@ -283,7 +296,7 @@ Run `npm run start:keys` in the `web` folder. It asks for your Claude key and yo
 - Make a voice key (ElevenLabs, official): <https://elevenlabs.io/app/api/api-keys>
 - Voice pricing and any trial plan (ElevenLabs, official): <https://elevenlabs.io/pricing/api>. Whether a trial plan exists, and what it includes, changes over time, so check the official page.
 
-In the app, while it is in trial mode, the 「本物の Claude にする」 button on the banner opens a guide with two ways: the key steps above, or connecting your own Claude Code on this computer (`npm run start:claude-code`, no key needed). A voice key can also be typed on this device only, at the “voice” step of the creation flow.
+In the app, while it is in おためしモード, the 「本物の Claude にする」 button on the banner opens a guide with two ways: the key steps above, or connecting your own Claude Code on this computer (`npm run start:claude-code`, no key needed). A voice key can also be typed on this device only, at the “voice” step of the creation flow.
 
 ## Connect it to Claude Code
 
@@ -296,7 +309,7 @@ npm run start:claude-code      # instead of npm start; then open http://127.0.0.
 - It first checks that `claude` is installed and logged in. If not, it stops and tells you why and how to fix it, in Japanese (to install Claude Code, see the [official guide](https://code.claude.com/docs/en/overview)).
 - A small relay ([`tools/claude-code-relay/`](tools/claude-code-relay/)) listens on this PC only (127.0.0.1) and hands the app's conversation and drawing calls to your own `claude -p`. `claude` gets no tools and no MCP. It allows up to 300 calls a day (change with `RELAY_DAILY_CAP`), and Ctrl+C stops it together with the app.
 - It does not use `ANTHROPIC_API_KEY` (even if one is set, it is passed neither to the app nor to `claude`). What you say is not logged. The usage counts against your Claude Code plan.
-- While connected, the status endpoint (`/api/status`) answers `brainVia: "claude-code"` (it answers `"mock"` when no key is set and the stand-in brain talks).
+- While connected, the status endpoint (`/api/status`) answers `brainVia: "claude-code"` (it answers `"mock"` when there is neither a key nor Claude Code and おためしモード talks).
 - The voice is separate. To hear it, enter your own ElevenLabs key as usual ([Voices](#voices)).
 - Checked on Windows with Node.js 22 and this PC's Claude Code. Not run on Mac or Linux yet.
 
@@ -341,8 +354,8 @@ Each row was checked by running it. The check is named next to it.
 - The phone's microphone and camera through an https entry (Tailscale serve): (not checked yet).
 - Talking with the real Claude Haiku with an API key (not checked yet). The real Haiku runs above called the brain in the same form as the product, through Claude Code (`claude -p`) on the development PC.
 - A voice with a voice key, and switching between the boy's and the girl's voice (not checked yet). Without a key, the character talks with text and a retro sound.
-- The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only with the stand-in brain and keeps no memory) (not checked yet). A real update from the public repository (not checked yet; checked against a local source).
-- In multilingual mode, only the real brain (with `ANTHROPIC_API_KEY`) answers in other languages; the stand-in brain used without a key stays in Japanese. The app's screens are in Japanese only.
+- The public link (two small functions on Vercel and an Upstash Redis store; without the store, the public link talks only in おためしモード and keeps no memory) (not checked yet). A real update from the public repository (not checked yet; checked against a local source).
+- In multilingual mode, only the real brain (with `ANTHROPIC_API_KEY`) answers in other languages; the おためしモード (trial mode) used with neither a key nor Claude Code stays in Japanese. The app's screens are in Japanese only.
 - `yuru-learn` reading a web page by URL (not checked yet; the PDF and the map picture were tried end to end).
 - 3D does not start from a browser button alone. After the OK on the picture for 3D, start the make-character skill in Claude Code on the PC ([below](#make-your-own-character-on-your-pc-with-claude-code)).
 - Norrie's 3D: seen from behind, a horizontal line shows where the head meets the body. Seen straight from the side, the eyes are hardly visible.
@@ -497,13 +510,13 @@ When a newer model comes out, change the names below and run the tests again, an
 
 | Role | Part |
 |---|---|
-| Brain (talk) | Claude API. Without a key: a stand-in brain that answers in the same format |
+| Brain (talk) | Claude API (or your own Claude Code connection). With neither: おためしモード, a fixed script |
 | Voice (optional, your own key) | An outside speech-synthesis service (by default, Japanese voices from its Voice Library: a boy's and a girl's). Its name and rules: [THIRD_PARTY.md](THIRD_PARTY.md) |
 | Speech to text | The browser's built-in speech recognition (some browsers send the sound to their maker's service), or faster-whisper running on your own PC (local server only) |
 | Face tracking | MediaPipe Face Landmarker (face detection runs on the device; video is not sent. The part tries to send usage records, not pictures or video, to a Google address; the public version blocks this with its CSP, the local server does not) |
 | 3D and VR in the browser | three.js and three-vrm; VR uses the browser's WebXR |
 | Sending to a Quest (optional) | Meta's Web Launch (only when you press 「Meta Quest に送る」, and only on https pages) |
-| Public link | Two functions on Vercel; counts and memory in Upstash Redis (without it: stand-in brain only, no memory). It talks with the real Claude only when the passphrase matches (otherwise the stand-in brain). Limits: 300 calls a day, 10 a minute, 100 camera pictures a day |
+| Public link | Two functions on Vercel; counts and memory in Upstash Redis (without it: おためしモード only, no memory). It talks with the real Claude only when the passphrase matches (otherwise おためしモード). Limits: 300 calls a day, 10 a minute, 100 camera pictures a day |
 
 Versions and licences of every part: [THIRD_PARTY.md](THIRD_PARTY.md).
 
