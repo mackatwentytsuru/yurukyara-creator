@@ -240,9 +240,10 @@ function sceneText() {
   return describeScene(a.tracks, { primaryId: a.primaryId, speakerId: a.speakerId });
 }
 
+let composerInput = null; // 文字の入力窓(ui/composerInput.js)。送った後に 1 行へ戻す
+
 /* ---------- 声 ---------- */
 let listener = null;
-let composerInput = null; // 文字の入力窓(ui/composerInput.js)。送った後に 1 行へ戻す
 // 声の向き(ステレオのマイク)。機材に依存しない: マイクの間隔などは URL で渡せる(?micspacing=0.06 ?mic=DVR ?micswap=1 ?ild=5)
 let stereoMic = null;
 function startStereoMic() {
@@ -343,10 +344,6 @@ async function toggleMic() {
           }, 2600);
         }
       },
-      onError: (msg) => ui.error(msg),
-      onEmpty: () => {
-        if (!speaker.speaking && !dialogue.busy) onMisheard();
-      },
       // 11-08 本人の iPhone: ブラウザの聞き取りが使えない時の自動の切りかえ・カメラを入れたままのマイクの取り直し・原因だけの報告
       onNotice: (text) => ui.notice(text),
       onProvider: () => updatePrivacy(),
@@ -360,6 +357,10 @@ async function toggleMic() {
       cameraOn: () => app.mode === 'camera',
       holdCamera: () => app.camera?.hold?.(),
       report: (event) => void reportVoice({ ...event, cameraOn: app.mode === 'camera' }),
+      onError: (msg) => ui.error(msg),
+      onEmpty: () => {
+        if (!speaker.speaking && !dialogue.busy) onMisheard();
+      },
     }, { provider, isBusy: () => speaker.speaking && params.get('bargein') !== '1' });
     await listener.start();
     // 声の向き。ステレオが取れなくても、聞き取りと映像はそのまま動く(ヘッドセットの中では、頭の位置が分かるので使わない)
