@@ -196,9 +196,13 @@ export function createDrawCreator({ sample, enabled }) {
       const fromPicture = input?.from === 'picture';
       const baseWords = fromPicture ? (input.file ? '' : originalWords(input)) : String(input?.words ?? '');
       // 「なおしたい ところ」の一言は、ことばの前に足す(長い時は後ろの元のことばが切れる。一言は捨てない。QA8 #4)
-      const words = note ? clipWords(`なおす: ${note}。${baseWords}`) : baseWords;
+      // 直す時は、前の子の名前も渡す(11/8 本人: 直すたびに別の子・別の名前になった。サーバーは「希望に名前があれば使う」)。一言→名前→元のことばの順(長い時に後ろから切れる)
+      const prevName = note && o.prev?.name && o.prev.name !== DEFAULT_DRAW_NAME ? `名前は ${o.prev.name}。` : '';
+      const words = note ? clipWords(`なおす: ${note}。${prevName}${baseWords}`) : baseWords;
       const body = fromPicture && input.file ? { ...(note ? { words } : {}), picture: await pictureBody(input.file) } : { words };
-      o.onProgress?.('Claude が 描いているよ。少し まってね(1 分くらい)');
+      // 直す元の絵: サーバーが前に描いた絵(自分で置いた SVG)を読み、その絵をもとに希望の所だけ直す。id の形が合わない物は送らない
+      if (note && /^[a-z0-9_]{1,32}$/.test(String(o.prev?.id ?? ''))) body.base = o.prev.id;
+      o.onProgress?.('Claude が 描いているよ。少し まってね(10〜30 秒くらい)');
       const r = await fetch('/api/draw', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json().catch(() => ({}));
       if (r.ok && /^[a-z0-9_]{1,32}$/.test(String(j.id ?? ''))) return { ok: true, character: { id: j.id, name: String(j.name ?? 'あたらしい子').slice(0, 20), sample: false, drawn: true, twod: true, note: 'Claude が描いた子' } };
@@ -232,6 +236,9 @@ export function createDrawCreator({ sample, enabled }) {
     },
   };
 }
+
+/** サーバーが名前を決められなかった時の既定の名前(server/draw.mjs の DEFAULT_NAME と同じ。名前として引き継がない) */
+const DEFAULT_DRAW_NAME = 'あたらしい子';
 
 /** ことばの長さ(サーバーの上限 60 字と同じ。長い時は後ろを切る) */
 const clipWords = (s) => [...String(s ?? '').trim()].slice(0, 60).join('');

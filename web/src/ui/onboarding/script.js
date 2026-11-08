@@ -1420,7 +1420,7 @@ export class FirstRun {
   async _fixDrawn(c, note) {
     if (!note) return this._meetAsk();
     await this._say({ who: 'user', text: note }, { who: 'guide', text: 'わかったよ。もう 1 回、描いてみるね。' }, { who: 'note', text: '一言も、この サーバーから Claude(Anthropic)に 送って、描きなおすよ。' });
-    const r = await this._long(this.d.creator.redraw(this.input, note, { onProgress: (text) => this._say({ who: 'note', text }) }), 'draw');
+    const r = await this._long(this.d.creator.redraw(this.input, note, { prev: { id: c.id, name: c.name }, onProgress: (text) => this._say({ who: 'note', text }) }), 'draw');
     if (r?.ok && r.character) {
       this.character = r.character;
       this._noteMade(r.character); // 描き直した子を「さっきの子」にする(戻った時に、描き直す前の子を指さない)

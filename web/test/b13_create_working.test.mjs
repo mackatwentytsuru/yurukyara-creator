@@ -140,12 +140,12 @@ test('文は ja・en・zh・ko の 4 つで、どの種類にもある。名前�
   assert.equal(workText('think', { lang: 'en', name: 'Mika' }), 'Mika is thinking');
   assert.equal(workText('think', { lang: 'xx', name: '' }), 'かんがえているよ', '知らないことばは日本語、名前が無ければ名前なし');
   assert.equal(workText('think', { name: 'あ'.repeat(30) }).startsWith('あ'.repeat(16) + '…'), true, '長い名前は切る');
-  assert.equal(workNote('draw'), '1 分くらい かかるよ');
+  assert.equal(workNote('draw'), '10〜30 秒くらい かかるよ');
   assert.equal(workNote('stage'), '', '短い物には一言を付けない');
   // 画面の側が教えたことばと名前で、いまの文が決まる
   configureWork({ lang: () => 'ko', name: () => 'Mika' });
   assert.equal(currentWorkText({ visible: true, kind: 'think', text: null }), 'Mika 생각 중이에요');
-  assert.equal(currentWorkNote({ visible: true, kind: 'draw' }), '1분쯤 걸려요');
+  assert.equal(currentWorkNote({ visible: true, kind: 'draw' }), '10~30초쯤 걸려요');
   assert.equal(currentWorkText({ visible: true, kind: 'draw', text: null }, 'ja'), 'えを かいているよ', 'ことばを渡せば、そちらを使う(作る札はいつも日本語)');
   configureWork({ lang: () => 'ja', name: () => '' });
   // 開発の言葉は出さない
@@ -303,6 +303,7 @@ test('描いた子に「みみ」を送ると、一言は吹き出しに残り�
     assert.equal(bodies.length, 1);
     assert.match(bodies[0].words, /^なおす: みみ。/, '一言を先に入れる(長い時に切れない)');
     assert.match(bodies[0].words, /ひつじの子/, '元のことばも渡す');
+    assert.equal(bodies[0].base, 'yb261108_aaaaaa', '直す元の絵(さっきの子の id)も渡す。直すたびに別の子にならない');
     assert.ok([...bodies[0].words].length <= 60, 'サーバーの上限(60 字)に収める');
     assert.ok(!h.texts().some((t) => /見本の子の 形や色は/.test(t)), '見本の子の文は出さない');
     assert.equal(h.fr.character.id, 'yb261108_bbbbbb', '描き直した子に替わる');

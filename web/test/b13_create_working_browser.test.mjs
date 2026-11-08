@@ -148,7 +148,7 @@ for (const sz of SIZES) {
       });
       assert.equal(info.sparkles, sz.sparkles, `粒の数(スマホ 9・PC 16): ${info.sparkles}`);
       assert.equal(info.text, 'えを かいているよ');
-      assert.equal(info.note, '1 分くらい かかるよ', '長くかかると、すぐ言う');
+      assert.equal(info.note, '10〜30 秒くらい かかるよ', '長くかかると、すぐ言う');
       assert.equal(info.dots, 3, '動く点');
       assert.equal(info.events, 'none', 'きらきらは押す所の邪魔をしない');
       assert.ok(info.animating >= sz.sparkles, `粒が動いている ${info.animating}`);
